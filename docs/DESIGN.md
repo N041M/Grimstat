@@ -2,7 +2,7 @@
 
 Working name (placeholder): **Grimstat**. Unofficial fan tool; no GW data shipped; free.
 
-> **Build status (9 Sep 2026):** Phases 0–3 are built and verified (204 tests, typecheck clean): schema, engine (exact + Monte Carlo), effects, 11e plugin (Tier-1 keywords, Tier-2 patterns, constraints, analyses), adapters (MFM YAML, BSData JSON, Wahapedia CSV), snapshot merge/overrides/diff, CLI, resolver + costing, and the web calculator PWA. A real local import produced 32 factions / 1,684 datasheets. Next: Phase 4 roster editor UI on top of `@grimstat/resolver`, then Phase 5 widgets for the matrix / durability / efficiency analyses already in the plugin. Modelling assumptions: `docs/MODELLING-NOTES.md`. Extension points: `docs/PLUGINS.md`.
+> **Build status (9 Sep 2026, evening):** Phases 0–4 are built and verified (232 tests, typecheck clean): schema, engine (exact + Monte Carlo), effects, 11e plugin (Tier-1 keywords, Tier-2 patterns, constraints, analyses), adapters (MFM YAML, BSData JSON, Wahapedia CSV), snapshot merge/overrides/diff, CLI, resolver + costing, the web calculator PWA, and the army builder (roster editor with autosave and history, DP/leader/enhancement validation, GW-app / New Recruit / Markdown exports with a round-tripping importer, printable reference pack, "open in calculator"). Miracle/Fate dice substitution is modelled exactly. A real local import produced 32 factions / 1,684 datasheets. Next: Phase 5 widgets for the matrix / durability / efficiency analyses already in the plugin, then the joint turn optimiser. Modelling assumptions: `docs/MODELLING-NOTES.md`. Extension points: `docs/PLUGINS.md`.
 
 ## Context
 

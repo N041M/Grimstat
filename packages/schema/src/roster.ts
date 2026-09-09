@@ -10,6 +10,7 @@ export const RosterModelGroup = z.object({
   /** Selected wargear item names (weapon profile names / wargear names). */
   wargear: z.array(z.string()).default([]),
 });
+export type RosterModelGroup = z.infer<typeof RosterModelGroup>;
 
 export const RosterUnit = z.object({
   id: Id,
@@ -30,6 +31,7 @@ export const RosterDetachment = z.object({
   detachmentId: Id,
   forceDisposition: z.string().optional(),
 });
+export type RosterDetachment = z.infer<typeof RosterDetachment>;
 
 export const Roster = RecordMeta.extend({
   id: Id,

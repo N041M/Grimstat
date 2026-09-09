@@ -1,6 +1,7 @@
 import { useRef, useState, type ChangeEvent } from "react";
-import { Scenario, Snapshot } from "@grimstat/schema";
+import { Roster, Scenario, Snapshot } from "@grimstat/schema";
 import { db, exportAll, importAll, type ExportBundle } from "../db";
+import { download } from "../lib/download";
 import { useApp } from "../state/AppContext";
 import { loadSampleSnapshot } from "../lib/snapshotSource";
 import { fmtDate } from "../lib/format";
@@ -17,16 +18,6 @@ async function readFile(e: ChangeEvent<HTMLInputElement>): Promise<{ name: strin
   e.target.value = "";
   if (!f) return undefined;
   return { name: f.name, text: await f.text() };
-}
-
-function download(name: string, data: unknown): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function DataPage() {
@@ -119,11 +110,17 @@ export function DataPage() {
         if (p.success) scenarios.push(p.data);
         else errors.push(`scenario ${(s as { id?: string })?.id ?? "?"}: ${p.error.issues[0]?.message ?? "invalid"}`);
       }
+      const rosters: Roster[] = [];
+      for (const r of b.stores.rosters ?? []) {
+        const p = Roster.safeParse(r);
+        if (p.success) rosters.push(p.data);
+        else errors.push(`roster ${(r as { id?: string })?.id ?? "?"}: ${p.error.issues[0]?.message ?? "invalid"}`);
+      }
       const counts = await importAll({
         format: "grimstat-export",
         version: 1,
         exportedAt: b.exportedAt ?? new Date().toISOString(),
-        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings: Array.isArray(b.stores.settings) ? b.stores.settings : [] },
+        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings: Array.isArray(b.stores.settings) ? b.stores.settings : [], rosters },
       });
       await refreshSnapshots();
       notify(t("data.bundleImported", { snapshots: counts.snapshots, scenarios: counts.scenarios }), errors.length ? "error" : "success", errors.length ? errors : undefined);

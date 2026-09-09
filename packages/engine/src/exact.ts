@@ -1,4 +1,4 @@
-import { type BPMF, bcompound, bcompoundOneReroll, bconvolve, bdelta, bmean, btrim } from "./bivariate";
+import { type BPMF, baddScaled, bcompound, bcompoundOneReroll, bconvolve, bdelta, bmean, btrim } from "./bivariate";
 import { type PMF, convolvePow, delta, mean } from "./pmf";
 import {
   type StateDist,
@@ -56,6 +56,35 @@ function perHitOutcome(w: WeaponParams): { full: BPMF; givenNotFail: BPMF } {
   return { full, givenNotFail: z > 0 ? btrim(nf.map((r) => r.map((v) => v / z))) : bdelta() };
 }
 
+/** Shift a count PMF down by one (the fixed die), dropping P(0). Result is unnormalised on purpose. */
+function shiftDown(p: PMF): PMF {
+  const out = p.slice(1);
+  const z = 1 - (p[0] ?? 0);
+  return z > 0 ? out.map((v) => v / z) : delta(0);
+}
+
+function fixedHitOutcome(w: WeaponParams): BPMF {
+  if (w.fixedHit === "miss") return bdelta(0, 0);
+  if (w.fixedHit === "hit") return bdelta(1, 0);
+  // critical hit: sustained extras + lethal
+  const sus = w.sustained ?? delta(0);
+  const B: BPMF = [];
+  for (let i = 0; i < 2 + sus.length; i++) B.push([0, 0]);
+  for (let x = 0; x < sus.length; x++) {
+    const px = sus[x] ?? 0;
+    if (px <= 0) continue;
+    if (w.lethal) B[x]![1] = (B[x]![1] ?? 0) + px;
+    else B[1 + x]![0] = (B[1 + x]![0] ?? 0) + px;
+  }
+  return btrim(B);
+}
+
+function fixedWoundOutcome(w: WeaponParams): BPMF {
+  if (w.fixedWound === "fail") return bdelta(0, 0);
+  if (w.fixedWound === "wound") return bdelta(1, 0);
+  return w.devastating ? bdelta(0, 1) : bdelta(1, 0);
+}
+
 function expectedDamage(space: StateSpace, dist: StateDist): number {
   let e = 0;
   for (let s = 0; s < space.total; s++) {
@@ -82,14 +111,24 @@ export function runExact(input: EngineInput): EngineOutput | null {
     if (w.count <= 0) continue;
     const attacksTotal = convolvePow(w.attacks, w.count);
     const die = perDieOutcome(w);
-    const H = w.singleRerollHit && !w.autoHit ? bcompoundOneReroll(attacksTotal, die.full, w.hit.pMiss, die.givenNotMiss) : bcompound(attacksTotal, die.full);
+    const compoundHits = (count: PMF): BPMF => (w.singleRerollHit && !w.autoHit ? bcompoundOneReroll(count, die.full, w.hit.pMiss, die.givenNotMiss) : bcompound(count, die.full));
+    let H: BPMF;
+    if (w.fixedHit && !w.autoHit) {
+      // one die is set, the remaining n-1 are rolled
+      const fixed = fixedHitOutcome(w);
+      const rolled = compoundHits(shiftDown(attacksTotal));
+      H = baddScaled(baddScaled([[0]], bconvolve(rolled, fixed), 1 - (attacksTotal[0] ?? 0)), bdelta(), attacksTotal[0] ?? 0);
+    } else H = compoundHits(attacksTotal);
     const hit = perHitOutcome(w);
     const rhMax = H.length - 1;
-    // WT[rh] = outcome of rh rolling hits
-    const WT: BPMF[] = [bdelta()];
-    for (let rh = 1; rh <= rhMax; rh++) {
-      WT.push(w.singleRerollWound ? bcompoundOneReroll(delta(rh), hit.full, w.wound.pFail, hit.givenNotFail) : bconvolve(WT[rh - 1]!, hit.full));
+    // R[k] = outcome of k rolled wound dice; WT[rh] = outcome of rh rolling hits (one die fixed when fixedWound is set)
+    const fixedW = w.fixedWound ? fixedWoundOutcome(w) : null;
+    const R: BPMF[] = [bdelta()];
+    for (let k = 1; k <= rhMax; k++) {
+      R.push(w.singleRerollWound ? bcompoundOneReroll(delta(k), hit.full, w.wound.pFail, hit.givenNotFail) : bconvolve(R[k - 1]!, hit.full));
     }
+    const WT: BPMF[] = [bdelta()];
+    for (let rh = 1; rh <= rhMax; rh++) WT.push(fixedW ? bconvolve(R[rh - 1]!, fixedW) : R[rh]!);
     // Joint J[ws][mt]
     let wsMax = 0;
     let mtMax = 0;

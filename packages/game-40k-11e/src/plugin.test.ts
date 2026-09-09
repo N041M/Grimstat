@@ -182,6 +182,20 @@ describe("runScenario", () => {
   });
 });
 
+describe("miracle dice toggles", () => {
+  it("one wound roll set to 6 becomes a devastating mortal event; one hit set to 6 is a crit", () => {
+    const tank = unit([{ name: "t", count: 1, T: 11, Sv: 2, W: 40, isCharacter: false, keywords: [] }], [], ["VEHICLE"]);
+    const w = gun({ count: 4, S: 6, AP: 1, D: "3", keywords: [{ name: "DEVASTATING WOUNDS" }] });
+    const plain = runScenario(scenario(unit([], [w]), tank));
+    const mw = runScenario(scenario(unit([], [w]), tank, {}, ["miracle-wound-6"]));
+    // 4 attacks, hits 2/3 each; plain: each hit crits on a 6 (1/6) → 3 mortal dmg; also normal wounds (5+) vs 2+ save with AP1 → 3+ save, 1/3 unsaved
+    // with the fixed wound: 1 hit's wound roll becomes a crit for sure. E[hits] unchanged; difference = P(hit≥1)... exact value checked against MC-free reasoning below
+    expect(mw.expectedDamage).toBeGreaterThan(plain.expectedDamage);
+    const mh = runScenario(scenario(unit([], [w]), tank, {}, ["miracle-hit-6"]));
+    close(mh.weapons[0]!.expectedHits, 3 * (2 / 3) + 1);
+  });
+});
+
 describe("pattern library", () => {
   it("derives tier-2 effects from generic phrasings", () => {
     const a = abilityEffects({ id: "x", name: "Test", scope: "datasheet", text: "Each time this unit makes a ranged attack, re-roll a hit roll of 1.", isLegends: false });

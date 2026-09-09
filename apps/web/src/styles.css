@@ -946,3 +946,370 @@ table.data input.dice {
 .about p {
   max-width: 70ch;
 }
+
+/* ---------- Army builder ---------- */
+.roster-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.roster-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+.roster-head-main,
+.roster-head-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.roster-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  min-width: 200px;
+  max-width: 100%;
+  letter-spacing: 0.02em;
+}
+.inline-field {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.4rem !important;
+}
+.inline-field > span:first-child {
+  white-space: nowrap;
+}
+.roster-head-stats .stat {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-variant-numeric: tabular-nums;
+}
+.roster-head-stats .stat .k {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.roster-head-stats .stat .v {
+  font-size: 1rem;
+  color: var(--text-strong);
+}
+.roster-head-stats .stat.over {
+  border-color: var(--danger);
+}
+.roster-head-stats .stat.over .v {
+  color: var(--danger);
+}
+.save-status {
+  font-size: 0.75rem;
+  color: var(--muted);
+  min-width: 7em;
+}
+.save-status.dirty,
+.save-status.saving {
+  color: var(--warn);
+}
+.save-status.error {
+  color: var(--danger);
+}
+.roster-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 1rem;
+  align-items: start;
+}
+.roster-inspector {
+  position: sticky;
+  top: 4.5rem;
+  max-height: calc(100vh - 5.5rem);
+  overflow: auto;
+}
+.roster-inspector.panel + .panel {
+  margin-top: 0;
+}
+@media (max-width: 899px) {
+  .roster-body {
+    grid-template-columns: 1fr;
+  }
+  .roster-inspector {
+    position: static;
+    max-height: none;
+  }
+  .roster-head {
+    position: static;
+  }
+}
+.inspector-h {
+  margin: 0.6rem 0 0.3rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.stepper input[type="number"] {
+  width: 4.5em;
+  text-align: center;
+}
+.wargear-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.7rem 0.6rem;
+  margin: 0 0 0.5rem;
+}
+.wargear-group legend {
+  font-size: 0.75rem;
+  color: var(--text-strong);
+  padding: 0 0.3rem;
+}
+.chip-x {
+  background: transparent;
+  border: 0;
+  padding: 0 0.1rem;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.chip-x:hover {
+  color: var(--danger);
+}
+
+/* detachments */
+.det-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.det-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.det-row .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* units */
+.unit-section + .unit-section {
+  margin-top: 0.6rem;
+}
+.unit-section-title {
+  margin: 0.5rem 0 0.3rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.unit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.unit-group > .unit-list {
+  gap: 0;
+}
+.unit-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.unit-row.nested {
+  margin-left: 1.25rem;
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.unit-group > .unit-list > .unit-row:not(.nested):has(+ .nested) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.unit-row.selected {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.unit-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0.45rem 0.7rem;
+  color: var(--text);
+}
+.unit-main:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+.unit-name {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.unit-badges {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.unit-meta {
+  white-space: nowrap;
+}
+.unit-pts {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  white-space: nowrap;
+  min-width: 4.5em;
+  text-align: right;
+}
+.unit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding-right: 0.25rem;
+}
+.add-unit {
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+/* diagnostics */
+.diag-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.diag-btn {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 0.3rem 0.5rem;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.diag-btn.static {
+  cursor: default;
+}
+button.diag-btn:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+}
+.diag-btn .grow {
+  flex: 1;
+  min-width: 0;
+}
+.diag-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--info);
+  transform: translateY(-1px);
+}
+.diag-dot.danger {
+  background: var(--danger);
+}
+.diag-dot.warn {
+  background: var(--warn);
+}
+
+/* history */
+.version-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.version-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.version-row.current {
+  border-color: var(--accent);
+}
+.version-row .grow {
+  flex: 1;
+  min-width: 140px;
+}
+.version-row .actions {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.diff-box {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.7rem;
+  background: var(--bg);
+}
+.diff-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+.diff-list .ok {
+  color: var(--ok);
+}
+.diff-list .danger {
+  color: var(--danger);
+}
+.diff-list .warn {
+  color: var(--warn);
+}

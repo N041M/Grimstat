@@ -38,6 +38,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@grimstat/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@grimstat/engine':
         specifier: workspace:*
         version: link:../../packages/engine
@@ -50,6 +53,9 @@ importers:
       '@grimstat/plugin-host':
         specifier: workspace:*
         version: link:../../packages/plugin-host
+      '@grimstat/resolver':
+        specifier: workspace:*
+        version: link:../../packages/resolver
       '@grimstat/schema':
         specifier: workspace:*
         version: link:../../packages/schema
@@ -102,12 +108,19 @@ importers:
 
   packages/adapters:
     dependencies:
+      '@grimstat/resolver':
+        specifier: workspace:*
+        version: link:../resolver
       '@grimstat/schema':
         specifier: workspace:*
         version: link:../schema
       yaml:
         specifier: ^2.8.0
         version: 2.9.0
+    devDependencies:
+      '@grimstat/snapshot':
+        specifier: workspace:*
+        version: link:../snapshot
 
   packages/effects:
     dependencies:
@@ -137,6 +150,10 @@ importers:
       '@grimstat/schema':
         specifier: workspace:*
         version: link:../schema
+    devDependencies:
+      '@grimstat/snapshot':
+        specifier: workspace:*
+        version: link:../snapshot
 
   packages/plugin-host:
     dependencies:

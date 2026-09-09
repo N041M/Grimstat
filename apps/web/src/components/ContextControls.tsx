@@ -23,7 +23,6 @@ export function ContextControls({ context, onChange }: { context: ScenarioContex
           <select value={context.allocationPolicy} onChange={(e) => set("allocationPolicy", e.target.value as ScenarioContext["allocationPolicy"])}>
             <option value="protect-character">{t("ctx.allocation.protect")}</option>
             <option value="in-order">{t("ctx.allocation.inOrder")}</option>
-            <option value="spread">{t("ctx.allocation.spread")}</option>
           </select>
         </Field>
         <Field label={t("ctx.lethal")}>

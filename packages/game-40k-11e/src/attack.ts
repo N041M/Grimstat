@@ -23,6 +23,16 @@ export interface HitOpts {
   reroll: RerollPolicy | null;
 }
 
+/** Outcome of a single unmodified hit-roll result under the gate: 0 miss, 1 hit, 2 critical hit. */
+export function classifyHit(r: number, o: HitOpts): 0 | 1 | 2 {
+  if (o.snap) return r !== 6 ? 0 : r >= o.critThreshold ? 2 : 1;
+  if (r === 1) return 0;
+  if (r >= o.critThreshold) return 2;
+  if (r === 6) return 1;
+  if (o.target === null) return 0;
+  return r + o.rollMod >= o.target ? 1 : 0;
+}
+
 export function hitGate(o: HitOpts): HitGate {
   type Out = 0 | 1 | 2; // miss, hit, crit
   const outcome = (r: number): Out => {
@@ -54,6 +64,13 @@ export interface WoundOpts {
   rollMod: number;
   critThreshold: number;
   reroll: RerollPolicy | null;
+}
+
+export function classifyWound(r: number, o: WoundOpts): 0 | 1 | 2 {
+  if (r === 1) return 0;
+  if (r >= o.critThreshold) return 2;
+  if (r === 6) return 1;
+  return r + o.rollMod >= o.target ? 1 : 0;
 }
 
 export function woundGate(o: WoundOpts): WoundGate {

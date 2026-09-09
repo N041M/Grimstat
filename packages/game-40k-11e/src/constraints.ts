@@ -21,6 +21,23 @@ export const BATTLE_SIZES: Record<Exclude<BattleSize, "custom">, BattleSizeRules
   onslaught: { points: 3000, detachmentPoints: 4, enhancements: 6, duplicates: 4, assumed: true },
 };
 
+/** Model-count bounds of a datasheet: per-line mins/maxs are summed ("1 Sergeant" + "4-9 Troopers" → 5..10). */
+export function compositionBounds(ds: { composition: Array<{ min?: number | undefined; max?: number | undefined }> }): { min?: number; max?: number } {
+  let min: number | undefined;
+  let max: number | undefined;
+  let maxKnown = true;
+  for (const c of ds.composition) {
+    if (typeof c.min === "number") min = (min ?? 0) + c.min;
+    if (typeof c.max === "number") max = (max ?? 0) + c.max;
+    else if (typeof c.min === "number") max = (max ?? 0) + c.min; // a fixed line ("1 Sergeant") contributes its min to the max
+    else maxKnown = false;
+  }
+  const out: { min?: number; max?: number } = {};
+  if (min !== undefined) out.min = min;
+  if (max !== undefined && maxKnown && ds.composition.some((c) => typeof c.max === "number")) out.max = max;
+  return out;
+}
+
 function sizeRules(ctx: RosterContext): BattleSizeRules {
   const bs = ctx.roster.battleSize;
   if (bs === "custom") return { points: ctx.roster.pointsLimit, detachmentPoints: 3, enhancements: 4, duplicates: 3, assumed: true };
@@ -104,10 +121,7 @@ export const constraints11e: ConstraintSet = {
           const ds = ctx.datasheet(u.datasheetId);
           if (!ds) continue;
           const n = ctx.unitCost(u).modelCount;
-          const mins = ds.composition.map((c) => c.min).filter((m): m is number => typeof m === "number");
-          const maxs = ds.composition.map((c) => c.max).filter((m): m is number => typeof m === "number");
-          const min = mins.length ? Math.max(...mins) : undefined;
-          const max = maxs.length ? Math.max(...maxs) : undefined;
+          const { min, max } = compositionBounds(ds);
           if (min !== undefined && n < min) out.push({ severity: "error", code: "units.size", message: `${ds.name} has ${n} models; minimum is ${min}.`, path: path(ctx, u) });
           if (max !== undefined && n > max) out.push({ severity: "error", code: "units.size", message: `${ds.name} has ${n} models; maximum is ${max}.`, path: path(ctx, u) });
         }

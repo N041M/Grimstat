@@ -1,4 +1,5 @@
-import type { Ability, Archetype, CoverageReport, Datasheet, EffectRecord, ManualToggle, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
+import type { Ability, Archetype, CoverageReport, Datasheet, EffectRecord, ManualToggle, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
+import { createContext } from "@grimstat/resolver";
 import { abilityEffects, applyFnpToModels } from "./patterns";
 import { create11eKeywordRegistry } from "./keywords";
 import { CH } from "./channels";
@@ -26,7 +27,7 @@ export function pointsFor(ds: Datasheet, snapshot: Snapshot, modelCount: number)
 
 function defaultModelCount(ds: Datasheet): number {
   const mins = ds.composition.map((c) => c.min).filter((m): m is number => typeof m === "number" && m > 0);
-  if (mins.length) return Math.max(...mins);
+  if (mins.length) return mins.reduce((s, m) => s + m, 0);
   return ds.models.length > 1 ? ds.models.length : 1;
 }
 
@@ -157,6 +158,48 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
   };
 }
 
+/** Apply a roster unit's wargear selection to the weapon list produced by unitFromDatasheet. */
+function applyWargearSelection(weapons: ScenarioWeapon[], groups: RosterUnit["models"], prefix = ""): ScenarioWeapon[] {
+  const selected = new Map<string, number>();
+  for (const g of groups) for (const item of g.wargear) {
+    const key = baseWeaponName(item).toLowerCase();
+    selected.set(key, (selected.get(key) ?? 0) + g.count);
+  }
+  const relevant = weapons.filter((w) => w.name.startsWith(prefix));
+  const anyMatch = relevant.some((w) => selected.has(baseWeaponName(w.name.slice(prefix.length)).toLowerCase()));
+  if (!anyMatch) return weapons;
+  const enabledBase = new Set<string>();
+  return weapons.map((w) => {
+    if (!w.name.startsWith(prefix)) return w;
+    const base = baseWeaponName(w.name.slice(prefix.length)).toLowerCase();
+    const n = selected.get(base) ?? 0;
+    const first = n > 0 && !enabledBase.has(base);
+    if (first) enabledBase.add(base);
+    return { ...w, count: n, enabled: first };
+  });
+}
+
+/**
+ * Build a ScenarioUnit from a roster entry: model count from the model groups, weapons from the
+ * wargear selection, attached characters resolved, points from the resolver's tiered costing.
+ */
+export function unitFromRosterUnit(unit: RosterUnit, roster: Roster, snapshot: Snapshot): ScenarioUnit {
+  const ds = snapshot.data.datasheets.find((d) => d.id === unit.datasheetId);
+  if (!ds) throw new Error(`Unknown datasheet ${unit.datasheetId}`);
+  const attached = roster.units.filter((u) => u.attachedTo?.unitId === unit.id);
+  const modelCount = unit.models.reduce((s, m) => s + m.count, 0);
+  const base = unitFromDatasheet(ds, snapshot, { modelCount, attachedDatasheetIds: attached.map((a) => a.datasheetId) });
+  let weapons = applyWargearSelection(base.weapons, unit.models);
+  for (const a of attached) {
+    const cds = snapshot.data.datasheets.find((d) => d.id === a.datasheetId);
+    if (cds) weapons = applyWargearSelection(weapons, a.models, `${cds.name}: `);
+  }
+  const ctx = createContext(roster, snapshot);
+  const points = ctx.unitCost(unit).total + attached.reduce((s, a) => s + ctx.unitCost(a).total, 0);
+  const name = unit.customName ?? ds.name;
+  return { ...base, name: attached.length ? `${name} (+${attached.map((a) => snapshot.data.datasheets.find((d) => d.id === a.datasheetId)?.name ?? "?").join(", ")})` : name, weapons, points };
+}
+
 export function resolveScenarioUnit(unit: ScenarioUnit, snapshot: Snapshot | undefined): ScenarioUnit {
   if (!unit.ref || unit.models.length) return unit;
   if (!snapshot) return unit;
@@ -251,6 +294,22 @@ export const GENERIC_TOGGLES: ManualToggle[] = [
     label: "Re-roll all failed wound rolls",
     side: "attacker",
     effects: [{ when: { stage: "wound", side: "attacker" }, op: "reroll", target: CH.rerollWound, value: "failed", source: "Toggle" }],
+    defaultOn: false,
+  },
+  {
+    id: "miracle-hit-6",
+    label: "Miracle/Fate dice: one hit roll set to 6",
+    description: "One attack die per weapon profile is not rolled; it counts as an unmodified 6.",
+    side: "attacker",
+    effects: [{ when: { stage: "hit", side: "attacker" }, op: "substitute", target: CH.hitRoll, value: 6, source: "Miracle dice" }],
+    defaultOn: false,
+  },
+  {
+    id: "miracle-wound-6",
+    label: "Miracle/Fate dice: one wound roll set to 6",
+    description: "One wound roll per weapon profile is not rolled; it counts as an unmodified 6.",
+    side: "attacker",
+    effects: [{ when: { stage: "wound", side: "attacker" }, op: "substitute", target: CH.woundRoll, value: 6, source: "Miracle dice" }],
     defaultOn: false,
   },
   { id: "plus1-hit", label: "+1 to hit", side: "attacker", effects: [{ when: { stage: "hit", side: "attacker" }, op: "add", target: CH.hitRoll, value: 1, source: "Toggle" }], defaultOn: false },

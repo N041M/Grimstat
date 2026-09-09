@@ -129,6 +129,23 @@ describe("exact engine", () => {
     close(out.expectedDamage, 4 / 3 + (5 / 9) * (2 / 3));
   });
 
+  it("fixed dice (Miracle dice): one die set to a critical hit / wound", () => {
+    const g = [{ id: "g", name: "g", models: 20, wounds: 1, isCharacter: false }];
+    const base = { count: 3, wound: { pFail: 0, pWound: 1, pCrit: 0 }, groups: [{ pUnsaved: 1, damage: delta(1), mortalDamage: delta(1) }] };
+    const crit = run({ weapons: [weapon({ ...base, fixedHit: "crit" })], groups: g, allocation: "in-order", backend: "exact", mcIterations: 0 });
+    close(crit.weapons[0]!.expectedHits, 2 * (2 / 3) + 1);
+    const sus = run({ weapons: [weapon({ ...base, fixedHit: "crit", sustained: delta(1) })], groups: g, allocation: "in-order", backend: "exact", mcIterations: 0 });
+    close(sus.weapons[0]!.expectedHits, 2 * (1 / 2 + 2 * (1 / 6)) + 2);
+    const w = run({ weapons: [weapon({ count: 3, autoHit: true, fixedWound: "crit", devastating: true, groups: [{ pUnsaved: 0, damage: delta(1), mortalDamage: delta(1) }] })], groups: g, allocation: "in-order", backend: "exact", mcIterations: 0 });
+    // 2 rolled hits: crit wound 1/6 each → mortal; plus one fixed crit
+    close(w.expectedDamage, 2 * (1 / 6) + 1);
+    const input: EngineInput = { weapons: [weapon({ count: 4, attacks: dicePMF("D3"), fixedHit: "crit", fixedWound: "wound", sustained: delta(1), singleRerollHit: true, groups: [{ pUnsaved: 0.5, damage: dicePMF("D3"), mortalDamage: dicePMF("D3") }] })], groups: [{ id: "g", name: "g", models: 6, wounds: 3, isCharacter: false }], allocation: "in-order", backend: "exact", mcIterations: 40000, seed: 7 };
+    const ex = runExact(input)!;
+    const mc = runMonteCarlo(input);
+    expect(Math.abs(ex.expectedDamage - mc.expectedDamage)).toBeLessThan(3 * (mc.ciHalfWidth ?? 0.1) + 0.02);
+    expect(Math.abs(ex.weapons[0]!.expectedHits - mc.weapons[0]!.expectedHits)).toBeLessThan(0.1);
+  });
+
   it("precision allocates to the character first", () => {
     const groups = [
       { id: "b", name: "bodyguard", models: 5, wounds: 2, isCharacter: false },

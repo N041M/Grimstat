@@ -7,6 +7,7 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - Attack count distributions (dice expressions, Blast/Cleave/Rapid Fire bonuses).
 - Per-die hit outcomes with the two 11e modifier channels: hit-roll modifiers capped at ±1, BS/WS *stat* penalties (cover, "-1 BS") uncapped and stacked on top. PSYCHIC ignores penalties on both channels.
 - Re-roll policies (ones / failed / non-critical "fishing") as exact per-die transforms; a single Command Re-roll of one failed hit or one failed wound roll per weapon profile as an exact order-statistic adjustment.
+- Substitute dice (Miracle/Fate dice): one hit roll or one wound roll per weapon profile set to a fixed value instead of rolled; the fixed die is never re-rolled.
 - Critical hits/wounds with adjustable thresholds (Anti-X, "crits on 5+", Conversion), Sustained Hits (fixed or dice), Lethal Hits (optional; `auto` picks whichever gives the higher expected damage), Devastating Wounds (mortal damage equal to D, max one model per critical wound, no spill), Twin-linked, Lance, Heavy, Melta, Torrent (no hit roll → no critical hits), Snap Shooting (6s only, no re-rolls).
 - Saves: invulnerable checked on the unmodified roll, armour on the AP-modified roll, best of both; unmodified 6 always saves and 1 always fails; save-roll modifiers capped ±1.
 - Damage modifiers in order set → ×(round up) → ± (min 1) → cap; Feel No Pain as per-wound binomial thinning.
@@ -21,11 +22,10 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - **Cleave X**: modelled as +X attacks per 5 models in the target (like Blast). Verify against the printed rule.
 - **Hazardous**: fails on 1–2; 1 mortal wound (3 if the firing unit is entirely VEHICLE/MONSTER); reported as expected self-inflicted mortal wounds, not applied to the attacker's profile.
 - **Sustained Hits** extra hits are never critical.
-- **Fast rolling / defender choice**: the defender's allocation policy is a fixed rule (protect character / in order); it does not optimise per roll result.
+- **Fast rolling / defender choice**: the defender's allocation policy is a fixed rule (protect character / in order); it does not optimise per roll result. Within a group the rules already force damage onto the wounded model first, so there is no separate "spread" policy.
 - **Weapon order**: `heuristic` sorts profiles by rough expected damage; a different order changes overkill slightly.
 - **Blast** counts all models in the defender (including attached characters).
 - **Fight phase**: only melee weapons; **shooting phase**: only ranged weapons. Pistols/Close-Quarters are not special-cased.
-- **Substitute dice** (Miracle/Fate dice) are not implemented (effect op exists; ignored with no warning yet).
 - **Damaged profiles, Deadly Demise, healing, "ignore first failed save"**: not modelled.
 
 ## Coverage tiers

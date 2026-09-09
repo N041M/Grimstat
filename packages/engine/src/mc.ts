@@ -73,6 +73,8 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
       let mortalEvents = 0;
       let rerollHit = w.singleRerollHit;
       let rerollWound = w.singleRerollWound;
+      let fixedHitLeft = !!w.fixedHit && !w.autoHit;
+      let fixedWoundLeft = !!w.fixedWound;
       for (let c = 0; c < w.count; c++) {
         const n = P.attacks();
         t.attacks += n;
@@ -80,7 +82,10 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
           // hit roll
           let cat: 0 | 1 | 2; // miss, hit, crit
           if (w.autoHit) cat = 1;
-          else {
+          else if (fixedHitLeft) {
+            fixedHitLeft = false;
+            cat = w.fixedHit === "miss" ? 0 : w.fixedHit === "hit" ? 1 : 2;
+          } else {
             let u = rand();
             cat = u < w.hit.pMiss ? 0 : u < w.hit.pMiss + w.hit.pHit ? 1 : 2;
             if (cat === 0 && rerollHit) {
@@ -105,7 +110,10 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
           for (let h = 0; h < rollingHits; h++) {
             let u = rand();
             let wc: 0 | 1 | 2 = u < w.wound.pFail ? 0 : u < w.wound.pFail + w.wound.pWound ? 1 : 2;
-            if (wc === 0 && rerollWound) {
+            if (fixedWoundLeft) {
+              fixedWoundLeft = false;
+              wc = w.fixedWound === "fail" ? 0 : w.fixedWound === "wound" ? 1 : 2;
+            } else if (wc === 0 && rerollWound) {
               rerollWound = false;
               u = rand();
               wc = u < w.wound.pFail ? 0 : u < w.wound.pFail + w.wound.pWound ? 1 : 2;

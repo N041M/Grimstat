@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Roster, Snapshot } from "@grimstat/schema";
 import { createContext, validateRoster } from "@grimstat/resolver";
-import { constraints11e } from "./constraints";
+import { constraints11e, compositionBounds } from "./constraints";
 
 const now = new Date().toISOString();
 const model = { id: "m", name: "Trooper", T: 4, Sv: 3, W: 2 };
@@ -116,6 +116,10 @@ describe("11e constraints", () => {
   });
   it("unit size", () => {
     expect(codes(roster({ units: [{ id: "u", datasheetId: "squad", models: [{ modelProfileId: "m", count: 11, wargear: [] }], isWarlord: false }] }))).toContain("units.size");
+    expect(compositionBounds({ composition: [{ min: 1, max: 1 }, { min: 4, max: 9 }] })).toEqual({ min: 5, max: 10 });
+    expect(compositionBounds({ composition: [{ min: 1 }, { min: 4, max: 9 }] })).toEqual({ min: 5, max: 10 });
+    expect(compositionBounds({ composition: [{ min: 10, max: 20 }] })).toEqual({ min: 10, max: 20 });
+    expect(compositionBounds({ composition: [{ min: 1 }] })).toEqual({ min: 1 });
   });
   it("leader / support legality", () => {
     const base = roster().units;

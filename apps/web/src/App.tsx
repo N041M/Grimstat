@@ -2,11 +2,16 @@ import { useEffect } from "react";
 import { can } from "@grimstat/entitlements";
 import { currentPlan } from "@grimstat/entitlements";
 import { useApp } from "./state/AppContext";
-import { navigate, useRoute, type Route } from "./router";
+import { navigate, useRouteInfo, type Route } from "./router";
 import { useTheme } from "./theme";
 import { decodePermalink, permalinkTokenFromHash } from "./lib/permalink";
+import { decodeRosterPermalink, rosterTokenFromHash } from "./lib/rosterPermalink";
+import { cloneRoster } from "./lib/roster";
+import { db, saveRosterWithVersion } from "./db";
 import { CalculatorPage } from "./pages/CalculatorPage";
 import { ScenariosPage } from "./pages/ScenariosPage";
+import { ArmiesPage } from "./pages/ArmiesPage";
+import { RosterEditorPage } from "./pages/RosterEditorPage";
 import { DataPage } from "./pages/DataPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -15,6 +20,7 @@ import { t } from "./i18n";
 const NAV: Array<{ route: Route; label: () => string }> = [
   { route: "calculator", label: () => t("nav.calculator") },
   { route: "scenarios", label: () => t("nav.scenarios") },
+  { route: "armies", label: () => t("nav.armies") },
   { route: "data", label: () => t("nav.data") },
   { route: "about", label: () => t("nav.about") },
 ];
@@ -31,7 +37,7 @@ function BrandMark() {
 }
 
 export function App() {
-  const route = useRoute();
+  const { route, param } = useRouteInfo();
   const theme = useTheme();
   const { ready, notice, dismissNotice, replaceScenario, notify, snapshot, activeSnapshotId } = useApp();
 
@@ -53,6 +59,33 @@ export function App() {
     window.addEventListener("hashchange", handle);
     return () => window.removeEventListener("hashchange", handle);
   }, [ready, replaceScenario, notify]);
+
+  // Roster permalinks: "#/armies?r=<token>" stores the embedded army and opens it in the editor.
+  useEffect(() => {
+    if (!ready) return;
+    const handle = () => {
+      const token = rosterTokenFromHash(location.hash);
+      if (!token) return;
+      void (async () => {
+        try {
+          const { roster, snapshotId } = decodeRosterPermalink(token);
+          const existing = await db.rosters.get(roster.id);
+          const same = existing && JSON.stringify(existing) === JSON.stringify(roster);
+          const rec = existing && !same ? cloneRoster(roster, t("armies.fromLinkName", { name: roster.name })) : roster;
+          if (!same) await saveRosterWithVersion(rec);
+          if (!(await db.snapshots.get(snapshotId))) notify(t("armies.snapshotMissing", { id: snapshotId }), "info");
+          else notify(t("armies.openedFromLink", { name: rec.name }), "success");
+          navigate("armies", true, rec.id);
+        } catch (e) {
+          notify(t("armies.badLink"), "error", [e instanceof Error ? e.message : String(e)]);
+          navigate("armies", true);
+        }
+      })();
+    };
+    handle();
+    window.addEventListener("hashchange", handle);
+    return () => window.removeEventListener("hashchange", handle);
+  }, [ready, notify]);
 
   const themeLabel = theme.preference === "system" ? t("theme.system", { r: theme.resolved }) : theme.preference === "dark" ? t("theme.dark") : t("theme.light");
 
@@ -108,8 +141,8 @@ export function App() {
         {!ready ? (
           <p className="muted">{t("shell.loading")}</p>
         ) : (
-          <ErrorBoundary resetKey={route}>
-            {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "data" ? <DataPage /> : <AboutPage />}
+          <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
+            {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "data" ? <DataPage /> : <AboutPage />}
           </ErrorBoundary>
         )}
       </main>

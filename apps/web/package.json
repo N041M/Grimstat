@@ -10,10 +10,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@grimstat/adapters": "workspace:*",
     "@grimstat/engine": "workspace:*",
     "@grimstat/entitlements": "workspace:*",
     "@grimstat/game-40k-11e": "workspace:*",
     "@grimstat/plugin-host": "workspace:*",
+    "@grimstat/resolver": "workspace:*",
     "@grimstat/schema": "workspace:*",
     "@grimstat/snapshot": "workspace:*",
     "comlink": "^4.4.2",

@@ -4,7 +4,7 @@ import type { Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, SimResult, 
 import { CH, POLICY } from "./channels";
 import { create11eKeywordRegistry } from "./keywords";
 import { RULES } from "./manifest";
-import { attacksPMF, damagePMF, hitGate, pUnsaved, sustainedPMF, woundGate, woundTarget } from "./attack";
+import { attacksPMF, classifyHit, classifyWound, damagePMF, hitGate, pUnsaved, sustainedPMF, woundGate, woundTarget } from "./attack";
 import { activeToggleEffects, coverageFor, listToggles, resolveScenarioUnit, upper } from "./resolve";
 
 const registry = create11eKeywordRegistry();
@@ -125,7 +125,10 @@ export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = 
     const snap = ctx.snapShooting || (mods.flag(CH.indirect) && ec.flags.has("target-not-visible"));
     const target = w.skill === null ? null : Math.max(2, Math.min(7, w.skill + skillPenalty));
     const critHit = mods.num(CH.critHit, 6, POLICY[CH.critHit]);
-    const hit = autoHit ? { pMiss: 0, pHit: 1, pCrit: 0 } : hitGate({ target: target === 7 ? null : target, rollMod: hitRollMod, critThreshold: critHit, snap, reroll: snap ? null : mods.reroll(CH.rerollHit) });
+    const hitOpts = { target: target === 7 ? null : target, rollMod: hitRollMod, critThreshold: critHit, snap, reroll: snap ? null : mods.reroll(CH.rerollHit) };
+    const hit = autoHit ? { pMiss: 0, pHit: 1, pCrit: 0 } : hitGate(hitOpts);
+    const subHit = mods.substitute(CH.hitRoll);
+    const fixedHit = subHit !== null && !autoHit ? (["miss", "hit", "crit"] as const)[classifyHit(Math.max(1, Math.min(6, subHit)), hitOpts)] : undefined;
     if (!autoHit && target === 7 && !snap) warnings.push(`${w.name}: BS/WS worse than 6+ — only unmodified 6s hit.`);
 
     // --- wound ---
@@ -134,7 +137,10 @@ export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = 
     const wt = woundTarget(S, Tmod);
     const woundMod = mods.num(CH.woundRoll, 0, POLICY[CH.woundRoll]);
     const critWound = mods.num(CH.critWound, 6, POLICY[CH.critWound]);
-    const wound = woundGate({ target: wt, rollMod: woundMod, critThreshold: critWound, reroll: mods.reroll(CH.rerollWound) });
+    const woundOpts = { target: wt, rollMod: woundMod, critThreshold: critWound, reroll: mods.reroll(CH.rerollWound) };
+    const wound = woundGate(woundOpts);
+    const subWound = mods.substitute(CH.woundRoll);
+    const fixedWound = subWound !== null ? (["fail", "wound", "crit"] as const)[classifyWound(Math.max(1, Math.min(6, subWound)), woundOpts)] : undefined;
     const devastating = mods.flag(CH.devastating);
     const lethalAvailable = mods.flag(CH.lethal);
     const sustained = sustainedPMF(mods.has(CH.sustained) ? (mods.list(CH.sustained).at(-1)?.value ?? null) : null);
@@ -188,6 +194,8 @@ export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = 
       singleRerollHit: !snap && mods.oneDieReroll(CH.rerollHit),
       singleRerollWound: mods.oneDieReroll(CH.rerollWound),
       groups: gparams,
+      ...(fixedHit ? { fixedHit } : {}),
+      ...(fixedWound ? { fixedWound } : {}),
       precision: mods.flag(CH.precision) && groups.some((g) => g.target.isCharacter),
       selfMortalsPerWeapon: hazardous ? RULES.hazardousFailProb * (attackerAllVM ? RULES.hazardousMortalsVehicleMonster : RULES.hazardousMortals) : 0,
     });

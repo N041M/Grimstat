@@ -61,6 +61,10 @@ export interface WeaponParams {
   /** One failed wound roll among all this weapon's hits may be re-rolled once. */
   singleRerollWound: boolean;
   groups: GroupParams[];
+  /** One attack die per weapon profile is not rolled but set to this outcome (Miracle/Fate dice). */
+  fixedHit?: "miss" | "hit" | "crit";
+  /** One wound roll per weapon profile is set to this outcome instead of being rolled. */
+  fixedWound?: "fail" | "wound" | "crit";
   /** Attacks may be allocated to character groups first (Precision). */
   precision: boolean;
   /** Expected mortal wounds suffered by the attacker per weapon fired (Hazardous). */

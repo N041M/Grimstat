@@ -5,9 +5,8 @@ import { EffectRecord } from "./effects";
 
 /** Defender allocation policy under 11e fast rolling (defender assigns save results in roll order). */
 export const AllocationPolicy = z.enum([
-  "in-order", // allocate to models in the given order (bodyguards first, character last)
-  "protect-character", // same as in-order but never allocate to a character while a non-character is alive (default)
-  "spread", // maximise survivors: put damage on already-wounded models first (used for multi-damage inefficiency)
+  "in-order", // allocate to model groups in the given order
+  "protect-character", // bodyguard groups absorb first; characters last (default)
 ]);
 export type AllocationPolicy = z.infer<typeof AllocationPolicy>;
 
