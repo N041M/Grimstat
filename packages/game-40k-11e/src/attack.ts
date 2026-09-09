@@ -1,7 +1,6 @@
 import { type ModifierSet, type RerollPolicy } from "@grimstat/effects";
 import { type HitGate, type WoundGate, type PMF, dicePMF, mapPMF, thin, delta } from "@grimstat/engine";
 import { CH, POLICY } from "./channels";
-import { RULES } from "./manifest";
 
 const SIX = [1, 2, 3, 4, 5, 6] as const;
 
@@ -99,13 +98,15 @@ export interface SaveOpts {
   invulnTarget: number | null;
   rollMod: number; // capped save-roll modifier
   reroll: RerollPolicy | null;
+  /** Unmodified 6 always saves (11e). Default true. */
+  sixAlwaysSaves?: boolean;
 }
 
 /** Probability that a save FAILS. */
 export function pUnsaved(o: SaveOpts): number {
   const success = (r: number): boolean => {
     if (r === 1) return false;
-    if (r === 6 && RULES.sixAlwaysSaves) return true;
+    if (r === 6 && (o.sixAlwaysSaves ?? true)) return true;
     if (r + o.rollMod >= o.armourTarget) return true;
     if (o.invulnTarget !== null && r >= o.invulnTarget) return true;
     return false;

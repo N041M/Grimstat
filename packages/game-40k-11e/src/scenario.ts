@@ -3,11 +3,12 @@ import { run, percentiles, delta, mean, type EngineInput, type TargetGroup, type
 import type { Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, SimResult, Snapshot } from "@grimstat/schema";
 import { CH, POLICY } from "./channels";
 import { create11eKeywordRegistry } from "./keywords";
-import { RULES } from "./manifest";
+import { RULES, type RulesParams } from "./manifest";
 import { attacksPMF, classifyHit, classifyWound, damagePMF, hitGate, pUnsaved, sustainedPMF, woundGate, woundTarget } from "./attack";
 import { activeToggleEffects, coverageFor, listToggles, resolveScenarioUnit, upper } from "./resolve";
 
-const registry = create11eKeywordRegistry();
+/** The live 11e keyword registry. Other plugins may extend it via `registerKeyword` without editing this package. */
+export const keywordRegistry = create11eKeywordRegistry(RULES);
 
 interface Group {
   target: TargetGroup;
@@ -69,7 +70,12 @@ function evalContext(attacker: ScenarioUnit, defender: ScenarioUnit, weapon: Sce
   };
 }
 
-export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = {}): SimResult {
+export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot; initialState?: number[] } = {}): SimResult {
+  return runScenarioWith(RULES, keywordRegistry, scenario, opts);
+}
+
+/** Edition-parametrised core: the same pipeline under a different `RulesParams` and keyword registry. */
+export function runScenarioWith(rules: RulesParams, registry: ReturnType<typeof create11eKeywordRegistry>, scenario: Scenario, opts: { snapshot?: Snapshot; initialState?: number[] } = {}): SimResult {
   const warnings: string[] = [];
   const snapshot = opts.snapshot;
   const attacker = resolveScenarioUnit(scenario.attacker, snapshot);
@@ -110,7 +116,7 @@ export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = 
     const stealth = mods.flag(CH.stealth);
     const inCover = (ctx.inCover || stealth) && w.kind === "ranged" && !ignoresCover;
     let skillPenalty = 0;
-    if (inCover && RULES.coverAsSkillPenalty) skillPenalty += 1;
+    if (inCover && rules.coverAsSkillPenalty) skillPenalty += 1;
     const skillAdds = mods.list(CH.skill).filter((m) => m.op === "add").map((m) => Number(m.value));
     for (const v of skillAdds) skillPenalty += v;
     let hitRollMod = 0;
@@ -118,7 +124,7 @@ export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = 
       // ignore penalties, keep buffs
       skillPenalty = Math.min(0, skillAdds.filter((v) => v < 0).reduce((s, v) => s + v, 0));
       const pos = mods.list(CH.hitRoll).filter((m) => m.op === "add" && Number(m.value) > 0).reduce((s, m) => s + Number(m.value), 0);
-      hitRollMod = Math.min(RULES.hitRollCap, pos);
+      hitRollMod = Math.min(rules.hitRollCap, pos);
     } else {
       hitRollMod = mods.num(CH.hitRoll, 0, POLICY[CH.hitRoll]);
     }
@@ -151,23 +157,24 @@ export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = 
     const fnpChannel = mods.has(CH.fnp) ? mods.num(CH.fnp, 0, POLICY[CH.fnp]) : 0;
     const gparams: GroupParams[] = groups.map((g) => {
       const m = g.model;
-      const armourTarget = mods.num(CH.save, m.Sv) + ap;
+      const coverBonus = inCover && rules.coverAsSaveBonus && !(m.Sv <= 3 && ap === 0) ? 1 : 0;
+      const armourTarget = mods.num(CH.save, m.Sv) + ap - coverBonus;
       let inv: number | null = m.InvSv ?? null;
       if (mods.has(CH.invuln)) {
         const v = mods.num(CH.invuln, inv ?? 7, POLICY[CH.critWound]);
         inv = v >= 7 ? inv : inv === null ? v : Math.min(inv, v);
       }
-      const pu = pUnsaved({ armourTarget, invulnTarget: inv, rollMod: saveMod, reroll: mods.reroll(CH.rerollSave) });
+      const pu = pUnsaved({ armourTarget, invulnTarget: inv, rollMod: saveMod, reroll: mods.reroll(CH.rerollSave), sixAlwaysSaves: rules.sixAlwaysSaves });
       const fnp = m.fnp ?? (fnpChannel >= 2 && fnpChannel <= 6 ? fnpChannel : null);
       const dmg = damagePMF(w.D, mods, fnp);
-      const mortal = RULES.damageModsApplyToDevastating ? dmg : damagePMF(w.D, new ModifierSet(), fnp);
+      const mortal = rules.damageModsApplyToDevastating ? dmg : damagePMF(w.D, new ModifierSet(), fnp);
       return { pUnsaved: pu, damage: dmg, mortalDamage: mortal };
     });
 
     // --- lethal hits choice ---
     let lethal = false;
     if (lethalAvailable) {
-      if (ctx.lethalChoice === "always") lethal = true;
+      if (!rules.lethalOptional || ctx.lethalChoice === "always") lethal = true;
       else if (ctx.lethalChoice === "never") lethal = false;
       else {
         const first = gparams[0] ?? { pUnsaved: 1, damage: delta(1), mortalDamage: delta(1) };
@@ -197,7 +204,7 @@ export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = 
       ...(fixedHit ? { fixedHit } : {}),
       ...(fixedWound ? { fixedWound } : {}),
       precision: mods.flag(CH.precision) && groups.some((g) => g.target.isCharacter),
-      selfMortalsPerWeapon: hazardous ? RULES.hazardousFailProb * (attackerAllVM ? RULES.hazardousMortalsVehicleMonster : RULES.hazardousMortals) : 0,
+      selfMortalsPerWeapon: hazardous ? rules.hazardousFailProb * (attackerAllVM ? rules.hazardousMortalsVehicleMonster : rules.hazardousMortals) : 0,
     });
   }
   if (!weapons.length) warnings.push(`No enabled ${phaseKind} weapons for the ${ctx.phase} phase.`);
@@ -215,6 +222,7 @@ export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = 
     backend: ctx.backend,
     mcIterations: ctx.mcIterations,
     seed: 1234,
+    ...(opts.initialState ? { initialState: opts.initialState } : {}),
   };
   const out = groups.length ? run(input) : null;
   const coverageA = coverageFor(attacker, snapshot);
@@ -248,6 +256,7 @@ export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot } = 
     pointsSlain: o.expectedPointsSlain,
     coverage,
     warnings: [...warnings, ...o.warnings],
+    ...("finalState" in o && o.finalState ? { finalState: o.finalState } : {}),
   };
   return result;
 }

@@ -1,17 +1,13 @@
 {
-  "name": "@grimstat/plugin-host",
+  "name": "@grimstat/game-40k-10e",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": {
-    ".": "./src/index.ts"
-  },
+  "exports": { ".": "./src/index.ts" },
   "dependencies": {
-    "@grimstat/schema": "workspace:*"
-  },
-  "devDependencies": {
+    "@grimstat/schema": "workspace:*",
     "@grimstat/game-40k-11e": "workspace:*"
   }
 }

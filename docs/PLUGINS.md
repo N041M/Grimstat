@@ -53,16 +53,23 @@ host.registries.widgets.set("kill-curve", {
 
 Widgets read the shared selection context (current scenario, result, snapshot, roster) and never call the engine themselves; the worker does.
 
-## 5. A new edition or game system
+## 5. A new edition of 40k
 
-Copy `packages/game-40k-11e` to `packages/game-<system>` and change:
+Another edition is a set of rule constants plus keyword differences on the same pipeline. `packages/game-40k-10e` is the worked example and is 30 lines:
 
-- `manifest.ts`: ids, `RULES` (cap sizes, cover model, hazardous, devastating behaviour).
-- `keywords.ts` and `patterns.ts`: the keyword and ability vocabulary.
-- `constraints.ts`: battle sizes and list-building rules.
-- `archetypes.ts`: generic target profiles.
+```ts
+export const plugin = createGameSystem({
+  manifest, gameSystem,
+  rules: RULES_10E,                       // cover as a save bonus, mandatory Lethal Hits, Hazardous on 1s, no auto-6 saves
+  keywords: (registry) => registry.register("CLEAVE", (_kw, c) => c.warnings.push("CLEAVE is not a 10th-edition ability.")),
+});
+```
 
-The engine (`packages/engine`) takes probabilities and distributions only, so it is shared unchanged. The plugin host checks `apiVersion` compatibility on load.
+`RulesParams` (in `manifest.ts`) lists every edition-level switch. Add a field there when a new edition needs a new switch; the 11e and 10e defaults live side by side.
+
+## 6. A different game system
+
+Copy `packages/game-40k-11e` to `packages/game-<system>` and change `manifest.ts` (ids, rules), `keywords.ts` and `patterns.ts` (vocabulary), `constraints.ts` (list-building rules) and `archetypes.ts`. The engine (`packages/engine`) takes probabilities and distributions only, so it is shared unchanged. The plugin host checks `apiVersion` compatibility on load; `packages/plugin-host/src/modularity.test.ts` shows a third-party plugin adding a keyword, a widget and an archetype through the public API only.
 
 ## Guarantees the core keeps
 

@@ -21,8 +21,26 @@ export const gameSystem: GameSystem = {
   ],
 };
 
-/** Edition-level rule parameters. A 10e plugin would override these. */
-export const RULES = {
+/** Edition-level rule parameters. Another edition's plugin overrides these through `createGameSystem`. */
+export interface RulesParams {
+  hitRollCap: number;
+  woundRollCap: number;
+  saveRollCap: number;
+  sixAlwaysSaves: boolean;
+  coverAsSkillPenalty: boolean;
+  /** 10e-style cover: +1 to the armour save against ranged attacks, except for a 3+ or better save against AP0. */
+  coverAsSaveBonus: boolean;
+  /** Lethal Hits is a choice (11e) or automatic (10e). */
+  lethalOptional: boolean;
+  hazardousFailProb: number;
+  hazardousMortals: number;
+  hazardousMortalsVehicleMonster: number;
+  devastatingMortalsNoSpill: boolean;
+  damageModsApplyToDevastating: boolean;
+  blastPerModels: number;
+}
+
+export const RULES: RulesParams = {
   hitRollCap: 1,
   woundRollCap: 1,
   saveRollCap: 1,
@@ -30,6 +48,8 @@ export const RULES = {
   sixAlwaysSaves: true,
   /** Cover: -1 to the attacker's BS/WS *stat* (uncapped channel), not +1 to the save. */
   coverAsSkillPenalty: true,
+  coverAsSaveBonus: false,
+  lethalOptional: true,
   /** Hazardous: fails on 1-2; 1 MW, or 3 MW if every model in the firing unit is a VEHICLE/MONSTER. */
   hazardousFailProb: 2 / 6,
   hazardousMortals: 1,
@@ -40,4 +60,15 @@ export const RULES = {
   damageModsApplyToDevastating: true,
   /** Blast/Cleave: +1 (or +X) attacks per 5 models in the target unit. */
   blastPerModels: 5,
-} as const;
+};
+
+export const RULES_10E: RulesParams = {
+  ...RULES,
+  sixAlwaysSaves: false,
+  coverAsSkillPenalty: false,
+  coverAsSaveBonus: true,
+  lethalOptional: false,
+  hazardousFailProb: 1 / 6,
+  hazardousMortals: 1,
+  hazardousMortalsVehicleMonster: 3,
+};

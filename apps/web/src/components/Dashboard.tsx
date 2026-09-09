@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactGridLayout, { WidthProvider, type Layout } from "react-grid-layout";
 import { db, type DashboardLayoutRecord } from "../db";
-import { widgetsFrom, type ReactWidgetDef, type WidgetProps } from "../widgets/registry";
+import { analysisKeys, widgetAvailable, widgetsFrom, type ReactWidgetDef, type WidgetProps } from "../widgets/registry";
 import { host } from "../plugin";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { t } from "../i18n";
@@ -52,7 +52,9 @@ function useMedia(query: string): boolean {
 }
 
 export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
-  const widgets = useMemo(() => widgetsFrom(host), []);
+  const provided = analysisKeys(inputs.analyses);
+  // Analysis widgets are gated on the inputs this dashboard provides (see widgetAvailable).
+  const widgets = useMemo(() => widgetsFrom(host).filter((w) => widgetAvailable(w, inputs.analyses)), [provided]); // eslint-disable-line react-hooks/exhaustive-deps
   const [layout, setLayout] = useState<Layout[] | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
   const narrow = useMedia("(max-width: 899px)");

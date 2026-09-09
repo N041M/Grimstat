@@ -32,3 +32,10 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - Tier 1: weapon keywords in `keywords.ts` and unit core abilities in `patterns.ts#coreAbilityEffects`.
 - Tier 2: `patterns.ts` regexes over ability text (generic phrasings only) and any explicit `effects` on an ability (override packs).
 - Tier 3: text only → listed as unmodelled; use the generic toggles to approximate.
+
+## Turn optimiser (`optimiser.ts`)
+- **Plan evaluation is exact** (exact backend): attackers assigned to the same target are resolved in order with the defender's state distribution chained from one to the next, so overkill and "the target is already dead" are accounted for. Targets are independent of each other, so the total models-slain distribution is the convolution of per-target distributions.
+- **Search is heuristic**: greedy construction (attackers by points, best marginal gain over target × option) then local search over single reassignments, pairwise target swaps and firing order, until no improvement. It is not guaranteed optimal; evaluations are cached.
+- Options model stratagem-like effects with CP costs (one per attacking unit, per phase, as in 11e); a CP budget constrains the plan.
+- Objectives: expected points of *destroyed* models (default; a chipped tank scores nothing), expected models slain, or expected wounds dealt.
+- Whole-unit targeting only (no split fire); if the exact path refuses a target (state space too large) that pair falls back to unchained Monte Carlo and a warning is raised.

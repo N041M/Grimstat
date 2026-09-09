@@ -136,6 +136,15 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/game-40k-10e:
+    dependencies:
+      '@grimstat/game-40k-11e':
+        specifier: workspace:*
+        version: link:../game-40k-11e
+      '@grimstat/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/game-40k-11e:
     dependencies:
       '@grimstat/effects':
@@ -160,6 +169,10 @@ importers:
       '@grimstat/schema':
         specifier: workspace:*
         version: link:../schema
+    devDependencies:
+      '@grimstat/game-40k-11e':
+        specifier: workspace:*
+        version: link:../game-40k-11e
 
   packages/resolver:
     dependencies:

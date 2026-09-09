@@ -12,6 +12,7 @@ import { CalculatorPage } from "./pages/CalculatorPage";
 import { ScenariosPage } from "./pages/ScenariosPage";
 import { ArmiesPage } from "./pages/ArmiesPage";
 import { RosterEditorPage } from "./pages/RosterEditorPage";
+import { AnalysesPage } from "./pages/AnalysesPage";
 import { DataPage } from "./pages/DataPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -21,6 +22,7 @@ const NAV: Array<{ route: Route; label: () => string }> = [
   { route: "calculator", label: () => t("nav.calculator") },
   { route: "scenarios", label: () => t("nav.scenarios") },
   { route: "armies", label: () => t("nav.armies") },
+  { route: "analyses", label: () => t("nav.analyses") },
   { route: "data", label: () => t("nav.data") },
   { route: "about", label: () => t("nav.about") },
 ];
@@ -142,7 +144,7 @@ export function App() {
           <p className="muted">{t("shell.loading")}</p>
         ) : (
           <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
-            {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "data" ? <DataPage /> : <AboutPage />}
+            {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "analyses" ? <AnalysesPage /> : route === "data" ? <DataPage /> : <AboutPage />}
           </ErrorBoundary>
         )}
       </main>

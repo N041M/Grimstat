@@ -1,7 +1,41 @@
 # apps/web — notes and requests for other packages
 
-Status: Phase 3 web app (Vite + React 18 + TypeScript, offline PWA) plus the Phase 4 army builder ("Armies" section).
-`pnpm typecheck` clean, `pnpm vitest run apps/web` green, `pnpm --filter @grimstat/web build` green.
+Status: Phase 3 web app (Vite + React 18 + TypeScript, offline PWA), the Phase 4 army builder ("Armies" section) and
+the Phase 5 army-level analyses ("Analyses" section). `pnpm typecheck` clean, `pnpm vitest run apps/web` green,
+`pnpm --filter @grimstat/web build` green.
+
+## Analyses (Phase 5) — what is where
+
+- Route: `#/analyses` (`src/pages/AnalysesPage.tsx`), four tabs — Matrix, Durability, Efficiency, Turn optimiser
+  (`src/components/analyses/{MatrixTab,DurabilityTab,EfficiencyTab,TurnTab}.tsx`). The active tab and every
+  tab's inputs persist in Dexie `settings` (`analyses.tab`, `analyses.<tab>.<set>` for unit sets,
+  `analyses.<tab>.options` for controls).
+- Worker: `src/worker/sim.worker.ts` gained `matrix`, `durability`, `efficiency`, `optimiseTurn`, `evaluateTurnPlan`
+  (thin wrappers over `runMatrix`, `durabilityProfile`, `efficiencyRanking`, `optimiseTurn`, `evaluateTurnPlan`).
+  `SimClient` (`src/worker/client.ts`) sequences *every* call through one `call()` helper, so the existing stale-run
+  rule (only the newest request's result is delivered; a superseded run hogging the worker > 2.5 s is terminated)
+  now covers the analyses too. `src/hooks/useWorkerTask.ts` is the button-triggered counterpart of `useSimulation`
+  (running flag, elapsed ms, error). Matrix cells are stripped of `SimResult.finalState` before crossing the worker
+  boundary (it is only needed for chaining and can be large).
+- Unit-set picker (`src/components/analyses/UnitSetPicker.tsx`, model in `src/lib/unitSet.ts`, persistence in
+  `src/hooks/useUnitSet.ts`): sources are an army from Dexie `rosters` (hosts only — attached characters are
+  folded in by `unitFromRosterUnit`), archetypes (multi-select), datasheets of the active snapshot
+  (`unitFromDatasheet`, default model count) and the calculator's attacker/defender. Only the *sources* are stored
+  (`{ source, optionId?, weight? }[]`); units are rebuilt on load and vanished sources are dropped silently.
+- Pure, tested helpers: `src/lib/heatmap.ts` (metric extraction, totals, `heatColour` colour scale using
+  `color-mix` on `--accent`), `src/lib/matrixCsv.ts` (long-form CSV, RFC 4180 escaping), `src/lib/unitSet.ts`.
+  Tests: `heatmap.test.ts`, `unitSet.test.ts`, `widgets/registry.test.ts`.
+- Widgets: `src/widgets/analyses.tsx` registers eight widgets (`analysis.*`) built from the same components the page
+  renders. They declare `requires: "analyses.<key>"`; `Dashboard` filters with `widgetAvailable()` on
+  `WidgetProps.analyses` (new optional field, `AnalysisInputs`), so the calculator dashboard is unchanged until a
+  dashboard provides those inputs.
+- Turn optimiser UI: per-attacker stratagem select ("let the optimiser choose" = all `DEFAULT_TURN_OPTIONS`, a
+  specific option = only that one), per-target priority weight 0.5–3, CP budget (default 3, 0 disables), objective,
+  range band + phase. Editing a target/stratagem in the plan table calls `evaluateTurnPlan` with the *full* option
+  list and shows the score delta against the optimised plan. Any warning mentioning Monte Carlo / fallback is
+  surfaced with an "approximate" badge; all warnings are listed.
+- No shims remain: `src/lib/turn.ts` re-exports the optimiser from `@grimstat/game-40k-11e`.
+
 
 ## Army builder (Phase 4) — what is where
 
@@ -36,6 +70,20 @@ Status: Phase 3 web app (Vite + React 18 + TypeScript, offline PWA) plus the Pha
   `checksumOf`-style verifier (or an async one the page can await) would let it flag tampered/corrupt imports.
 - Snapshots produced by the CLI must be plain JSON that passes `Snapshot.parse` from `@grimstat/schema`; the Data page shows
   the first 15 zod issues on failure.
+
+### packages/game-40k-11e (analyses)
+- `efficiencyRanking` evaluates every attacker under one context (default shooting), so melee-only units rank at 0.
+  The worker partitions melee-only attackers and ranks them with `phase: "fight", charged: true` before merging;
+  `durabilityProfile` already auto-detects melee archetypes — the same auto-detection inside `efficiencyRanking`
+  would remove that workaround.
+- `runMatrix` cells carry the full `SimResult` (incl. `finalState`); the web worker strips `finalState`. A
+  `{ slim?: boolean }` option (or omitting `finalState` unless requested) would avoid shipping it at all.
+- `TurnAssignment.order` is 0-based; the UI shows the row position instead. Worth documenting on the type.
+- `DEFAULT_TURN_OPTIONS` labels are inconsistent about stating the CP cost ("+1 to wound (1 CP)" vs
+  "Command Re-roll (one hit roll)"); the UI appends "(n CP)" only when the label does not already mention CP.
+  Consistent labels (without the cost) would let the UI format them uniformly.
+- Nice-to-have: `MatrixCell` could expose `attackerPoints` / `defenderPoints` directly (they are on the nested
+  `SimResult` today) so consumers do not need the unit list to label headers.
 
 ### packages/game-40k-11e (army builder)
 - **`constraints11e` `units.size` mis-handles multi-line compositions.** For a datasheet whose `composition` has one
@@ -86,6 +134,13 @@ Status: Phase 3 web app (Vite + React 18 + TypeScript, offline PWA) plus the Pha
   CLI output as a single `Snapshot` object (not wrapped) so it round-trips.
 
 ## Local decisions worth knowing
+- Analyses persist per tab in `settings`: `analyses.tab`, `analyses.matrix.{attackers,defenders,options}`,
+  `analyses.durability.{defender,options}`, `analyses.efficiency.{attackers,options}`,
+  `analyses.turn.{attackers,targets,options}`. Unit sets store sources, not units.
+- Matrix "totals" sum additive metrics and average P(kill). The CSV export is long-form (one row per pair, every
+  metric) rather than one grid per metric.
+- Clicking a heatmap cell copies the pair (and the matrix context) into the calculator via `replaceScenario`, so the
+  pickers re-sync exactly like a permalink open.
 - Dexie stores: `snapshots`, `scenarios`, `layouts`, `settings` (v1) + `rosters`, `rosterVersions` (v2; db name
   `grimstat`). Export-all / import-all bundle format: `{ format: "grimstat-export", version: 1, exportedAt,
   stores: {..., rosters?} }`. The Armies page's "Export all" writes `{ format: "grimstat-rosters", version: 1, rosters }`.

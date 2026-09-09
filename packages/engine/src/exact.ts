@@ -104,6 +104,11 @@ export function runExact(input: EngineInput): EngineOutput | null {
   if (space.total > (input.maxExactStates ?? DEFAULT_MAX_STATES)) return null;
   const warnings: string[] = [];
   let dist = initialDist(space);
+  if (input.initialState) {
+    if (input.initialState.length !== space.total) throw new Error("initialState does not match the target's state space");
+    dist = { p: Float64Array.from(input.initialState), wasted: 0, unsaved: 0 };
+  }
+  const startDamage = expectedDamage(space, dist);
   const traces: WeaponTrace[] = [];
   let selfMortals = 0;
 
@@ -200,19 +205,22 @@ export function runExact(input: EngineInput): EngineOutput | null {
   }
 
   const fin = summarize(space, dist);
+  // when chained, report the damage/slain achieved *in this run* as expectations, and cumulative PMFs
+  const startFin = input.initialState ? summarize(space, { p: Float64Array.from(input.initialState), wasted: 0, unsaved: 0 }) : null;
   return {
     backend: "exact",
     damagePMF: fin.damagePMF,
     slainPMF: fin.slainPMF,
-    expectedDamage: mean(fin.damagePMF),
-    expectedSlain: mean(fin.slainPMF),
+    expectedDamage: mean(fin.damagePMF) - startDamage,
+    expectedSlain: mean(fin.slainPMF) - (startFin ? mean(startFin.slainPMF) : 0),
     pKill: fin.pKill,
     pAtLeastSlain: survivalFromPMF(fin.slainPMF),
     expectedWasted: dist.wasted,
     expectedSelfMortals: selfMortals,
-    expectedPointsSlain: fin.expectedPointsSlain,
+    expectedPointsSlain: fin.expectedPointsSlain - (startFin ? startFin.expectedPointsSlain : 0),
     weapons: traces,
     warnings,
+    finalState: Array.from(dist.p),
   };
 }
 

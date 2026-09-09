@@ -16,8 +16,12 @@ describe("army-level analyses", () => {
     expect(d.length).toBe(4);
     for (const e of d) expect(e.expectedDamage).toBeGreaterThanOrEqual(0);
   });
-  it("efficiency ranking sorts descending", () => {
-    const rows = efficiencyRanking([byId("bolter-squad"), byId("lascannon-team"), byId("melta-squad")]);
+  it("efficiency ranking sorts descending and ranks melee-only units in the fight phase", () => {
+    const rows = efficiencyRanking([byId("bolter-squad"), byId("lascannon-team"), byId("melta-squad"), byId("chainsword-mob")]);
     for (let i = 1; i < rows.length; i++) expect(rows[i - 1]!.damagePer100).toBeGreaterThanOrEqual(rows[i]!.damagePer100);
+    expect(rows.find((r) => r.unit.includes("Melee horde"))!.damagePer100).toBeGreaterThan(0);
+    const m = runMatrix([byId("chainsword-mob")], [byId("marine-like")]);
+    expect(m.cells[0]![0]!.result.expectedDamage).toBeGreaterThan(0);
+    expect(m.cells[0]![0]!.result.finalState).toBeUndefined();
   });
 });

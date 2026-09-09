@@ -246,3 +246,22 @@ describe("monte carlo agrees with exact", () => {
     );
   });
 });
+
+describe("chained runs", () => {
+  it("running two weapons in one run equals running them in two chained runs", () => {
+    const groups = [{ id: "g", name: "g", models: 4, wounds: 3, isCharacter: false, pointsPerModel: 10 }];
+    const w1 = weapon({ name: "a", count: 4, groups: [{ pUnsaved: 0.5, damage: dicePMF("D3"), mortalDamage: dicePMF("D3") }] });
+    const w2 = weapon({ name: "b", count: 3, attacks: dicePMF("D6"), groups: [{ pUnsaved: 0.7, damage: delta(2), mortalDamage: delta(2) }] });
+    const both = runExact({ weapons: [w1, w2], groups, allocation: "in-order", backend: "exact", mcIterations: 0 })!;
+    const first = runExact({ weapons: [w1], groups, allocation: "in-order", backend: "exact", mcIterations: 0 })!;
+    const second = runExact({ weapons: [w2], groups, allocation: "in-order", backend: "exact", mcIterations: 0, initialState: first.finalState! })!;
+    close(first.expectedDamage + second.expectedDamage, both.expectedDamage, 1e-9);
+    close(first.expectedSlain + second.expectedSlain, both.expectedSlain, 1e-9);
+    close(second.pKill, both.pKill, 1e-9);
+    close(first.expectedPointsSlain + second.expectedPointsSlain, both.expectedPointsSlain, 1e-9);
+    both.slainPMF.forEach((v, i) => close(v, second.slainPMF[i] ?? 0, 1e-9));
+    const mc = runMonteCarlo({ weapons: [w2], groups, allocation: "in-order", backend: "mc", mcIterations: 40000, seed: 3, initialState: first.finalState! });
+    expect(Math.abs(mc.expectedDamage - second.expectedDamage)).toBeLessThan(3 * (mc.ciHalfWidth ?? 0.1) + 0.03);
+    expect(Math.abs(mc.pKill - second.pKill)).toBeLessThan(0.02);
+  });
+});

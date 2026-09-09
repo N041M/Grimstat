@@ -1,6 +1,6 @@
 import { KeywordRegistry } from "@grimstat/effects";
 import { CH } from "./channels";
-import { RULES } from "./manifest";
+import { RULES, type RulesParams } from "./manifest";
 
 function numVal(v: number | string | undefined, fallback = 1): number {
   if (typeof v === "number") return v;
@@ -9,19 +9,19 @@ function numVal(v: number | string | undefined, fallback = 1): number {
 }
 
 /** Tier-1 weapon keywords of 11th edition. Each handler translates a keyword into modifiers/flags. */
-export function create11eKeywordRegistry(): KeywordRegistry {
+export function create11eKeywordRegistry(rules: RulesParams = RULES): KeywordRegistry {
   const r = new KeywordRegistry();
 
   r.register("RAPID FIRE", (kw, c) => {
     if (c.rangeBand === "half") c.mods.add({ channel: CH.attacks, op: "add", value: numVal(kw.value), source: "Rapid Fire" });
   });
   r.register("BLAST", (_kw, c) => {
-    const bonus = Math.floor(c.targetModelCount / RULES.blastPerModels);
+    const bonus = Math.floor(c.targetModelCount / rules.blastPerModels);
     if (bonus > 0) c.mods.add({ channel: CH.attacks, op: "add", value: bonus, source: "Blast" });
   });
   r.register("CLEAVE", (kw, c) => {
     if (c.weaponKind !== "melee") return;
-    const bonus = Math.floor(c.targetModelCount / RULES.blastPerModels) * numVal(kw.value);
+    const bonus = Math.floor(c.targetModelCount / rules.blastPerModels) * numVal(kw.value);
     if (bonus > 0) c.mods.add({ channel: CH.attacks, op: "add", value: bonus, source: "Cleave" });
   });
   r.register("HEAVY", (_kw, c) => {

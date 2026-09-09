@@ -58,5 +58,7 @@ export const SimResult = z.object({
   pointsSlain: z.number().optional(),
   coverage: CoverageReport,
   warnings: z.array(z.string()).default([]),
+  /** Defender state distribution after the attack (exact backend); used to chain attackers in the turn optimiser. */
+  finalState: z.array(z.number()).optional(),
 });
 export type SimResult = z.infer<typeof SimResult>;

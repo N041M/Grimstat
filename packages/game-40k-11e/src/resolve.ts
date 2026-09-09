@@ -1,11 +1,10 @@
 import type { Ability, Archetype, CoverageReport, Datasheet, EffectRecord, ManualToggle, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
 import { createContext } from "@grimstat/resolver";
 import { abilityEffects, applyFnpToModels } from "./patterns";
-import { create11eKeywordRegistry } from "./keywords";
 import { CH } from "./channels";
 import type { UnitFromDatasheetOptions } from "./api";
 
-const registry = create11eKeywordRegistry();
+import { keywordRegistry as registry } from "./scenario";
 
 export function upper(s: string): string {
   return s.trim().toUpperCase();

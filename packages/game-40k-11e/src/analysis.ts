@@ -39,6 +39,8 @@ export interface MatrixCell {
   attacker: string;
   defender: string;
   result: SimResult;
+  attackerPoints?: number | undefined;
+  defenderPoints?: number | undefined;
   /** Expected damage per 100 attacker points, when known. */
   damagePer100?: number;
   /** Expected defender points destroyed per 100 attacker points, when known. */
@@ -51,12 +53,21 @@ export interface MatrixResult {
   cells: MatrixCell[][]; // [attackerIndex][defenderIndex]
 }
 
+/** Melee-only attackers are resolved in the fight phase (charged); everyone else as given. */
+function phaseFor(a: ScenarioUnit, context: Partial<ScenarioContext>): Partial<ScenarioContext> {
+  if (context.phase) return context;
+  const enabled = a.weapons.filter((w) => w.enabled && w.count > 0);
+  const meleeOnly = enabled.length > 0 && enabled.every((w) => w.kind === "melee");
+  return meleeOnly ? { ...context, phase: "fight", charged: context.charged ?? true } : context;
+}
+
 /** Many-vs-many: every attacker against every defender under one context. */
 export function runMatrix(attackers: ScenarioUnit[], defenders: ScenarioUnit[], context: Partial<ScenarioContext> = {}, opts: { snapshot?: Snapshot; enabledToggles?: string[] } = {}): MatrixResult {
   const cells = attackers.map((a) =>
     defenders.map((d) => {
-      const result = runScenario(makeScenario(a, d, context, opts.enabledToggles ?? []), { snapshot: opts.snapshot });
-      const cell: MatrixCell = { attacker: a.name, defender: d.name, result };
+      const result = runScenario(makeScenario(a, d, phaseFor(a, context), opts.enabledToggles ?? []), { snapshot: opts.snapshot });
+      delete result.finalState; // not needed for a matrix; keeps the payload small
+      const cell: MatrixCell = { attacker: a.name, defender: d.name, result, attackerPoints: a.points, defenderPoints: d.points };
       if (a.points) {
         cell.damagePer100 = (result.expectedDamage / a.points) * 100;
         if (result.pointsSlain !== undefined) cell.pointsTradePer100 = (result.pointsSlain / a.points) * 100;
@@ -110,7 +121,7 @@ export function efficiencyRanking(attackers: ScenarioUnit[], opts: { targetIds?:
     const byTarget: Record<string, number> = {};
     let sum = 0;
     for (const t of targets) {
-      const r = runScenario(makeScenario(a, t, opts.context ?? { rangeBand: "half" }), { snapshot: opts.snapshot });
+      const r = runScenario(makeScenario(a, t, phaseFor(a, opts.context ?? { rangeBand: "half" })), { snapshot: opts.snapshot });
       byTarget[t.name] = r.expectedDamage;
       sum += a.points ? (r.expectedDamage / a.points) * 100 : r.expectedDamage;
     }

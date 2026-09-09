@@ -1,5 +1,5 @@
 import { makeSampler, mulberry32 } from "./rng";
-import { groupOrder } from "./allocation";
+import { decode, groupOrder, makeStateSpace } from "./allocation";
 import type { EngineInput, EngineOutput, WeaponParams, WeaponTrace } from "./types";
 import { mean, pmfFromHistogram } from "./pmf";
 import { survivalFromPMF } from "./stats";
@@ -42,6 +42,11 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
 
   const slain = new Array<number>(G).fill(0);
   const curW = new Array<number>(G).fill(0);
+  const space = makeStateSpace(groups);
+  const initial = input.initialState ? makeSampler(input.initialState, rand) : null;
+  let startSlain = 0;
+  let startDamage = 0;
+  let startPts = 0;
 
   const pickGroup = (order: number[]): number => {
     for (const g of order) if (slain[g]! < groups[g]!.models) return g;
@@ -60,12 +65,31 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
   };
 
   for (let it = 0; it < iters; it++) {
-    for (let g = 0; g < G; g++) {
-      slain[g] = 0;
-      curW[g] = groups[g]!.wounds;
-    }
-    let wasted = 0;
     let dealt = 0;
+    let slainBefore = 0;
+    let ptsBefore = 0;
+    if (initial) {
+      const locals = decode(space, initial());
+      for (let g = 0; g < G; g++) {
+        const grp = groups[g]!;
+        const l = locals[g]!;
+        const terminal = l >= grp.models * grp.wounds;
+        slain[g] = terminal ? grp.models : Math.floor(l / grp.wounds);
+        curW[g] = terminal ? grp.wounds : grp.wounds - (l % grp.wounds);
+        dealt += Math.min(l, grp.models * grp.wounds);
+        slainBefore += slain[g]!;
+        ptsBefore += slain[g]! * (grp.pointsPerModel ?? 0);
+      }
+    } else {
+      for (let g = 0; g < G; g++) {
+        slain[g] = 0;
+        curW[g] = groups[g]!.wounds;
+      }
+    }
+    startSlain += slainBefore;
+    startDamage += dealt;
+    startPts += ptsBefore;
+    let wasted = 0;
     for (let wi = 0; wi < prepared.length; wi++) {
       const P = prepared[wi]!;
       const w = P.w;
@@ -172,7 +196,7 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
 
   const damagePMF = pmfFromHistogram(dmgHist, iters);
   const slainPMF = pmfFromHistogram(slainHist, iters);
-  const m = dmgSum / iters;
+  const m = dmgSum / iters - startDamage / iters;
   const sd = Math.sqrt(Math.max(0, dmgSq / iters - m * m));
   const traces: WeaponTrace[] = prepared.map((P, i) => ({
     name: P.w.name,
@@ -190,12 +214,12 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
     damagePMF,
     slainPMF,
     expectedDamage: m,
-    expectedSlain: mean(slainPMF),
+    expectedSlain: mean(slainPMF) - startSlain / iters,
     pKill: killCount / iters,
     pAtLeastSlain: survivalFromPMF(slainPMF),
     expectedWasted: wastedSum / iters,
     expectedSelfMortals: prepared.reduce((s, P) => s + P.w.count * P.w.selfMortalsPerWeapon, 0),
-    expectedPointsSlain: ptsSum / iters,
+    expectedPointsSlain: (ptsSum - startPts) / iters,
     weapons: traces,
     warnings: [],
   };

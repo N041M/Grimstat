@@ -431,6 +431,7 @@ label.inline {
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
   border-bottom: 1px solid var(--border);
   margin-bottom: 0.75rem;
@@ -1312,4 +1313,242 @@ button.diag-btn:hover {
 }
 .diff-list .warn {
   color: var(--warn);
+}
+
+/* ---------- Analyses (Phase 5) ---------- */
+.field-row .grow {
+  flex: 1;
+  min-width: 160px;
+}
+.analysis {
+  display: grid;
+  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.analysis-controls .panel + .panel {
+  margin-top: 0;
+}
+.analysis-results {
+  min-width: 0;
+}
+@media (max-width: 1099px) {
+  .analysis {
+    grid-template-columns: 1fr;
+  }
+}
+.unit-set .tabs {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.unit-chips {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.unit-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.unit-chip-main {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.unit-chip-name {
+  flex: 1 1 140px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+}
+.unit-chip-extra {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.unit-chip-extra select,
+.unit-chip-extra input {
+  padding: 0.15rem 0.35rem;
+  font-size: 0.8rem;
+}
+.unit-chip-extra input[type="number"] {
+  width: 4.5em;
+}
+.empty.small {
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+}
+
+/* heatmap */
+.heatmap-outer {
+  position: relative;
+}
+.heatmap-wrap {
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+.heatmap {
+  display: grid;
+  gap: 2px;
+  font-size: 0.8rem;
+}
+.heatmap-r {
+  display: contents;
+}
+.heatmap-h,
+.heatmap-rh,
+.heatmap-corner {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.1rem;
+  padding: 0.3rem 0.45rem;
+  background: var(--panel-2);
+  border-radius: 4px;
+  color: var(--text-strong);
+  min-width: 0;
+}
+.heatmap-h {
+  align-items: center;
+  text-align: center;
+  justify-content: flex-end;
+}
+.heatmap-rh {
+  justify-content: center;
+  max-width: 220px;
+}
+.heatmap-hname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-width: 100%;
+}
+.heatmap-c {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+.heatmap-c.heatmap-tot,
+.heatmap-h.heatmap-tot,
+.heatmap-rh.heatmap-tot {
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0.3rem 0.45rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  background: transparent;
+  border: 1px dashed var(--border);
+}
+.heatmap-btn {
+  flex: 1;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.45rem 0.3rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: inherit;
+  cursor: pointer;
+  justify-content: center;
+  min-height: 2.2rem;
+}
+.heatmap-btn:hover {
+  border-color: var(--brass);
+}
+.heatmap-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.heatmap-tip {
+  transform: translate(-50%, 4px);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* horizontal bars */
+.hbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.hbar-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 38%) minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+.hbar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hbar-track {
+  display: block;
+  height: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.hbar-fill {
+  display: block;
+  height: 100%;
+  background: var(--chart-bar);
+  transition: width 0.2s ease;
+}
+.hbar-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.chart-trio {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+.chart-h {
+  margin: 0 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.sort-btn {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+.plan-table select {
+  padding: 0.15rem 0.35rem;
+  font-size: 0.8rem;
+  max-width: 220px;
+}
+.target-cards .tile .k {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.8rem;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.target-cards .tile .v .sub {
+  font-size: 0.8rem;
+  color: var(--muted);
 }

@@ -82,6 +82,8 @@ export interface EngineInput {
   seed?: number;
   /** Exact backend falls back to MC above this many DP states. */
   maxExactStates?: number;
+  /** Start from this defender state distribution (from a previous EngineOutput.finalState with the same groups). */
+  initialState?: number[];
 }
 
 export interface WeaponTrace {
@@ -111,4 +113,6 @@ export interface EngineOutput {
   expectedPointsSlain: number;
   weapons: WeaponTrace[];
   warnings: string[];
+  /** Defender state distribution after all weapons (exact backend only); feed into another run's initialState. */
+  finalState?: number[];
 }

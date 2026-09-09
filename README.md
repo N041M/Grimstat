@@ -20,6 +20,7 @@ packages/engine        pure probability engine (exact PMF + Monte Carlo)
 packages/effects       Tier-1 keyword / Tier-2 effect record registry
 packages/game-40k-11e  40k 11th edition game-system plugin (keywords, patterns, constraints, analyses)
 packages/resolver      roster legality runner + costing (shared by UI, CLI, tests)
+packages/game-40k-10e  10th edition as rule-parameter overrides on the same pipeline
 packages/adapters      importers (MFM YAML, BSData JSON, Wahapedia CSV) and exporters
 packages/snapshot      merge, overrides, immutable snapshots, diffs
 packages/entitlements  feature gating abstraction (local: everything unlocked)
