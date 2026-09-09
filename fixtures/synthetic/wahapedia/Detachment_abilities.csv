@@ -1,0 +1,3 @@
+﻿id|faction_id|name|legend|description|detachment|detachment_id|
+000000401|AW|Ember Doctrine|Hold the line and the line holds you.|Each time a model from your army with the Ember Resolve ability makes a melee attack while within range of an objective marker, improve the Armour Penetration characteristic of that attack by 1.|Ember Vanguard|000000501|
+000000402|VS|Tide Instinct||Each time a <span class="kwb">VERDANT SWARM</span> unit from your army is selected to shoot or fight, if it is within 6" of a friendly Swarm Seer, re-roll a wound roll of 1.|Thorn Tide|000000502|

@@ -1,0 +1,325 @@
+import type { Ability, Archetype, CoverageReport, Datasheet, EffectRecord, ManualToggle, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
+import { abilityEffects, applyFnpToModels } from "./patterns";
+import { create11eKeywordRegistry } from "./keywords";
+import { CH } from "./channels";
+import type { UnitFromDatasheetOptions } from "./api";
+
+const registry = create11eKeywordRegistry();
+
+export function upper(s: string): string {
+  return s.trim().toUpperCase();
+}
+
+function abilitiesOf(ds: Datasheet, snapshot: Snapshot): Ability[] {
+  const byId = new Map(snapshot.data.abilities.map((a) => [a.id, a] as const));
+  return ds.abilityIds.map((id) => byId.get(id)).filter((a): a is Ability => !!a);
+}
+
+export function pointsFor(ds: Datasheet, snapshot: Snapshot, modelCount: number): number | undefined {
+  const rules = snapshot.data.priceRules.filter((r) => r.datasheetId === ds.id && r.copyRange.min <= 1 && (r.copyRange.max === undefined || r.copyRange.max >= 1));
+  const rule = rules[0];
+  if (!rule) return ds.fallbackPoints;
+  let best = rule.tiers[0];
+  for (const t of rule.tiers) if (t.models <= modelCount && (!best || t.models >= best.models)) best = t;
+  return best?.points ?? ds.fallbackPoints;
+}
+
+function defaultModelCount(ds: Datasheet): number {
+  const mins = ds.composition.map((c) => c.min).filter((m): m is number => typeof m === "number" && m > 0);
+  if (mins.length) return Math.max(...mins);
+  return ds.models.length > 1 ? ds.models.length : 1;
+}
+
+function weaponToScenario(w: WeaponProfile, count: number, enabled: boolean): ScenarioWeapon {
+  return {
+    name: w.name,
+    count,
+    kind: w.kind,
+    range: w.range ?? null,
+    A: w.A,
+    skill: w.skill,
+    S: w.S,
+    AP: w.AP,
+    D: w.D,
+    keywords: w.keywords,
+    enabled,
+  };
+}
+
+/** "Plasma pistol – standard" -> "Plasma pistol"; "Bolt rifle" -> "Bolt rifle". */
+export function baseWeaponName(name: string): string {
+  return name.split(/\s+[–—-]\s+/)[0]!.trim();
+}
+
+/** Weapon base names mentioned in the datasheet's default loadout text (lower-case). */
+function defaultWeaponNames(ds: Datasheet): Set<string> {
+  const out = new Set<string>();
+  const text = (ds.loadout ?? "").toLowerCase();
+  if (!text) return out;
+  for (const w of ds.weapons) {
+    const base = baseWeaponName(w.name).toLowerCase();
+    if (base && text.includes(base)) out.add(base);
+  }
+  return out;
+}
+
+function modelsFromDatasheet(ds: Datasheet, modelCount: number, isCharacter: boolean): ScenarioModel[] {
+  const profiles = ds.models;
+  const out: ScenarioModel[] = [];
+  if (isCharacter || profiles.length === 1) {
+    for (const p of profiles) {
+      out.push({ name: p.name, count: isCharacter ? 1 : modelCount, T: p.T, Sv: p.Sv, InvSv: p.InvSv ?? null, W: p.W, fnp: null, isCharacter, keywords: [] });
+    }
+    return out;
+  }
+  // multiple profiles (e.g. a sergeant + troopers): one of each leading profile, remainder on the last
+  let remaining = modelCount;
+  profiles.forEach((p, i) => {
+    const isLast = i === profiles.length - 1;
+    const count = isLast ? Math.max(1, remaining) : 1;
+    remaining -= count;
+    out.push({ name: p.name, count, T: p.T, Sv: p.Sv, InvSv: p.InvSv ?? null, W: p.W, fnp: null, isCharacter: false, keywords: [] });
+  });
+  return out;
+}
+
+export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitFromDatasheetOptions = {}): ScenarioUnit {
+  const modelCount = Math.max(1, opts.modelCount ?? defaultModelCount(ds));
+  const isCharacterSheet = ds.isCharacter && ds.models.length === 1 && !ds.keywords.some((k) => upper(k) === "VEHICLE" || upper(k) === "MONSTER");
+  let models = modelsFromDatasheet(ds, modelCount, isCharacterSheet);
+  const weapons: ScenarioWeapon[] = [];
+  const defaults = defaultWeaponNames(ds);
+  const seenGroup = new Set<string>();
+  let anyRanged = false;
+  let anyMelee = false;
+  for (const w of ds.weapons) {
+    if (opts.weaponNames && !opts.weaponNames.includes(w.name)) continue;
+    const group = w.groupName ?? baseWeaponName(w.name);
+    let enabled = defaults.has(baseWeaponName(w.name).toLowerCase());
+    if (seenGroup.has(group)) enabled = false;
+    seenGroup.add(group);
+    if (enabled) {
+      if (w.kind === "ranged") anyRanged = true;
+      else anyMelee = true;
+    }
+    weapons.push(weaponToScenario(w, isCharacterSheet ? 1 : modelCount, opts.weaponNames ? true : enabled));
+  }
+  // fall back to the first weapon of each kind when the loadout text named nothing usable
+  for (const kind of ["ranged", "melee"] as const) {
+    if (kind === "ranged" ? anyRanged : anyMelee) continue;
+    const first = weapons.find((w) => w.kind === kind);
+    if (first) first.enabled = true;
+  }
+  const effects: EffectRecord[] = [];
+  let fnp: number | undefined;
+  for (const a of abilitiesOf(ds, snapshot)) {
+    const ae = abilityEffects(a);
+    effects.push(...ae.effects);
+    if (ae.fnp) fnp = Math.min(fnp ?? 7, ae.fnp);
+  }
+  models = applyFnpToModels(models, fnp);
+  const keywords = [...ds.keywords, ...ds.factionKeywords].map(upper);
+  let points = pointsFor(ds, snapshot, modelCount);
+
+  // attached characters (Leader / Support)
+  for (const id of opts.attachedDatasheetIds ?? []) {
+    const cds = snapshot.data.datasheets.find((d) => d.id === id);
+    if (!cds) continue;
+    const cm = modelsFromDatasheet(cds, 1, true);
+    let cfnp: number | undefined;
+    for (const a of abilitiesOf(cds, snapshot)) {
+      const ae = abilityEffects(a);
+      effects.push(...ae.effects.map((e) => ({ ...e, source: `${cds.name}: ${e.source ?? ""}`.trim() })));
+      if (ae.fnp) cfnp = Math.min(cfnp ?? 7, ae.fnp);
+    }
+    models.push(...applyFnpToModels(cm, cfnp).map((m) => ({ ...m, name: m.name.toLowerCase() === cds.name.toLowerCase() ? m.name : `${cds.name}: ${m.name}` })));
+    let cr = true;
+    let cmelee = true;
+    for (const w of cds.weapons) {
+      const enabled = w.kind === "ranged" ? cr : cmelee;
+      if (w.kind === "ranged") cr = false;
+      else cmelee = false;
+      weapons.push({ ...weaponToScenario(w, 1, enabled), name: `${cds.name}: ${w.name}` });
+    }
+    for (const k of [...cds.keywords, ...cds.factionKeywords]) if (!keywords.includes(upper(k))) keywords.push(upper(k));
+    const cp = pointsFor(cds, snapshot, 1);
+    if (cp !== undefined) points = (points ?? 0) + cp;
+  }
+
+  return {
+    name: opts.attachedDatasheetIds?.length ? `${ds.name} (+${opts.attachedDatasheetIds.length})` : ds.name,
+    ref: { snapshotId: snapshot.id, datasheetId: ds.id, attachedDatasheetIds: opts.attachedDatasheetIds ?? [] },
+    keywords,
+    models,
+    weapons,
+    effects,
+    ...(points !== undefined ? { points } : {}),
+  };
+}
+
+export function resolveScenarioUnit(unit: ScenarioUnit, snapshot: Snapshot | undefined): ScenarioUnit {
+  if (!unit.ref || unit.models.length) return unit;
+  if (!snapshot) return unit;
+  const ds = snapshot.data.datasheets.find((d) => d.id === unit.ref!.datasheetId);
+  if (!ds) return unit;
+  return unitFromDatasheet(ds, snapshot, { attachedDatasheetIds: unit.ref.attachedDatasheetIds });
+}
+
+/** Coverage: abilities (via snapshot when referenced) and weapon keywords. */
+export function coverageFor(unit: ScenarioUnit, snapshot?: Snapshot): CoverageReport {
+  let tier1 = 0;
+  let tier2 = 0;
+  let tier3 = 0;
+  const unmodelled: string[] = [];
+  if (unit.ref && snapshot) {
+    const ids = [unit.ref.datasheetId, ...unit.ref.attachedDatasheetIds];
+    for (const id of ids) {
+      const ds = snapshot.data.datasheets.find((d) => d.id === id);
+      if (!ds) continue;
+      for (const a of abilitiesOf(ds, snapshot)) {
+        const t = abilityEffects(a).tier;
+        if (t === "tier1") tier1++;
+        else if (t === "tier2") tier2++;
+        else {
+          tier3++;
+          unmodelled.push(a.name);
+        }
+      }
+    }
+  } else if (unit.effects.length) {
+    tier2 += new Set(unit.effects.map((e) => e.source ?? "")).size;
+  }
+  for (const w of unit.weapons) {
+    for (const k of w.keywords) {
+      if (registry.has(k.name)) tier1++;
+      else {
+        tier3++;
+        unmodelled.push(`${w.name}: ${k.raw ?? k.name}`);
+      }
+    }
+  }
+  return { tier1, tier2, tier3, unmodelled: [...new Set(unmodelled)] };
+}
+
+export const GENERIC_TOGGLES: ManualToggle[] = [
+  {
+    id: "cmd-reroll-hit",
+    label: "Command Re-roll: one hit roll",
+    description: "Re-roll a single failed hit roll (per weapon profile).",
+    side: "attacker",
+    effects: [{ when: { stage: "hit", side: "attacker" }, op: "reroll", target: CH.rerollHit, value: "one-die", source: "Command Re-roll" }],
+    defaultOn: false,
+  },
+  {
+    id: "cmd-reroll-wound",
+    label: "Command Re-roll: one wound roll",
+    description: "Re-roll a single failed wound roll (per weapon profile).",
+    side: "attacker",
+    effects: [{ when: { stage: "wound", side: "attacker" }, op: "reroll", target: CH.rerollWound, value: "one-die", source: "Command Re-roll" }],
+    defaultOn: false,
+  },
+  {
+    id: "reroll-hits-ones",
+    label: "Re-roll hit rolls of 1",
+    side: "attacker",
+    effects: [{ when: { stage: "hit", side: "attacker" }, op: "reroll", target: CH.rerollHit, value: "ones", source: "Toggle" }],
+    defaultOn: false,
+  },
+  {
+    id: "reroll-hits",
+    label: "Re-roll all failed hit rolls",
+    side: "attacker",
+    effects: [{ when: { stage: "hit", side: "attacker" }, op: "reroll", target: CH.rerollHit, value: "failed", source: "Toggle" }],
+    defaultOn: false,
+  },
+  {
+    id: "reroll-hits-fish",
+    label: "Re-roll all non-critical hit rolls (fish for 6s)",
+    side: "attacker",
+    effects: [{ when: { stage: "hit", side: "attacker" }, op: "reroll", target: CH.rerollHit, value: "non-crit", source: "Toggle" }],
+    defaultOn: false,
+  },
+  {
+    id: "reroll-wounds-ones",
+    label: "Re-roll wound rolls of 1",
+    side: "attacker",
+    effects: [{ when: { stage: "wound", side: "attacker" }, op: "reroll", target: CH.rerollWound, value: "ones", source: "Toggle" }],
+    defaultOn: false,
+  },
+  {
+    id: "reroll-wounds",
+    label: "Re-roll all failed wound rolls",
+    side: "attacker",
+    effects: [{ when: { stage: "wound", side: "attacker" }, op: "reroll", target: CH.rerollWound, value: "failed", source: "Toggle" }],
+    defaultOn: false,
+  },
+  { id: "plus1-hit", label: "+1 to hit", side: "attacker", effects: [{ when: { stage: "hit", side: "attacker" }, op: "add", target: CH.hitRoll, value: 1, source: "Toggle" }], defaultOn: false },
+  { id: "plus1-wound", label: "+1 to wound", side: "attacker", effects: [{ when: { stage: "wound", side: "attacker" }, op: "add", target: CH.woundRoll, value: 1, source: "Toggle" }], defaultOn: false },
+  { id: "plus1-ap", label: "Improve AP by 1", side: "attacker", effects: [{ when: { stage: "save", side: "attacker" }, op: "add", target: CH.ap, value: 1, source: "Toggle" }], defaultOn: false },
+  { id: "lethal-all", label: "Grant Lethal Hits", side: "attacker", effects: [{ when: { stage: "hit", side: "attacker" }, op: "flag", target: CH.lethal, value: true, source: "Toggle" }], defaultOn: false },
+  { id: "sustained-all", label: "Grant Sustained Hits 1", side: "attacker", effects: [{ when: { stage: "hit", side: "attacker" }, op: "set", target: CH.sustained, value: 1, source: "Toggle" }], defaultOn: false },
+  { id: "dev-all", label: "Grant Devastating Wounds", side: "attacker", effects: [{ when: { stage: "wound", side: "attacker" }, op: "flag", target: CH.devastating, value: true, source: "Toggle" }], defaultOn: false },
+  { id: "crit5", label: "Critical hits on 5+", side: "attacker", effects: [{ when: { stage: "hit", side: "attacker" }, op: "cap", target: CH.critHit, value: 5, source: "Toggle" }], defaultOn: false },
+  { id: "minus1-hit", label: "-1 to be hit", side: "defender", effects: [{ when: { stage: "hit", side: "defender" }, op: "add", target: CH.hitRoll, value: -1, source: "Toggle" }], defaultOn: false },
+  { id: "minus1-wound", label: "-1 to be wounded", side: "defender", effects: [{ when: { stage: "wound", side: "defender" }, op: "add", target: CH.woundRoll, value: -1, source: "Toggle" }], defaultOn: false },
+  { id: "minus1-dmg", label: "-1 Damage (min 1)", side: "defender", effects: [{ when: { stage: "damage", side: "defender" }, op: "add", target: CH.damage, value: -1, source: "Toggle" }], defaultOn: false },
+  { id: "half-dmg", label: "Halve Damage (rounding up)", side: "defender", effects: [{ when: { stage: "damage", side: "defender" }, op: "mul", target: CH.damage, value: 0.5, source: "Toggle" }], defaultOn: false },
+  { id: "ap-worse", label: "Worsen AP by 1 (Armour of Contempt-like)", side: "defender", effects: [{ when: { stage: "save", side: "defender" }, op: "add", target: CH.ap, value: -1, source: "Toggle" }], defaultOn: false },
+  { id: "fnp5", label: "Feel No Pain 5+", side: "defender", effects: [{ when: { stage: "fnp", side: "defender" }, op: "set", target: CH.fnp, value: 5, source: "Toggle" }], defaultOn: false },
+  { id: "fnp6", label: "Feel No Pain 6+", side: "defender", effects: [{ when: { stage: "fnp", side: "defender" }, op: "set", target: CH.fnp, value: 6, source: "Toggle" }], defaultOn: false },
+  { id: "inv4", label: "4+ invulnerable save", side: "defender", effects: [{ when: { stage: "save", side: "defender" }, op: "cap", target: CH.invuln, value: 4, source: "Toggle" }], defaultOn: false },
+  { id: "inv5", label: "5+ invulnerable save", side: "defender", effects: [{ when: { stage: "save", side: "defender" }, op: "cap", target: CH.invuln, value: 5, source: "Toggle" }], defaultOn: false },
+  { id: "stealth", label: "Stealth / benefit of cover", side: "defender", effects: [{ when: { stage: "hit", side: "defender" }, op: "flag", target: CH.stealth, value: true, source: "Toggle" }], defaultOn: false },
+  { id: "defender-indirect", label: "Target not visible (Indirect Fire → Snap Shooting)", side: "defender", effects: [], defaultOn: false },
+];
+
+/** Toggles for the abilities carried by a unit (Tier-2 ones are on by default and can be switched off). */
+export function abilityToggles(unit: ScenarioUnit, side: "attacker" | "defender", snapshot?: Snapshot): ManualToggle[] {
+  const out: ManualToggle[] = [];
+  const seen = new Set<string>();
+  if (unit.ref && snapshot) {
+    for (const id of [unit.ref.datasheetId, ...unit.ref.attachedDatasheetIds]) {
+      const ds = snapshot.data.datasheets.find((d) => d.id === id);
+      if (!ds) continue;
+      for (const a of abilitiesOf(ds, snapshot)) {
+        const ae = abilityEffects(a);
+        const relevant = ae.effects.filter((e) => (e.when.side ?? "attacker") === side);
+        if (!relevant.length) continue;
+        const tid = `ability:${side}:${a.id}`;
+        if (seen.has(tid)) continue;
+        seen.add(tid);
+        out.push({ id: tid, label: a.name, description: a.text.slice(0, 300), side, effects: relevant, defaultOn: true });
+      }
+    }
+  } else {
+    const groups = new Map<string, EffectRecord[]>();
+    for (const e of unit.effects) {
+      if ((e.when.side ?? "attacker") !== side) continue;
+      const k = e.source ?? "effect";
+      groups.set(k, [...(groups.get(k) ?? []), e]);
+    }
+    for (const [name, effects] of groups) out.push({ id: `ability:${side}:${name}`, label: name, side, effects, defaultOn: true });
+  }
+  return out;
+}
+
+export function listToggles(scenario: Scenario, snapshot?: Snapshot): ManualToggle[] {
+  return [...abilityToggles(scenario.attacker, "attacker", snapshot), ...abilityToggles(scenario.defender, "defender", snapshot), ...GENERIC_TOGGLES];
+}
+
+/** Effects active for the scenario after applying enabledToggles ("-id" disables a default-on toggle). */
+export function activeToggleEffects(scenario: Scenario, toggles: ManualToggle[]): { effects: EffectRecord[]; flags: string[] } {
+  const on = new Set(scenario.enabledToggles.filter((t) => !t.startsWith("-")));
+  const off = new Set(scenario.enabledToggles.filter((t) => t.startsWith("-")).map((t) => t.slice(1)));
+  const effects: EffectRecord[] = [];
+  const flags: string[] = [];
+  for (const t of toggles) {
+    const enabled = on.has(t.id) || (t.defaultOn && !off.has(t.id));
+    if (!enabled) continue;
+    effects.push(...t.effects.map((e) => ({ ...e, when: { ...e.when, side: e.when.side ?? t.side } })));
+    if (t.id === "defender-indirect") flags.push("target-not-visible");
+  }
+  return { effects, flags };
+}
+
+export type { Archetype };

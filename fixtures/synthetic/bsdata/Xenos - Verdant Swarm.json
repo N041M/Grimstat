@@ -1,0 +1,974 @@
+{
+  "catalogue": {
+    "name": "Xenos - Verdant Swarm",
+    "id": "cat-vs",
+    "battleScribeVersion": "2.03",
+    "gameSystemId": "sys-synthetic",
+    "gameSystemRevision": 1,
+    "library": false,
+    "revision": 5,
+    "type": "catalogue",
+    "xmlns": "http://www.battlescribe.net/schema/catalogueSchema",
+    "categoryEntries": [
+      {
+        "name": "Faction: Verdant Swarm",
+        "id": "cat-faction-vs",
+        "hidden": false
+      },
+      {
+        "name": "Thornlings",
+        "id": "cat-unit-thornlings",
+        "hidden": false
+      },
+      {
+        "name": "1DP Detachment",
+        "id": "cat-1dp",
+        "hidden": false
+      }
+    ],
+    "sharedRules": [
+      {
+        "id": "rule-tide-instinct",
+        "name": "Tide Instinct",
+        "hidden": false,
+        "description": "Each time a VERDANT SWARM unit from your army is selected to shoot or fight, if it is within 6\" of a friendly Swarm Seer, re-roll a wound roll of 1."
+      }
+    ],
+    "sharedSelectionEntries": [
+      {
+        "name": "Thornlings",
+        "id": "se-thornlings",
+        "hidden": false,
+        "import": true,
+        "type": "unit",
+        "categoryLinks": [
+          {
+            "name": "Faction: Verdant Swarm",
+            "id": "cl-cat-faction-vs-028",
+            "primary": false,
+            "targetId": "cat-faction-vs"
+          },
+          {
+            "name": "Infantry",
+            "id": "cl-cat-infantry-029",
+            "primary": false,
+            "targetId": "cat-infantry"
+          },
+          {
+            "name": "Swarm",
+            "id": "cl-cat-swarm-030",
+            "primary": false,
+            "targetId": "cat-swarm"
+          },
+          {
+            "name": "Battleline",
+            "id": "cl-cat-battleline-031",
+            "primary": false,
+            "targetId": "cat-battleline"
+          },
+          {
+            "name": "Thornlings",
+            "id": "cl-cat-unit-thornlings-032",
+            "primary": false,
+            "targetId": "cat-unit-thornlings"
+          }
+        ],
+        "costs": [
+          {
+            "name": "pts",
+            "typeId": "ct-pts",
+            "value": 60
+          },
+          {
+            "name": "Detachment Points",
+            "typeId": "ct-dp",
+            "value": 0
+          }
+        ],
+        "modifiers": [
+          {
+            "field": "ct-pts",
+            "type": "set",
+            "value": 120,
+            "conditions": [
+              {
+                "childId": "model",
+                "field": "selections",
+                "includeChildSelections": true,
+                "scope": "se-thornlings",
+                "shared": true,
+                "type": "atLeast",
+                "value": 11
+              }
+            ]
+          }
+        ],
+        "infoLinks": [
+          {
+            "id": "il-th-fnp",
+            "name": "Feel No Pain 5+",
+            "hidden": false,
+            "targetId": "rule-fnp-5",
+            "type": "rule"
+          }
+        ],
+        "selectionEntryGroups": [
+          {
+            "name": "10-20 Thornlings",
+            "id": "seg-th",
+            "hidden": false,
+            "constraints": [
+              {
+                "id": "c-10-20-033",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "min",
+                "value": 10
+              },
+              {
+                "id": "c-max-20-034",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "max",
+                "value": 20
+              }
+            ],
+            "selectionEntries": [
+              {
+                "name": "Thornling",
+                "id": "se-thornling",
+                "hidden": false,
+                "import": true,
+                "type": "model",
+                "profiles": [
+                  {
+                    "id": "p-th-unit",
+                    "name": "Thornling",
+                    "hidden": false,
+                    "typeId": "pt-unit",
+                    "typeName": "Unit",
+                    "characteristics": [
+                      {
+                        "name": "M",
+                        "$text": "8\""
+                      },
+                      {
+                        "name": "T",
+                        "$text": "3"
+                      },
+                      {
+                        "name": "Sv",
+                        "$text": "6+"
+                      },
+                      {
+                        "name": "W",
+                        "$text": "1"
+                      },
+                      {
+                        "name": "LD",
+                        "$text": "8+"
+                      },
+                      {
+                        "name": "OC",
+                        "$text": "2"
+                      },
+                      {
+                        "name": "InSv",
+                        "$text": "-"
+                      }
+                    ]
+                  }
+                ],
+                "selectionEntries": [
+                  {
+                    "name": "Spine flick",
+                    "id": "se-th-sf",
+                    "hidden": false,
+                    "import": true,
+                    "type": "upgrade",
+                    "profiles": [
+                      {
+                        "id": "p-th-sf",
+                        "name": "Spine flick",
+                        "hidden": false,
+                        "typeId": "pt-ranged",
+                        "typeName": "Ranged Weapons",
+                        "characteristics": [
+                          {
+                            "name": "Range",
+                            "$text": "12\""
+                          },
+                          {
+                            "name": "A",
+                            "$text": "1"
+                          },
+                          {
+                            "name": "BS",
+                            "$text": "4+"
+                          },
+                          {
+                            "name": "S",
+                            "$text": "3"
+                          },
+                          {
+                            "name": "AP",
+                            "$text": "0"
+                          },
+                          {
+                            "name": "D",
+                            "$text": "1"
+                          },
+                          {
+                            "name": "Keywords",
+                            "$text": "Assault"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Barbed claws",
+                    "id": "se-th-bc",
+                    "hidden": false,
+                    "import": true,
+                    "type": "upgrade",
+                    "profiles": [
+                      {
+                        "id": "p-th-bc",
+                        "name": "Barbed claws",
+                        "hidden": false,
+                        "typeId": "pt-melee",
+                        "typeName": "Melee Weapons",
+                        "characteristics": [
+                          {
+                            "name": "Range",
+                            "$text": "Melee"
+                          },
+                          {
+                            "name": "A",
+                            "$text": "2"
+                          },
+                          {
+                            "name": "WS",
+                            "$text": "4+"
+                          },
+                          {
+                            "name": "S",
+                            "$text": "3"
+                          },
+                          {
+                            "name": "AP",
+                            "$text": "0"
+                          },
+                          {
+                            "name": "D",
+                            "$text": "1"
+                          },
+                          {
+                            "name": "Keywords",
+                            "$text": "Lethal Hits"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Spine Drake",
+        "id": "se-spine-drake",
+        "hidden": false,
+        "import": true,
+        "type": "model",
+        "categoryLinks": [
+          {
+            "name": "Faction: Verdant Swarm",
+            "id": "cl-cat-faction-vs-035",
+            "primary": false,
+            "targetId": "cat-faction-vs"
+          },
+          {
+            "name": "Monster",
+            "id": "cl-cat-monster-036",
+            "primary": false,
+            "targetId": "cat-monster"
+          }
+        ],
+        "costs": [
+          {
+            "name": "pts",
+            "typeId": "ct-pts",
+            "value": 210
+          },
+          {
+            "name": "Detachment Points",
+            "typeId": "ct-dp",
+            "value": 0
+          }
+        ],
+        "profiles": [
+          {
+            "id": "p-sd-unit",
+            "name": "Spine Drake",
+            "hidden": false,
+            "typeId": "pt-unit",
+            "typeName": "Unit",
+            "characteristics": [
+              {
+                "name": "M",
+                "$text": "10\""
+              },
+              {
+                "name": "T",
+                "$text": "10"
+              },
+              {
+                "name": "Sv",
+                "$text": "3+"
+              },
+              {
+                "name": "W",
+                "$text": "16"
+              },
+              {
+                "name": "LD",
+                "$text": "7+"
+              },
+              {
+                "name": "OC",
+                "$text": "4"
+              },
+              {
+                "name": "InSv",
+                "$text": "-"
+              }
+            ]
+          },
+          {
+            "id": "p-sd-regen",
+            "name": "Regenerating Hide",
+            "hidden": false,
+            "typeId": "pt-abilities",
+            "typeName": "Abilities",
+            "characteristics": [
+              {
+                "name": "Description",
+                "$text": "At the start of your Command phase, this model regains up to D3 lost wounds."
+              }
+            ]
+          },
+          {
+            "id": "p-sd-dd",
+            "name": "Deadly Demise D6",
+            "hidden": false,
+            "typeId": "pt-abilities",
+            "typeName": "Abilities",
+            "characteristics": [
+              {
+                "name": "Description",
+                "$text": "Synthetic rules text: explode on a 6 when destroyed, D6 mortal wounds."
+              }
+            ]
+          }
+        ],
+        "selectionEntries": [
+          {
+            "name": "Spine volley",
+            "id": "se-sd-sv",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "profiles": [
+              {
+                "id": "p-sd-sv",
+                "name": "Spine volley",
+                "hidden": false,
+                "typeId": "pt-ranged",
+                "typeName": "Ranged Weapons",
+                "characteristics": [
+                  {
+                    "name": "Range",
+                    "$text": "18\""
+                  },
+                  {
+                    "name": "A",
+                    "$text": "D6+3"
+                  },
+                  {
+                    "name": "BS",
+                    "$text": "N/A"
+                  },
+                  {
+                    "name": "S",
+                    "$text": "6"
+                  },
+                  {
+                    "name": "AP",
+                    "$text": "-1"
+                  },
+                  {
+                    "name": "D",
+                    "$text": "1"
+                  },
+                  {
+                    "name": "Keywords",
+                    "$text": "Torrent, Ignores Cover"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Acid lance",
+            "id": "se-sd-al",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "profiles": [
+              {
+                "id": "p-sd-al",
+                "name": "Acid lance",
+                "hidden": false,
+                "typeId": "pt-ranged",
+                "typeName": "Ranged Weapons",
+                "characteristics": [
+                  {
+                    "name": "Range",
+                    "$text": "24\""
+                  },
+                  {
+                    "name": "A",
+                    "$text": "2"
+                  },
+                  {
+                    "name": "BS",
+                    "$text": "3+"
+                  },
+                  {
+                    "name": "S",
+                    "$text": "12"
+                  },
+                  {
+                    "name": "AP",
+                    "$text": "-3"
+                  },
+                  {
+                    "name": "D",
+                    "$text": "D6+1"
+                  },
+                  {
+                    "name": "Keywords",
+                    "$text": "Anti-vehicle 4+, Devastating Wounds"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Rending talons",
+            "id": "se-sd-rt",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "profiles": [
+              {
+                "id": "p-sd-rt",
+                "name": "Rending talons",
+                "hidden": false,
+                "typeId": "pt-melee",
+                "typeName": "Melee Weapons",
+                "characteristics": [
+                  {
+                    "name": "Range",
+                    "$text": "Melee"
+                  },
+                  {
+                    "name": "A",
+                    "$text": "6"
+                  },
+                  {
+                    "name": "WS",
+                    "$text": "3+"
+                  },
+                  {
+                    "name": "S",
+                    "$text": "9"
+                  },
+                  {
+                    "name": "AP",
+                    "$text": "-2"
+                  },
+                  {
+                    "name": "D",
+                    "$text": "3"
+                  },
+                  {
+                    "name": "Keywords",
+                    "$text": "Precision"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Swarm Seer",
+        "id": "se-swarm-seer",
+        "hidden": false,
+        "import": true,
+        "type": "model",
+        "categoryLinks": [
+          {
+            "name": "Faction: Verdant Swarm",
+            "id": "cl-cat-faction-vs-037",
+            "primary": false,
+            "targetId": "cat-faction-vs"
+          },
+          {
+            "name": "Infantry",
+            "id": "cl-cat-infantry-038",
+            "primary": false,
+            "targetId": "cat-infantry"
+          },
+          {
+            "name": "Character",
+            "id": "cl-cat-character-039",
+            "primary": false,
+            "targetId": "cat-character"
+          },
+          {
+            "name": "Psyker",
+            "id": "cl-cat-psyker-040",
+            "primary": false,
+            "targetId": "cat-psyker"
+          }
+        ],
+        "costs": [
+          {
+            "name": "pts",
+            "typeId": "ct-pts",
+            "value": 70
+          },
+          {
+            "name": "Detachment Points",
+            "typeId": "ct-dp",
+            "value": 0
+          }
+        ],
+        "profiles": [
+          {
+            "id": "p-ss-unit",
+            "name": "Swarm Seer",
+            "hidden": false,
+            "typeId": "pt-unit",
+            "typeName": "Unit",
+            "characteristics": [
+              {
+                "name": "M",
+                "$text": "6\""
+              },
+              {
+                "name": "T",
+                "$text": "4"
+              },
+              {
+                "name": "Sv",
+                "$text": "5+"
+              },
+              {
+                "name": "W",
+                "$text": "4"
+              },
+              {
+                "name": "LD",
+                "$text": "7+"
+              },
+              {
+                "name": "OC",
+                "$text": "1"
+              },
+              {
+                "name": "InSv",
+                "$text": "5+"
+              }
+            ]
+          },
+          {
+            "id": "p-ss-link",
+            "name": "Swarm Link",
+            "hidden": false,
+            "typeId": "pt-abilities",
+            "typeName": "Abilities",
+            "characteristics": [
+              {
+                "name": "Description",
+                "$text": "While this model is leading a unit, models in that unit have the Stealth ability."
+              }
+            ]
+          }
+        ],
+        "infoLinks": [
+          {
+            "id": "il-ss-leader",
+            "name": "Leader",
+            "hidden": false,
+            "targetId": "rule-leader",
+            "type": "rule"
+          },
+          {
+            "id": "il-ss-lo",
+            "name": "Lone Operative",
+            "hidden": false,
+            "targetId": "rule-lone-operative",
+            "type": "rule"
+          }
+        ],
+        "associations": [
+          {
+            "name": "Leading",
+            "id": "as-ss-leading",
+            "action": "group",
+            "childId": "unit",
+            "childName": "unit",
+            "includeChildSelections": true,
+            "label": "Leader",
+            "max": 1,
+            "min": 0,
+            "scope": "force",
+            "conditionGroups": [
+              {
+                "type": "or",
+                "conditions": [
+                  {
+                    "childId": "cat-unit-thornlings",
+                    "childName": "Thornlings",
+                    "field": "selections",
+                    "scope": "self",
+                    "shared": true,
+                    "type": "instanceOf",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "selectionEntries": [
+          {
+            "name": "Mind bolt",
+            "id": "se-ss-mb",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "profiles": [
+              {
+                "id": "p-ss-mb",
+                "name": "Mind bolt",
+                "hidden": false,
+                "typeId": "pt-ranged",
+                "typeName": "Ranged Weapons",
+                "characteristics": [
+                  {
+                    "name": "Range",
+                    "$text": "18\""
+                  },
+                  {
+                    "name": "A",
+                    "$text": "2"
+                  },
+                  {
+                    "name": "BS",
+                    "$text": "3+"
+                  },
+                  {
+                    "name": "S",
+                    "$text": "6"
+                  },
+                  {
+                    "name": "AP",
+                    "$text": "-2"
+                  },
+                  {
+                    "name": "D",
+                    "$text": "D3"
+                  },
+                  {
+                    "name": "Keywords",
+                    "$text": "Psychic, Hazardous"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Seer's claws",
+            "id": "se-ss-sc",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "profiles": [
+              {
+                "id": "p-ss-sc",
+                "name": "Seer's claws",
+                "hidden": false,
+                "typeId": "pt-melee",
+                "typeName": "Melee Weapons",
+                "characteristics": [
+                  {
+                    "name": "Range",
+                    "$text": "Melee"
+                  },
+                  {
+                    "name": "A",
+                    "$text": "3"
+                  },
+                  {
+                    "name": "WS",
+                    "$text": "4+"
+                  },
+                  {
+                    "name": "S",
+                    "$text": "4"
+                  },
+                  {
+                    "name": "AP",
+                    "$text": "0"
+                  },
+                  {
+                    "name": "D",
+                    "$text": "1"
+                  },
+                  {
+                    "name": "Keywords",
+                    "$text": ""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Old Thornback [Legends]",
+        "id": "se-old-thornback",
+        "hidden": true,
+        "import": true,
+        "type": "model",
+        "categoryLinks": [
+          {
+            "name": "Faction: Verdant Swarm",
+            "id": "cl-cat-faction-vs-041",
+            "primary": false,
+            "targetId": "cat-faction-vs"
+          },
+          {
+            "name": "Monster",
+            "id": "cl-cat-monster-042",
+            "primary": false,
+            "targetId": "cat-monster"
+          }
+        ],
+        "costs": [
+          {
+            "name": "pts",
+            "typeId": "ct-pts",
+            "value": 90
+          },
+          {
+            "name": "Detachment Points",
+            "typeId": "ct-dp",
+            "value": 0
+          }
+        ],
+        "profiles": []
+      },
+      {
+        "name": "Detachment",
+        "id": "se-vs-detachment",
+        "hidden": false,
+        "import": true,
+        "type": "upgrade",
+        "categoryLinks": [
+          {
+            "name": "Configuration",
+            "id": "cl-cat-configuration-043",
+            "primary": true,
+            "targetId": "cat-configuration"
+          }
+        ],
+        "selectionEntryGroups": [
+          {
+            "name": "Detachment",
+            "id": "seg-vs-det",
+            "hidden": false,
+            "constraints": [
+              {
+                "id": "c-1-1-044",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "min",
+                "value": 1
+              },
+              {
+                "id": "c-max-1-045",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "max",
+                "value": 1
+              }
+            ],
+            "selectionEntries": [
+              {
+                "name": "Thorn Tide",
+                "id": "se-det-thorn-tide",
+                "hidden": false,
+                "import": true,
+                "type": "upgrade",
+                "categoryLinks": [
+                  {
+                    "name": "1DP Detachment",
+                    "id": "cl-cat-1dp-046",
+                    "primary": false,
+                    "targetId": "cat-1dp"
+                  }
+                ],
+                "costs": [
+                  {
+                    "name": "pts",
+                    "typeId": "ct-pts",
+                    "value": 0
+                  },
+                  {
+                    "name": "Detachment Points",
+                    "typeId": "ct-dp",
+                    "value": 1
+                  }
+                ],
+                "infoLinks": [
+                  {
+                    "id": "il-det-tide",
+                    "name": "Tide Instinct",
+                    "hidden": false,
+                    "targetId": "rule-tide-instinct",
+                    "type": "rule"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "sharedSelectionEntryGroups": [
+      {
+        "name": "Enhancements",
+        "id": "seg-vs-enhancements",
+        "hidden": false,
+        "selectionEntries": [
+          {
+            "name": "Venom Sac",
+            "id": "se-enh-venom",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "costs": [
+              {
+                "name": "pts",
+                "typeId": "ct-pts",
+                "value": 10
+              },
+              {
+                "name": "Detachment Points",
+                "typeId": "ct-dp",
+                "value": 0
+              }
+            ],
+            "profiles": [
+              {
+                "id": "p-enh-vs",
+                "name": "Venom Sac",
+                "hidden": false,
+                "typeId": "pt-abilities",
+                "typeName": "Abilities",
+                "characteristics": [
+                  {
+                    "name": "Description",
+                    "$text": "The bearer's melee weapons have the [LETHAL HITS] ability."
+                  }
+                ]
+              }
+            ],
+            "modifiers": [
+              {
+                "field": "hidden",
+                "type": "set",
+                "value": true,
+                "conditions": [
+                  {
+                    "childId": "se-det-thorn-tide",
+                    "field": "selections",
+                    "scope": "force",
+                    "shared": true,
+                    "type": "lessThan",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "entryLinks": [
+      {
+        "name": "se-thornlings",
+        "id": "el-se-thornlings",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-thornlings",
+        "type": "selectionEntry"
+      },
+      {
+        "name": "se-spine-drake",
+        "id": "el-se-spine-drake",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-spine-drake",
+        "type": "selectionEntry"
+      },
+      {
+        "name": "se-swarm-seer",
+        "id": "el-se-swarm-seer",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-swarm-seer",
+        "type": "selectionEntry"
+      },
+      {
+        "name": "se-old-thornback",
+        "id": "el-se-old-thornback",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-old-thornback",
+        "type": "selectionEntry"
+      },
+      {
+        "name": "se-vs-detachment",
+        "id": "el-se-vs-detachment",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-vs-detachment",
+        "type": "selectionEntry"
+      }
+    ]
+  }
+}

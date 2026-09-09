@@ -1,0 +1,1200 @@
+{
+  "ownerId": "local",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "revision": 0,
+  "id": "snap_20260101_78a75cfe",
+  "gameSystemId": "wh40k-11e",
+  "label": "synthetic fixture",
+  "sources": [
+    {
+      "adapter": "mfm-yaml",
+      "url": "fixture://mfm/",
+      "ref": "mfm-v0.1@2026-01-01",
+      "fetchedAt": "2026-01-01T00:00:00.000Z",
+      "notes": "BSData/wh40k-11e-mfm (MIT); points (c) Games Workshop"
+    },
+    {
+      "adapter": "bsdata-json",
+      "url": "fixture://bsdata/",
+      "ref": "synthetic",
+      "fetchedAt": "2026-01-01T00:00:00.000Z",
+      "notes": "BSData/wh40k-11e (no licence; data (c) Games Workshop). catalogues: ashen-wardens@r2, verdant-swarm@r5"
+    },
+    {
+      "adapter": "wahapedia-csv",
+      "url": "fixture://wahapedia/",
+      "ref": "2026-01-01 00:00:00",
+      "fetchedAt": "2026-01-01T00:00:00.000Z",
+      "notes": "Powered by Wahapedia (https://wahapedia.ru); text (c) Games Workshop"
+    }
+  ],
+  "checksum": "78a75cfe837ae6247c06ac2442a8bc5365651000302919c3928604dfc31dccbc",
+  "conflicts": [
+    {
+      "entity": "datasheet",
+      "id": "ds:ashen-wardens:warden-captain",
+      "field": "points",
+      "chosen": "[1,]1:80",
+      "candidates": [
+        {
+          "adapter": "mfm-yaml",
+          "value": "[1,]1:80"
+        },
+        {
+          "adapter": "bsdata-json",
+          "value": "[1,]1:80"
+        },
+        {
+          "adapter": "wahapedia-csv",
+          "value": "[1,]1:85"
+        }
+      ]
+    },
+    {
+      "entity": "datasheet",
+      "id": "ds:ashen-wardens:warden-squad",
+      "field": "points",
+      "chosen": "[1,2]5:90,10:180 | [3,]5:100,10:200",
+      "candidates": [
+        {
+          "adapter": "mfm-yaml",
+          "value": "[1,2]5:90,10:180 | [3,]5:100,10:200"
+        },
+        {
+          "adapter": "bsdata-json",
+          "value": "[1,]5:90,10:180"
+        },
+        {
+          "adapter": "wahapedia-csv",
+          "value": "[1,2]5:90,10:180 | [3,]5:100,10:200"
+        }
+      ]
+    },
+    {
+      "entity": "datasheet",
+      "id": "ds:verdant-swarm:spine-drake",
+      "field": "models[Spine Drake].T",
+      "chosen": "11",
+      "candidates": [
+        {
+          "adapter": "wahapedia-csv",
+          "value": "11"
+        },
+        {
+          "adapter": "bsdata-json",
+          "value": "10"
+        }
+      ]
+    },
+    {
+      "entity": "datasheet",
+      "id": "ds:verdant-swarm:swarm-seer",
+      "field": "points",
+      "chosen": "[1,1]1:70 | [2,]1:80",
+      "candidates": [
+        {
+          "adapter": "mfm-yaml",
+          "value": "[1,1]1:70 | [2,]1:80"
+        },
+        {
+          "adapter": "bsdata-json",
+          "value": "[1,]1:70"
+        },
+        {
+          "adapter": "wahapedia-csv",
+          "value": "[1,1]1:70 | [2,]1:80"
+        }
+      ]
+    }
+  ],
+  "data": {
+    "gameSystem": {
+      "id": "wh40k-11e",
+      "name": "Synthetic Wargame",
+      "edition": "11",
+      "version": "r1",
+      "costTypes": [
+        {
+          "id": "ct-pts",
+          "name": "pts"
+        },
+        {
+          "id": "ct-dp",
+          "name": "Detachment Points"
+        }
+      ]
+    },
+    "factions": [
+      {
+        "id": "faction:ashen-wardens",
+        "gameSystemId": "wh40k-11e",
+        "name": "Ashen Wardens",
+        "keywords": []
+      },
+      {
+        "id": "faction:verdant-swarm",
+        "gameSystemId": "wh40k-11e",
+        "name": "Verdant Swarm",
+        "keywords": []
+      }
+    ],
+    "publications": [
+      {
+        "id": "pub:bsdata:pub-synthetic",
+        "name": "Synthetic fixtures"
+      },
+      {
+        "id": "pub:wahapedia:000000001",
+        "name": "Synthetic Codex",
+        "type": "Codex",
+        "edition": "11",
+        "version": "1.0"
+      },
+      {
+        "id": "pub:wahapedia:000000002",
+        "name": "Synthetic Legends",
+        "type": "Legends",
+        "edition": "11",
+        "version": "1.0"
+      }
+    ],
+    "datasheets": [
+      {
+        "id": "ds:ashen-wardens:ashen-crusher",
+        "gameSystemId": "wh40k-11e",
+        "factionId": "faction:ashen-wardens",
+        "name": "Ashen Crusher",
+        "role": "Vehicles",
+        "isLegends": false,
+        "isCharacter": false,
+        "isEpicHero": false,
+        "isBattleline": false,
+        "isSupport": false,
+        "keywords": [
+          "VEHICLE",
+          "WALKER",
+          "ASHEN CRUSHER"
+        ],
+        "factionKeywords": [
+          "ASHEN WARDENS"
+        ],
+        "models": [
+          {
+            "id": "mp:ashen-wardens:ashen-crusher:ashen-crusher",
+            "name": "Ashen Crusher",
+            "M": 10,
+            "T": 10,
+            "Sv": 2,
+            "InvSv": null,
+            "W": 12,
+            "Ld": 6,
+            "OC": 3,
+            "baseSize": "120mm oval"
+          }
+        ],
+        "weapons": [
+          {
+            "id": "wp:ashen-wardens:ashen-crusher:vortex-cannon",
+            "name": "Vortex cannon",
+            "kind": "ranged",
+            "range": 36,
+            "A": "D6",
+            "skill": 3,
+            "S": 9,
+            "AP": 2,
+            "D": 3,
+            "keywords": [
+              {
+                "name": "BLAST",
+                "raw": "Blast"
+              },
+              {
+                "name": "HEAVY",
+                "raw": "Heavy"
+              }
+            ]
+          },
+          {
+            "id": "wp:ashen-wardens:ashen-crusher:fusion-beamer",
+            "name": "Fusion beamer",
+            "kind": "ranged",
+            "range": 12,
+            "A": 1,
+            "skill": 3,
+            "S": 9,
+            "AP": 4,
+            "D": "D6",
+            "keywords": [
+              {
+                "name": "MELTA",
+                "value": 2,
+                "raw": "Melta 2"
+              }
+            ]
+          },
+          {
+            "id": "wp:ashen-wardens:ashen-crusher:twin-hail-gun",
+            "name": "Twin hail gun",
+            "kind": "ranged",
+            "range": 24,
+            "A": 6,
+            "skill": 3,
+            "S": 5,
+            "AP": 1,
+            "D": 1,
+            "keywords": [
+              {
+                "name": "TWIN-LINKED",
+                "raw": "Twin-linked"
+              },
+              {
+                "name": "SUSTAINED HITS",
+                "value": 1,
+                "raw": "Sustained Hits 1"
+              }
+            ]
+          },
+          {
+            "id": "wp:ashen-wardens:ashen-crusher:crusher-fists",
+            "name": "Crusher fists",
+            "kind": "melee",
+            "range": null,
+            "A": 4,
+            "skill": 3,
+            "S": 12,
+            "AP": 3,
+            "D": 4,
+            "keywords": []
+          }
+        ],
+        "abilityIds": [
+          "ab:core:deadly-demise:d3",
+          "ab:ashen-wardens:ashen-crusher:siege-protocols",
+          "ab:ashen-wardens:ashen-crusher:ablative-plating"
+        ],
+        "leaderTo": [],
+        "supportTo": [],
+        "composition": [
+          {
+            "description": "1 Ashen Crusher model",
+            "min": 1,
+            "max": 1
+          }
+        ],
+        "loadout": "This model is equipped with: vortex cannon; twin hail gun; crusher fists.",
+        "wargearOptions": [
+          "This model’s twin hail gun can be replaced with one of the following:\n- 1 fusion beamer\n- 1 vortex cannon"
+        ],
+        "damagedProfile": {
+          "threshold": "1-4",
+          "description": "While this model has 1-4 wounds remaining, subtract 1 from its hit rolls and its Objective Control characteristic is 1."
+        },
+        "sourceId": "pub:wahapedia:000000001",
+        "fallbackPoints": 150
+      },
+      {
+        "id": "ds:ashen-wardens:warden-captain",
+        "gameSystemId": "wh40k-11e",
+        "factionId": "faction:ashen-wardens",
+        "name": "Warden Captain",
+        "role": "Characters",
+        "isLegends": false,
+        "isCharacter": true,
+        "isEpicHero": false,
+        "isBattleline": false,
+        "isSupport": false,
+        "keywords": [
+          "INFANTRY",
+          "CHARACTER",
+          "WARDEN CAPTAIN"
+        ],
+        "factionKeywords": [
+          "ASHEN WARDENS"
+        ],
+        "models": [
+          {
+            "id": "mp:ashen-wardens:warden-captain:warden-captain",
+            "name": "Warden Captain",
+            "M": 6,
+            "T": 5,
+            "Sv": 3,
+            "InvSv": 4,
+            "W": 5,
+            "Ld": 6,
+            "OC": 1,
+            "baseSize": "40mm"
+          }
+        ],
+        "weapons": [
+          {
+            "id": "wp:ashen-wardens:warden-captain:flux-pistol",
+            "name": "Flux pistol",
+            "kind": "ranged",
+            "range": 12,
+            "A": 1,
+            "skill": 2,
+            "S": 5,
+            "AP": 1,
+            "D": 2,
+            "keywords": [
+              {
+                "name": "PISTOL",
+                "raw": "Pistol"
+              },
+              {
+                "name": "PRECISION",
+                "raw": "Precision"
+              }
+            ]
+          },
+          {
+            "id": "wp:ashen-wardens:warden-captain:relic-blade",
+            "name": "Relic blade",
+            "kind": "melee",
+            "range": null,
+            "A": 5,
+            "skill": 2,
+            "S": 6,
+            "AP": 2,
+            "D": 2,
+            "keywords": [
+              {
+                "name": "DEVASTATING WOUNDS",
+                "raw": "Devastating Wounds"
+              }
+            ]
+          }
+        ],
+        "abilityIds": [
+          "ab:core:leader",
+          "ab:core:deep-strike",
+          "ab:ashen-wardens:ember-resolve",
+          "ab:ashen-wardens:warden-captain:rally-the-line"
+        ],
+        "leaderTo": [
+          "ds:ashen-wardens:warden-squad"
+        ],
+        "supportTo": [],
+        "composition": [
+          {
+            "description": "1 Warden Captain model",
+            "min": 1,
+            "max": 1
+          }
+        ],
+        "loadout": "This model is equipped with: flux pistol; relic blade.",
+        "wargearOptions": [],
+        "sourceId": "pub:wahapedia:000000001",
+        "fallbackPoints": 80
+      },
+      {
+        "id": "ds:ashen-wardens:warden-squad",
+        "gameSystemId": "wh40k-11e",
+        "factionId": "faction:ashen-wardens",
+        "name": "Warden Squad",
+        "role": "Battleline",
+        "isLegends": false,
+        "isCharacter": false,
+        "isEpicHero": false,
+        "isBattleline": true,
+        "isSupport": false,
+        "keywords": [
+          "INFANTRY",
+          "BATTLELINE",
+          "WARDEN SQUAD"
+        ],
+        "factionKeywords": [
+          "ASHEN WARDENS"
+        ],
+        "models": [
+          {
+            "id": "mp:ashen-wardens:warden-squad:warden-sergeant",
+            "name": "Warden Sergeant",
+            "M": 6,
+            "T": 5,
+            "Sv": 3,
+            "InvSv": null,
+            "W": 3,
+            "Ld": 6,
+            "OC": 2,
+            "baseSize": "32mm"
+          },
+          {
+            "id": "mp:ashen-wardens:warden-squad:warden",
+            "name": "Warden",
+            "M": 6,
+            "T": 5,
+            "Sv": 3,
+            "InvSv": null,
+            "W": 2,
+            "Ld": 6,
+            "OC": 2,
+            "baseSize": "32mm"
+          }
+        ],
+        "weapons": [
+          {
+            "id": "wp:ashen-wardens:warden-squad:flux-carbine",
+            "name": "Flux carbine",
+            "kind": "ranged",
+            "range": 24,
+            "A": 2,
+            "skill": 3,
+            "S": 5,
+            "AP": 1,
+            "D": 1,
+            "keywords": [
+              {
+                "name": "RAPID FIRE",
+                "value": 1,
+                "raw": "Rapid Fire 1"
+              }
+            ]
+          },
+          {
+            "id": "wp:ashen-wardens:warden-squad:shock-maul",
+            "name": "Shock maul",
+            "kind": "melee",
+            "range": null,
+            "A": 3,
+            "skill": 3,
+            "S": 5,
+            "AP": 1,
+            "D": 1,
+            "keywords": [
+              {
+                "name": "SUSTAINED HITS",
+                "value": 1,
+                "raw": "Sustained Hits 1"
+              }
+            ]
+          },
+          {
+            "id": "wp:ashen-wardens:warden-squad:power-fist",
+            "name": "Power fist",
+            "kind": "melee",
+            "range": null,
+            "A": 3,
+            "skill": 3,
+            "S": 8,
+            "AP": 2,
+            "D": 2,
+            "keywords": [
+              {
+                "name": "LETHAL HITS",
+                "raw": "Lethal Hits"
+              }
+            ]
+          }
+        ],
+        "abilityIds": [
+          "ab:ashen-wardens:ember-resolve",
+          "ab:ashen-wardens:warden-squad:shield-wall-once-per-battle"
+        ],
+        "leaderTo": [],
+        "supportTo": [],
+        "composition": [
+          {
+            "description": "1 Warden Sergeant",
+            "min": 1,
+            "max": 1
+          },
+          {
+            "description": "4-9 Wardens",
+            "min": 4,
+            "max": 9
+          }
+        ],
+        "loadout": "Every model is equipped with: flux carbine; shock maul.\nThe Warden Sergeant is also equipped with a power fist.",
+        "wargearOptions": [
+          "Any number of Wardens can each have their flux carbine replaced with 1 shock maul."
+        ],
+        "sourceId": "pub:wahapedia:000000001",
+        "fallbackPoints": 90
+      },
+      {
+        "id": "ds:verdant-swarm:spine-drake",
+        "gameSystemId": "wh40k-11e",
+        "factionId": "faction:verdant-swarm",
+        "name": "Spine Drake",
+        "role": "Monsters",
+        "isLegends": false,
+        "isCharacter": false,
+        "isEpicHero": false,
+        "isBattleline": false,
+        "isSupport": false,
+        "keywords": [
+          "MONSTER",
+          "SPINE DRAKE"
+        ],
+        "factionKeywords": [
+          "VERDANT SWARM"
+        ],
+        "models": [
+          {
+            "id": "mp:verdant-swarm:spine-drake:spine-drake",
+            "name": "Spine Drake",
+            "M": 10,
+            "T": 11,
+            "Sv": 3,
+            "InvSv": null,
+            "W": 16,
+            "Ld": 7,
+            "OC": 4,
+            "baseSize": "120mm oval"
+          }
+        ],
+        "weapons": [
+          {
+            "id": "wp:verdant-swarm:spine-drake:spine-volley",
+            "name": "Spine volley",
+            "kind": "ranged",
+            "range": 18,
+            "A": "D6+3",
+            "skill": null,
+            "S": 6,
+            "AP": 1,
+            "D": 1,
+            "keywords": [
+              {
+                "name": "TORRENT",
+                "raw": "Torrent"
+              },
+              {
+                "name": "IGNORES COVER",
+                "raw": "Ignores Cover"
+              }
+            ]
+          },
+          {
+            "id": "wp:verdant-swarm:spine-drake:acid-lance",
+            "name": "Acid lance",
+            "kind": "ranged",
+            "range": 24,
+            "A": 2,
+            "skill": 3,
+            "S": 12,
+            "AP": 3,
+            "D": "D6+1",
+            "keywords": [
+              {
+                "name": "ANTI",
+                "value": 4,
+                "keyword": "VEHICLE",
+                "raw": "Anti-vehicle 4+"
+              },
+              {
+                "name": "DEVASTATING WOUNDS",
+                "raw": "Devastating Wounds"
+              }
+            ]
+          },
+          {
+            "id": "wp:verdant-swarm:spine-drake:rending-talons",
+            "name": "Rending talons",
+            "kind": "melee",
+            "range": null,
+            "A": 6,
+            "skill": 3,
+            "S": 9,
+            "AP": 2,
+            "D": 3,
+            "keywords": [
+              {
+                "name": "PRECISION",
+                "raw": "Precision"
+              }
+            ]
+          }
+        ],
+        "abilityIds": [
+          "ab:core:deadly-demise:d6",
+          "ab:verdant-swarm:spine-drake:regenerating-hide"
+        ],
+        "leaderTo": [],
+        "supportTo": [],
+        "composition": [
+          {
+            "description": "1 Spine Drake model",
+            "min": 1,
+            "max": 1
+          }
+        ],
+        "loadout": "This model is equipped with: spine volley; acid lance; rending talons.",
+        "wargearOptions": [],
+        "damagedProfile": {
+          "threshold": "1-5",
+          "description": "While this model has 1-5 wounds remaining, subtract 1 from its hit rolls."
+        },
+        "sourceId": "pub:wahapedia:000000001",
+        "fallbackPoints": 210
+      },
+      {
+        "id": "ds:verdant-swarm:swarm-seer",
+        "gameSystemId": "wh40k-11e",
+        "factionId": "faction:verdant-swarm",
+        "name": "Swarm Seer",
+        "role": "Characters",
+        "isLegends": false,
+        "isCharacter": true,
+        "isEpicHero": false,
+        "isBattleline": false,
+        "isSupport": false,
+        "keywords": [
+          "INFANTRY",
+          "CHARACTER",
+          "PSYKER",
+          "SWARM SEER"
+        ],
+        "factionKeywords": [
+          "VERDANT SWARM"
+        ],
+        "models": [
+          {
+            "id": "mp:verdant-swarm:swarm-seer:swarm-seer",
+            "name": "Swarm Seer",
+            "M": 6,
+            "T": 4,
+            "Sv": 5,
+            "InvSv": 5,
+            "W": 4,
+            "Ld": 7,
+            "OC": 1,
+            "baseSize": "32mm"
+          }
+        ],
+        "weapons": [
+          {
+            "id": "wp:verdant-swarm:swarm-seer:mind-bolt",
+            "name": "Mind bolt",
+            "kind": "ranged",
+            "range": 18,
+            "A": 2,
+            "skill": 3,
+            "S": 6,
+            "AP": 2,
+            "D": "D3",
+            "keywords": [
+              {
+                "name": "PSYCHIC",
+                "raw": "Psychic"
+              },
+              {
+                "name": "HAZARDOUS",
+                "raw": "Hazardous"
+              }
+            ]
+          },
+          {
+            "id": "wp:verdant-swarm:swarm-seer:seers-claws",
+            "name": "Seer’s claws",
+            "kind": "melee",
+            "range": null,
+            "A": 3,
+            "skill": 4,
+            "S": 4,
+            "AP": 0,
+            "D": 1,
+            "keywords": []
+          }
+        ],
+        "abilityIds": [
+          "ab:core:leader",
+          "ab:core:lone-operative",
+          "ab:verdant-swarm:swarm-seer:swarm-link"
+        ],
+        "leaderTo": [
+          "ds:verdant-swarm:thornlings"
+        ],
+        "supportTo": [],
+        "composition": [
+          {
+            "description": "1 Swarm Seer model",
+            "min": 1,
+            "max": 1
+          }
+        ],
+        "loadout": "This model is equipped with: mind bolt; seer’s claws.",
+        "wargearOptions": [],
+        "sourceId": "pub:wahapedia:000000001",
+        "fallbackPoints": 70
+      },
+      {
+        "id": "ds:verdant-swarm:thornlings",
+        "gameSystemId": "wh40k-11e",
+        "factionId": "faction:verdant-swarm",
+        "name": "Thornlings",
+        "role": "Battleline",
+        "isLegends": false,
+        "isCharacter": false,
+        "isEpicHero": false,
+        "isBattleline": true,
+        "isSupport": false,
+        "keywords": [
+          "INFANTRY",
+          "SWARM",
+          "BATTLELINE",
+          "THORNLINGS"
+        ],
+        "factionKeywords": [
+          "VERDANT SWARM"
+        ],
+        "models": [
+          {
+            "id": "mp:verdant-swarm:thornlings:thornling",
+            "name": "Thornling",
+            "M": 8,
+            "T": 3,
+            "Sv": 6,
+            "InvSv": null,
+            "W": 1,
+            "Ld": 8,
+            "OC": 2,
+            "baseSize": "25mm"
+          }
+        ],
+        "weapons": [
+          {
+            "id": "wp:verdant-swarm:thornlings:spine-flick",
+            "name": "Spine flick",
+            "kind": "ranged",
+            "range": 12,
+            "A": 1,
+            "skill": 4,
+            "S": 3,
+            "AP": 0,
+            "D": 1,
+            "keywords": [
+              {
+                "name": "ASSAULT",
+                "raw": "Assault"
+              }
+            ]
+          },
+          {
+            "id": "wp:verdant-swarm:thornlings:barbed-claws",
+            "name": "Barbed claws",
+            "kind": "melee",
+            "range": null,
+            "A": 2,
+            "skill": 4,
+            "S": 3,
+            "AP": 0,
+            "D": 1,
+            "keywords": [
+              {
+                "name": "LETHAL HITS",
+                "raw": "Lethal Hits"
+              }
+            ]
+          }
+        ],
+        "abilityIds": [
+          "ab:core:feel-no-pain:5"
+        ],
+        "leaderTo": [],
+        "supportTo": [],
+        "composition": [
+          {
+            "description": "10-20 Thornlings",
+            "min": 10,
+            "max": 20
+          }
+        ],
+        "loadout": "Every model is equipped with: spine flick; barbed claws.",
+        "wargearOptions": [],
+        "sourceId": "pub:wahapedia:000000001",
+        "fallbackPoints": 60
+      }
+    ],
+    "abilities": [
+      {
+        "id": "ab:ashen-wardens:ashen-crusher:ablative-plating",
+        "name": "Ablative Plating",
+        "scope": "wargear",
+        "text": "This model has a 5+ invulnerable save against ranged attacks.",
+        "factionId": "faction:ashen-wardens",
+        "isLegends": false
+      },
+      {
+        "id": "ab:ashen-wardens:ashen-crusher:siege-protocols",
+        "name": "Siege Protocols",
+        "scope": "datasheet",
+        "text": "Once per battle, at the start of your turn, this model can enter siege mode. If it does, until the start of your next turn it cannot move but its ranged weapons have the [HEAVY] ability and +1 to their Strength characteristic.",
+        "factionId": "faction:ashen-wardens",
+        "isLegends": false
+      },
+      {
+        "id": "ab:ashen-wardens:ember-resolve",
+        "name": "Ember Resolve",
+        "scope": "faction",
+        "text": "Each time a model in this unit makes a melee attack that targets a unit within range of an objective marker, add 1 to the wound roll.",
+        "factionId": "faction:ashen-wardens",
+        "isLegends": false
+      },
+      {
+        "id": "ab:ashen-wardens:warden-captain:rally-the-line",
+        "name": "Rally the Line",
+        "scope": "datasheet",
+        "text": "Each time this unit makes a ranged attack, re-roll a hit roll of 1.",
+        "factionId": "faction:ashen-wardens",
+        "isLegends": false
+      },
+      {
+        "id": "ab:ashen-wardens:warden-squad:shield-wall-once-per-battle",
+        "name": "Shield Wall (Once per battle)",
+        "scope": "datasheet",
+        "text": "Once per battle, at the start of your opponent’s Shooting phase, this unit can brace.\n\nIf it does, until the end of the phase:\n\n- It cannot be selected as the target of ranged attacks made by models more than 18\" away.\n\n- It cannot make Overwatch attacks.",
+        "factionId": "faction:ashen-wardens",
+        "isLegends": false
+      },
+      {
+        "id": "ab:core:deadly-demise:d3",
+        "name": "Deadly Demise D3",
+        "scope": "core",
+        "text": "Synthetic rules text: when this model is destroyed, roll one D6; on a 6 each unit within 6\" suffers X mortal wounds.",
+        "coreKeyword": "DEADLY DEMISE",
+        "coreValue": "D3",
+        "isLegends": false
+      },
+      {
+        "id": "ab:core:deadly-demise:d6",
+        "name": "Deadly Demise D6",
+        "scope": "core",
+        "text": "Synthetic rules text: when this model is destroyed, roll one D6; on a 6 each unit within 6\" suffers X mortal wounds.",
+        "coreKeyword": "DEADLY DEMISE",
+        "coreValue": "D6",
+        "isLegends": false
+      },
+      {
+        "id": "ab:core:deep-strike",
+        "name": "Deep Strike",
+        "scope": "core",
+        "text": "Synthetic rules text: this unit can arrive from reserves more than 9\" away from enemy models.",
+        "coreKeyword": "DEEP STRIKE",
+        "isLegends": false
+      },
+      {
+        "id": "ab:core:feel-no-pain:5",
+        "name": "Feel No Pain 5+",
+        "scope": "core",
+        "text": "Synthetic rules text: each time this model would lose a wound, roll one D6; if the result equals or exceeds X, that wound is not lost.",
+        "coreKeyword": "FEEL NO PAIN",
+        "coreValue": 5,
+        "isLegends": false
+      },
+      {
+        "id": "ab:core:leader",
+        "name": "Leader",
+        "scope": "core",
+        "text": "Some characters can lead a unit. Synthetic rules text: attach this model to one unit it can lead.",
+        "coreKeyword": "LEADER",
+        "isLegends": false
+      },
+      {
+        "id": "ab:core:lone-operative",
+        "name": "Lone Operative",
+        "scope": "core",
+        "text": "Synthetic rules text: this model can only be targeted by ranged attacks from within 12\".",
+        "coreKeyword": "LONE OPERATIVE",
+        "isLegends": false
+      },
+      {
+        "id": "ab:det-ashen-wardens:ember-vanguard:ember-doctrine",
+        "name": "Ember Doctrine",
+        "scope": "detachment",
+        "text": "Each time a model from your army with the Ember Resolve ability makes a melee attack while within range of an objective marker, improve the Armour Penetration characteristic of that attack by 1.",
+        "factionId": "faction:ashen-wardens",
+        "isLegends": false
+      },
+      {
+        "id": "ab:det-verdant-swarm:thorn-tide:tide-instinct",
+        "name": "Tide Instinct",
+        "scope": "detachment",
+        "text": "Each time a VERDANT SWARM unit from your army is selected to shoot or fight, if it is within 6\" of a friendly Swarm Seer, re-roll a wound roll of 1.",
+        "factionId": "faction:verdant-swarm",
+        "isLegends": false
+      },
+      {
+        "id": "ab:verdant-swarm:spine-drake:regenerating-hide",
+        "name": "Regenerating Hide",
+        "scope": "datasheet",
+        "text": "At the start of your Command phase, this model regains up to D3 lost wounds.",
+        "factionId": "faction:verdant-swarm",
+        "isLegends": false
+      },
+      {
+        "id": "ab:verdant-swarm:swarm-seer:swarm-link",
+        "name": "Swarm Link",
+        "scope": "datasheet",
+        "text": "While this model is leading a unit, models in that unit have the Stealth ability.",
+        "factionId": "faction:verdant-swarm",
+        "isLegends": false
+      }
+    ],
+    "detachments": [
+      {
+        "id": "det:ashen-wardens:ember-vanguard",
+        "factionId": "faction:ashen-wardens",
+        "name": "Ember Vanguard",
+        "dp": 2,
+        "forceDispositions": [
+          "HOLD THE RIDGE"
+        ],
+        "uniqueTag": "Ember",
+        "ruleAbilityIds": [
+          "ab:det-ashen-wardens:ember-vanguard:ember-doctrine"
+        ],
+        "enhancementIds": [
+          "enh:ashen-wardens:ember-blade",
+          "enh:ashen-wardens:wardens-aegis"
+        ],
+        "stratagemIds": [
+          "strat:ashen-wardens:ember-vanguard:hold-fast",
+          "strat:ashen-wardens:ember-vanguard:covering-volley"
+        ]
+      },
+      {
+        "id": "det:verdant-swarm:thorn-tide",
+        "factionId": "faction:verdant-swarm",
+        "name": "Thorn Tide",
+        "dp": 1,
+        "forceDispositions": [
+          "SEIZE THE GROVE"
+        ],
+        "ruleAbilityIds": [
+          "ab:det-verdant-swarm:thorn-tide:tide-instinct"
+        ],
+        "enhancementIds": [
+          "enh:verdant-swarm:venom-sac"
+        ],
+        "stratagemIds": [
+          "strat:verdant-swarm:thorn-tide:surge-of-thorns"
+        ]
+      }
+    ],
+    "enhancements": [
+      {
+        "id": "enh:ashen-wardens:ember-blade",
+        "detachmentId": "det:ashen-wardens:ember-vanguard",
+        "name": "Ember Blade",
+        "cost": 15,
+        "text": "Improve the Strength and Damage characteristics of the bearer’s melee weapons by 1.",
+        "supportOnly": false,
+        "isLegends": false
+      },
+      {
+        "id": "enh:ashen-wardens:wardens-aegis",
+        "detachmentId": "det:ashen-wardens:ember-vanguard",
+        "name": "Warden's Aegis",
+        "cost": 25,
+        "text": "The bearer has a 4+ invulnerable save. While the bearer is leading a unit, models in that unit have the Feel No Pain 6+ ability.",
+        "supportOnly": false,
+        "restrictions": "LEADER: WARDEN SQUAD",
+        "isLegends": false
+      },
+      {
+        "id": "enh:verdant-swarm:venom-sac",
+        "detachmentId": "det:verdant-swarm:thorn-tide",
+        "name": "Venom Sac",
+        "cost": 10,
+        "text": "The bearer’s melee weapons have the [LETHAL HITS] ability.",
+        "supportOnly": false,
+        "isLegends": false
+      }
+    ],
+    "stratagems": [
+      {
+        "id": "strat:ashen-wardens:ember-vanguard:covering-volley",
+        "factionId": "faction:ashen-wardens",
+        "detachmentId": "det:ashen-wardens:ember-vanguard",
+        "name": "COVERING VOLLEY",
+        "type": "Ember Vanguard – Strategic Ploy Stratagem",
+        "cpCost": 1,
+        "turn": "opponent",
+        "phases": [
+          "Charge"
+        ],
+        "when": "Your opponent’s Charge phase, just after an enemy unit declares a charge.",
+        "target": "One ASHEN WARDENS unit from your army that was selected as a target of that charge.",
+        "effect": "Your unit can shoot at the charging unit as if it were your Shooting phase.",
+        "text": "WHEN: Your opponent’s Charge phase, just after an enemy unit declares a charge.\n\nTARGET: One ASHEN WARDENS unit from your army that was selected as a target of that charge.\n\nEFFECT: Your unit can shoot at the charging unit as if it were your Shooting phase."
+      },
+      {
+        "id": "strat:ashen-wardens:ember-vanguard:hold-fast",
+        "factionId": "faction:ashen-wardens",
+        "detachmentId": "det:ashen-wardens:ember-vanguard",
+        "name": "HOLD FAST",
+        "type": "Ember Vanguard – Battle Tactic Stratagem",
+        "cpCost": 1,
+        "turn": "your",
+        "phases": [
+          "Fight"
+        ],
+        "when": "Your Fight phase.",
+        "target": "One ASHEN WARDENS unit from your army that has not been selected to fight this phase.",
+        "effect": "Until the end of the phase, each time a model in your unit makes a melee attack, add 1 to the hit roll.",
+        "restrictions": "You cannot use this Stratagem on a unit that made a charge move this turn.",
+        "text": "WHEN: Your Fight phase.\n\nTARGET: One ASHEN WARDENS unit from your army that has not been selected to fight this phase.\n\nEFFECT: Until the end of the phase, each time a model in your unit makes a melee attack, add 1 to the hit roll.\n\nRESTRICTIONS: You cannot use this Stratagem on a unit that made a charge move this turn."
+      },
+      {
+        "id": "strat:core:re-roll-dice",
+        "name": "RE-ROLL DICE",
+        "type": "Core – Epic Deed Stratagem",
+        "cpCost": 1,
+        "turn": "either",
+        "phases": [
+          "Any"
+        ],
+        "when": "Any phase, just after you make a roll.",
+        "effect": "Re-roll that roll.",
+        "text": "WHEN: Any phase, just after you make a roll.\n\nEFFECT: Re-roll that roll."
+      },
+      {
+        "id": "strat:verdant-swarm:thorn-tide:surge-of-thorns",
+        "factionId": "faction:verdant-swarm",
+        "detachmentId": "det:verdant-swarm:thorn-tide",
+        "name": "SURGE OF THORNS",
+        "type": "Thorn Tide – Battle Tactic Stratagem",
+        "cpCost": 2,
+        "turn": "either",
+        "phases": [
+          "Shooting",
+          "Fight"
+        ],
+        "when": "Your Shooting phase or the Fight phase.",
+        "target": "One VERDANT SWARM unit from your army.",
+        "effect": "Until the end of the phase, weapons equipped by models in your unit have the [SUSTAINED HITS 1] ability.",
+        "text": "WHEN: Your Shooting phase or the Fight phase.\n\nTARGET: One VERDANT SWARM unit from your army.\n\nEFFECT: Until the end of the phase, weapons equipped by models in your unit have the [SUSTAINED HITS 1] ability."
+      }
+    ],
+    "priceRules": [
+      {
+        "datasheetId": "ds:ashen-wardens:ashen-crusher",
+        "copyRange": {
+          "min": 1
+        },
+        "label": "Your Unit Costs",
+        "tiers": [
+          {
+            "models": 1,
+            "points": 150
+          }
+        ]
+      },
+      {
+        "datasheetId": "ds:ashen-wardens:warden-captain",
+        "copyRange": {
+          "min": 1
+        },
+        "label": "Your Unit Costs",
+        "tiers": [
+          {
+            "models": 1,
+            "points": 80
+          }
+        ]
+      },
+      {
+        "datasheetId": "ds:ashen-wardens:warden-squad",
+        "copyRange": {
+          "min": 1,
+          "max": 2
+        },
+        "label": "Your 1st To 2nd Units Cost",
+        "tiers": [
+          {
+            "models": 5,
+            "points": 90
+          },
+          {
+            "models": 10,
+            "points": 180
+          }
+        ]
+      },
+      {
+        "datasheetId": "ds:ashen-wardens:warden-squad",
+        "copyRange": {
+          "min": 3
+        },
+        "label": "Your 3rd + Unit Costs",
+        "tiers": [
+          {
+            "models": 5,
+            "points": 100
+          },
+          {
+            "models": 10,
+            "points": 200
+          }
+        ]
+      },
+      {
+        "datasheetId": "ds:verdant-swarm:spine-drake",
+        "copyRange": {
+          "min": 1
+        },
+        "label": "Your Unit Costs",
+        "tiers": [
+          {
+            "models": 1,
+            "points": 210
+          }
+        ]
+      },
+      {
+        "datasheetId": "ds:verdant-swarm:swarm-seer",
+        "copyRange": {
+          "min": 1,
+          "max": 1
+        },
+        "label": "Your 1st Unit Costs",
+        "tiers": [
+          {
+            "models": 1,
+            "points": 70
+          }
+        ]
+      },
+      {
+        "datasheetId": "ds:verdant-swarm:swarm-seer",
+        "copyRange": {
+          "min": 2
+        },
+        "label": "Your 2nd + Unit Costs",
+        "tiers": [
+          {
+            "models": 1,
+            "points": 80
+          }
+        ]
+      },
+      {
+        "datasheetId": "ds:verdant-swarm:thornlings",
+        "copyRange": {
+          "min": 1
+        },
+        "label": "Your Unit Costs",
+        "tiers": [
+          {
+            "models": 10,
+            "points": 60
+          },
+          {
+            "models": 20,
+            "points": 120
+          }
+        ]
+      }
+    ],
+    "wargearPrices": [
+      {
+        "datasheetId": "ds:ashen-wardens:ashen-crusher",
+        "item": "Fusion beamer",
+        "points": 10
+      }
+    ]
+  }
+}

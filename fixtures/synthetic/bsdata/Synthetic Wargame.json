@@ -1,0 +1,286 @@
+{
+  "gameSystem": {
+    "name": "Synthetic Wargame 11th Edition",
+    "id": "sys-synthetic",
+    "battleScribeVersion": "2.03",
+    "revision": 1,
+    "type": "gameSystem",
+    "xmlns": "http://www.battlescribe.net/schema/gameSystemSchema",
+    "publications": [
+      {
+        "name": "Synthetic fixtures",
+        "id": "pub-synthetic",
+        "hidden": false,
+        "shortName": "SYN"
+      }
+    ],
+    "costTypes": [
+      {
+        "id": "ct-pts",
+        "name": "pts",
+        "defaultCostLimit": -1,
+        "hidden": false
+      },
+      {
+        "id": "ct-dp",
+        "name": "Detachment Points",
+        "defaultCostLimit": -1,
+        "hidden": false
+      }
+    ],
+    "profileTypes": [
+      {
+        "id": "pt-unit",
+        "name": "Unit",
+        "characteristicTypes": [
+          {
+            "id": "ct-unit-M",
+            "name": "M"
+          },
+          {
+            "id": "ct-unit-T",
+            "name": "T"
+          },
+          {
+            "id": "ct-unit-Sv",
+            "name": "Sv"
+          },
+          {
+            "id": "ct-unit-W",
+            "name": "W"
+          },
+          {
+            "id": "ct-unit-LD",
+            "name": "LD"
+          },
+          {
+            "id": "ct-unit-OC",
+            "name": "OC"
+          },
+          {
+            "id": "ct-unit-InSv",
+            "name": "InSv"
+          }
+        ]
+      },
+      {
+        "id": "pt-ranged",
+        "name": "Ranged Weapons",
+        "characteristicTypes": [
+          {
+            "id": "ct-r-Range",
+            "name": "Range"
+          },
+          {
+            "id": "ct-r-A",
+            "name": "A"
+          },
+          {
+            "id": "ct-r-BS",
+            "name": "BS"
+          },
+          {
+            "id": "ct-r-S",
+            "name": "S"
+          },
+          {
+            "id": "ct-r-AP",
+            "name": "AP"
+          },
+          {
+            "id": "ct-r-D",
+            "name": "D"
+          },
+          {
+            "id": "ct-r-Keywords",
+            "name": "Keywords"
+          }
+        ]
+      },
+      {
+        "id": "pt-melee",
+        "name": "Melee Weapons",
+        "characteristicTypes": [
+          {
+            "id": "ct-m-Range",
+            "name": "Range"
+          },
+          {
+            "id": "ct-m-A",
+            "name": "A"
+          },
+          {
+            "id": "ct-m-WS",
+            "name": "WS"
+          },
+          {
+            "id": "ct-m-S",
+            "name": "S"
+          },
+          {
+            "id": "ct-m-AP",
+            "name": "AP"
+          },
+          {
+            "id": "ct-m-D",
+            "name": "D"
+          },
+          {
+            "id": "ct-m-Keywords",
+            "name": "Keywords"
+          }
+        ]
+      },
+      {
+        "id": "pt-abilities",
+        "name": "Abilities",
+        "characteristicTypes": [
+          {
+            "id": "ct-ab-desc",
+            "name": "Description"
+          }
+        ]
+      },
+      {
+        "id": "pt-transport",
+        "name": "Transport",
+        "characteristicTypes": [
+          {
+            "id": "ct-tr-cap",
+            "name": "Capacity"
+          }
+        ]
+      }
+    ],
+    "categoryEntries": [
+      {
+        "name": "Character",
+        "id": "cat-character",
+        "hidden": false
+      },
+      {
+        "name": "Epic Hero",
+        "id": "cat-epic-hero",
+        "hidden": false
+      },
+      {
+        "name": "Infantry",
+        "id": "cat-infantry",
+        "hidden": false
+      },
+      {
+        "name": "Battleline",
+        "id": "cat-battleline",
+        "hidden": false
+      },
+      {
+        "name": "Vehicle",
+        "id": "cat-vehicle",
+        "hidden": false
+      },
+      {
+        "name": "Monster",
+        "id": "cat-monster",
+        "hidden": false
+      },
+      {
+        "name": "Psyker",
+        "id": "cat-psyker",
+        "hidden": false
+      },
+      {
+        "name": "Swarm",
+        "id": "cat-swarm",
+        "hidden": false
+      },
+      {
+        "name": "Walker",
+        "id": "cat-walker",
+        "hidden": false
+      },
+      {
+        "name": "Configuration",
+        "id": "cat-configuration",
+        "hidden": false
+      }
+    ],
+    "sharedRules": [
+      {
+        "id": "rule-leader",
+        "name": "Leader",
+        "hidden": false,
+        "description": "Synthetic rules text: attach this model to one unit it can lead."
+      },
+      {
+        "id": "rule-support",
+        "name": "Support",
+        "hidden": false,
+        "description": "Synthetic rules text: attach this model to a unit that already has a Leader."
+      },
+      {
+        "id": "rule-deep-strike",
+        "name": "Deep Strike",
+        "hidden": false,
+        "description": "Synthetic rules text: arrive from reserves more than 9\" from enemy models."
+      },
+      {
+        "id": "rule-fnp-5",
+        "name": "Feel No Pain 5+",
+        "hidden": false,
+        "description": "Synthetic rules text: ignore a lost wound on a 5+."
+      },
+      {
+        "id": "rule-deadly-demise",
+        "name": "Deadly Demise",
+        "hidden": false,
+        "description": "Synthetic rules text: explode on a 6 when destroyed."
+      },
+      {
+        "id": "rule-lone-operative",
+        "name": "Lone Operative",
+        "hidden": false,
+        "description": "Synthetic rules text: only targetable within 12\"."
+      },
+      {
+        "id": "rule-stealth",
+        "name": "Stealth",
+        "hidden": false,
+        "description": "Synthetic rules text: -1 to hit for ranged attacks that target this unit."
+      }
+    ],
+    "sharedSelectionEntries": [
+      {
+        "name": "Battle Size",
+        "id": "se-battle-size",
+        "hidden": false,
+        "import": true,
+        "type": "upgrade",
+        "categoryLinks": [
+          {
+            "name": "Configuration",
+            "id": "cl-cat-configuration-001",
+            "primary": true,
+            "targetId": "cat-configuration"
+          }
+        ]
+      }
+    ],
+    "entryLinks": [
+      {
+        "name": "Battle Size",
+        "id": "el-battle-size",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-battle-size",
+        "type": "selectionEntry"
+      }
+    ],
+    "forceEntries": [
+      {
+        "name": "Army Roster",
+        "id": "fe-army",
+        "hidden": false
+      }
+    ]
+  }
+}

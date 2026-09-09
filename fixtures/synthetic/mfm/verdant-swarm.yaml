@@ -1,0 +1,44 @@
+name: Verdant Swarm
+slug: verdant-swarm
+version: "0.1"
+firstSeen: 2026-01-01
+detachments:
+  - name: Thorn Tide
+    dp: 1
+    objectives:
+      - SEIZE THE GROVE
+    enhancements:
+      - { name: Venom Sac, points: 10 }
+units:
+  - name: Old Thornback
+    pricing:
+      - range: "[1,)"
+        label: Your Unit Costs
+        costs:
+          - { models: 1, points: 90 }
+    legends: true
+  - name: Spine Drake
+    pricing:
+      - range: "[1,)"
+        label: Your Unit Costs
+        costs:
+          - { models: 1, points: 210 }
+  - name: Swarm Seer
+    pricing:
+      - range: "[1,1]"
+        label: Your 1st Unit Costs
+        costs:
+          - { models: 1, points: 70 }
+      - range: "[2,)"
+        label: Your 2nd + Unit Costs
+        costs:
+          - { models: 1, points: 80 }
+    leaderTo:
+      - Thornlings
+  - name: Thornlings
+    pricing:
+      - range: "[1,)"
+        label: Your Unit Costs
+        costs:
+          - { models: 10, points: 60 }
+          - { models: 20, points: 120 }

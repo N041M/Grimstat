@@ -1,0 +1,4 @@
+﻿faction_id|name|id|cost|detachment|detachment_id|upgrade|legend|description|support_leader|
+AW|Ember Blade|000000601|15|Ember Vanguard|000000501|false||Improve the Strength and Damage characteristics of the bearer’s melee weapons by 1.||
+AW|Warden's Aegis|000000602|25|Ember Vanguard|000000501|false||The bearer has a 4+ invulnerable save. While the bearer is leading a unit, models in that unit have the Feel No Pain 6+ ability.|<span class="kwb">LEADER:</span> <a class="kwbOne" href="/aw/warden-squad"><span class="kwb kwbo">WARDEN</span> <span class="kwb kwbo">SQUAD</span></a>|
+VS|Venom Sac|000000603|10|Thorn Tide|000000502|false||The bearer’s melee weapons have the <span class="kwb">[LETHAL HITS]</span> ability.||

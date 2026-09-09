@@ -1,0 +1,6 @@
+version: "0.1"
+lastUpdated: 2026-01-01
+notes: Synthetic fixture. No real points values.
+factions:
+  - ashen-wardens
+  - verdant-swarm

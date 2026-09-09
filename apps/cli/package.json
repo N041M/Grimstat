@@ -1,0 +1,13 @@
+{
+  "name": "@grimstat/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "grimstat": "./src/main.ts" },
+  "scripts": { "start": "tsx src/main.ts" },
+  "dependencies": {
+    "@grimstat/adapters": "workspace:*",
+    "@grimstat/schema": "workspace:*",
+    "@grimstat/snapshot": "workspace:*"
+  }
+}

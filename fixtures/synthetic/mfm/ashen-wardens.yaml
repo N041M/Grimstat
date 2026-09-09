@@ -1,0 +1,42 @@
+name: Ashen Wardens
+slug: ashen-wardens
+version: "0.1"
+firstSeen: 2026-01-01
+detachments:
+  - name: Ember Vanguard
+    dp: 2
+    objectives:
+      - HOLD THE RIDGE
+    unique: Ember
+    enhancements:
+      - { name: Ember Blade, points: 15 }
+      - { name: Warden's Aegis, points: 25, leaderTo: [ Warden Squad ] }
+units:
+  - name: Ashen Crusher
+    pricing:
+      - range: "[1,)"
+        label: Your Unit Costs
+        costs:
+          - { models: 1, points: 150 }
+    wargear:
+      - { item: Fusion beamer, points: 10 }
+  - name: Warden Captain
+    pricing:
+      - range: "[1,)"
+        label: Your Unit Costs
+        costs:
+          - { models: 1, points: 80 }
+    leaderTo:
+      - Warden Squad
+  - name: Warden Squad
+    pricing:
+      - range: "[1,2]"
+        label: Your 1st To 2nd Units Cost
+        costs:
+          - { models: 5, points: 90 }
+          - { models: 10, points: 180 }
+      - range: "[3,)"
+        label: Your 3rd + Unit Costs
+        costs:
+          - { models: 5, points: 100 }
+          - { models: 10, points: 200 }

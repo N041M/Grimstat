@@ -1,0 +1,39 @@
+{
+  "catalogue": {
+    "name": "Imperium - Ashen Wardens",
+    "id": "cat-aw",
+    "battleScribeVersion": "2.03",
+    "gameSystemId": "sys-synthetic",
+    "gameSystemRevision": 1,
+    "library": false,
+    "revision": 2,
+    "type": "catalogue",
+    "xmlns": "http://www.battlescribe.net/schema/catalogueSchema",
+    "catalogueLinks": [
+      {
+        "name": "Imperium - Ashen Wardens - Library",
+        "id": "cl-aw-lib",
+        "importRootEntries": true,
+        "targetId": "cat-aw-lib",
+        "type": "catalogue"
+      },
+      {
+        "name": "Some Missing Allies",
+        "id": "cl-missing",
+        "importRootEntries": true,
+        "targetId": "cat-does-not-exist",
+        "type": "catalogue"
+      }
+    ],
+    "entryLinks": [
+      {
+        "name": "Battle Size",
+        "id": "el-aw-battle-size",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-battle-size",
+        "type": "selectionEntry"
+      }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "grimstat",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Unofficial, local-first Warhammer 40,000 statistics dashboard and army builder. Ships no Games Workshop data.",
+  "packageManager": "pnpm@10.12.1",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "dev": "pnpm --filter @grimstat/web dev",
+    "build": "pnpm --filter @grimstat/web build",
+    "cli": "tsx apps/cli/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "fast-check": "^4.1.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

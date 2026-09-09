@@ -1,0 +1,34 @@
+# Modelling notes — 40k 11th edition plugin
+
+What the engine computes exactly, what it approximates, and the assumptions baked into `packages/game-40k-11e`.
+Every item here is a candidate for a plugin-level option or a future exact treatment.
+
+## Exact
+- Attack count distributions (dice expressions, Blast/Cleave/Rapid Fire bonuses).
+- Per-die hit outcomes with the two 11e modifier channels: hit-roll modifiers capped at ±1, BS/WS *stat* penalties (cover, "-1 BS") uncapped and stacked on top. PSYCHIC ignores penalties on both channels.
+- Re-roll policies (ones / failed / non-critical "fishing") as exact per-die transforms; a single Command Re-roll of one failed hit or one failed wound roll per weapon profile as an exact order-statistic adjustment.
+- Critical hits/wounds with adjustable thresholds (Anti-X, "crits on 5+", Conversion), Sustained Hits (fixed or dice), Lethal Hits (optional; `auto` picks whichever gives the higher expected damage), Devastating Wounds (mortal damage equal to D, max one model per critical wound, no spill), Twin-linked, Lance, Heavy, Melta, Torrent (no hit roll → no critical hits), Snap Shooting (6s only, no re-rolls).
+- Saves: invulnerable checked on the unmodified roll, armour on the AP-modified roll, best of both; unmodified 6 always saves and 1 always fails; save-roll modifiers capped ±1.
+- Damage modifiers in order set → ×(round up) → ± (min 1) → cap; Feel No Pain as per-wound binomial thinning.
+- Allocation: a Markov DP over (models slain, wounds on the current model) per allocation group; damage never spills to the next model; wasted damage tracked; characters are separate groups; Precision allocates to character groups first; otherwise bodyguards absorb first.
+- Joint distribution of (wounds needing a save, mortal-damage events) per weapon — Devastating Wounds are not approximated as independent of the normal wounds.
+
+## Approximations / assumptions
+- **Toughness**: the unit's majority Toughness is used for the wound roll (ties → highest); per-model Toughness inside a mixed unit is ignored at the wound step.
+- **Mortal wound timing**: mortal-damage events from a weapon profile are applied after that profile's normal wounds, not after the whole unit's attacks.
+- **Command Re-roll stacking**: the single re-roll can land on a die that a policy re-roll already touched (rules forbid re-rolling a die twice). Effect is second-order.
+- **Damage modifiers on Devastating Wounds**: applied (mortal wounds equal the *modified* Damage). Flip `RULES.damageModsApplyToDevastating` if your event rules differently.
+- **Cleave X**: modelled as +X attacks per 5 models in the target (like Blast). Verify against the printed rule.
+- **Hazardous**: fails on 1–2; 1 mortal wound (3 if the firing unit is entirely VEHICLE/MONSTER); reported as expected self-inflicted mortal wounds, not applied to the attacker's profile.
+- **Sustained Hits** extra hits are never critical.
+- **Fast rolling / defender choice**: the defender's allocation policy is a fixed rule (protect character / in order); it does not optimise per roll result.
+- **Weapon order**: `heuristic` sorts profiles by rough expected damage; a different order changes overkill slightly.
+- **Blast** counts all models in the defender (including attached characters).
+- **Fight phase**: only melee weapons; **shooting phase**: only ranged weapons. Pistols/Close-Quarters are not special-cased.
+- **Substitute dice** (Miracle/Fate dice) are not implemented (effect op exists; ignored with no warning yet).
+- **Damaged profiles, Deadly Demise, healing, "ignore first failed save"**: not modelled.
+
+## Coverage tiers
+- Tier 1: weapon keywords in `keywords.ts` and unit core abilities in `patterns.ts#coreAbilityEffects`.
+- Tier 2: `patterns.ts` regexes over ability text (generic phrasings only) and any explicit `effects` on an ability (override packs).
+- Tier 3: text only → listed as unmodelled; use the generic toggles to approximate.

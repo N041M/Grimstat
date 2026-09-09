@@ -1,0 +1,8 @@
+﻿id|name|faction_id|source_id|legend|role|loadout|transport|virtual|is_support|leader_head|leader_footer|damaged_w|damaged_description|link|
+000000101|Warden Captain|AW|000000001|A veteran who has seen too many sieges.|Characters|<b>This model is equipped with:</b> flux pistol; relic blade.||false|false|||||https://example.invalid/aw/warden-captain|
+000000102|Warden Squad|AW|000000001|The line that does not break.|Battleline|<b>Every model is equipped with:</b> flux carbine; shock maul.<br>The Warden Sergeant is also equipped with a power fist.||false|false|||||https://example.invalid/aw/warden-squad|
+000000103|Ashen Crusher|AW|000000001|A walking siege engine.|Vehicles|<b>This model is equipped with:</b> vortex cannon; twin hail gun; crusher fists.||false|false|||1-4|While this model has 1-4 wounds remaining, subtract 1 from its hit rolls and its Objective Control characteristic is 1.|https://example.invalid/aw/ashen-crusher|
+000000104|Thornlings|VS|000000001|A carpet of teeth.|Battleline|<b>Every model is equipped with:</b> spine flick; barbed claws.||false|false|||||https://example.invalid/vs/thornlings|
+000000105|Spine Drake|VS|000000001|Apex predator of the grove.|Monsters|<b>This model is equipped with:</b> spine volley; acid lance; rending talons.||false|false|||1-5|While this model has 1-5 wounds remaining, subtract 1 from its hit rolls.|https://example.invalid/vs/spine-drake|
+000000106|Swarm Seer|VS|000000001|The grove thinks through it.|Characters|<b>This model is equipped with:</b> mind bolt; seer’s claws.||false|false|||||https://example.invalid/vs/swarm-seer|
+000000107|Example Wargear|VS|000000001|||||true|false||||||

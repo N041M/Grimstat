@@ -1,0 +1,18 @@
+﻿datasheet_id|line|ability_id|model|name|description|type|parameter|
+000000101|1|000000201||||Core||
+000000101|2|000000202||||Core||
+000000101|3|000000301||||Faction||
+000000101|4|||Rally the Line|Each time this unit makes a ranged attack, re-roll a hit roll of 1.|Datasheet||
+000000102|1|000000301||||Faction||
+000000102|2|||Shield Wall (Once per battle)|Once per battle, at the start of your opponent’s Shooting phase, this unit can brace.<br>
+If it does, until the end of the phase:<br><ul><li>It cannot be selected as the target of ranged attacks made by models more than 18" away.</li>
+<li>It cannot make Overwatch attacks.</li></ul>|Datasheet||
+000000103|1|000000204||||Core|D3|
+000000103|2|||Siege Protocols|Once per battle, at the start of your turn, this model can enter siege mode. If it does, until the start of your next turn it cannot move but its ranged weapons have the <span class="kwb">[HEAVY]</span> ability and +1 to their Strength characteristic.|Datasheet||
+000000103|3|||Ablative Plating|This model has a 5+ invulnerable save against ranged attacks.|Wargear||
+000000104|1|000000203||||Core|5+|
+000000105|1|000000204||||Core|D6|
+000000105|2|||Regenerating Hide|At the start of your Command phase, this model regains up to D3 lost wounds.|Datasheet||
+000000106|1|000000201||||Core||
+000000106|2|000000205||||Core||
+000000106|3|||Swarm Link|While this model is leading a unit, models in that unit have the Stealth ability.|Datasheet||

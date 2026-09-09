@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+.env
+.env.*
+
+# Imported game data (fetched to the user's machine at runtime; never committed)
+data/
+.grimstat/
+apps/web/dev-dist/

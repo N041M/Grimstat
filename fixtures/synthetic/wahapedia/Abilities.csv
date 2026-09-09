@@ -1,0 +1,7 @@
+﻿id|name|legend|faction_id|description|
+000000201|Leader|||Some characters can lead a unit. Synthetic rules text: attach this model to one unit it can lead.|
+000000202|Deep Strike|||Synthetic rules text: this unit can arrive from reserves more than 9" away from enemy models.|
+000000203|Feel No Pain|||Synthetic rules text: each time this model would lose a wound, roll one D6; if the result equals or exceeds X, that wound is not lost.|
+000000204|Deadly Demise|||Synthetic rules text: when this model is destroyed, roll one D6; on a 6 each unit within 6" suffers X mortal wounds.|
+000000205|Lone Operative|||Synthetic rules text: this model can only be targeted by ranged attacks from within 12".|
+000000301|Ember Resolve|Ashen resolve burns hottest at the objective.|AW|Each time a model in this unit makes a melee attack that targets a unit within range of an objective marker, add 1 to the wound roll.|

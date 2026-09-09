@@ -1,0 +1,1403 @@
+{
+  "catalogue": {
+    "name": "Imperium - Ashen Wardens - Library",
+    "id": "cat-aw-lib",
+    "battleScribeVersion": "2.03",
+    "gameSystemId": "sys-synthetic",
+    "gameSystemRevision": 1,
+    "library": true,
+    "revision": 3,
+    "type": "catalogue",
+    "xmlns": "http://www.battlescribe.net/schema/catalogueSchema",
+    "categoryEntries": [
+      {
+        "name": "Faction: Ashen Wardens",
+        "id": "cat-faction-aw",
+        "hidden": false
+      },
+      {
+        "name": "Warden Squad",
+        "id": "cat-unit-warden-squad",
+        "hidden": false
+      },
+      {
+        "name": "Warden Captain",
+        "id": "cat-unit-warden-captain",
+        "hidden": false
+      },
+      {
+        "name": "Ember",
+        "id": "cat-ember",
+        "hidden": false
+      },
+      {
+        "name": "2DP Detachment",
+        "id": "cat-2dp",
+        "hidden": false
+      }
+    ],
+    "sharedRules": [
+      {
+        "id": "rule-ember-resolve",
+        "name": "Ember Resolve",
+        "hidden": false,
+        "description": "Each time a model in this unit makes a melee attack that targets a unit within range of an objective marker, add 1 to the wound roll."
+      },
+      {
+        "id": "rule-ember-doctrine",
+        "name": "Ember Doctrine",
+        "hidden": false,
+        "description": "Each time a model from your army with the Ember Resolve ability makes a melee attack while within range of an objective marker, improve the Armour Penetration characteristic of that attack by 1."
+      }
+    ],
+    "sharedInfoGroups": [
+      {
+        "name": "Detachment Rules",
+        "id": "ig-aw-det-rules",
+        "hidden": false,
+        "infoLinks": [
+          {
+            "id": "il-det-ember",
+            "name": "Ember Doctrine",
+            "hidden": false,
+            "targetId": "rule-ember-doctrine",
+            "type": "rule"
+          }
+        ]
+      }
+    ],
+    "sharedSelectionEntries": [
+      {
+        "name": "Warden Captain",
+        "id": "se-warden-captain",
+        "hidden": false,
+        "import": true,
+        "type": "model",
+        "categoryLinks": [
+          {
+            "name": "Faction: Ashen Wardens",
+            "id": "cl-cat-faction-aw-002",
+            "primary": false,
+            "targetId": "cat-faction-aw"
+          },
+          {
+            "name": "Infantry",
+            "id": "cl-cat-infantry-003",
+            "primary": false,
+            "targetId": "cat-infantry"
+          },
+          {
+            "name": "Character",
+            "id": "cl-cat-character-004",
+            "primary": false,
+            "targetId": "cat-character"
+          },
+          {
+            "name": "Warden Captain",
+            "id": "cl-cat-unit-warden-captain-005",
+            "primary": false,
+            "targetId": "cat-unit-warden-captain"
+          }
+        ],
+        "costs": [
+          {
+            "name": "pts",
+            "typeId": "ct-pts",
+            "value": 80
+          },
+          {
+            "name": "Detachment Points",
+            "typeId": "ct-dp",
+            "value": 0
+          }
+        ],
+        "profiles": [
+          {
+            "id": "p-wc-unit",
+            "name": "Warden Captain",
+            "hidden": false,
+            "typeId": "pt-unit",
+            "typeName": "Unit",
+            "characteristics": [
+              {
+                "name": "M",
+                "$text": "6\""
+              },
+              {
+                "name": "T",
+                "$text": "5"
+              },
+              {
+                "name": "Sv",
+                "$text": "3+"
+              },
+              {
+                "name": "W",
+                "$text": "5"
+              },
+              {
+                "name": "LD",
+                "$text": "6+"
+              },
+              {
+                "name": "OC",
+                "$text": "1"
+              },
+              {
+                "name": "InSv",
+                "$text": "4+"
+              }
+            ]
+          },
+          {
+            "id": "p-wc-rally",
+            "name": "Rally the Line",
+            "hidden": false,
+            "typeId": "pt-abilities",
+            "typeName": "Abilities",
+            "characteristics": [
+              {
+                "name": "Description",
+                "$text": "Each time this unit makes a ranged attack, re-roll a hit roll of 1."
+              }
+            ]
+          }
+        ],
+        "infoLinks": [
+          {
+            "id": "il-wc-leader",
+            "name": "Leader",
+            "hidden": false,
+            "targetId": "rule-leader",
+            "type": "rule"
+          },
+          {
+            "id": "il-wc-ds",
+            "name": "Deep Strike",
+            "hidden": false,
+            "targetId": "rule-deep-strike",
+            "type": "rule"
+          },
+          {
+            "id": "il-wc-er",
+            "name": "Ember Resolve",
+            "hidden": false,
+            "targetId": "rule-ember-resolve",
+            "type": "rule"
+          },
+          {
+            "id": "il-wc-detrules",
+            "name": "Detachment Rules",
+            "hidden": false,
+            "targetId": "ig-aw-det-rules",
+            "type": "infoGroup"
+          }
+        ],
+        "associations": [
+          {
+            "name": "Leading",
+            "id": "as-wc-leading",
+            "action": "group",
+            "childId": "unit",
+            "childName": "unit",
+            "includeChildSelections": true,
+            "label": "Leader",
+            "max": 1,
+            "min": 0,
+            "scope": "force",
+            "conditionGroups": [
+              {
+                "type": "or",
+                "conditions": [
+                  {
+                    "childId": "cat-unit-warden-squad",
+                    "childName": "Warden Squad",
+                    "field": "selections",
+                    "scope": "self",
+                    "shared": true,
+                    "type": "instanceOf",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "selectionEntries": [
+          {
+            "name": "Flux pistol",
+            "id": "se-wc-flux-pistol",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "profiles": [
+              {
+                "id": "p-wc-fp",
+                "name": "Flux pistol",
+                "hidden": false,
+                "typeId": "pt-ranged",
+                "typeName": "Ranged Weapons",
+                "characteristics": [
+                  {
+                    "name": "Range",
+                    "$text": "12\""
+                  },
+                  {
+                    "name": "A",
+                    "$text": "1"
+                  },
+                  {
+                    "name": "BS",
+                    "$text": "2+"
+                  },
+                  {
+                    "name": "S",
+                    "$text": "5"
+                  },
+                  {
+                    "name": "AP",
+                    "$text": "-1"
+                  },
+                  {
+                    "name": "D",
+                    "$text": "2"
+                  },
+                  {
+                    "name": "Keywords",
+                    "$text": "Pistol, Precision"
+                  }
+                ]
+              }
+            ],
+            "constraints": [
+              {
+                "id": "c-1-1-006",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "min",
+                "value": 1
+              },
+              {
+                "id": "c-max-1-007",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "max",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "name": "Relic blade",
+            "id": "se-wc-relic-blade",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "profiles": [
+              {
+                "id": "p-wc-rb",
+                "name": "Relic blade",
+                "hidden": false,
+                "typeId": "pt-melee",
+                "typeName": "Melee Weapons",
+                "characteristics": [
+                  {
+                    "name": "Range",
+                    "$text": "Melee"
+                  },
+                  {
+                    "name": "A",
+                    "$text": "5"
+                  },
+                  {
+                    "name": "WS",
+                    "$text": "2+"
+                  },
+                  {
+                    "name": "S",
+                    "$text": "6"
+                  },
+                  {
+                    "name": "AP",
+                    "$text": "-2"
+                  },
+                  {
+                    "name": "D",
+                    "$text": "2"
+                  },
+                  {
+                    "name": "Keywords",
+                    "$text": "Devastating Wounds"
+                  }
+                ]
+              }
+            ],
+            "constraints": [
+              {
+                "id": "c-1-1-008",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "min",
+                "value": 1
+              },
+              {
+                "id": "c-max-1-009",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "max",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "entryLinks": [
+          {
+            "name": "Enhancements",
+            "id": "el-wc-enh",
+            "hidden": false,
+            "import": true,
+            "targetId": "seg-aw-enhancements",
+            "type": "selectionEntryGroup"
+          }
+        ]
+      },
+      {
+        "name": "Warden Squad",
+        "id": "se-warden-squad",
+        "hidden": false,
+        "import": true,
+        "type": "unit",
+        "categoryLinks": [
+          {
+            "name": "Faction: Ashen Wardens",
+            "id": "cl-cat-faction-aw-010",
+            "primary": false,
+            "targetId": "cat-faction-aw"
+          },
+          {
+            "name": "Infantry",
+            "id": "cl-cat-infantry-011",
+            "primary": false,
+            "targetId": "cat-infantry"
+          },
+          {
+            "name": "Battleline",
+            "id": "cl-cat-battleline-012",
+            "primary": false,
+            "targetId": "cat-battleline"
+          },
+          {
+            "name": "Warden Squad",
+            "id": "cl-cat-unit-warden-squad-013",
+            "primary": false,
+            "targetId": "cat-unit-warden-squad"
+          }
+        ],
+        "costs": [
+          {
+            "name": "pts",
+            "typeId": "ct-pts",
+            "value": 90
+          },
+          {
+            "name": "Detachment Points",
+            "typeId": "ct-dp",
+            "value": 0
+          }
+        ],
+        "modifiers": [
+          {
+            "field": "ct-pts",
+            "type": "set",
+            "value": 180,
+            "conditions": [
+              {
+                "childId": "model",
+                "field": "selections",
+                "includeChildSelections": true,
+                "scope": "se-warden-squad",
+                "shared": true,
+                "type": "atLeast",
+                "value": 6
+              }
+            ]
+          }
+        ],
+        "infoLinks": [
+          {
+            "id": "il-ws-er",
+            "name": "Ember Resolve",
+            "hidden": false,
+            "targetId": "rule-ember-resolve",
+            "type": "rule"
+          },
+          {
+            "id": "il-ws-detrules",
+            "name": "Detachment Rules",
+            "hidden": false,
+            "targetId": "ig-aw-det-rules",
+            "type": "infoGroup"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "p-ws-shield",
+            "name": "Shield Wall (Once per battle)",
+            "hidden": false,
+            "typeId": "pt-abilities",
+            "typeName": "Abilities",
+            "characteristics": [
+              {
+                "name": "Description",
+                "$text": "Once per battle, at the start of your opponent's Shooting phase, this unit can brace. If it does, until the end of the phase it cannot be selected as the target of ranged attacks made by models more than 18\" away and it cannot make Overwatch attacks."
+              }
+            ]
+          }
+        ],
+        "selectionEntries": [
+          {
+            "name": "Warden Sergeant",
+            "id": "se-ws-sgt",
+            "hidden": false,
+            "import": true,
+            "type": "model",
+            "constraints": [
+              {
+                "id": "c-1-1-014",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "min",
+                "value": 1
+              },
+              {
+                "id": "c-max-1-015",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "max",
+                "value": 1
+              }
+            ],
+            "profiles": [
+              {
+                "id": "p-ws-sgt",
+                "name": "Warden Sergeant",
+                "hidden": false,
+                "typeId": "pt-unit",
+                "typeName": "Unit",
+                "characteristics": [
+                  {
+                    "name": "M",
+                    "$text": "6\""
+                  },
+                  {
+                    "name": "T",
+                    "$text": "5"
+                  },
+                  {
+                    "name": "Sv",
+                    "$text": "3+"
+                  },
+                  {
+                    "name": "W",
+                    "$text": "3"
+                  },
+                  {
+                    "name": "LD",
+                    "$text": "6+"
+                  },
+                  {
+                    "name": "OC",
+                    "$text": "2"
+                  },
+                  {
+                    "name": "InSv",
+                    "$text": "-"
+                  }
+                ]
+              }
+            ],
+            "selectionEntries": [
+              {
+                "name": "Power fist",
+                "id": "se-ws-sgt-pf",
+                "hidden": false,
+                "import": true,
+                "type": "upgrade",
+                "profiles": [
+                  {
+                    "id": "p-ws-pf",
+                    "name": "Power fist",
+                    "hidden": false,
+                    "typeId": "pt-melee",
+                    "typeName": "Melee Weapons",
+                    "characteristics": [
+                      {
+                        "name": "Range",
+                        "$text": "Melee"
+                      },
+                      {
+                        "name": "A",
+                        "$text": "3"
+                      },
+                      {
+                        "name": "WS",
+                        "$text": "3+"
+                      },
+                      {
+                        "name": "S",
+                        "$text": "8"
+                      },
+                      {
+                        "name": "AP",
+                        "$text": "-2"
+                      },
+                      {
+                        "name": "D",
+                        "$text": "2"
+                      },
+                      {
+                        "name": "Keywords",
+                        "$text": "Lethal Hits"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Flux carbine",
+                "id": "se-ws-sgt-fc",
+                "hidden": false,
+                "import": true,
+                "type": "upgrade",
+                "profiles": [
+                  {
+                    "id": "p-ws-sgt-fc",
+                    "name": "Flux carbine",
+                    "hidden": false,
+                    "typeId": "pt-ranged",
+                    "typeName": "Ranged Weapons",
+                    "characteristics": [
+                      {
+                        "name": "Range",
+                        "$text": "24\""
+                      },
+                      {
+                        "name": "A",
+                        "$text": "2"
+                      },
+                      {
+                        "name": "BS",
+                        "$text": "3+"
+                      },
+                      {
+                        "name": "S",
+                        "$text": "5"
+                      },
+                      {
+                        "name": "AP",
+                        "$text": "-1"
+                      },
+                      {
+                        "name": "D",
+                        "$text": "1"
+                      },
+                      {
+                        "name": "Keywords",
+                        "$text": "Rapid Fire 1"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Warden",
+            "id": "se-ws-warden",
+            "hidden": false,
+            "import": true,
+            "type": "model",
+            "constraints": [
+              {
+                "id": "c-4-9-016",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "min",
+                "value": 4
+              },
+              {
+                "id": "c-max-9-017",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "max",
+                "value": 9
+              }
+            ],
+            "profiles": [
+              {
+                "id": "p-ws-w",
+                "name": "Warden",
+                "hidden": false,
+                "typeId": "pt-unit",
+                "typeName": "Unit",
+                "characteristics": [
+                  {
+                    "name": "M",
+                    "$text": "6\""
+                  },
+                  {
+                    "name": "T",
+                    "$text": "5"
+                  },
+                  {
+                    "name": "Sv",
+                    "$text": "3+"
+                  },
+                  {
+                    "name": "W",
+                    "$text": "2"
+                  },
+                  {
+                    "name": "LD",
+                    "$text": "6+"
+                  },
+                  {
+                    "name": "OC",
+                    "$text": "2"
+                  },
+                  {
+                    "name": "InSv",
+                    "$text": "-"
+                  }
+                ]
+              }
+            ],
+            "selectionEntries": [
+              {
+                "name": "Flux carbine",
+                "id": "se-ws-w-fc",
+                "hidden": false,
+                "import": true,
+                "type": "upgrade",
+                "profiles": [
+                  {
+                    "id": "p-ws-w-fc",
+                    "name": "Flux carbine",
+                    "hidden": false,
+                    "typeId": "pt-ranged",
+                    "typeName": "Ranged Weapons",
+                    "characteristics": [
+                      {
+                        "name": "Range",
+                        "$text": "24\""
+                      },
+                      {
+                        "name": "A",
+                        "$text": "2"
+                      },
+                      {
+                        "name": "BS",
+                        "$text": "3+"
+                      },
+                      {
+                        "name": "S",
+                        "$text": "5"
+                      },
+                      {
+                        "name": "AP",
+                        "$text": "-1"
+                      },
+                      {
+                        "name": "D",
+                        "$text": "1"
+                      },
+                      {
+                        "name": "Keywords",
+                        "$text": "Rapid Fire 1"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Shock maul",
+                "id": "se-ws-w-sm",
+                "hidden": false,
+                "import": true,
+                "type": "upgrade",
+                "profiles": [
+                  {
+                    "id": "p-ws-w-sm",
+                    "name": "Shock maul",
+                    "hidden": false,
+                    "typeId": "pt-melee",
+                    "typeName": "Melee Weapons",
+                    "characteristics": [
+                      {
+                        "name": "Range",
+                        "$text": "Melee"
+                      },
+                      {
+                        "name": "A",
+                        "$text": "3"
+                      },
+                      {
+                        "name": "WS",
+                        "$text": "3+"
+                      },
+                      {
+                        "name": "S",
+                        "$text": "5"
+                      },
+                      {
+                        "name": "AP",
+                        "$text": "-1"
+                      },
+                      {
+                        "name": "D",
+                        "$text": "1"
+                      },
+                      {
+                        "name": "Keywords",
+                        "$text": "Sustained Hits 1"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Ashen Crusher",
+        "id": "se-ashen-crusher",
+        "hidden": false,
+        "import": true,
+        "type": "model",
+        "categoryLinks": [
+          {
+            "name": "Faction: Ashen Wardens",
+            "id": "cl-cat-faction-aw-018",
+            "primary": false,
+            "targetId": "cat-faction-aw"
+          },
+          {
+            "name": "Vehicle",
+            "id": "cl-cat-vehicle-019",
+            "primary": false,
+            "targetId": "cat-vehicle"
+          },
+          {
+            "name": "Walker",
+            "id": "cl-cat-walker-020",
+            "primary": false,
+            "targetId": "cat-walker"
+          }
+        ],
+        "costs": [
+          {
+            "name": "pts",
+            "typeId": "ct-pts",
+            "value": 150
+          },
+          {
+            "name": "Detachment Points",
+            "typeId": "ct-dp",
+            "value": 0
+          }
+        ],
+        "profiles": [
+          {
+            "id": "p-ac-unit",
+            "name": "Ashen Crusher",
+            "hidden": false,
+            "typeId": "pt-unit",
+            "typeName": "Unit",
+            "characteristics": [
+              {
+                "name": "M",
+                "$text": "10\""
+              },
+              {
+                "name": "T",
+                "$text": "10"
+              },
+              {
+                "name": "Sv",
+                "$text": "2+"
+              },
+              {
+                "name": "W",
+                "$text": "12"
+              },
+              {
+                "name": "LD",
+                "$text": "6+"
+              },
+              {
+                "name": "OC",
+                "$text": "3"
+              },
+              {
+                "name": "InSv",
+                "$text": "-"
+              }
+            ]
+          },
+          {
+            "id": "p-ac-dd",
+            "name": "Deadly Demise D3",
+            "hidden": false,
+            "typeId": "pt-abilities",
+            "typeName": "Abilities",
+            "characteristics": [
+              {
+                "name": "Description",
+                "$text": "Synthetic rules text: explode on a 6 when destroyed, D3 mortal wounds."
+              }
+            ]
+          },
+          {
+            "id": "p-ac-siege",
+            "name": "Siege Protocols",
+            "hidden": false,
+            "typeId": "pt-abilities",
+            "typeName": "Abilities",
+            "characteristics": [
+              {
+                "name": "Description",
+                "$text": "Once per battle, at the start of your turn, this model can enter siege mode. If it does, until the start of your next turn it cannot move but its ranged weapons have the [HEAVY] ability and +1 to their Strength characteristic."
+              }
+            ]
+          },
+          {
+            "id": "p-ac-damaged",
+            "name": "Damaged: 1-4 wounds remaining",
+            "hidden": false,
+            "typeId": "pt-abilities",
+            "typeName": "Abilities",
+            "characteristics": [
+              {
+                "name": "Description",
+                "$text": "While this model has 1-4 wounds remaining, subtract 1 from its hit rolls and its Objective Control characteristic is 1."
+              }
+            ]
+          }
+        ],
+        "infoLinks": [
+          {
+            "id": "il-ac-dd",
+            "name": "Deadly Demise",
+            "hidden": false,
+            "targetId": "rule-deadly-demise",
+            "type": "rule"
+          }
+        ],
+        "selectionEntryGroups": [
+          {
+            "name": "Main weapon",
+            "id": "seg-ac-main",
+            "hidden": false,
+            "defaultSelectionEntryId": "se-ac-thg",
+            "constraints": [
+              {
+                "id": "c-1-1-021",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "min",
+                "value": 1
+              },
+              {
+                "id": "c-max-1-022",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "max",
+                "value": 1
+              }
+            ],
+            "selectionEntries": [
+              {
+                "name": "Twin hail gun",
+                "id": "se-ac-thg",
+                "hidden": false,
+                "import": true,
+                "type": "upgrade",
+                "profiles": [
+                  {
+                    "id": "p-ac-thg",
+                    "name": "Twin hail gun",
+                    "hidden": false,
+                    "typeId": "pt-ranged",
+                    "typeName": "Ranged Weapons",
+                    "characteristics": [
+                      {
+                        "name": "Range",
+                        "$text": "24\""
+                      },
+                      {
+                        "name": "A",
+                        "$text": "6"
+                      },
+                      {
+                        "name": "BS",
+                        "$text": "3+"
+                      },
+                      {
+                        "name": "S",
+                        "$text": "5"
+                      },
+                      {
+                        "name": "AP",
+                        "$text": "-1"
+                      },
+                      {
+                        "name": "D",
+                        "$text": "1"
+                      },
+                      {
+                        "name": "Keywords",
+                        "$text": "Twin-linked, Sustained Hits 1"
+                      }
+                    ]
+                  }
+                ],
+                "costs": [
+                  {
+                    "name": "pts",
+                    "typeId": "ct-pts",
+                    "value": 0
+                  },
+                  {
+                    "name": "Detachment Points",
+                    "typeId": "ct-dp",
+                    "value": 0
+                  }
+                ]
+              },
+              {
+                "name": "Fusion beamer",
+                "id": "se-ac-fb",
+                "hidden": false,
+                "import": true,
+                "type": "upgrade",
+                "profiles": [
+                  {
+                    "id": "p-ac-fb",
+                    "name": "Fusion beamer",
+                    "hidden": false,
+                    "typeId": "pt-ranged",
+                    "typeName": "Ranged Weapons",
+                    "characteristics": [
+                      {
+                        "name": "Range",
+                        "$text": "12\""
+                      },
+                      {
+                        "name": "A",
+                        "$text": "1"
+                      },
+                      {
+                        "name": "BS",
+                        "$text": "3+"
+                      },
+                      {
+                        "name": "S",
+                        "$text": "9"
+                      },
+                      {
+                        "name": "AP",
+                        "$text": "-4"
+                      },
+                      {
+                        "name": "D",
+                        "$text": "D6"
+                      },
+                      {
+                        "name": "Keywords",
+                        "$text": "Melta 2"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "p-ac-plating",
+                    "name": "Ablative Plating",
+                    "hidden": false,
+                    "typeId": "pt-abilities",
+                    "typeName": "Abilities",
+                    "characteristics": [
+                      {
+                        "name": "Description",
+                        "$text": "This model has a 5+ invulnerable save against ranged attacks."
+                      }
+                    ]
+                  }
+                ],
+                "costs": [
+                  {
+                    "name": "pts",
+                    "typeId": "ct-pts",
+                    "value": 10
+                  },
+                  {
+                    "name": "Detachment Points",
+                    "typeId": "ct-dp",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "selectionEntries": [
+          {
+            "name": "Vortex cannon",
+            "id": "se-ac-vc",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "profiles": [
+              {
+                "id": "p-ac-vc",
+                "name": "Vortex cannon",
+                "hidden": false,
+                "typeId": "pt-ranged",
+                "typeName": "Ranged Weapons",
+                "characteristics": [
+                  {
+                    "name": "Range",
+                    "$text": "36\""
+                  },
+                  {
+                    "name": "A",
+                    "$text": "D6"
+                  },
+                  {
+                    "name": "BS",
+                    "$text": "3+"
+                  },
+                  {
+                    "name": "S",
+                    "$text": "9"
+                  },
+                  {
+                    "name": "AP",
+                    "$text": "-2"
+                  },
+                  {
+                    "name": "D",
+                    "$text": "3"
+                  },
+                  {
+                    "name": "Keywords",
+                    "$text": "Blast, Heavy"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Crusher fists",
+            "id": "se-ac-cf",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "profiles": [
+              {
+                "id": "p-ac-cf",
+                "name": "Crusher fists",
+                "hidden": false,
+                "typeId": "pt-melee",
+                "typeName": "Melee Weapons",
+                "characteristics": [
+                  {
+                    "name": "Range",
+                    "$text": "Melee"
+                  },
+                  {
+                    "name": "A",
+                    "$text": "4"
+                  },
+                  {
+                    "name": "WS",
+                    "$text": "3+"
+                  },
+                  {
+                    "name": "S",
+                    "$text": "12"
+                  },
+                  {
+                    "name": "AP",
+                    "$text": "-3"
+                  },
+                  {
+                    "name": "D",
+                    "$text": "4"
+                  },
+                  {
+                    "name": "Keywords",
+                    "$text": ""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Detachment",
+        "id": "se-aw-detachment",
+        "hidden": false,
+        "import": true,
+        "type": "upgrade",
+        "categoryLinks": [
+          {
+            "name": "Configuration",
+            "id": "cl-cat-configuration-023",
+            "primary": true,
+            "targetId": "cat-configuration"
+          }
+        ],
+        "selectionEntryGroups": [
+          {
+            "name": "Detachment",
+            "id": "seg-aw-det",
+            "hidden": false,
+            "constraints": [
+              {
+                "id": "c-1-1-024",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "min",
+                "value": 1
+              },
+              {
+                "id": "c-max-1-025",
+                "field": "selections",
+                "scope": "parent",
+                "shared": true,
+                "type": "max",
+                "value": 1
+              }
+            ],
+            "selectionEntries": [
+              {
+                "name": "Ember Vanguard",
+                "id": "se-det-ember-vanguard",
+                "hidden": false,
+                "import": true,
+                "type": "upgrade",
+                "categoryLinks": [
+                  {
+                    "name": "Ember",
+                    "id": "cl-cat-ember-026",
+                    "primary": false,
+                    "targetId": "cat-ember"
+                  },
+                  {
+                    "name": "2DP Detachment",
+                    "id": "cl-cat-2dp-027",
+                    "primary": false,
+                    "targetId": "cat-2dp"
+                  }
+                ],
+                "costs": [
+                  {
+                    "name": "pts",
+                    "typeId": "ct-pts",
+                    "value": 0
+                  },
+                  {
+                    "name": "Detachment Points",
+                    "typeId": "ct-dp",
+                    "value": 2
+                  }
+                ],
+                "infoLinks": [
+                  {
+                    "id": "il-det-ember-doc",
+                    "name": "Ember Doctrine",
+                    "hidden": false,
+                    "targetId": "rule-ember-doctrine",
+                    "type": "rule"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "sharedSelectionEntryGroups": [
+      {
+        "name": "Enhancements",
+        "id": "seg-aw-enhancements",
+        "hidden": false,
+        "constraints": [
+          {
+            "id": "c-enh-max",
+            "field": "selections",
+            "scope": "parent",
+            "shared": true,
+            "type": "max",
+            "value": 1
+          }
+        ],
+        "selectionEntries": [
+          {
+            "name": "Ember Blade",
+            "id": "se-enh-ember-blade",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "costs": [
+              {
+                "name": "pts",
+                "typeId": "ct-pts",
+                "value": 15
+              },
+              {
+                "name": "Detachment Points",
+                "typeId": "ct-dp",
+                "value": 0
+              }
+            ],
+            "profiles": [
+              {
+                "id": "p-enh-eb",
+                "name": "Ember Blade",
+                "hidden": false,
+                "typeId": "pt-abilities",
+                "typeName": "Abilities",
+                "characteristics": [
+                  {
+                    "name": "Description",
+                    "$text": "Improve the Strength and Damage characteristics of the bearer's melee weapons by 1."
+                  }
+                ]
+              }
+            ],
+            "modifiers": [
+              {
+                "field": "hidden",
+                "type": "set",
+                "value": true,
+                "conditionGroups": [
+                  {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "childId": "se-det-ember-vanguard",
+                        "field": "selections",
+                        "includeChildSelections": true,
+                        "scope": "force",
+                        "shared": true,
+                        "type": "lessThan",
+                        "value": 1
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Warden's Aegis",
+            "id": "se-enh-aegis",
+            "hidden": false,
+            "import": true,
+            "type": "upgrade",
+            "costs": [
+              {
+                "name": "pts",
+                "typeId": "ct-pts",
+                "value": 25
+              },
+              {
+                "name": "Detachment Points",
+                "typeId": "ct-dp",
+                "value": 0
+              }
+            ],
+            "profiles": [
+              {
+                "id": "p-enh-wa",
+                "name": "Warden's Aegis",
+                "hidden": false,
+                "typeId": "pt-abilities",
+                "typeName": "Abilities",
+                "characteristics": [
+                  {
+                    "name": "Description",
+                    "$text": "The bearer has a 4+ invulnerable save. While the bearer is leading a unit, models in that unit have the Feel No Pain 6+ ability."
+                  }
+                ]
+              }
+            ],
+            "modifiers": [
+              {
+                "field": "hidden",
+                "type": "set",
+                "value": true,
+                "conditions": [
+                  {
+                    "childId": "se-det-ember-vanguard",
+                    "field": "selections",
+                    "scope": "force",
+                    "shared": true,
+                    "type": "lessThan",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "entryLinks": [
+      {
+        "name": "se-warden-captain",
+        "id": "el-se-warden-captain",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-warden-captain",
+        "type": "selectionEntry"
+      },
+      {
+        "name": "se-warden-squad",
+        "id": "el-se-warden-squad",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-warden-squad",
+        "type": "selectionEntry"
+      },
+      {
+        "name": "se-ashen-crusher",
+        "id": "el-se-ashen-crusher",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-ashen-crusher",
+        "type": "selectionEntry"
+      },
+      {
+        "name": "se-aw-detachment",
+        "id": "el-se-aw-detachment",
+        "hidden": false,
+        "import": true,
+        "targetId": "se-aw-detachment",
+        "type": "selectionEntry"
+      }
+    ]
+  }
+}
