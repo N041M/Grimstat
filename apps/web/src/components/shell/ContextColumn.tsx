@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Roster, Scenario, Snapshot } from "@grimstat/schema";
 import { rosterSummary } from "@grimstat/resolver";
+import { useStoreVersion } from "../../hooks/useStoreVersion";
 import { db } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { useUnitSet } from "../../hooks/useUnitSet";
@@ -8,7 +9,7 @@ import { hrefFor, navigate, type Route } from "../../router";
 import { fmtInt, fmtRelative } from "../../lib/format";
 import { totalPoints } from "../../lib/unitSet";
 import { useContextHostRef, useContextSlotFilled } from "./ContextSlot";
-import { t, type I18nKey } from "../../i18n";
+import { t, type I18nKey, tn } from "../../i18n";
 
 /** Repository + documentation links shown in the About column. */
 export const REPO_URL = "https://github.com/N041M/Grimstat";
@@ -197,6 +198,9 @@ function ScenariosBody({ inSheet }: BodyProps) {
 function ArmiesBody({ param, inSheet }: BodyProps) {
   const { snapshot, activeSnapshotId } = useApp();
   const [items, setItems] = useState<Roster[]>([]);
+  // `param` changes when an army is opened or created; the version bumps on every save from the
+  // editor, so points and unit counts here follow the roster the user is editing.
+  const version = useStoreVersion("rosters");
   useEffect(() => {
     let alive = true;
     void db.rosters
@@ -208,7 +212,7 @@ function ArmiesBody({ param, inSheet }: BodyProps) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [param, version]);
   const rows = useMemo(
     () =>
       items.map((r) => {
@@ -230,7 +234,7 @@ function ArmiesBody({ param, inSheet }: BodyProps) {
       <ContextList>
         {rows.length === 0 ? <ContextEmpty>{t("ctxcol.noArmies")}</ContextEmpty> : null}
         {rows.map(({ r, value }) => (
-          <ContextRow key={r.id} name={r.name} value={value} meta={t("ctxcol.units", { n: r.units.length })} selected={param === r.id} href={hrefFor("armies", r.id)} />
+          <ContextRow key={r.id} name={r.name} value={value} meta={tn(r.units.length, "ctxcol.unit", "ctxcol.units", { n: r.units.length })} selected={param === r.id} href={hrefFor("armies", r.id)} />
         ))}
       </ContextList>
       <ContextNewRow label={t("ctxcol.newArmy")} onClick={() => requestNew("armies")} />

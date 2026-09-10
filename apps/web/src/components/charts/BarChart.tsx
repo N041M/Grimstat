@@ -98,10 +98,10 @@ export function BarChart(props: BarChartProps) {
     <div className="chart-wrap" ref={wrapRef} tabIndex={0} role="img" aria-label={ariaLabel} onKeyDown={onKey} onBlur={() => setHover(undefined)}>
       {width > 0 ? (
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(undefined)}>
-          {shade ? <rect x={x(Math.max(0, shade.from))} y={PAD.t} width={Math.max(0, x(Math.min(maxK, shade.to) + 1) - x(Math.max(0, shade.from)))} height={innerH} fill="var(--chart-shade)" /> : null}
+          {shade ? <rect x={x(Math.max(0, shade.from))} y={PAD.t} width={Math.max(0, x(Math.min(maxK, shade.to) + 1) - x(Math.max(0, shade.from)))} height={innerH} fill="var(--fill)" /> : null}
           {yTicks.map((p) => (
             <g key={p}>
-              <line x1={PAD.l} x2={PAD.l + innerW} y1={y(p)} y2={y(p)} stroke="var(--chart-grid)" strokeWidth={1} />
+              <line x1={PAD.l} x2={PAD.l + innerW} y1={y(p)} y2={y(p)} stroke="var(--line-soft)" strokeWidth={1} />
               <text x={PAD.l - 4} y={y(p) + 3} textAnchor="end" fontSize={9} fill="var(--muted)">
                 {(p * 100).toFixed(p * 100 >= 10 ? 0 : 1)}%
               </text>
@@ -111,7 +111,7 @@ export function BarChart(props: BarChartProps) {
             const v = values[k] ?? 0;
             const h = (v / yMax) * innerH;
             const dim = shade ? k < shade.from || k > shade.to : false;
-            return <rect key={k} x={x(k) + 1} y={PAD.t + innerH - h} width={Math.max(1, bw - 2)} height={h} fill={hover === k ? "var(--brass)" : dim ? "var(--chart-bar-dim)" : "var(--chart-bar)"} />;
+            return <rect key={k} x={x(k) + 1} y={PAD.t + innerH - h} width={Math.max(1, bw - 2)} height={h} fill={hover === k ? "var(--mid)" : dim ? "var(--dim)" : "var(--ink)"} />;
           })}
           {stepLine ? (
             <path
@@ -120,22 +120,22 @@ export function BarChart(props: BarChartProps) {
                 return `${k === 0 ? "M" : "L"}${x(k)},${yStep(p)} L${x(k + 1)},${yStep(p)}`;
               }).join(" ")}
               fill="none"
-              stroke="var(--chart-line)"
+              stroke="var(--ink)"
               strokeWidth={1.5}
               strokeDasharray="4 2"
             />
           ) : null}
           {marker !== undefined && marker >= 0 && marker <= maxK + 1 ? (
             <g>
-              <line x1={x(marker) + bw / 2} x2={x(marker) + bw / 2} y1={PAD.t} y2={PAD.t + innerH} stroke="var(--brass)" strokeWidth={1.5} />
+              <line x1={x(marker) + bw / 2} x2={x(marker) + bw / 2} y1={PAD.t} y2={PAD.t + innerH} stroke="var(--mid)" strokeWidth={1.5} />
               {markerLabel ? (
-                <text x={Math.min(x(marker) + bw / 2 + 4, width - 40)} y={PAD.t + 9} fontSize={9} fill="var(--brass)">
+                <text x={Math.min(x(marker) + bw / 2 + 4, width - 40)} y={PAD.t + 9} fontSize={9} fill="var(--mid)">
                   {markerLabel}
                 </text>
               ) : null}
             </g>
           ) : null}
-          <line x1={PAD.l} x2={PAD.l + innerW} y1={PAD.t + innerH} y2={PAD.t + innerH} stroke="var(--border-strong)" />
+          <line x1={PAD.l} x2={PAD.l + innerW} y1={PAD.t + innerH} y2={PAD.t + innerH} stroke="var(--dash)" />
           {ticks.map((k) => (
             <text key={k} x={x(k) + bw / 2} y={PAD.t + innerH + 12} textAnchor="middle" fontSize={9} fill="var(--muted)">
               {k}

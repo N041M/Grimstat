@@ -8,7 +8,7 @@ export function Warnings({ result, error }: WidgetProps) {
   return (
     <ul className="small" style={{ margin: 0, paddingLeft: "1.2rem" }}>
       {items.map((w, i) => (
-        <li key={i} style={error && i === 0 ? { color: "var(--danger)" } : undefined}>
+        <li key={i} style={error && i === 0 ? { color: "var(--accent)" } : undefined}>
           {w}
         </li>
       ))}
@@ -22,5 +22,6 @@ export const warningsWidget = defineWidget({
   description: t("widget.warnings.desc"),
   inputs: ["result"],
   defaultSize: { w: 6, h: 6 },
+  minSize: { w: 3, h: 3 },
   render: Warnings,
 });

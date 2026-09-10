@@ -42,7 +42,7 @@ export function RawPatchEditor({ record, onSave, onCancel }: { record: OverrideR
         <input type="text" value={note} placeholder={t("overrides.notePlaceholder")} onChange={(e) => setNote(e.target.value)} />
       </Field>
       {error ? (
-        <span className="small" role="alert" style={{ color: "var(--danger)" }}>
+        <span className="small" role="alert" style={{ color: "var(--accent)" }}>
           {error}
         </span>
       ) : null}

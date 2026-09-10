@@ -1,13 +1,102 @@
-import { defineConfig } from "vite";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { gzipSync } from "node:zlib";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 /** Deployed under a sub-path on GitHub Pages (e.g. "/Grimstat/"); "/" for local dev. */
 const base = process.env.VITE_BASE ?? "/";
 
+/* ---- About-screen facts, measured at build time rather than typed by hand ---- */
+
+const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
+
+function walk(dir: string, onFile: (path: string) => void): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (name === "node_modules" || name === "dist" || name.startsWith(".")) continue;
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walk(p, onFile);
+    else onFile(p);
+  }
+}
+
+/** Test cases in the workspace: `it(` / `test(` at the start of a line in any *.test.ts. */
+function countTests(): number {
+  let n = 0;
+  for (const root of ["packages", "apps"]) {
+    walk(join(repoRoot, root), (p) => {
+      if (!p.endsWith(".test.ts")) return;
+      n += (readFileSync(p, "utf8").match(/^\s*(?:it|test)(?:\.\w+)?\(/gm) ?? []).length;
+    });
+  }
+  return n;
+}
+
+/** Workspace packages: everything under packages/ and apps/ that has a package.json. */
+function countPackages(): number {
+  let n = 0;
+  for (const root of ["packages", "apps"]) {
+    let dirs: string[] = [];
+    try {
+      dirs = readdirSync(join(repoRoot, root));
+    } catch {
+      continue;
+    }
+    for (const d of dirs) {
+      try {
+        statSync(join(repoRoot, root, d, "package.json"));
+        n++;
+      } catch {
+        /* not a package */
+      }
+    }
+  }
+  return n;
+}
+
+/**
+ * The bundle cannot know its own size while it is being defined, so `__GS_BUNDLE__` is compiled to
+ * this token and swapped for the real figure once every chunk exists. In dev the token survives and
+ * the screen shows "dev build" instead. The figure is the gzipped JS + CSS — what a visitor
+ * actually downloads — which is the only version of "bundle size" worth printing.
+ */
+const BUNDLE_TOKEN = "__GS_BUNDLE_SIZE__";
+
+function bundleSizePlugin(): Plugin {
+  return {
+    name: "grimstat-bundle-size",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      let bytes = 0;
+      for (const file of Object.values(bundle)) {
+        if (file.type === "chunk") bytes += gzipSync(Buffer.from(file.code, "utf8")).byteLength;
+        else if (file.fileName.endsWith(".css")) bytes += gzipSync(typeof file.source === "string" ? Buffer.from(file.source, "utf8") : Buffer.from(file.source)).byteLength;
+      }
+      const label = `${Math.round(bytes / 1024)} kB`;
+      for (const file of Object.values(bundle)) {
+        if (file.type === "chunk" && file.code.includes(BUNDLE_TOKEN)) file.code = file.code.replaceAll(BUNDLE_TOKEN, label);
+      }
+    },
+  };
+}
+
 export default defineConfig({
   base,
+  define: {
+    __GS_TESTS__: JSON.stringify(countTests()),
+    __GS_PACKAGES__: JSON.stringify(countPackages()),
+    __GS_BUNDLE__: JSON.stringify(BUNDLE_TOKEN),
+  },
   plugins: [
+    bundleSizePlugin(),
     react(),
     VitePWA({
       registerType: "autoUpdate",

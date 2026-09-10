@@ -7,11 +7,12 @@ import { useApp } from "../state/AppContext";
 import { hrefFor, navigate } from "../router";
 import { BATTLE_SIZE_ORDER, cloneRoster, newRoster, pointsLimitFor, pointsTone } from "../lib/roster";
 import { newId } from "../lib/ids";
-import { fmtDate, fmtInt } from "../lib/format";
+import { fmtDay, fmtInt } from "../lib/format";
 import { download } from "../lib/download";
-import { Dialog, Empty, Field, Icon, PointsMeter, Popover } from "../components/ui";
+import { Dialog, Empty, Field, Icon, Popover } from "../components/ui";
+import { ProportionBar } from "../components/kit";
 import { PageHeader, useContextNewAction } from "../components/shell";
-import { t, type I18nKey } from "../i18n";
+import { t, tn, type I18nKey } from "../i18n";
 
 export const battleSizeKey = (s: BattleSize): I18nKey => `battleSize.${s}` as I18nKey;
 
@@ -211,7 +212,7 @@ export function ArmiesPage() {
   return (
     <>
       <PageHeader
-        title={t("nav.armies")}
+        title={t("armies.title")}
         subtitle={t("page.sub.armies", { n: items?.length ?? 0 })}
         actions={
           <>
@@ -231,7 +232,6 @@ export function ArmiesPage() {
         }
       />
       <div className="page-body stack">
-      <p className="page-lede">{t("armies.intro")}</p>
 
       {!snapshot ? (
         <Empty>
@@ -378,25 +378,24 @@ export function ArmiesPage() {
         <div className="army-cards">
           {rows.map(({ r, faction, points, otherSnapshot }) => (
             <article key={r.id} className="army-card">
-              <div className="row between" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+              <div className="army-card-top">
                 <a href={hrefFor("armies", r.id)} className="army-card-title">
                   {r.name}
                 </a>
                 <CardMenu name={r.name} busy={busy} onDuplicate={() => void duplicate(r)} onDelete={() => void remove(r)} />
               </div>
-              <div className="army-card-meta">
-                <span className="badge">{faction}</span>
-                <span className="badge">{t(battleSizeKey(r.battleSize))}</span>
+              <div className="army-card-kind">
+                {faction} · {t(battleSizeKey(r.battleSize))}
               </div>
-              {points !== undefined ? <PointsMeter compact points={fmtInt(points)} limit={fmtInt(r.pointsLimit)} tone={pointsTone(points, r.pointsLimit)} label={t("roster.meter.aria", { points: fmtInt(points), limit: fmtInt(r.pointsLimit) })} /> : null}
-              <div className="small muted">
-                {t("armies.unitsCount", { n: r.units.length })} · {t("armies.lastEdited", { date: fmtDate(r.updatedAt) })}
-                {otherSnapshot ? ` · ${t("armies.snapshotOther", { id: r.snapshotId })}` : ""}
-              </div>
+              <ProportionBar value={points === undefined ? 0 : points / Math.max(1, r.pointsLimit)} height={5} tone={points !== undefined && pointsTone(points, r.pointsLimit) === "danger" ? "dim" : "ink"} title={t("roster.meter.aria", { points: fmtInt(points ?? 0), limit: fmtInt(r.pointsLimit) })} />
               <div className="army-card-foot">
-                <button type="button" className="sm primary" onClick={() => navigate("armies", false, r.id)}>
-                  {t("armies.open")}
-                </button>
+                <span className="army-card-pts">
+                  {points === undefined ? "–" : fmtInt(points)} / {fmtInt(r.pointsLimit)}
+                </span>
+                <span>{tn(r.units.length, "armies.unitCount.one", "armies.unitCount.many")}</span>
+                <span className="army-card-when" title={otherSnapshot ? t("armies.snapshotOther", { id: r.snapshotId }) : undefined}>
+                  {fmtDay(r.updatedAt)}
+                </span>
               </div>
             </article>
           ))}

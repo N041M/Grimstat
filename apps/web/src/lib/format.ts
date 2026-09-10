@@ -21,6 +21,14 @@ export function fmtDate(iso: string | undefined): string {
   return d.toLocaleString();
 }
 
+/** Date only, ISO-ordered ("2026-08-14"): the stamp used in dense table columns. */
+export function fmtDay(iso: string | undefined): string {
+  if (!iso) return "–";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toISOString().slice(0, 10);
+}
+
 /** Compact "just now / 4m / 3h / 6d / 2026-08-14" stamp for dense list rows. */
 export function fmtRelative(iso: string | undefined, now = Date.now()): string {
   if (!iso) return "–";

@@ -12,9 +12,9 @@ import type { CSSProperties, ReactNode } from "react";
 // ---------- dock ----------
 
 /** The right-hand control dock: `--rail` background, left border, its own scroll. */
-export function Dock({ label, meta, children }: { label: string; meta?: ReactNode; children: ReactNode }) {
+export function Dock({ label, meta, children, className }: { label: string; meta?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <aside className="dock" aria-label={label}>
+    <aside className={`dock ${className ?? ""}`.trim()} aria-label={label}>
       <div className="dock-head">
         <span className="dock-head-title">{label}</span>
         {meta ? <span className="dock-head-meta">{meta}</span> : null}
@@ -129,8 +129,8 @@ export function PanelHead({ title, aside, id }: { title: ReactNode; aside?: Reac
   );
 }
 
-/** Proportional bar in a `--fill` trough. `tone` picks the ink / dim fill. */
-export function ProportionBar({ value, tone = "ink", height = 11, title }: { value: number; tone?: "ink" | "dim"; height?: number; title?: string }) {
+/** Proportional bar in a `--fill` trough. `tone` picks the ink / mid / dim / accent fill. */
+export function ProportionBar({ value, tone = "ink", height = 11, title }: { value: number; tone?: "ink" | "mid" | "dim" | "accent"; height?: number; title?: string }) {
   const w = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
   return (
     <span className={`pbar tone-${tone}`} style={{ "--h": `${height}px` } as CSSProperties} title={title} aria-hidden="true">

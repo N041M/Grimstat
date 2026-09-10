@@ -1,6 +1,6 @@
 import * as Comlink from "comlink";
 import type { Scenario, ScenarioContext, ScenarioUnit, SimResult, Snapshot } from "@grimstat/schema";
-import type { DurabilityEntry, EfficiencyRow, MatrixResult } from "@grimstat/game-40k-11e";
+import type { DurabilityEntry, DurabilityIndexRow, EfficiencyRow, MatrixResult } from "@grimstat/game-40k-11e";
 import type { SimWorkerApi, SnapshotRef, Timed } from "./sim.worker";
 import type { TurnPlanInput, TurnPlanResult, TurnPlanStep } from "../lib/turn";
 import type { ReverseInput, ReverseResult, SensitivityResult } from "../lib/gameExtras";
@@ -89,6 +89,10 @@ export class SimClient {
 
   durability(defender: ScenarioUnit, opts: { attackerIds?: string[]; context?: Partial<ScenarioContext> }, snapshot: Snapshot | undefined): Promise<Sequenced<Timed<DurabilityEntry[]>>> {
     return this.call(snapshot, (p, ref) => p.durability(defender, opts, ref));
+  }
+
+  durabilityIndex(defenders: ScenarioUnit[], opts: { attackerIds?: string[]; context?: Partial<ScenarioContext> }, snapshot: Snapshot | undefined): Promise<Sequenced<Timed<DurabilityIndexRow[]>>> {
+    return this.call(snapshot, (p, ref) => p.durabilityIndex(defenders, opts, ref));
   }
 
   efficiency(attackers: ScenarioUnit[], opts: { targetIds?: string[]; context?: Partial<ScenarioContext> }, snapshot: Snapshot | undefined): Promise<Sequenced<Timed<EfficiencyRow[]>>> {

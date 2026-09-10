@@ -29,23 +29,47 @@ export function metricIsAverage(metric: MatrixMetric): boolean {
 export interface HeatColour {
   /** Position in the scale, 0..1 (NaN-safe; 0 when undefined). */
   t: number;
-  /** CSS background (theme-aware via color-mix on the accent token). */
+  /** Ink opacity of the cell, `ALPHA_BASE + ALPHA_SPAN × t`. */
+  alpha: number;
+  /** CSS background: the ink token at `alpha`, so it is `rgba(23,24,27,α)` light and `rgba(237,236,232,α)` dark. */
   background: string;
-  /** CSS text colour, or undefined to inherit (dark cells switch to the accent's contrast colour). */
+  /** CSS text colour, or undefined to inherit (dark cells flip to the inverse ink). */
   color: string | undefined;
 }
 
-const MIN_PCT = 6;
-const MAX_PCT = 86;
+/** Cell opacity at the bottom of the scale, and how much it grows across it. */
+export const ALPHA_BASE = 0.04;
+export const ALPHA_SPAN = 0.7;
+/** Scale position past which the label flips to the inverse ink so it stays legible on a dark cell. */
+export const FLIP_AT = 0.55;
 
-/** Colour of a cell for `value` on a linear scale between `min` and `max`. */
+/** Position of `value` on the linear scale between `min` and `max`, clamped to 0..1. */
+export function heatT(value: number, min: number, max: number): number {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max - min <= 1e-12) return value > 0 ? 0.5 : 0;
+  return Math.max(0, Math.min(1, (value - min) / (max - min)));
+}
+
+/**
+ * Colour of a cell for `value` on a linear scale between `min` and `max`.
+ *
+ * The ramp is a single ink at a growing opacity rather than a hue sweep: the numbers stay readable
+ * at every step, which naive heatmap palettes do not manage, and it needs no second colour token.
+ */
 export function heatColour(value: number | undefined, min: number, max: number): HeatColour {
-  if (value === undefined || !Number.isFinite(value)) return { t: 0, background: "transparent", color: undefined };
-  let t: number;
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max - min <= 1e-12) t = value > 0 ? 0.5 : 0;
-  else t = Math.max(0, Math.min(1, (value - min) / (max - min)));
-  const pct = Math.round(MIN_PCT + (MAX_PCT - MIN_PCT) * t);
-  return { t, background: `color-mix(in srgb, var(--accent) ${pct}%, transparent)`, color: pct > 50 ? "var(--accent-contrast)" : undefined };
+  if (value === undefined || !Number.isFinite(value)) return { t: 0, alpha: 0, background: "transparent", color: undefined };
+  const t = heatT(value, min, max);
+  const alpha = ALPHA_BASE + ALPHA_SPAN * t;
+  return {
+    t,
+    alpha,
+    background: `color-mix(in srgb, var(--ink) ${(alpha * 100).toFixed(1)}%, transparent)`,
+    color: t > FLIP_AT ? "var(--btn-fg)" : "var(--ink-2)",
+  };
+}
+
+/** Eight swatches sampling the same ramp, for the legend strip under the matrix. */
+export function heatRamp(min: number, max: number, steps = 8): HeatColour[] {
+  return Array.from({ length: steps }, (_, i) => heatColour(min + (i / Math.max(1, steps - 1)) * (max - min), min, max));
 }
 
 export interface HeatmapModel {

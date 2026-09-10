@@ -84,6 +84,18 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   await db.settings.put({ key, value });
 }
 
+/**
+ * Stores are written from several places (the editor's autosave, imports, deletes) while other
+ * views list them. Writers announce the store they touched; listing views re-read on the signal.
+ */
+export const STORE_CHANGED = "grimstat:store-changed";
+
+export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides";
+
+export function notifyStoreChanged(store: StoreName): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORE_CHANGED, { detail: store }));
+}
+
 /** Store a roster and record its revision in the history (pruned to ROSTER_VERSION_CAP per roster). */
 export async function saveRosterWithVersion(roster: Roster): Promise<void> {
   await db.transaction("rw", db.rosters, db.rosterVersions, async () => {
@@ -92,6 +104,7 @@ export async function saveRosterWithVersion(roster: Roster): Promise<void> {
     const all = await db.rosterVersions.where("rosterId").equals(roster.id).sortBy("revision");
     if (all.length > ROSTER_VERSION_CAP) await db.rosterVersions.bulkDelete(all.slice(0, all.length - ROSTER_VERSION_CAP).map((v) => v.id));
   });
+  notifyStoreChanged("rosters");
 }
 
 /** Versions of one roster, newest first. */
@@ -105,6 +118,7 @@ export async function deleteRoster(rosterId: string): Promise<void> {
     await db.rosters.delete(rosterId);
     await db.rosterVersions.where("rosterId").equals(rosterId).delete();
   });
+  notifyStoreChanged("rosters");
 }
 
 /** Lightweight summary of a stored snapshot for lists (avoids keeping every full snapshot in React state). */
@@ -116,7 +130,7 @@ export interface SnapshotMeta {
   checksum: string;
   createdAt: string;
   updatedAt: string;
-  counts: { factions: number; datasheets: number; abilities: number; detachments: number; stratagems: number; priceRules: number };
+  counts: { factions: number; datasheets: number; weapons: number; abilities: number; detachments: number; stratagems: number; priceRules: number };
   conflicts: number;
 }
 
@@ -132,6 +146,7 @@ export function snapshotMeta(s: Snapshot): SnapshotMeta {
     counts: {
       factions: s.data.factions.length,
       datasheets: s.data.datasheets.length,
+      weapons: s.data.datasheets.reduce((n, d) => n + d.weapons.length, 0),
       abilities: s.data.abilities.length,
       detachments: s.data.detachments.length,
       stratagems: s.data.stratagems.length,
@@ -182,6 +197,7 @@ export async function importAll(bundle: ExportBundle): Promise<{ snapshots: numb
     if (rosters.length) await db.rosters.bulkPut(rosters);
     if (overrides.length) await db.overrides.bulkPut(overrides);
   });
+  notifyStoreChanged("rosters");
   return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length };
 }
 

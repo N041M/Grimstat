@@ -1,8 +1,33 @@
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 import type { ScenarioContext } from "@grimstat/schema";
 import type { TaskState } from "../../hooks/useWorkerTask";
 import { Badge, Field, Spinner } from "../ui";
 import { fmtInt } from "../../lib/format";
 import { t } from "../../i18n";
+
+/** What a tab hangs in the page header: a mono subtitle and its own actions (Run, Export CSV…). */
+export interface AnalysisHeader {
+  subtitle?: string;
+  actions?: ReactNode;
+}
+
+const HeaderContext = createContext<((h: AnalysisHeader) => void) | undefined>(undefined);
+
+export function AnalysisHeaderProvider({ value, children }: { value: (h: AnalysisHeader) => void; children: ReactNode }) {
+  return <HeaderContext.Provider value={value}>{children}</HeaderContext.Provider>;
+}
+
+/**
+ * Publish this tab's subtitle and header actions. `deps` must be primitives: the header node is
+ * rebuilt inside the effect so passing JSX never re-triggers it.
+ */
+export function useAnalysisHeader(make: () => AnalysisHeader, deps: unknown[]): void {
+  const set = useContext(HeaderContext);
+  useEffect(() => {
+    set?.(make());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [set, ...deps]);
+}
 
 /** Status line shared by every analysis: running indicator, elapsed time, error. */
 export function RunStatus({ task, extra }: { task: TaskState<unknown>; extra?: string }) {
@@ -11,11 +36,7 @@ export function RunStatus({ task, extra }: { task: TaskState<unknown>; extra?: s
       {task.running ? <Spinner label={t("results.running")} /> : task.error ? <Badge tone="danger">{t("results.error")}</Badge> : task.result !== undefined ? <Badge tone="ok">{t("results.upToDate")}</Badge> : <Badge>{t("results.idle")}</Badge>}
       {task.elapsedMs !== undefined && !task.running ? <span className="small muted">{t("results.elapsed", { ms: fmtInt(task.elapsedMs) })}</span> : null}
       {extra ? <span className="small muted">{extra}</span> : null}
-      {task.error ? (
-        <span className="small" style={{ color: "var(--danger)" }}>
-          {task.error}
-        </span>
-      ) : null}
+      {task.error ? <span className="small accent-text">{task.error}</span> : null}
     </div>
   );
 }

@@ -210,7 +210,7 @@ export function EffectForm({ source, initial, onSubmit, onCancel }: { source: st
           {t("overrides.form.source")}: <strong>{source}</strong>
         </span>
         {error ? (
-          <span className="small" role="alert" style={{ color: "var(--danger)" }}>
+          <span className="small" role="alert" style={{ color: "var(--accent)" }}>
             {error}
           </span>
         ) : null}

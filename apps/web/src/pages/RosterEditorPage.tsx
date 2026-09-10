@@ -6,12 +6,13 @@ import { useApp } from "../state/AppContext";
 import { useRosterEditor, useRosterSnapshot } from "../hooks/useRosterEditor";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { hrefFor, navigate } from "../router";
-import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, newRosterUnit, pointsLimitFor } from "../lib/roster";
+import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, enhancementsFor, newRosterUnit, pointsLimitFor, sectionOf } from "../lib/roster";
+import { pointsBarModel } from "../lib/pointsBar";
 import { RosterHeader, type EditorMode } from "../components/roster/RosterHeader";
 import { DetachmentStrip } from "../components/roster/DetachmentsBlock";
-import { UnitsBlock, type CalcSide } from "../components/roster/UnitsBlock";
+import { UnitTable, type CalcSide } from "../components/roster/UnitTable";
 import { UnitInspector } from "../components/roster/UnitInspector";
-import { DiagnosticsPanel } from "../components/roster/DiagnosticsPanel";
+import { RosterDock, type DockBudget } from "../components/roster/RosterDock";
 import { ExportDrawer } from "../components/roster/ExportDrawer";
 import { HistoryPanel } from "../components/roster/HistoryPanel";
 import { Empty, Sheet } from "../components/ui";
@@ -41,6 +42,20 @@ export function RosterEditorPage({ id }: { id: string }) {
   const costById = useMemo(() => new Map((summary?.units ?? []).map((u) => [u.id, u.cost] as const)), [summary]);
   const diagnostics = useMemo(() => (roster && snapshot ? validateRoster(roster, snapshot, [constraints11e]) : []), [roster, snapshot]);
   const faction = snapshot?.data.factions.find((f) => f.id === roster?.factionId);
+
+  // Points by role for the header bar; attached characters count under their own role.
+  const points = useMemo(() => (roster ? pointsBarModel(roster.units.map((u) => ({ section: sectionOf(datasheets.get(u.datasheetId), roster), points: costById.get(u.id)?.total ?? 0 })), roster.pointsLimit) : undefined), [roster, datasheets, costById]);
+
+  // Escape closes the inspector / export / history panel (the phone sheet handles its own).
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMode("unit");
+      setSelectedId(undefined);
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
 
   const selectUnit = useCallback((unitId: string) => {
     setSelectedId(unitId);
@@ -108,26 +123,18 @@ export function RosterEditorPage({ id }: { id: string }) {
     notify(t("roster.history.restored", { n: revision }), "success");
   };
 
-  const showIssues = () => {
-    const el = document.getElementById("diagnostics");
-    if (!el) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
-    el.focus({ preventScroll: true });
-  };
-
-  if (status === "loading" || (roster && loading)) return <p className="muted">{t("armies.loading")}</p>;
+  if (status === "loading" || (roster && loading)) return <p className="muted roster-loading">{t("armies.loading")}</p>;
   if (!roster || status === "missing") {
     return (
-      <div className="stack">
+      <div className="stack roster-loading">
         <a href={hrefFor("armies")}>← {t("armies.back")}</a>
         <Empty>{t("armies.notFound")}</Empty>
       </div>
     );
   }
-  if (!snapshot) {
+  if (!snapshot || !points) {
     return (
-      <div className="stack">
+      <div className="stack roster-loading">
         <a href={hrefFor("armies")}>← {t("armies.back")}</a>
         <Empty>
           {t("armies.noSnapshot")} <a href={hrefFor("data")}>{t("nav.data")}</a>
@@ -136,13 +143,15 @@ export function RosterEditorPage({ id }: { id: string }) {
     );
   }
 
-  const points = summary?.points ?? 0;
   const dpSpent = summary?.detachmentPoints ?? 0;
-  const dpLimit = detachmentPointsFor(roster.battleSize);
   const errors = diagnostics.filter((d) => d.severity === "error").length;
   const warns = diagnostics.filter((d) => d.severity === "warn").length;
+  const budgets: DockBudget[] = [
+    { label: t("roster.budget.points"), used: points.total, limit: points.limit },
+    { label: t("roster.budget.dp"), used: dpSpent, limit: detachmentPointsFor(roster.battleSize) },
+    { label: t("roster.budget.enhancements"), used: roster.units.filter((u) => u.enhancementId).length, limit: enhancementsFor(roster.battleSize) },
+  ];
 
-  const strip = <DetachmentStrip roster={roster} snapshot={snapshot} onChange={update} pickerOpen={detPicker} onPickerOpen={setDetPicker} />;
   const panelLabel = mode === "export" ? t("roster.export.title") : mode === "history" ? t("roster.history.title") : t("roster.inspector.aria");
   const panel =
     mode === "export" ? (
@@ -164,74 +173,73 @@ export function RosterEditorPage({ id }: { id: string }) {
         onRemove={() => remove(selected)}
         onClose={closePanel}
       />
-    ) : (
-      <div className="empty insp-empty">{t("roster.inspector.empty")}</div>
-    );
+    ) : null;
   const panelOpen = mode !== "unit" || !!selected;
 
   return (
     <div className={`roster-editor ${narrow ? "narrow" : ""}`.trim()}>
-      <RosterHeader
-        roster={roster}
-        factionName={faction?.name ?? t("roster.factionMissing", { id: roster.factionId })}
-        points={points}
-        dpSpent={dpSpent}
-        dpLimit={dpLimit}
-        status={status}
-        savedAt={savedAt}
-        errors={errors}
-        warns={warns}
-        mode={mode}
-        narrow={narrow}
-        onMode={(m) => {
-          setMode(m);
-          if (m === "unit") setSelectedId(undefined);
-        }}
-        onRename={(name) => update((r) => ({ ...r, name }))}
-        onBattleSize={setBattleSize}
-        onPointsLimit={(limit) => update((r) => ({ ...r, pointsLimit: limit }))}
-        onShowIssues={showIssues}
-      >
-        {narrow ? null : strip}
-      </RosterHeader>
-      {narrow ? strip : null}
+      <div className="roster-main">
+        <RosterHeader
+          roster={roster}
+          factionName={faction?.name ?? t("roster.factionMissing", { id: roster.factionId })}
+          points={points}
+          status={status}
+          savedAt={savedAt}
+          errors={errors}
+          warns={warns}
+          mode={mode}
+          onMode={(m) => {
+            setMode(m);
+            if (m === "unit") setSelectedId(undefined);
+          }}
+          onRename={(name) => update((r) => ({ ...r, name }))}
+          onBattleSize={setBattleSize}
+          onPointsLimit={(limit) => update((r) => ({ ...r, pointsLimit: limit }))}
+          onAddUnit={() => setAdding((v) => !v)}
+        >
+          <DetachmentStrip roster={roster} snapshot={snapshot} onChange={update} pickerOpen={detPicker} onPickerOpen={setDetPicker} />
+        </RosterHeader>
 
-      <div className="roster-body">
-        <div className="roster-main stack">
-          <UnitsBlock
-            roster={roster}
-            snapshot={snapshot}
-            datasheets={datasheets}
-            costById={costById}
-            selectedId={selectedId}
-            adding={adding}
-            onAdding={setAdding}
-            onSelect={selectUnit}
-            onAdd={addUnit}
-            onDuplicate={duplicate}
-            onRemove={remove}
-            onOpenInCalculator={(u, side) => void openInCalculator(u, side)}
-            onOpenDetachmentPicker={() => setDetPicker(true)}
-            onExport={() => setMode("export")}
-          />
-          <DiagnosticsPanel
-            diagnostics={diagnostics}
-            onSelectUnit={(i) => {
-              const u = roster.units[i];
-              if (u) selectUnit(u.id);
-            }}
-          />
-        </div>
-        {narrow ? (
-          <Sheet open={panelOpen} onClose={closePanel} label={panelLabel} className="roster-sheet">
-            {panel}
-          </Sheet>
-        ) : (
-          <aside className={`roster-inspector panel ${panelOpen ? "open" : "idle"}`} aria-label={panelLabel}>
-            {panel}
-          </aside>
-        )}
+        <UnitTable
+          roster={roster}
+          snapshot={snapshot}
+          datasheets={datasheets}
+          costById={costById}
+          diagnostics={diagnostics}
+          selectedId={selectedId}
+          adding={adding}
+          onAdding={setAdding}
+          onSelect={selectUnit}
+          onAdd={addUnit}
+          onDuplicate={duplicate}
+          onRemove={remove}
+          onOpenInCalculator={(u, side) => void openInCalculator(u, side)}
+          onOpenDetachmentPicker={() => setDetPicker(true)}
+          onExport={() => setMode("export")}
+        />
       </div>
+
+      <RosterDock
+        roster={roster}
+        snapshot={snapshot}
+        diagnostics={diagnostics}
+        budgets={budgets}
+        onSelectUnit={(i) => {
+          const u = roster.units[i];
+          if (u) selectUnit(u.id);
+        }}
+        onOpenHistory={() => setMode("history")}
+      />
+
+      {narrow ? (
+        <Sheet open={panelOpen} onClose={closePanel} label={panelLabel} className="roster-sheet">
+          {panel}
+        </Sheet>
+      ) : panelOpen ? (
+        <aside className="roster-inspector" aria-label={panelLabel}>
+          {panel}
+        </aside>
+      ) : null}
     </div>
   );
 }

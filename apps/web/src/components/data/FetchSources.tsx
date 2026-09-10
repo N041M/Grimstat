@@ -1,18 +1,23 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { SOURCES } from "@grimstat/adapters";
+import type { SourceRef } from "@grimstat/schema";
 import { db } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { ImportCancelledError, importClient } from "../../worker/importClient";
-import { BROWSER_SOURCES, IDLE_PROGRESS, classifyError, errorMessage, importRequestFor, isRunning, reduceProgress, type BrowserSourceId, type ImportErrorKind, type ImportSelection, type SourceCounts, type SourceProgress } from "../../lib/importProgress";
-import { fmtInt } from "../../lib/format";
-import { Field, Spinner } from "../ui";
-import { t } from "../../i18n";
+import { BROWSER_SOURCES, IDLE_PROGRESS, classifyError, errorMessage, importRequestFor, isRunning, reduceProgress, type BrowserSourceId, type ImportErrorKind, type ImportSelection, type SourceProgress } from "../../lib/importProgress";
+import { fmtDay, fmtInt } from "../../lib/format";
+import { PillChip, ProportionBar } from "../kit";
+import { t, type I18nKey } from "../../i18n";
 
 export const CLI_IMPORT_COMMAND = "pnpm cli import --system wh40k-11e --out data/snapshots";
 export const README_URL = "https://github.com/N041M/Grimstat#getting-started";
 const SETTING_KEY = "data.fetch.selection";
 const DEFAULT_SELECTION: ImportSelection = { sources: { "mfm-yaml": true, "bsdata-json": true }, factionFilter: "" };
+
+/** The card deck: the two sources a browser can reach, then the CLI-only Wahapedia export. */
+const CARD_SOURCES = [...BROWSER_SOURCES, "wahapedia-csv"] as const;
+type CardSourceId = (typeof CARD_SOURCES)[number];
 
 function parseSelection(raw: unknown): ImportSelection | undefined {
   if (!raw || typeof raw !== "object") return undefined;
@@ -21,8 +26,11 @@ function parseSelection(raw: unknown): ImportSelection | undefined {
   return { sources: { "mfm-yaml": src["mfm-yaml"] !== false, "bsdata-json": src["bsdata-json"] !== false }, factionFilter: typeof r.factionFilter === "string" ? r.factionFilter : "" };
 }
 
-function sourceName(id: BrowserSourceId): string {
-  return id === "mfm-yaml" ? t("data.fetch.source.mfm-yaml") : t("data.fetch.source.bsdata-json");
+const NAME_KEY: Record<CardSourceId, I18nKey> = { "mfm-yaml": "data.fetch.source.mfm-yaml", "bsdata-json": "data.fetch.source.bsdata-json", "wahapedia-csv": "data.fetch.source.wahapedia-csv" };
+const KIND_KEY: Record<CardSourceId, I18nKey> = { "mfm-yaml": "data.source.kind.mfm-yaml", "bsdata-json": "data.source.kind.bsdata-json", "wahapedia-csv": "data.source.kind.wahapedia-csv" };
+
+function sourceName(id: CardSourceId): string {
+  return t(NAME_KEY[id]);
 }
 
 function sourceSize(id: BrowserSourceId): string {
@@ -44,55 +52,74 @@ function stageLabel(stage: SourceProgress["stage"]): string {
   }
 }
 
-function stageTone(stage: SourceProgress["stage"]): string {
-  return stage === "parsed" ? "ok" : stage === "failed" ? "danger" : stage === "pending" ? "" : "accent";
-}
-
 function errorHint(kind: ImportErrorKind): string {
   return kind === "rate-limit" ? t("data.fetch.hint.rate-limit") : kind === "network" ? t("data.fetch.hint.network") : t("data.fetch.hint.other");
 }
 
-function countsLine(c: SourceCounts): string {
-  return t("data.fetch.sourceCounts", { datasheets: fmtInt(c.datasheets), abilities: fmtInt(c.abilities), detachments: fmtInt(c.detachments), enhancements: fmtInt(c.enhancements), priceRules: fmtInt(c.priceRules) });
+/** What one card shows: a status pill, a 5px bar and a detail/timestamp row. */
+interface CardModel {
+  status: string;
+  /** Accent-tinted pill + bar while something is in flight or wrong; neutral otherwise. */
+  live: boolean;
+  fraction: number;
+  detail: string;
+  when: string;
 }
 
-function SourceRow({ s }: { s: SourceProgress }) {
-  const busy = s.stage === "downloading" || s.stage === "parsing";
+/**
+ * Reconcile a source's live fetch progress with what the active snapshot already carries. A run in
+ * progress always wins; otherwise a snapshot that lists the adapter is "current", and anything else
+ * has simply never been fetched onto this device.
+ */
+export function cardModel(id: CardSourceId, progress: SourceProgress | undefined, stored: SourceRef | undefined, storedCount: number | undefined): CardModel {
+  if (progress && progress.stage !== "pending") {
+    switch (progress.stage) {
+      case "downloading":
+        return { status: stageLabel(progress.stage), live: true, fraction: progress.total > 0 ? progress.index / progress.total : 0, detail: t("data.fetch.files", { index: progress.index, total: progress.total }), when: t("data.source.inProgress") };
+      case "parsing":
+        return { status: stageLabel(progress.stage), live: true, fraction: 1, detail: t("data.fetch.parsingFiles", { files: progress.files }), when: t("data.source.inProgress") };
+      case "parsed":
+        return { status: t("data.source.current"), live: false, fraction: 1, detail: progress.counts ? t("data.source.datasheets", { n: fmtInt(progress.counts.datasheets) }) : t("data.fetch.stage.parsed"), when: progress.ref ?? t("data.source.justNow") };
+      case "failed":
+        return { status: stageLabel(progress.stage), live: true, fraction: 0, detail: progress.message ?? t("data.fetch.stage.failed"), when: t("data.source.failed") };
+    }
+  }
+  if (stored) return { status: t("data.source.current"), live: false, fraction: 1, detail: storedCount === undefined ? (stored.ref ?? t("data.source.stored")) : t("data.source.datasheets", { n: fmtInt(storedCount) }), when: fmtDay(stored.fetchedAt) };
+  return { status: t("data.source.notFetched"), live: false, fraction: 0, detail: SOURCES[id].role, when: "–" };
+}
+
+function SourceCard({ id, model, selectable, selected, disabled, onSelect, footer }: { id: CardSourceId; model: CardModel; selectable: boolean; selected?: boolean; disabled?: boolean; onSelect?: (on: boolean) => void; footer?: ReactNode }) {
   return (
-    <li className={`progress-item ${s.stage}`}>
-      <div className="row between">
-        <span className="row">
-          {busy ? <span className="spinner" aria-hidden="true" /> : null}
-          <strong>{sourceName(s.id)}</strong>
-          {s.ref ? <span className="mono small muted">{t("data.fetch.ref", { ref: s.ref })}</span> : null}
-        </span>
-        <span className={`badge ${stageTone(s.stage)}`.trim()}>{stageLabel(s.stage)}</span>
+    <article className="src-card">
+      <div className="src-card-top">
+        <div className="src-card-id">
+          <div className="src-card-name">{sourceName(id)}</div>
+          <div className="src-card-kind">{t(KIND_KEY[id])}</div>
+        </div>
+        <span className={`src-pill ${model.live ? "live" : ""}`.trim()}>{model.status}</span>
       </div>
-      {s.stage === "downloading" && s.total > 0 ? <progress value={s.index} max={s.total} aria-label={`${sourceName(s.id)}: ${t("data.fetch.files", { index: s.index, total: s.total })}`} /> : null}
-      <div className="small muted">
-        {s.stage === "downloading" ? t("data.fetch.files", { index: s.index, total: s.total }) : null}
-        {s.stage === "parsing" ? t("data.fetch.parsingFiles", { files: s.files }) : null}
-        {s.stage === "parsed" && s.counts ? `${countsLine(s.counts)} · ${s.warnings ? t("data.fetch.warnings", { n: s.warnings }) : t("data.fetch.noWarnings")}` : null}
-        {s.stage === "failed" ? <span className="mono">{s.message}</span> : null}
+      <ProportionBar value={model.fraction} height={5} tone={model.live ? "accent" : "ink"} />
+      <div className="src-card-foot">
+        <span title={model.detail}>{model.detail}</span>
+        <span>{model.when}</span>
       </div>
-      {s.sample.length ? (
-        <details className="small">
-          <summary>{t("data.fetch.warnings", { n: s.warnings })}</summary>
-          <ul className="mono muted" style={{ margin: "0.3rem 0 0", paddingLeft: "1.1rem" }}>
-            {s.sample.map((w, i) => (
-              <li key={i}>{w}</li>
-            ))}
-            {s.warnings > s.sample.length ? <li>{t("data.fetch.moreWarnings", { n: s.warnings - s.sample.length })}</li> : null}
-          </ul>
-        </details>
+      {selectable ? (
+        <div className="src-card-select">
+          <PillChip label={selected ? t("data.source.included") : t("data.source.excluded")} on={!!selected} title={disabled ? t("data.fetch.busy") : SOURCES[id].attribution} onChange={(on) => !disabled && onSelect?.(on)} />
+          <span className="src-card-size">{selectable && id !== "wahapedia-csv" ? sourceSize(id as BrowserSourceId) : ""}</span>
+        </div>
       ) : null}
-    </li>
+      {footer}
+    </article>
   );
 }
 
-/** Data page panel: fetch MFM points + BSData catalogues in a worker and store the built snapshot. */
+/**
+ * Data page: the three source cards plus the in-browser fetch (MFM points + BSData catalogues) that
+ * fills them — selection, faction filter, progress, cancel and the errors the run can end with.
+ */
 export function FetchSources() {
-  const { refreshSnapshots, setActiveSnapshot, notify } = useApp();
+  const { refreshSnapshots, setActiveSnapshot, notify, rawSnapshot } = useApp();
   const [selection, setSelection] = usePersistedSetting<ImportSelection>(SETTING_KEY, DEFAULT_SELECTION, parseSelection);
   const [progress, dispatch] = useReducer(reduceProgress, IDLE_PROGRESS);
   // A run started before this mount (the user navigated away and back) keeps going in the worker.
@@ -110,6 +137,7 @@ export function FetchSources() {
   const running = isRunning(progress);
   const request = importRequestFor(selection);
   const pointsOnly = selection.sources["mfm-yaml"] && !selection.sources["bsdata-json"];
+  const datasheetCount = rawSnapshot?.data.datasheets.length;
 
   const start = useCallback(async () => {
     const req = importRequestFor(selection);
@@ -153,42 +181,35 @@ export function FetchSources() {
   const toggle = (id: BrowserSourceId, on: boolean) => setSelection((s) => ({ ...s, sources: { ...s.sources, [id]: on } }));
 
   return (
-    <section className="panel" aria-labelledby="data-fetch-h">
-      <div className="panel-head">
-        <h2 id="data-fetch-h">{t("data.fetch.title")}</h2>
-      </div>
-      <p className="small muted">{t("data.fetch.intro")}</p>
-
-      <fieldset className="source-options" disabled={running}>
-        <legend className="small muted" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: "0.7rem" }}>
-          {t("data.fetch.sourcesLabel")}
-        </legend>
-        {BROWSER_SOURCES.map((id) => {
-          const def = SOURCES[id];
+    <section className="src-block" aria-labelledby="data-fetch-h">
+      <h2 className="sr-only" id="data-fetch-h">
+        {t("data.fetch.title")}
+      </h2>
+      <div className="src-cards">
+        {CARD_SOURCES.map((id) => {
+          const stored = rawSnapshot?.sources.find((s) => s.adapter === id);
+          const model = cardModel(id, progress.sources.find((s) => s.id === id), stored, id === "bsdata-json" ? datasheetCount : undefined);
+          const browser = id !== "wahapedia-csv";
           return (
-            <label key={id} className="source-option">
-              <input type="checkbox" checked={selection.sources[id]} onChange={(e) => toggle(id, e.target.checked)} />
-              <span className="desc">
-                <span>
-                  <strong>{sourceName(id)}</strong> <span className="muted">— {def.role}</span>
-                </span>
-                <span className="small muted">{t("data.fetch.attribution", { attribution: def.attribution })}</span>
-                <span className="small muted">{t("data.fetch.licence", { licence: def.licence })}</span>
-                <span className="small muted">{sourceSize(id)}</span>
-              </span>
-            </label>
+            <SourceCard
+              key={id}
+              id={id}
+              model={model}
+              selectable={browser}
+              selected={browser ? selection.sources[id as BrowserSourceId] : false}
+              disabled={running}
+              onSelect={(on) => toggle(id as BrowserSourceId, on)}
+              footer={browser ? undefined : <div className="src-card-note">{t("data.fetch.wahapedia")}</div>}
+            />
           );
         })}
-      </fieldset>
-
-      <div className="field-row" style={{ marginTop: "0.75rem" }}>
-        <Field label={t("data.fetch.filter")} hint={t("data.fetch.filterHint")} className="grow">
-          <input id={filterId} type="text" value={selection.factionFilter} placeholder={t("data.fetch.filterPlaceholder")} disabled={running || !selection.sources["bsdata-json"]} onChange={(e) => setSelection((s) => ({ ...s, factionFilter: e.target.value }))} />
-        </Field>
       </div>
-      {pointsOnly ? <p className="small muted">{t("data.fetch.pointsOnly")}</p> : null}
 
-      <div className="row" style={{ marginTop: "0.75rem" }}>
+      <div className="src-run">
+        <label className="src-filter" htmlFor={filterId}>
+          <span>{t("data.fetch.filter")}</span>
+          <input id={filterId} type="text" value={selection.factionFilter} placeholder={t("data.fetch.filterPlaceholder")} disabled={running || !selection.sources["bsdata-json"]} onChange={(e) => setSelection((s) => ({ ...s, factionFilter: e.target.value }))} />
+        </label>
         <button type="button" className="primary" disabled={running || background || request.sources.length === 0} onClick={() => void start()}>
           {t("data.fetch.run")}
         </button>
@@ -197,76 +218,43 @@ export function FetchSources() {
             {t("data.fetch.cancel")}
           </button>
         ) : null}
-        {running ? <Spinner label={progress.stage === "merging" ? t("data.fetch.merging") : progress.stage === "building" ? t("data.fetch.building") : t("data.fetch.stage.downloading")} /> : null}
+        <span className="src-run-status" role="status" aria-live="polite">
+          {running ? (progress.stage === "merging" ? t("data.fetch.merging") : progress.stage === "building" ? t("data.fetch.building") : t("data.fetch.stage.downloading")) : background ? t("data.fetch.background") : pointsOnly ? t("data.fetch.pointsOnly") : t("data.fetch.filterHint")}
+        </span>
       </div>
-      {background ? <p className="small muted">{t("data.fetch.background")}</p> : null}
 
-      {progress.sources.length ? (
-        <ol className="progress-list" aria-label={t("data.fetch.progress")} aria-live="polite">
-          {progress.sources.map((s) => (
-            <SourceRow key={s.id} s={s} />
-          ))}
-          {progress.merge ? <li className="progress-item parsed small">{t("data.fetch.merged", { conflicts: fmtInt(progress.merge.conflicts), unmatched: fmtInt(progress.merge.unmatched), warnings: fmtInt(progress.merge.warnings) })}</li> : progress.stage === "merging" ? <li className="progress-item small">{t("data.fetch.merging")}</li> : null}
-          {progress.stage === "building" ? <li className="progress-item small">{t("data.fetch.building")}</li> : null}
-        </ol>
-      ) : null}
+      {progress.merge ? <p className="src-note">{t("data.fetch.merged", { conflicts: fmtInt(progress.merge.conflicts), unmatched: fmtInt(progress.merge.unmatched), warnings: fmtInt(progress.merge.warnings) })}</p> : null}
 
       {progress.stage === "done" && progress.summary ? (
-        <div className="result-box" role="status" style={{ marginTop: "0.75rem" }}>
-          <strong>{t("data.fetch.done", { label: progress.summary.label ?? progress.summary.snapshotId, s: (progress.summary.elapsedMs / 1000).toFixed(1) })}</strong>
-          <dl className="kv" style={{ marginTop: 6 }}>
-            <dt>{t("data.id")}</dt>
-            <dd className="mono">{progress.summary.snapshotId}</dd>
-            <dt>{t("data.counts")}</dt>
-            <dd>
-              {t("data.countsLine", { factions: progress.summary.counts.factions, datasheets: progress.summary.counts.datasheets, abilities: progress.summary.counts.abilities, detachments: progress.summary.counts.detachments, stratagems: progress.summary.counts.stratagems, priceRules: progress.summary.counts.priceRules })}
-              {progress.summary.conflicts ? ` · ${t("data.conflicts", { n: progress.summary.conflicts })}` : ""}
-            </dd>
-            <dt>{t("data.fetch.refs")}</dt>
-            <dd>
-              {progress.summary.sources.map((s, i) => (
-                <div key={i} className="mono">
-                  {s.adapter}
-                  {s.ref ? ` @ ${s.ref}` : ""}
-                </div>
-              ))}
-            </dd>
-          </dl>
-        </div>
+        <p className="src-note" role="status">
+          {t("data.fetch.done", { label: progress.summary.label ?? progress.summary.snapshotId, s: (progress.summary.elapsedMs / 1000).toFixed(1) })}
+        </p>
       ) : null}
 
       {progress.stage === "cancelled" ? (
-        <p className="small muted" role="status">
+        <p className="src-note" role="status">
           {t("data.fetch.cancelled")}
         </p>
       ) : null}
 
       {progress.stage === "error" && progress.error ? (
-        <div className="error-box" role="alert" style={{ marginTop: "0.75rem" }}>
+        <div className="src-error" role="alert">
           <strong>{t("data.fetch.failed", { msg: progress.error.message })}</strong>
-          <p className="small" style={{ margin: "0.4rem 0" }}>
-            {errorHint(progress.error.kind)}
-          </p>
-          <p className="small muted" style={{ margin: "0.4rem 0" }}>
-            {t("data.fetch.hint.cli")} <code className="cmd">{CLI_IMPORT_COMMAND}</code>
-          </p>
-          <div className="row">
-            <button type="button" className="primary sm" onClick={() => void start()}>
+          <p>{errorHint(progress.error.kind)}</p>
+          <p className="mono">{CLI_IMPORT_COMMAND}</p>
+          <div className="src-error-actions">
+            <button type="button" className="primary" onClick={() => void start()}>
               {t("data.fetch.retry")}
             </button>
-            <button type="button" className="sm" onClick={() => dispatch({ type: "reset" })}>
+            <button type="button" onClick={() => dispatch({ type: "reset" })}>
               {t("common.close")}
             </button>
+            <a href={README_URL} target="_blank" rel="noreferrer">
+              {t("data.fetch.readme")}
+            </a>
           </div>
         </div>
       ) : null}
-
-      <p className="small muted" style={{ marginTop: "0.9rem" }}>
-        {t("data.fetch.wahapedia")} <code className="cmd">{CLI_IMPORT_COMMAND}</code>{" "}
-        <a href={README_URL} target="_blank" rel="noreferrer">
-          {t("data.fetch.readme")}
-        </a>
-      </p>
     </section>
   );
 }

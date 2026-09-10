@@ -27,6 +27,12 @@ describe("army-level analyses", () => {
     expect(rows.find((r) => r.unit.includes("Melee horde"))!.damagePer100).toBeGreaterThan(0);
     const m = runMatrix([byId("chainsword-mob")], [byId("marine-like")]);
     expect(m.cells[0]![0]!.result.expectedDamage).toBeGreaterThan(0);
+    // an explicit shooting phase must not reduce a melee-only unit to a meaningless zero
+    const explicit = runMatrix([byId("chainsword-mob")], [byId("marine-like")], { phase: "shooting", rangeBand: "half" });
+    expect(explicit.cells[0]![0]!.result.expectedDamage).toBeGreaterThan(0);
+    // a shooting unit asked for the fight phase is resolved where it can act, too
+    const shooters = runMatrix([byId("lascannon-team")], [byId("heavy-tank")], { phase: "fight" });
+    expect(shooters.cells[0]![0]!.result.expectedDamage).toBeGreaterThan(0);
     expect(m.cells[0]![0]!.result.finalState).toBeUndefined();
   });
 });

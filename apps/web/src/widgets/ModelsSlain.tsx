@@ -42,5 +42,6 @@ export const modelsSlainWidget = defineWidget({
   description: t("widget.slain.desc"),
   inputs: ["result"],
   defaultSize: { w: 6, h: 6 },
+  minSize: { w: 4, h: 4 },
   render: ModelsSlain,
 });

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import { t } from "../i18n";
 
 /** Labelled form field; the label wraps the control so it is always associated. */
@@ -283,38 +283,3 @@ export function Sheet({ open, onClose, label, children, className }: { open: boo
 }
 
 // ---------- meters ----------
-
-/** Thin points progress bar with a `1,985 / 2,000` label; warn above 90 %, danger over the limit. */
-export function PointsMeter({ points, limit, tone, label, compact }: { points: string; limit: string; tone: "ok" | "warn" | "danger"; label: string; compact?: boolean; }) {
-  const raw = Number(points.replace(/[^\d.-]/g, ""));
-  const lim = Number(limit.replace(/[^\d.-]/g, ""));
-  const pct = lim > 0 ? Math.min(100, Math.max(0, (raw / lim) * 100)) : raw > 0 ? 100 : 0;
-  return (
-    <div className={`pts-meter tone-${tone} ${compact ? "compact" : ""}`.trim()} role="meter" aria-valuemin={0} aria-valuemax={lim} aria-valuenow={raw} aria-label={label}>
-      <div className="pts-meter-label">
-        <strong>{points}</strong>
-        <span className="muted"> / {limit}</span>
-      </div>
-      <div className="pts-bar" aria-hidden="true">
-        <span style={{ "--w": `${pct}%` } as CSSProperties} />
-      </div>
-    </div>
-  );
-}
-
-/** Detachment points as pips: ● ● ○ plus a "2 / 3 DP" label. */
-export function DpPips({ spent, limit, label }: { spent: number; limit: number; label: string }) {
-  const total = Math.max(limit, spent);
-  const pips = Array.from({ length: total }, (_, i) => i < spent);
-  const over = spent > limit;
-  return (
-    <span className={`dp-pips ${over ? "over" : ""}`.trim()} role="img" aria-label={label}>
-      <span className="pips" aria-hidden="true">
-        {pips.map((on, i) => (
-          <span key={i} className={`pip ${on ? "on" : ""} ${on && i >= limit ? "extra" : ""}`.trim()} />
-        ))}
-      </span>
-      <span className="dp-label">{label}</span>
-    </span>
-  );
-}

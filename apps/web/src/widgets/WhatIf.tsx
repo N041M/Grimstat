@@ -129,7 +129,7 @@ export function WhatIf({ scenario, result, snapshot, running }: WidgetProps) {
         <span className="muted">{t("whatIf.base", { d: fmt(task.result.base.expectedDamage), s: fmt(task.result.base.expectedSlain), p: pct(task.result.base.pKill) })}</span>
         {task.running || stale ? <Spinner label={t(task.running ? "whatIf.running" : "whatIf.stale")} /> : null}
       </div>
-      <div className="grid-2">
+      <div className="grid-2 grid-fold">
         {attackerRows.length ? (
           <div>
             <h4 className="chart-h">{t("whatIf.attacker")}</h4>
@@ -184,5 +184,6 @@ export const whatIfWidget = defineWidget({
   description: t("widget.whatIf.desc"),
   inputs: ["scenario", "result", "snapshot"],
   defaultSize: { w: 6, h: 9 },
+  minSize: { w: 6, h: 6 },
   render: WhatIf,
 });

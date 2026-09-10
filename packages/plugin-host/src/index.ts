@@ -11,6 +11,8 @@ export interface WidgetDef<TProps = unknown> {
   /** Which inputs this widget consumes. */
   inputs: Array<"scenario" | "result" | "snapshot" | "roster">;
   defaultSize: { w: number; h: number };
+  /** Smallest size the panel stays legible at, in grid units. Defaults are derived when omitted. */
+  minSize?: { w: number; h: number };
   /** Framework-specific render token (e.g. a React component). Kept opaque here. */
   render: TProps;
   requires?: string;

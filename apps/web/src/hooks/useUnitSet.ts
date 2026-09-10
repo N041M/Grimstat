@@ -6,6 +6,18 @@ import { t } from "../i18n";
 
 const WRITE_DEBOUNCE_MS = 250;
 
+/**
+ * Every hook on the same key mirrors the same set, so editing the Matrix's attackers also updates
+ * the copy the context column renders. Instances broadcast by reference and ignore their own echo.
+ */
+type SetListener = (entries: UnitEntry[], from: number) => void;
+const mirrors = new Map<string, Set<SetListener>>();
+let nextInstanceId = 1;
+
+function broadcast(key: string, entries: UnitEntry[], from: number): void {
+  for (const l of mirrors.get(key) ?? []) l(entries, from);
+}
+
 export interface UnitSetState {
   entries: UnitEntry[];
   setEntries: (next: SetStateAction<UnitEntry[]>) => void;
@@ -23,6 +35,8 @@ export function useUnitSet(key: string): UnitSetState {
   const [entries, setEntriesState] = useState<UnitEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const timer = useRef<number | undefined>(undefined);
+  const instance = useRef(0);
+  if (!instance.current) instance.current = nextInstanceId++;
   const envRef = useRef({ snapshot, scenario, withOverrides });
   envRef.current = { snapshot, scenario, withOverrides };
 
@@ -59,12 +73,37 @@ export function useUnitSet(key: string): UnitSetState {
   }, [key]);
 
   useEffect(() => {
+    const mine = instance.current;
+    // Adopting never re-broadcasts (only `setEntries` does), so mirrors cannot ping-pong.
+    const listener: SetListener = (next, from) => {
+      if (from === mine) return;
+      setEntriesState(next);
+    };
+    const set = mirrors.get(key) ?? new Set<SetListener>();
+    set.add(listener);
+    mirrors.set(key, set);
+    return () => {
+      set.delete(listener);
+      if (!set.size) mirrors.delete(key);
+    };
+  }, [key]);
+
+  useEffect(() => {
     if (!loaded) return;
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => void setSetting(key, toStored(entries)).catch(() => undefined), WRITE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer.current);
   }, [entries, loaded, key]);
 
-  const setEntries = useCallback((next: SetStateAction<UnitEntry[]>) => setEntriesState(next), []);
+  const setEntries = useCallback(
+    (next: SetStateAction<UnitEntry[]>) =>
+      setEntriesState((cur) => {
+        const value = typeof next === "function" ? next(cur) : next;
+        // After the commit, so a mirror never re-renders another component mid-render.
+        queueMicrotask(() => broadcast(key, value, instance.current));
+        return value;
+      }),
+    [key],
+  );
   return { entries, setEntries, loaded };
 }

@@ -75,5 +75,6 @@ export const weaponBreakdownWidget = defineWidget({
   description: t("widget.weapons.desc"),
   inputs: ["result"],
   defaultSize: { w: 12, h: 7 },
+  minSize: { w: 6, h: 4 },
   render: WeaponBreakdown,
 });

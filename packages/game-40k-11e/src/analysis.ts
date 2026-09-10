@@ -53,12 +53,20 @@ export interface MatrixResult {
   cells: MatrixCell[][]; // [attackerIndex][defenderIndex]
 }
 
-/** Melee-only attackers are resolved in the fight phase (charged); everyone else as given. */
+/**
+ * Resolve an attacker in the phase where it can actually fight.
+ *
+ * A unit with no weapon for the requested phase would score a flat zero, which says nothing about
+ * the unit; when it has weapons for the other phase, use that instead. An explicit phase is still
+ * honoured whenever the unit can act in it.
+ */
 export function phaseFor(a: ScenarioUnit, context: Partial<ScenarioContext>): Partial<ScenarioContext> {
-  if (context.phase) return context;
   const enabled = a.weapons.filter((w) => w.enabled && w.count > 0);
-  const meleeOnly = enabled.length > 0 && enabled.every((w) => w.kind === "melee");
-  return meleeOnly ? { ...context, phase: "fight", charged: context.charged ?? true } : context;
+  if (!enabled.length) return context;
+  const wanted = context.phase ?? "shooting";
+  const kind = wanted === "fight" ? "melee" : "ranged";
+  if (enabled.some((w) => w.kind === kind)) return context;
+  return wanted === "fight" ? { ...context, phase: "shooting" } : { ...context, phase: "fight", charged: context.charged ?? true };
 }
 
 /** Many-vs-many: every attacker against every defender under one context. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MatrixCell, MatrixResult } from "@grimstat/game-40k-11e";
 import type { SimResult } from "@grimstat/schema";
-import { heatColour, heatmapModel, metricIsAverage, metricValue } from "./heatmap";
+import { ALPHA_BASE, ALPHA_SPAN, FLIP_AT, heatColour, heatRamp, heatT, heatmapModel, metricIsAverage, metricValue } from "./heatmap";
 import { MATRIX_CSV_HEADER, csvEscape, csvLine, matrixToCsv } from "./matrixCsv";
 
 function result(over: Partial<SimResult>): SimResult {
@@ -38,20 +38,27 @@ const matrix: MatrixResult = {
 };
 
 describe("heatColour", () => {
-  it("maps min → faint and max → strong, monotonically", () => {
+  it("runs the alpha ramp from 0.04 to 0.74 across the range", () => {
     const lo = heatColour(0, 0, 10);
     const mid = heatColour(5, 0, 10);
     const hi = heatColour(10, 0, 10);
     expect(lo.t).toBe(0);
     expect(mid.t).toBeCloseTo(0.5);
     expect(hi.t).toBe(1);
-    expect(lo.background).toContain("6%");
-    expect(hi.background).toContain("86%");
-    expect(lo.color).toBeUndefined();
-    expect(hi.color).toBe("var(--accent-contrast)");
-    const pct = (c: ReturnType<typeof heatColour>) => Number(/(\d+)%/.exec(c.background)?.[1]);
-    expect(pct(lo)).toBeLessThan(pct(mid));
-    expect(pct(mid)).toBeLessThan(pct(hi));
+    expect(lo.alpha).toBeCloseTo(ALPHA_BASE);
+    expect(mid.alpha).toBeCloseTo(ALPHA_BASE + ALPHA_SPAN / 2);
+    expect(hi.alpha).toBeCloseTo(ALPHA_BASE + ALPHA_SPAN);
+    // Painted as the ink token at that opacity, so it is rgba(23,24,27,α) light and rgba(237,236,232,α) dark.
+    expect(lo.background).toBe("color-mix(in srgb, var(--ink) 4.0%, transparent)");
+    expect(hi.background).toBe("color-mix(in srgb, var(--ink) 74.0%, transparent)");
+    expect(heatT(2.5, 0, 10)).toBeCloseTo(0.25);
+  });
+
+  it("flips the label to the inverse ink past the halfway-ish point only", () => {
+    expect(heatColour(5, 0, 10).color).toBe("var(--ink-2)");
+    expect(heatColour(FLIP_AT * 10, 0, 10).color).toBe("var(--ink-2)");
+    expect(heatColour(FLIP_AT * 10 + 0.01, 0, 10).color).toBe("var(--btn-fg)");
+    expect(heatColour(10, 0, 10).color).toBe("var(--btn-fg)");
   });
 
   it("clamps out-of-range values and tolerates a degenerate range", () => {
@@ -62,8 +69,19 @@ describe("heatColour", () => {
   });
 
   it("renders missing values transparently", () => {
-    expect(heatColour(undefined, 0, 1)).toEqual({ t: 0, background: "transparent", color: undefined });
+    expect(heatColour(undefined, 0, 1)).toEqual({ t: 0, alpha: 0, background: "transparent", color: undefined });
     expect(heatColour(Number.NaN, 0, 1).background).toBe("transparent");
+  });
+});
+
+describe("heatRamp", () => {
+  it("samples the ramp end to end for the legend strip", () => {
+    const swatches = heatRamp(1.2, 14.6);
+    expect(swatches).toHaveLength(8);
+    expect(swatches[0]!.alpha).toBeCloseTo(ALPHA_BASE);
+    expect(swatches[7]!.alpha).toBeCloseTo(ALPHA_BASE + ALPHA_SPAN);
+    const alphas = swatches.map((s) => s.alpha);
+    expect([...alphas].sort((a, b) => a - b)).toEqual(alphas);
   });
 });
 

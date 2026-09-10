@@ -63,5 +63,6 @@ export const damageDistributionWidget = defineWidget({
   description: t("widget.damage.desc"),
   inputs: ["result"],
   defaultSize: { w: 12, h: 8 },
+  minSize: { w: 6, h: 6 },
   render: DamageDistribution,
 });

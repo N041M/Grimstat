@@ -3,7 +3,7 @@ import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grims
 import type { UnitCost } from "@grimstat/resolver";
 import { groupBounds, hasWargear, isCharacterSheet, modelCountOf, toggleWargear, unitDisplayName, weaponBaseNames, type ModelGroup } from "../../lib/roster";
 import { fmtInt } from "../../lib/format";
-import { DiagnosticItem } from "./DiagnosticsPanel";
+import { DiagnosticItem } from "./DiagnosticItem";
 import { Field, Icon, Switch } from "../ui";
 import { t, tn } from "../../i18n";
 

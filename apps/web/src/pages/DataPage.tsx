@@ -1,19 +1,22 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Override, Roster, Scenario, Snapshot } from "@grimstat/schema";
-import { db, exportAll, importAll, overrideKey, type ExportBundle, type OverrideRecord } from "../db";
+import { db, exportAll, importAll, overrideKey, type ExportBundle, type OverrideRecord, type SnapshotMeta } from "../db";
 import { nowIso } from "../lib/ids";
 import { download } from "../lib/download";
 import { useApp } from "../state/AppContext";
 import { loadSampleSnapshot } from "../lib/snapshotSource";
-import { fmtDate } from "../lib/format";
-import { Empty } from "../components/ui";
+import { summarisePatch } from "../lib/overrides";
+import { fmtDay, fmtInt } from "../lib/format";
+import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead } from "../components/kit";
 import { SnapshotCompare } from "../components/data/SnapshotCompare";
 import { FetchSources } from "../components/data/FetchSources";
 import { SourceAttribution } from "../components/data/SourceAttribution";
-import { OverridesPill } from "./OverridesPage";
 import { hrefFor } from "../router";
 import { PageHeader } from "../components/shell";
 import { t } from "../i18n";
+
+/** Label (status dot) | System | Units | Weapons | Built. */
+const SNAPSHOT_COLUMNS = "minmax(180px,2fr) 120px 100px 100px 110px";
 
 function zodIssues(err: { issues: Array<{ path: Array<string | number>; message: string }> }, max = 15): string[] {
   const lines = err.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`);
@@ -27,11 +30,99 @@ async function readFile(e: ChangeEvent<HTMLInputElement>): Promise<{ name: strin
   return { name: f.name, text: await f.text() };
 }
 
+/** "3 effects", "Feel No Pain 5+", … — the change an override makes, in one mono line. */
+function patchSummary(patch: Record<string, unknown>): string {
+  const s = summarisePatch(patch);
+  switch (s.kind) {
+    case "effects":
+      return t("overrides.patch.effects", { n: s.n });
+    case "none":
+      return t("overrides.patch.none");
+    case "fnp":
+      return t("overrides.patch.fnp", { n: s.n });
+    case "fields":
+      return t("overrides.patch.fields", { keys: s.keys.join(", ") });
+  }
+}
+
+function SnapshotRow({ m, active, busy, onUse, onRemove }: { m: SnapshotMeta; active: boolean; busy: boolean; onUse: () => void; onRemove: () => void }) {
+  return (
+    <GridRow className={active ? "current" : ""} onClick={active ? undefined : onUse} title={active ? t("data.activeRow", { id: m.id }) : t("data.useRow", { id: m.id })}>
+      <GridCell>
+        <span className="snap-label">
+          <span className={`snap-dot ${active ? "on" : ""}`.trim()} aria-hidden="true" />
+          <span className="snap-name">{m.label ?? m.id}</span>
+        </span>
+      </GridCell>
+      <GridCell mono tone="muted">
+        {m.gameSystemId}
+      </GridCell>
+      <GridCell align="end" mono>
+        {fmtInt(m.counts.datasheets)}
+      </GridCell>
+      <GridCell align="end" mono>
+        {fmtInt(m.counts.weapons)}
+      </GridCell>
+      <GridCell align="end" mono tone="faint">
+        {fmtDay(m.updatedAt)}
+      </GridCell>
+      <span className="snap-actions">
+        <button
+          type="button"
+          disabled={busy || active}
+          onClick={(e) => {
+            e.stopPropagation();
+            onUse();
+          }}
+        >
+          {t("data.use")}
+        </button>
+        <button
+          type="button"
+          className="danger"
+          disabled={busy}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
+          {t("data.delete")}
+        </button>
+      </span>
+    </GridRow>
+  );
+}
+
 export function DataPage() {
   const { snapshotList, activeSnapshotId, rawSnapshot, setActiveSnapshot, refreshSnapshots, refreshOverrides, notify, overrides, overrideStatus } = useApp();
   const [busy, setBusy] = useState(false);
   const snapInput = useRef<HTMLInputElement>(null);
   const bundleInput = useRef<HTMLInputElement>(null);
+
+  const overrideNames = useMemo(() => {
+    const d = rawSnapshot?.data;
+    const byEntity = (o: OverrideRecord): string | undefined => {
+      if (!d) return undefined;
+      switch (o.entity) {
+        case "ability":
+          return d.abilities.find((x) => x.id === o.id)?.name;
+        case "datasheet":
+        case "priceRule":
+          return d.datasheets.find((x) => x.id === o.id)?.name;
+        case "detachment":
+          return d.detachments.find((x) => x.id === o.id)?.name;
+        case "enhancement":
+          return d.enhancements.find((x) => x.id === o.id)?.name;
+        case "stratagem":
+          return d.stratagems.find((x) => x.id === o.id)?.name;
+        case "faction":
+          return d.factions.find((x) => x.id === o.id)?.name;
+        default:
+          return undefined;
+      }
+    };
+    return new Map(overrides.map((o) => [o.key, byEntity(o)] as const));
+  }, [overrides, rawSnapshot]);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -143,136 +234,87 @@ export function DataPage() {
 
   return (
     <>
-      <PageHeader title={t("nav.data")} subtitle={t("page.sub.data", { n: snapshotList.length, o: overrides.length })} />
-      <div className="page-body stack">
-      <p className="page-lede">{t("data.intro")}</p>
+      <PageHeader
+        title={t("data.title")}
+        subtitle={t("page.sub.data")}
+        actions={
+          <>
+            <button type="button" disabled={busy} onClick={() => void loadSample()}>
+              {t("data.loadSample")}
+            </button>
+            <button type="button" className="primary" disabled={busy} onClick={() => snapInput.current?.click()}>
+              {t("data.importSnapshot")}
+            </button>
+            <input ref={snapInput} type="file" accept="application/json,.json" className="sr-only" aria-label={t("data.importSnapshot")} onChange={(e) => void importSnapshot(e)} />
+          </>
+        }
+      />
+      <div className="page-body data-body">
+        <FetchSources />
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>{t("data.getData")}</h2>
-        </div>
-        <div className="row">
-          <button type="button" className="primary" disabled={busy} onClick={() => void loadSample()}>
-            {t("data.loadSample")}
-          </button>
-          <button type="button" disabled={busy} onClick={() => snapInput.current?.click()}>
-            {t("data.importSnapshot")}
-          </button>
-          <input ref={snapInput} type="file" accept="application/json,.json" className="sr-only" aria-label={t("data.importSnapshot")} onChange={(e) => void importSnapshot(e)} />
-        </div>
-        <p className="small muted" style={{ marginTop: "0.6rem" }}>{t("data.importHint")}</p>
-      </section>
+        <section aria-labelledby="data-snapshots-h">
+          <PanelHead id="data-snapshots-h" title={t("data.stored")} aside={<span className="t-meta">{t("data.snapshotsMeta", { n: snapshotList.length })}</span>} />
+          {snapshotList.length === 0 ? (
+            <p className="data-empty">{t("data.empty")}</p>
+          ) : (
+            <div className="data-table-card">
+              <GridTable columns={SNAPSHOT_COLUMNS} label={t("data.stored")} className="snap-table">
+                <GridHead>
+                  <GridHeadCell>{t("data.col.label")}</GridHeadCell>
+                  <GridHeadCell>{t("data.col.system")}</GridHeadCell>
+                  <GridHeadCell align="end">{t("data.col.units")}</GridHeadCell>
+                  <GridHeadCell align="end">{t("data.col.weapons")}</GridHeadCell>
+                  <GridHeadCell align="end">{t("data.col.built")}</GridHeadCell>
+                </GridHead>
+                {snapshotList.map((m) => (
+                  <SnapshotRow key={m.id} m={m} active={m.id === activeSnapshotId} busy={busy} onUse={() => void setActiveSnapshot(m.id)} onRemove={() => void remove(m.id)} />
+                ))}
+              </GridTable>
+            </div>
+          )}
+        </section>
 
-      <FetchSources />
+        <section aria-labelledby="data-overrides-h">
+          <PanelHead id="data-overrides-h" title={t("overrides.title")} aside={<a className="data-link" href={hrefFor("data", "overrides")}>{overrides.length ? t("overrides.open") : t("overrides.add")}</a>} />
+          {overrides.length === 0 ? (
+            <p className="data-empty">{t("overrides.emptyLine")}</p>
+          ) : (
+            <div className="ovr-cards">
+              {overrides.map((o) => (
+                <a key={o.key} className="ovr-card" href={hrefFor("data", "overrides")}>
+                  <span className="ovr-target">{overrideNames.get(o.key) ?? o.id}</span>
+                  <span className="ovr-change">{o.note ?? patchSummary(o.patch)}</span>
+                  <span className="ovr-scope">{t("overrides.scope.global")}</span>
+                </a>
+              ))}
+            </div>
+          )}
+          <p className="data-note">{t("overrides.dataSummary", { n: overrides.length, applied: overrideStatus.applied })}</p>
+        </section>
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>{t("data.stored")}</h2>
-          <OverridesPill />
-        </div>
-        {snapshotList.length === 0 ? (
-          <Empty>{t("data.empty")}</Empty>
-        ) : (
-          <div className="list">
-            {snapshotList.map((m) => (
-              <div key={m.id} className={`list-item ${m.id === activeSnapshotId ? "active" : ""}`}>
-                <div className="grow">
-                  <div className="row">
-                    <strong>{m.label ?? m.id}</strong>
-                    {m.id === activeSnapshotId ? <span className="badge accent">{t("data.active")}</span> : null}
-                    <span className="badge">{m.gameSystemId}</span>
-                  </div>
-                  <dl className="kv" style={{ marginTop: 6 }}>
-                    <dt>{t("data.id")}</dt>
-                    <dd className="mono">{m.id}</dd>
-                    <dt>{t("data.checksum")}</dt>
-                    <dd className="mono">{m.checksum}</dd>
-                    <dt>{t("data.counts")}</dt>
-                    <dd>
-                      {t("data.countsLine", { factions: m.counts.factions, datasheets: m.counts.datasheets, abilities: m.counts.abilities, detachments: m.counts.detachments, stratagems: m.counts.stratagems, priceRules: m.counts.priceRules })}
-                      {m.conflicts ? ` · ${t("data.conflicts", { n: m.conflicts })}` : ""}
-                    </dd>
-                    <dt>{t("data.sources")}</dt>
-                    <dd>
-                      {m.sources.length ? (
-                        <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
-                          {m.sources.map((s, i) => (
-                            <li key={i}>
-                              <span className="mono">{s.adapter}</span>
-                              {s.ref ? ` @ ${s.ref}` : ""}
-                              {s.url ? ` · ${s.url}` : ""} · {fmtDate(s.fetchedAt)}
-                              {s.notes ? <span className="muted"> — {s.notes}</span> : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        "–"
-                      )}
-                    </dd>
-                    <dt>{t("data.date")}</dt>
-                    <dd>{fmtDate(m.updatedAt)}</dd>
-                  </dl>
-                </div>
-                <div className="actions">
-                  <button type="button" className="sm primary" disabled={busy || m.id === activeSnapshotId} onClick={() => void setActiveSnapshot(m.id)}>
-                    {t("data.use")}
-                  </button>
-                  <button type="button" className="sm danger" disabled={busy} onClick={() => void remove(m.id)}>
-                    {t("data.delete")}
-                  </button>
-                </div>
-              </div>
-            ))}
+        <section aria-labelledby="data-compare-h">
+          <PanelHead id="data-compare-h" title={t("data.compare")} aside={<span className="t-meta">{t("data.compare.meta")}</span>} />
+          <SnapshotCompare snapshotList={snapshotList} activeSnapshotId={activeSnapshotId} />
+        </section>
+
+        <section aria-labelledby="data-attribution-h">
+          <PanelHead id="data-attribution-h" title={t("data.attribution")} aside={rawSnapshot ? <span className="t-meta">{rawSnapshot.label ?? rawSnapshot.id}</span> : undefined} />
+          <SourceAttribution sources={rawSnapshot?.sources} />
+        </section>
+
+        <section aria-labelledby="data-backup-h">
+          <PanelHead id="data-backup-h" title={t("data.backup")} />
+          <div className="data-actions">
+            <button type="button" disabled={busy} onClick={() => void doExportAll()}>
+              {t("data.exportAll")}
+            </button>
+            <button type="button" disabled={busy} onClick={() => bundleInput.current?.click()}>
+              {t("data.importAll")}
+            </button>
+            <input ref={bundleInput} type="file" accept="application/json,.json" className="sr-only" aria-label={t("data.importAll")} onChange={(e) => void doImportAll(e)} />
+            <span className="data-note">{t("data.backupHint")}</span>
           </div>
-        )}
-      </section>
-
-      <section className="panel" aria-labelledby="data-attribution-h">
-        <div className="panel-head">
-          <h2 id="data-attribution-h">{t("data.attribution")}</h2>
-          {rawSnapshot ? <span className="badge">{rawSnapshot.label ?? rawSnapshot.id}</span> : null}
-        </div>
-        <p className="small muted">{t("data.attribution.intro")}</p>
-        <SourceAttribution sources={rawSnapshot?.sources} />
-      </section>
-
-      <section className="panel" aria-labelledby="data-overrides-h">
-        <div className="panel-head">
-          <h2 id="data-overrides-h">{t("overrides.title")}</h2>
-          <OverridesPill />
-        </div>
-        <p className="small muted">{t("overrides.intro")}</p>
-        <div className="row">
-          <a className="btn" href={hrefFor("data", "overrides")}>
-            {t("overrides.open")}
-          </a>
-          <span className="small muted">{t("overrides.dataSummary", { n: overrides.length, applied: overrideStatus.applied })}</span>
-        </div>
-      </section>
-
-      <section className="panel" aria-labelledby="data-compare-h">
-        <div className="panel-head">
-          <h2 id="data-compare-h">{t("data.compare")}</h2>
-        </div>
-        <p className="small muted">{t("data.compare.intro")}</p>
-        <SnapshotCompare snapshotList={snapshotList} activeSnapshotId={activeSnapshotId} />
-      </section>
-
-      <section className="panel">
-        <div className="panel-head">
-          <h2>{t("data.backup")}</h2>
-        </div>
-        <div className="row">
-          <button type="button" disabled={busy} onClick={() => void doExportAll()}>
-            {t("data.exportAll")}
-          </button>
-          <button type="button" disabled={busy} onClick={() => bundleInput.current?.click()}>
-            {t("data.importAll")}
-          </button>
-          <input ref={bundleInput} type="file" accept="application/json,.json" className="sr-only" aria-label={t("data.importAll")} onChange={(e) => void doImportAll(e)} />
-        </div>
-        <p className="small muted" style={{ marginTop: "0.6rem" }}>{t("data.backupHint")}</p>
-      </section>
+        </section>
       </div>
     </>
   );

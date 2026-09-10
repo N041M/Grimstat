@@ -19,6 +19,11 @@ export function detachmentPointsFor(size: BattleSize): number {
   return size === "custom" ? BATTLE_SIZES["strike-force"].detachmentPoints : BATTLE_SIZES[size].detachmentPoints;
 }
 
+/** Enhancements a battle size allows (same custom-size rule as the Detachment Points budget). */
+export function enhancementsFor(size: BattleSize): number {
+  return size === "custom" ? BATTLE_SIZES["strike-force"].enhancements : BATTLE_SIZES[size].enhancements;
+}
+
 export function newRoster(opts: { snapshot: Snapshot; factionId: string; battleSize: BattleSize; name?: string; pointsLimit?: number }): Roster {
   const now = nowIso();
   const faction = opts.snapshot.data.factions.find((f) => f.id === opts.factionId);
@@ -246,6 +251,23 @@ export function diffRosters(prev: Roster, next: Roster, snapshot: Snapshot): Ros
   }
   for (const u of a.units) if (!byIdB.has(u.id)) removed.push({ id: u.id, name: u.name, points: u.cost.total });
   return { added, removed, changed, pointsBefore: a.points, pointsAfter: b.points };
+}
+
+/**
+ * What one saved revision did, for the editor's history list. Deliberately coarse: a revision is
+ * one auto-save, so a single unit change is the common case and anything busier is just a count.
+ */
+export type RevisionChange = { kind: "created" } | { kind: "added" | "removed" | "changed"; name: string } | { kind: "detachments" } | { kind: "multi"; n: number };
+
+export function describeRevisionChange(prev: Roster | undefined, next: Roster, snapshot: Snapshot): RevisionChange {
+  if (!prev) return { kind: "created" };
+  const d = diffRosters(prev, next, snapshot);
+  const total = d.added.length + d.removed.length + d.changed.length;
+  if (total === 0) return JSON.stringify(prev.detachments) === JSON.stringify(next.detachments) ? { kind: "multi", n: 0 } : { kind: "detachments" };
+  if (total > 1) return { kind: "multi", n: total };
+  if (d.added.length) return { kind: "added", name: d.added[0]!.name };
+  if (d.removed.length) return { kind: "removed", name: d.removed[0]!.name };
+  return { kind: "changed", name: d.changed[0]!.name };
 }
 
 /** "/units/3" → 3; anything else → undefined. */

@@ -100,7 +100,7 @@ export function UnitCards({ scenario }: WidgetProps) {
   return (
     <div className="stack">
       <UnitCard unit={scenario.attacker} title={t("side.attacker")} />
-      <hr style={{ border: 0, borderTop: "1px solid var(--border)" }} />
+      <hr style={{ border: 0, borderTop: "1px solid var(--line)" }} />
       <UnitCard unit={scenario.defender} title={t("side.defender")} />
     </div>
   );
@@ -112,5 +112,6 @@ export const unitCardsWidget = defineWidget({
   description: t("widget.units.desc"),
   inputs: ["scenario"],
   defaultSize: { w: 6, h: 9 },
+  minSize: { w: 4, h: 5 },
   render: UnitCards,
 });

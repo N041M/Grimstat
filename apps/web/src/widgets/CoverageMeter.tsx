@@ -22,15 +22,15 @@ function Meter({ c, label }: { c: CoverageReport; label: string }) {
       </div>
       <div className="chart-legend">
         <span>
-          <span className="sw" style={{ background: "var(--ok)" }} />
+          <span className="sw" style={{ background: "var(--good)" }} />
           {t("coverage.tier1", { n: c.tier1 })}
         </span>
         <span>
-          <span className="sw" style={{ background: "var(--brass)" }} />
+          <span className="sw" style={{ background: "var(--mid)" }} />
           {t("coverage.tier2", { n: c.tier2 })}
         </span>
         <span>
-          <span className="sw" style={{ background: "var(--danger)" }} />
+          <span className="sw" style={{ background: "var(--accent)" }} />
           {t("coverage.tier3", { n: c.tier3 })}
         </span>
       </div>
@@ -118,5 +118,6 @@ export const coverageMeterWidget = defineWidget({
   description: t("widget.coverage.desc"),
   inputs: ["scenario", "result", "snapshot"],
   defaultSize: { w: 6, h: 9 },
+  minSize: { w: 4, h: 5 },
   render: CoverageMeter,
 });

@@ -14,7 +14,7 @@ export interface HBarRow {
   actionLabel?: string;
 }
 
-const TONES: Record<NonNullable<HBarRow["tone"]>, string> = { bar: "var(--chart-bar)", brass: "var(--brass)", ok: "var(--ok)", info: "var(--info)", danger: "var(--danger)" };
+const TONES: Record<NonNullable<HBarRow["tone"]>, string> = { bar: "var(--ink)", brass: "var(--mid)", ok: "var(--good)", info: "var(--ink-2)", danger: "var(--accent)" };
 
 /**
  * Horizontal bar chart in plain CSS (grid + proportional widths). Rows are a list so screen readers

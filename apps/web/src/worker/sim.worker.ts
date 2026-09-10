@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import * as Comlink from "comlink";
 import type { Scenario, ScenarioContext, ScenarioUnit, SimResult, Snapshot } from "@grimstat/schema";
-import { durabilityProfile, efficiencyRanking, runMatrix, runScenario, type DurabilityEntry, type EfficiencyRow, type MatrixResult } from "@grimstat/game-40k-11e";
+import { durabilityIndex, durabilityProfile, efficiencyRanking, runMatrix, runScenario, type DurabilityEntry, type DurabilityIndexRow, type EfficiencyRow, type MatrixResult } from "@grimstat/game-40k-11e";
 import { evaluateTurnPlan, optimiseTurn, type TurnPlanInput, type TurnPlanResult, type TurnPlanStep } from "../lib/turn";
 import { reverseMathhammer, sensitivity, type ReverseInput, type ReverseResult, type SensitivityResult } from "../lib/gameExtras";
 
@@ -31,6 +31,8 @@ export interface SimWorkerApi {
   matrix(attackers: ScenarioUnit[], defenders: ScenarioUnit[], context: Partial<ScenarioContext>, enabledToggles: string[], snapshot?: SnapshotRef): Timed<MatrixResult>;
   /** One defender against attacker archetypes (Analyses → Durability). */
   durability(defender: ScenarioUnit, opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, snapshot?: SnapshotRef): Timed<DurabilityEntry[]>;
+  /** Points of shooting needed to remove each unit (Analyses → Matrix's durability index card). */
+  durabilityIndex(defenders: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, snapshot?: SnapshotRef): Timed<DurabilityIndexRow[]>;
   /** Attackers ranked by damage per point across target archetypes (Analyses → Efficiency). */
   efficiency(attackers: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { targetIds?: string[] }, snapshot?: SnapshotRef): Timed<EfficiencyRow[]>;
   /** Joint target allocation for one turn (Analyses → Turn optimiser). */
@@ -86,6 +88,10 @@ const api: SimWorkerApi = {
   durability(defender, opts, snapshot) {
     const snap = resolve(snapshot);
     return timed(() => durabilityProfile(defender, { ...opts, ...(snap ? { snapshot: snap } : {}) }));
+  },
+  durabilityIndex(defenders, opts, snapshot) {
+    const snap = resolve(snapshot);
+    return timed(() => durabilityIndex(defenders, { ...opts, ...(snap ? { snapshot: snap } : {}) }));
   },
   efficiency(attackers, opts, snapshot) {
     const snap = resolve(snapshot);

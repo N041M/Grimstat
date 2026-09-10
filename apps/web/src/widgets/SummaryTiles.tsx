@@ -46,5 +46,6 @@ export const summaryTilesWidget = defineWidget({
   description: t("widget.summary.desc"),
   inputs: ["result"],
   defaultSize: { w: 12, h: 3 },
+  minSize: { w: 8, h: 4 },
   render: SummaryTiles,
 });
