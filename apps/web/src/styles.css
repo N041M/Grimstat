@@ -1674,3 +1674,103 @@ a.btn {
 a.btn:hover {
   border-color: var(--brass);
 }
+
+/* ---------- Data: fetch from community sources ---------- */
+.source-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 0;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  min-width: 0;
+}
+.source-options legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+}
+.source-option {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  cursor: pointer;
+}
+.source-option:has(input:checked) {
+  border-color: var(--accent);
+}
+.source-option input {
+  margin-top: 0.25rem;
+  flex-shrink: 0;
+}
+.source-option .desc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.source-options:disabled .source-option {
+  opacity: 0.7;
+  cursor: default;
+}
+.progress-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.progress-item {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+.progress-item.failed {
+  border-color: var(--danger);
+}
+.progress-item.parsed {
+  border-color: var(--ok);
+}
+.progress-item progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin: 0.35rem 0;
+  accent-color: var(--accent);
+}
+.progress-item details summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.result-box {
+  border: 1px solid var(--ok);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  background: var(--panel);
+}
+.attribution-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.footer-credits {
+  display: block;
+  margin-top: 0.25rem;
+}
+code.cmd {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  user-select: all;
+  overflow-wrap: anywhere;
+}

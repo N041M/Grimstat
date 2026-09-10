@@ -1,6 +1,7 @@
 import { currentPlan } from "@grimstat/entitlements";
 import { gameSystem, manifest } from "@grimstat/game-40k-11e";
 import { host } from "../plugin";
+import { hrefFor } from "../router";
 import { t } from "../i18n";
 
 export function AboutPage() {
@@ -22,6 +23,19 @@ export function AboutPage() {
         <h2>{t("about.dataTitle")}</h2>
         <p>{t("about.data1")}</p>
         <p>{t("about.data2")}</p>
+      </section>
+      <section className="panel">
+        <h2>{t("about.getDataTitle")}</h2>
+        <ul>
+          <li>{t("about.getData1")}</li>
+          <li>{t("about.getData2")}</li>
+          <li>{t("about.getData3")}</li>
+        </ul>
+        <p>
+          <a className="btn" href={hrefFor("data")}>
+            {t("about.getDataLink")}
+          </a>
+        </p>
       </section>
       <section className="panel">
         <h2>{t("about.systemTitle")}</h2>

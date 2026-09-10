@@ -2,6 +2,8 @@
 
 An **unofficial, fan-made, local-first** statistics dashboard and army builder for Warhammer 40,000.
 
+**Live app:** https://n041m.github.io/Grimstat/ (deployed from `master` by GitHub Actions; everything runs in your browser, nothing is uploaded).
+
 - Models unit-vs-unit and army-vs-army interactions with exact probability distributions (Monte Carlo fallback).
 - Army builder with 11th-edition validation (Detachment Points, Leader/Support, tiered points).
 - Everything that changes with a codex, dataslate or edition is **data or a plugin** — never core code.
@@ -50,4 +52,8 @@ pnpm cli diff data/snapshots/<old>.json data/snapshots/<new>.json
 
 Scenarios built from a 10th-edition snapshot run under the 10th-edition rules model automatically (`scenario.gameSystemId`).
 
-See `docs/DESIGN.md` for the research findings, architecture and roadmap.
+## Deployment
+
+`.github/workflows/pages.yml` builds `apps/web` with `VITE_BASE=/<repo>/` and publishes it to GitHub Pages on every push to `master`; `ci.yml` runs the typecheck and the test suite. The app uses a hash router, so deep links work under the sub-path.
+
+See `docs/DESIGN.md` for the research findings, architecture and roadmap, `docs/MODELLING-NOTES.md` for what the maths assumes, and `docs/PLUGINS.md` for extension points.

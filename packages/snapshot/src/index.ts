@@ -9,3 +9,4 @@ export type { BuildSnapshotInput } from "./build";
 export { diffSnapshots, fieldChanges } from "./diff";
 export type { SnapshotDiff, EntityChange, EntityRef, FieldChange, PointsChange, DiffEntity } from "./diff";
 export { loadSyntheticSnapshot } from "./synthetic/index";
+export { pruneFactionsWithoutDatasheets } from "./prune";

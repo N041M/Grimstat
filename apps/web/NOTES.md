@@ -1,8 +1,58 @@
 # apps/web — notes and requests for other packages
 
 Status: Phase 3 web app (Vite + React 18 + TypeScript, offline PWA), the Phase 4 army builder ("Armies" section),
-the Phase 5 army-level analyses ("Analyses" section) and the Phase 6 additions (reverse mathhammer, what-if widget,
-snapshot comparison, rules overrides). `pnpm typecheck` clean, `pnpm vitest run apps/web` green.
+the Phase 5 army-level analyses ("Analyses" section), the Phase 6 additions (reverse mathhammer, what-if widget,
+snapshot comparison, rules overrides) and the Phase 7 in-browser data import for the GitHub Pages deployment.
+`pnpm typecheck` clean, `pnpm vitest run apps/web` green.
+
+## Phase 7 — fetch from community sources in the browser (GitHub Pages) — what is where
+
+- **Data page → "Fetch from community sources"** (`src/components/data/FetchSources.tsx`): the two sources whose hosts
+  send `access-control-allow-origin: *` — `mfm-yaml` (raw.githubusercontent.com) and `bsdata-json` (api.github.com
+  tree listing + raw files). Wahapedia sends no CORS header, so it stays CLI-only; the panel says so and shows
+  `pnpm cli import --system wh40k-11e --out data/snapshots` plus a README link. Each source is a labelled checkbox with
+  `SOURCES[id].role`, `attribution` and `licence` and a size hint; the optional BSData faction filter is a
+  comma-separated, case-insensitive match on catalogue file names (passed to `fetchSource` as `filter`; libraries and
+  the game-system file are always downloaded). Selection + filter persist in `settings` under `data.fetch.selection`.
+  Progress list per source (waiting / downloading n/total files with a `<progress>` / parsing / parsed with counts,
+  warning count and a `<details>` sample of the first 5 warnings / failed), then merge counts, build, and a result box
+  with id, counts and the source refs (MFM version, BSData git SHA). Errors show a kind-specific hint (GitHub API quota
+  for `api.github.com` 403/429, connectivity, other) with Retry and the CLI command.
+- **Worker** `src/worker/import.worker.ts` (Comlink, `run(request, onEvent)` + `cancel()`), a mirror of
+  `apps/cli/src/commands/import.ts`: `fetchSource` for every selected source (concurrently, one `AbortController`
+  injected through the `fetchImpl` wrapper) → `adapter.parse(files, { gameSystemId, fetchedAt, ref, url })` →
+  `mergeSources(parts)` → `buildSnapshot({ data, sources, conflicts, label })` (SHA-256 via WebCrypto in the worker).
+  Overrides are *not* applied at build time — the app applies them when it reads a snapshot. Progress goes back through
+  a `Comlink.proxy` callback (released in `finally`).
+- **Client** `src/worker/importClient.ts`: one run at a time; `cancel()` terminates the worker (the only way to interrupt
+  a synchronous parse) and rejects the pending run with `ImportCancelledError`; the worker is recreated lazily. A run
+  survives navigating away from the Data page: the snapshot is still stored + activated and a notice is shown; the
+  remounted panel shows a "still running" line with Cancel (`importClient().running`).
+- **Pure model + tests**: `src/lib/importProgress.ts` (`BROWSER_SOURCES`, `catalogueFilter`, `importRequestFor`,
+  `reduceProgress`, `classifyError`; label `Fetched <yyyy-mm-dd>[ · <filter>]`) with `importProgress.test.ts`, and
+  `src/lib/attribution.ts` (`attributionFor`, `attributionSummary`: `snapshot.sources[].adapter` → `SOURCES` attribution
+  + licence + collected refs, unknown adapters fall back to the id) with `attribution.test.ts`.
+- **Attribution**: Data page panel (`src/components/data/SourceAttribution.tsx`) for the active (raw) snapshot and a
+  credit line in the global footer (`footer.poweredBy`, e.g. "Powered by Wahapedia (…)" when a CLI snapshot with that
+  source is active). About page gained a "Getting data" section (browser fetch / CLI for Wahapedia / stays on device).
+- **Verified 2026-09-10** in the production build (`VITE_BASE=/Grimstat/ pnpm --filter @grimstat/web build && preview`,
+  opened at `http://localhost:4173/Grimstat/#/data`): filter "Necrons" → 10 BSData files + 31 MFM files, 12.0 s wall
+  time; BSData parsed 67 datasheets · 203 abilities · 12 detachments · 33 enhancements · 66 price rules (14 warnings),
+  MFM 1,361 datasheet stubs · 348 detachments · 1,193 enhancements · 1,751 price rules (62 warnings); merge 25
+  conflicts · 1,297 unmatched (the MFM stubs of the other factions) · 31 warnings; snapshot `snap_20260910_03aeea17`
+  = 30 factions · 67 datasheets · 201 abilities · 270 detachments · 0 stratagems · 84 price rules, stored and active,
+  label "Fetched 2026-09-10 · Necrons", refs `mfm-v1.4@2026-09-02` / BSData tree SHA. Nothing downloaded is committed.
+- **Sizes** (from the tree listing): the full BSData set is ~50 MB of JSON, the always-included libraries + game system
+  alone ~14 MB, Space Marines 5 MB, Necrons 1.5 MB; the MFM is ~1 MB. `api.github.com` allows 60 anonymous
+  requests/hour/IP and the tree listing costs one.
+- **Base-path audit** (`/Grimstat/`): nothing in `src/` builds absolute `/` URLs — permalinks use
+  `location.origin + location.pathname`, both workers use `new URL("./x.worker.ts", import.meta.url)`, routes are hash
+  links. Vite rewrites the two icon links in `index.html`; the manifest's `start_url`/`scope` come from `base`; the SW is
+  registered at `${base}sw.js` with scope `base` and its precache entries are relative to `sw.js` (so
+  `navigateFallback: "index.html"` resolves to `/Grimstat/index.html`). `vite preview` answers 404 for `/Grimstat`
+  without the trailing slash (GitHub Pages redirects to `/Grimstat/`). The in-app browser pane refuses service-worker
+  registration ("An unknown error occurred when fetching the script") although `sw.js` is served with 200 —
+  an artefact of that sandbox, not of the build.
 
 ## Phase 6 — reverse, what-if, compare, overrides — what is where
 
@@ -103,6 +153,24 @@ snapshot comparison, rules overrides). `pnpm typecheck` clean, `pnpm vitest run 
   No local shims remain.
 
 ## Requests / hand-offs
+
+### packages/adapters (browser import)
+- `fetchSource` downloads files strictly one after another; BSData catalogues are 1–5 MB each. A `concurrency`
+  option (and an `AbortSignal` in `FetchSourceOptions` instead of callers wrapping `fetchImpl`) would cut the wall time.
+- The GitHub tree API returns `size` per blob; passing `bytes`/`totalBytes` through `onProgress` would allow a real
+  byte-based progress bar instead of file counts (the UI shows "n/total files" today).
+- A `listBsdataCatalogues(fetchImpl)` helper (tree listing only, no downloads) would let the Data page offer a
+  catalogue checklist instead of the free-text file-name filter; it costs the same single `api.github.com` request.
+- Documenting the sizes in `SOURCES` (or a `sizeHint`) would remove the hard-coded "about 14 MB / 50 MB" strings in
+  `en.ts`.
+
+### packages/snapshot (browser import)
+- With a BSData catalogue filter, the MFM still contributes factions, detachments and enhancements for *every*
+  faction while only the filtered datasheets survive `dropStubs`: a Necrons-only fetch yields 30 factions and 270
+  detachments for 67 datasheets. A policy flag such as `dropFactionsWithoutDatasheets` (cascading to detachments,
+  enhancements and price rules) would keep filtered snapshots tidy; the UI shows the counts as they are.
+- `mergeSources` and `buildSnapshot` are ~1–2 s of synchronous CPU for a one-faction snapshot; fine inside the worker,
+  noticeable if they ever ran on the main thread.
 
 ### packages/snapshot
 - **`loadSyntheticSnapshot()` is wired** (`apps/web/src/lib/snapshotSource.ts`) and, now that

@@ -8,6 +8,7 @@ import { decodePermalink, permalinkTokenFromHash } from "./lib/permalink";
 import { decodeRosterPermalink, rosterTokenFromHash } from "./lib/rosterPermalink";
 import { cloneRoster } from "./lib/roster";
 import { db, saveRosterWithVersion } from "./db";
+import { attributionSummary } from "./lib/attribution";
 import { CalculatorPage } from "./pages/CalculatorPage";
 import { ScenariosPage } from "./pages/ScenariosPage";
 import { ArmiesPage } from "./pages/ArmiesPage";
@@ -149,7 +150,10 @@ export function App() {
           </ErrorBoundary>
         )}
       </main>
-      <footer className="footer">{t("footer.disclaimer")}</footer>
+      <footer className="footer">
+        <span>{t("footer.disclaimer")}</span>
+        {snapshot?.sources.length ? <span className="footer-credits">{t("footer.poweredBy", { list: attributionSummary(snapshot.sources) })}</span> : null}
+      </footer>
     </div>
   );
 }

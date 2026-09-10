@@ -8,6 +8,8 @@ import { loadSampleSnapshot } from "../lib/snapshotSource";
 import { fmtDate } from "../lib/format";
 import { Empty } from "../components/ui";
 import { SnapshotCompare } from "../components/data/SnapshotCompare";
+import { FetchSources } from "../components/data/FetchSources";
+import { SourceAttribution } from "../components/data/SourceAttribution";
 import { OverridesPill } from "./OverridesPage";
 import { hrefFor } from "../router";
 import { t } from "../i18n";
@@ -25,7 +27,7 @@ async function readFile(e: ChangeEvent<HTMLInputElement>): Promise<{ name: strin
 }
 
 export function DataPage() {
-  const { snapshotList, activeSnapshotId, setActiveSnapshot, refreshSnapshots, refreshOverrides, notify, overrides, overrideStatus } = useApp();
+  const { snapshotList, activeSnapshotId, rawSnapshot, setActiveSnapshot, refreshSnapshots, refreshOverrides, notify, overrides, overrideStatus } = useApp();
   const [busy, setBusy] = useState(false);
   const snapInput = useRef<HTMLInputElement>(null);
   const bundleInput = useRef<HTMLInputElement>(null);
@@ -163,6 +165,8 @@ export function DataPage() {
         <p className="small muted" style={{ marginTop: "0.6rem" }}>{t("data.importHint")}</p>
       </section>
 
+      <FetchSources />
+
       <section className="panel">
         <div className="panel-head">
           <h2>{t("data.stored")}</h2>
@@ -223,6 +227,15 @@ export function DataPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="panel" aria-labelledby="data-attribution-h">
+        <div className="panel-head">
+          <h2 id="data-attribution-h">{t("data.attribution")}</h2>
+          {rawSnapshot ? <span className="badge">{rawSnapshot.label ?? rawSnapshot.id}</span> : null}
+        </div>
+        <p className="small muted">{t("data.attribution.intro")}</p>
+        <SourceAttribution sources={rawSnapshot?.sources} />
       </section>
 
       <section className="panel" aria-labelledby="data-overrides-h">
