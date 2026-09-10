@@ -12,4 +12,6 @@ export * from "./shapes";
 export * from "./terrain";
 export * from "./distance";
 export * from "./los";
+export * from "./movement";
 export * from "./board";
+export * from "./layout";

@@ -195,14 +195,31 @@ apps/web
 
 ## Phases
 
-| Phase | Deliverable | Rough size |
+| Phase | Deliverable | Status |
 |---|---|---|
-| **B1 Geometry kernel** | `packages/board`: vectors, hulls, terrain prisms with floors, 3D distance, engagement range, true LoS, cover, coherency, zones, objective control — pure and unit-tested | 1 session |
-| B1b Movement & charge | `reachable` with climbing and path cost, `chargeGeometry`, `hidden`; terrain layout schema + 4 generic layouts; layout editor | 1 session |
+| **B1 Geometry kernel** | `packages/board`: vectors, hulls, terrain prisms with floors, 3D distance, engagement range, true LoS, cover, coherency, zones, objective control | **done** |
+| **B1b Movement & charge** | `reachable` with climbing and path cost, `chargeGeometry` with an exact final leg, `hidden`, the layout schema and four generic layouts with a validator | **done** |
 | B2 The table | Battle page: r3f renderer, both cameras, deploy both lists, drag with legality overlays, measure/LoS/cover/threat/charge tools, expected shooting from any unit to any target, save/share plans | 2 sessions |
 | B3 Resolution & missions | `packages/game`: phases, actions, dice mode, casualty allocation, CP/VP, generic missions, Force Disposition generation, hot-seat play, replay/undo, battle report | 2 sessions |
 | B4 AI opponent v1 | `packages/ai`: deployment, movement, shooting, charges, fights, scoring; Easy/Normal; play vs computer end to end | 2 sessions |
 | B5 Depth | Stratagems from data, Tier-2 abilities applied automatically, transports/reserves/deep strike, overwatch, battle-shock, leaders/support on the table, Hard difficulty with rollouts, coach mode | 2+ sessions |
+
+### What the kernel settled along the way
+
+Three answers fell out of the geometry that a 2D model would have had to hard-code, and one of them is
+genuinely counter-intuitive:
+
+- A wall that hides a 2" trooper does not hide a 3.5" Rhino, from the same spot, at the same range.
+- A model on a ruin's **ground floor is already engaged** with one on the first floor above it —
+  engagement range reaches five inches up, and 4.5" of storey is inside that. Charging "upstairs" to
+  the first floor costs nothing extra; the second floor is what forces a climb.
+- Climbing is paid for out of the Move characteristic, so a unit's threat range is not a circle. It
+  is a shape that terrain carves, and `reachable` returns that shape rather than a radius.
+
+Two performance notes for B4, where the AI will call all of this in a loop: a 6" move for a
+ten-model unit costs about 60 ms at half-inch resolution, and a 10-versus-10 charge about 30 ms once
+the search is bounded by the best answer found so far (it was 350 ms before that bound). Both need
+the caching the AI section describes before they run inside a search.
 
 ## Decisions (defaults chosen)
 
