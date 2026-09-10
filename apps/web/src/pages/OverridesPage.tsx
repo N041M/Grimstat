@@ -11,6 +11,7 @@ import { AbilitySearch, useAbilitySearch, tierLabel, type AbilityHit } from "../
 import { EffectForm } from "../components/overrides/EffectForm";
 import { OverridesList, RawPatchEditor } from "../components/overrides/OverridesList";
 import { Badge, Empty, Field } from "../components/ui";
+import { PageHeader } from "../components/shell";
 import { t } from "../i18n";
 
 export function OverridesPill({ compact }: { compact?: boolean }) {
@@ -175,19 +176,21 @@ export function OverridesPage() {
   const editingForm: EffectFormState | undefined = editor && editor.editing !== undefined && editor.effects[editor.editing] ? effectToForm(editor.effects[editor.editing]!) : undefined;
 
   return (
-    <div className="stack">
-      <div className="page-head">
-        <div>
-          <h1>{t("overrides.title")}</h1>
-          <p>{t("overrides.intro")}</p>
-        </div>
-        <div className="row">
-          <OverridesPill />
-          <a className="btn" href={hrefFor("data")}>
-            {t("overrides.back")}
-          </a>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title={t("overrides.title")}
+        subtitle={t("page.sub.overrides", { n: overrides.length })}
+        actions={
+          <>
+            <OverridesPill />
+            <a className="btn" href={hrefFor("data")}>
+              {t("overrides.back")}
+            </a>
+          </>
+        }
+      />
+      <div className="page-body stack">
+      <p className="page-lede">{t("overrides.intro")}</p>
 
       <div className="analysis overrides-layout">
         <aside className="analysis-controls stack">
@@ -296,6 +299,7 @@ export function OverridesPage() {
           </section>
         </section>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

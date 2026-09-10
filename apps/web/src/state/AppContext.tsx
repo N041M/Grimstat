@@ -12,6 +12,9 @@ export interface Notice {
   details?: string[];
 }
 
+/** Whether the result on screen matches the current inputs. Drives the dot on the brand mark. */
+export type SolveState = "current" | "pending";
+
 export interface AppContextValue {
   ready: boolean;
   /** The active snapshot with every stored override applied — what the calculator, armies and analyses read. */
@@ -37,6 +40,13 @@ export interface AppContextValue {
   refreshSnapshots(): Promise<void>;
   notify(text: string, kind?: NoticeKind, details?: string[]): void;
   dismissNotice(): void;
+  /** Solve state reported by whichever screen is running the worker (see `useReportSolveState`). */
+  solveState: SolveState;
+  setSolveState(s: SolveState): void;
+  /** Command palette: any screen may open it (brand mark, ⌘K, the Scenarios filter field). */
+  paletteOpen: boolean;
+  openPalette(): void;
+  closePalette(): void;
 }
 
 export const NOTICE_AUTO_DISMISS_MS = 4000;
@@ -53,6 +63,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [scenarioLoadKey, setLoadKey] = useState(0);
   const [notice, setNotice] = useState<Notice | undefined>(undefined);
   const noticeTimer = useRef<number | undefined>(undefined);
+  const [solveState, setSolveStateRaw] = useState<SolveState>("current");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  const setSolveState = useCallback((s: SolveState) => setSolveStateRaw((prev) => (prev === s ? prev : s)), []);
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  const closePalette = useCallback(() => setPaletteOpen(false), []);
 
   const notify = useCallback((text: string, kind: NoticeKind = "info", details?: string[]) => {
     setNotice(details ? { kind, text, details } : { kind, text });
@@ -149,8 +165,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AppContextValue>(
-    () => ({ ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice }),
-    [ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice],
+    () => ({ ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette }),
+    [ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -160,4 +176,20 @@ export function useApp(): AppContextValue {
   const v = useContext(Ctx);
   if (!v) throw new Error("useApp must be used inside AppProvider");
   return v;
+}
+
+/**
+ * Publish a screen's solve state to the shell (the dot on the brand mark). Call it from
+ * whichever screen owns the worker run, e.g. `useReportSolveState(sim.running)`.
+ * The state resets to "current" when that screen unmounts.
+ */
+export function useReportSolveState(pending: boolean): void {
+  const { setSolveState } = useApp();
+  useEffect(() => {
+    setSolveState(pending ? "pending" : "current");
+  }, [pending, setSolveState]);
+  useEffect(
+    () => () => setSolveState("current"),
+    [setSolveState],
+  );
 }

@@ -25,7 +25,7 @@ export function applyTheme(p: ThemePreference): ResolvedTheme {
   const r = resolveTheme(p);
   document.documentElement.setAttribute("data-theme", r);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", r === "dark" ? "#15161a" : "#f3efe6");
+  if (meta) meta.setAttribute("content", r === "dark" ? "#131417" : "#fbfaf8");
   return r;
 }
 

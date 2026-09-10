@@ -12,6 +12,7 @@ import { FetchSources } from "../components/data/FetchSources";
 import { SourceAttribution } from "../components/data/SourceAttribution";
 import { OverridesPill } from "./OverridesPage";
 import { hrefFor } from "../router";
+import { PageHeader } from "../components/shell";
 import { t } from "../i18n";
 
 function zodIssues(err: { issues: Array<{ path: Array<string | number>; message: string }> }, max = 15): string[] {
@@ -141,13 +142,10 @@ export function DataPage() {
     });
 
   return (
-    <div className="stack">
-      <div className="page-head">
-        <div>
-          <h1>{t("nav.data")}</h1>
-          <p>{t("data.intro")}</p>
-        </div>
-      </div>
+    <>
+      <PageHeader title={t("nav.data")} subtitle={t("page.sub.data", { n: snapshotList.length, o: overrides.length })} />
+      <div className="page-body stack">
+      <p className="page-lede">{t("data.intro")}</p>
 
       <section className="panel">
         <div className="panel-head">
@@ -275,6 +273,7 @@ export function DataPage() {
         </div>
         <p className="small muted" style={{ marginTop: "0.6rem" }}>{t("data.backupHint")}</p>
       </section>
-    </div>
+      </div>
+    </>
   );
 }

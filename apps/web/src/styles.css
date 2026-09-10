@@ -1,60 +1,186 @@
-/* ---------- Theme tokens ---------- */
-:root {
-  color-scheme: dark;
-  --bg: #15161a;
-  --bg-2: #1b1d22;
-  --panel: #1f2127;
-  --panel-2: #262932;
-  --border: #30333c;
-  --border-strong: #454956;
-  --text: #d8d3c4;
-  --text-strong: #f0ece0;
-  --muted: #8f8b80;
-  --accent: #b8323a;
-  --accent-strong: #d33c45;
-  --accent-contrast: #fff5f5;
-  --brass: #b08d3c;
-  --ok: #5f9c6a;
-  --warn: #c99a3a;
-  --danger: #d0454d;
-  --info: #5a8fbf;
-  --chart-bar: #b8323a;
-  --chart-bar-dim: #6e2a2f;
-  --chart-shade: rgba(176, 141, 60, 0.18);
-  --chart-line: #d8d3c4;
-  --chart-grid: #2c2f37;
-  --focus: #e0b24a;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
-  --radius: 6px;
-  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+/* ---------- Fonts (self-hosted so the app stays offline-capable) ---------- */
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/IBMPlexSans-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
-:root[data-theme="light"] {
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/IBMPlexMono-400-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/IBMPlexMono-500-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/IBMPlexMono-600-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---------- Design tokens ----------
+   Light is the base; dark overrides under [data-theme="dark"]. The "system" theme
+   option resolves to one of the two at runtime (see theme.ts) and stamps data-theme,
+   so no rule here may depend on prefers-color-scheme alone. */
+:root {
   color-scheme: light;
-  --bg: #f3efe6;
-  --bg-2: #ebe6da;
-  --panel: #fbf9f4;
-  --panel-2: #f1ede3;
-  --border: #d9d3c4;
-  --border-strong: #b9b2a0;
-  --text: #2a2b30;
-  --text-strong: #15161a;
-  --muted: #6d695e;
-  --accent: #9c2a31;
-  --accent-strong: #b8323a;
-  --accent-contrast: #fff;
-  --brass: #8a6c22;
-  --ok: #3f7d4a;
-  --warn: #9a6f14;
-  --danger: #b1303a;
-  --info: #35689a;
-  --chart-bar: #9c2a31;
-  --chart-bar-dim: #d7a3a7;
-  --chart-shade: rgba(138, 108, 34, 0.16);
-  --chart-line: #2a2b30;
-  --chart-grid: #ddd7c8;
-  --focus: #8a5a00;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.08);
+  --bg: #fbfaf8;
+  --panel: #ffffff;
+  --rail: #f5f4f0;
+  --hover: #f5f4f0;
+  --line: #e5e3de;
+  --line-soft: #efeeea;
+  --dash: #cfcdc7;
+  --ink: #17181b;
+  --ink-2: #54534f;
+  --muted: #74736e;
+  --faint: #9a9892;
+  --dim: #c9c7c1;
+  --track: #d6d4ce;
+  --fill: #efeeea;
+  --btn-bg: #17181b;
+  --btn-fg: #fbfaf8;
+  --shadow: rgba(23, 24, 27, 0.16);
+  --accent: #c8352b;
+  --accent-hover: #96251d;
+  --good: #3f9e6c;
+  --mid: #4a4b4f; /* third-rank chart series */
+
+  --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 6px;
+  --radius-input: 4px;
+  --radius-btn: 5px;
+  --radius-overlay: 8px;
+  --radius-pill: 12px;
+  --gutter: 22px;
+
+  /* Compatibility aliases: screens not yet restyled keep rendering on the new palette. */
+  --bg-2: var(--rail);
+  --panel-2: var(--rail);
+  --border: var(--line);
+  --border-strong: var(--dash);
+  --text: var(--ink);
+  --text-strong: var(--ink);
+  --accent-strong: var(--accent-hover);
+  --accent-contrast: var(--btn-fg);
+  --brass: var(--mid);
+  --ok: var(--good);
+  --warn: var(--accent);
+  --danger: var(--accent);
+  --info: var(--ink-2);
+  --focus: var(--accent);
+  --chart-bar: var(--ink);
+  --chart-bar-dim: var(--dim);
+  --chart-shade: var(--fill);
+  --chart-line: var(--ink);
+  --chart-grid: var(--line-soft);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #131417;
+  --panel: #191a1e;
+  --rail: #0f1013;
+  --hover: #1f2025;
+  --line: #2a2b30;
+  --line-soft: #212227;
+  --dash: #3a3b40;
+  --ink: #edece8;
+  --ink-2: #bcbbb6;
+  --muted: #8e8d88;
+  --faint: #6e6d69;
+  --dim: #3d3e44;
+  --track: #34353a;
+  --fill: #232429;
+  --btn-bg: #edece8;
+  --btn-fg: #131417;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --mid: #a9a8a3;
+}
+
+/* ---------- Typography ----------
+   Hard rule: every number, code, id, timestamp and axis label is set in the mono face.
+   Only running prose keeps numerals in the sans face. */
+.mono,
+.num,
+input[type="number"],
+td.num,
+.stat-value,
+time {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.t-hero {
+  font: 600 56px/1 var(--mono);
+  letter-spacing: -0.03em;
+}
+.t-metric {
+  font: 600 24px/1.1 var(--mono);
+  letter-spacing: -0.01em;
+}
+.t-title {
+  font: 600 20px/1.25 var(--font);
+  letter-spacing: -0.015em;
+}
+.t-section {
+  font: 600 13px/1.3 var(--font);
+}
+.t-body {
+  font: 400 13.5px/1.6 var(--font);
+}
+.t-cell {
+  font: 400 12px/1.4 var(--font);
+}
+.t-meta {
+  font: 400 11px/1.4 var(--mono);
+  color: var(--faint);
+}
+.t-eyebrow {
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+}
+.t-micro {
+  font: 500 10px/1.3 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.prose {
+  text-wrap: pretty;
+}
+
+@keyframes gs-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* ---------- Base ---------- */
@@ -125,177 +251,669 @@ code,
   border: 0;
 }
 
-/* ---------- Shell ---------- */
-.app {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  grid-template-rows: 1fr auto;
-  min-height: 100%;
-}
-.sidebar {
-  grid-row: 1 / span 2;
-  background: var(--bg-2);
-  border-right: 1px solid var(--border);
-  padding: 1rem 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  position: sticky;
-  top: 0;
+/* ---------- Shell ----------
+   56px icon rail | 240–264px context column | the page. Full viewport height, each region
+   scrolls on its own. The 1040px floor only applies above 900px; below that the shell folds
+   into the phone reduction at the bottom of this section. */
+.shell {
   height: 100vh;
+  display: grid;
+  grid-template-columns: 56px minmax(240px, 264px) minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  position: relative;
 }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0 0.5rem;
+@media (min-width: 900px) {
+  .shell {
+    min-width: 1040px;
+  }
 }
-.brand-mark {
-  width: 28px;
-  height: 28px;
-  flex: none;
-}
-.brand-name {
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--text-strong);
-}
-.brand-sub {
-  font-size: 0.7rem;
-  color: var(--muted);
-  letter-spacing: 0.05em;
-}
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.nav a,
-.nav .nav-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: var(--radius);
-  color: var(--text);
-  text-decoration: none;
-  border-left: 3px solid transparent;
-}
-.nav a:hover {
-  background: var(--panel);
-}
-.nav a[aria-current="page"] {
-  background: var(--panel);
-  border-left-color: var(--accent);
-  color: var(--text-strong);
-}
-.nav .nav-item.disabled {
-  color: var(--muted);
-  cursor: not-allowed;
-}
-.nav .badge {
-  margin-left: auto;
-}
-.sidebar-foot {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-.main {
-  padding: 1.25rem 1.5rem 2rem;
-  min-width: 0;
-}
-.footer {
-  grid-column: 2;
-  padding: 1rem 1.5rem;
-  font-size: 0.75rem;
-  color: var(--muted);
-  border-top: 1px solid var(--border);
-}
-.page-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 1rem;
-}
-.page-head p {
-  color: var(--muted);
-  margin: 0;
+.shell-loading {
+  padding: 22px;
 }
 
+/* ---- icon rail ---- */
+.rail {
+  border-right: 1px solid var(--line);
+  background: var(--rail);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 4px;
+  position: relative;
+  z-index: 2;
+}
+.rail-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: var(--btn-bg);
+  border: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  cursor: pointer;
+  position: relative;
+  flex: none;
+}
+.rail-mark:hover {
+  opacity: 0.85;
+}
+.rail-mark-diamond {
+  width: 11px;
+  height: 11px;
+  background: var(--accent);
+  transform: rotate(45deg);
+}
+.rail-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--rail);
+}
+.rail-dot.current {
+  background: var(--good);
+}
+.rail-dot.pending {
+  background: var(--accent);
+}
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rail-item {
+  width: 38px;
+  height: 38px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 13px/1 var(--mono);
+  color: var(--muted);
+  text-decoration: none;
+  cursor: pointer;
+  flex: none;
+}
+.rail-item:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.rail-item[aria-current="page"] {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+}
+.rail-spacer {
+  flex: 1;
+}
+.rail-theme {
+  position: relative;
+  flex: none;
+}
+.rail-theme-btn {
+  font: 400 14px/1 var(--font);
+  color: var(--faint);
+}
+.rail-theme-menu {
+  position: absolute;
+  left: 46px;
+  bottom: 0;
+  z-index: 30;
+  min-width: 132px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px var(--shadow);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.rail-theme-menu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 6px 9px;
+  border-radius: 4px;
+  font: 400 13px/1.3 var(--font);
+  color: var(--ink);
+  cursor: pointer;
+}
+.rail-theme-menu button:hover {
+  background: var(--hover);
+}
+.rail-theme-menu button[aria-checked="true"] {
+  font-weight: 600;
+}
+.rail-theme-menu button[aria-checked="true"]::after {
+  content: "·";
+  margin-left: 6px;
+  color: var(--accent);
+}
+
+/* ---- context column ---- */
+.ctx-col {
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+.ctx-head {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+}
+.ctx-head-eyebrow {
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+}
+.ctx-head-meta {
+  font: 400 11px/1 var(--mono);
+  color: var(--faint);
+}
+.ctx-body {
+  flex: none;
+}
+.ctx-spacer {
+  flex: 1;
+}
+.ctx-foot {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  flex: none;
+}
+.ctx-foot-eyebrow {
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--faint);
+  margin-bottom: 4px;
+}
+.ctx-foot-value {
+  font: 400 11px/1.3 var(--mono);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* the generic list-row pattern */
+.ctx-list {
+  display: flex;
+  flex-direction: column;
+}
+.ctx-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+}
+.ctx-row:hover {
+  background: var(--hover);
+}
+.ctx-row.selected {
+  background: var(--hover);
+  border-left-color: var(--accent);
+}
+.ctx-row-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.ctx-row-name {
+  font: 500 13px/1.3 var(--font);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ctx-row.selected .ctx-row-name {
+  font-weight: 600;
+}
+.ctx-row-value {
+  font: 400 11px/1.3 var(--mono);
+  color: var(--muted);
+  white-space: nowrap;
+  flex: none;
+}
+.ctx-row-meta {
+  display: block;
+  font: 400 10px/1.3 var(--mono);
+  color: var(--faint);
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+.ctx-lede {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.ctx-lede-name {
+  font: 600 15px/1.25 var(--font);
+  letter-spacing: -0.01em;
+}
+.ctx-lede-meta {
+  font: 400 11px/1.3 var(--mono);
+  color: var(--faint);
+  margin-top: 4px;
+}
+.ctx-new-wrap {
+  padding: 12px 16px;
+}
+.ctx-new {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 7px 0;
+  border-radius: var(--radius-btn);
+  border: 1px dashed var(--dash);
+  background: transparent;
+  font: 400 12px/1.3 var(--font);
+  color: var(--muted);
+  text-decoration: none;
+  cursor: pointer;
+}
+.ctx-new:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.ctx-empty {
+  margin: 0;
+  padding: 16px;
+  font: 400 12px/1.5 var(--font);
+  color: var(--faint);
+}
+
+/* ---- main region ---- */
+/* Block flow, not flex: a flex column stretches to its widest child, which would let a wide
+   table push the whole region sideways instead of scrolling inside its own `.table-wrap`. */
+.main-region {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  flex: none;
+}
+.page-header-title {
+  min-width: 0;
+}
+.page-header h1 {
+  margin: 0;
+  font: 600 20px/1.25 var(--font);
+  letter-spacing: -0.015em;
+  text-transform: none;
+  color: var(--ink);
+}
+.page-header-sub {
+  font: 400 11px/1.4 var(--mono);
+  color: var(--faint);
+  margin-top: 3px;
+}
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.page-header-actions > * {
+  white-space: nowrap;
+  flex: none;
+}
+/* Header buttons use the redesign's primary treatment: ink fill, inverse label, radius 5. */
+.page-header-actions button,
+.page-header-actions .btn {
+  border-radius: var(--radius-btn);
+  border-color: var(--line);
+  background: var(--panel);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 11px;
+}
+.page-header-actions button:hover:not(:disabled),
+.page-header-actions .btn:hover {
+  border-color: var(--ink);
+}
+.page-header-actions button.primary {
+  background: var(--btn-bg);
+  border-color: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: 600;
+}
+.page-header-actions button.primary:hover:not(:disabled) {
+  background: var(--btn-bg);
+  border-color: var(--btn-bg);
+  opacity: 0.88;
+}
+.page-header-actions button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.page-header-actions button.ghost:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--line);
+}
+.page-body {
+  padding: 16px 22px 26px;
+  min-width: 0;
+}
+/* Long-form intro under a page header (the copy that used to sit in `.page-head p`). */
+.page-lede {
+  margin: 0;
+  max-width: 78ch;
+  font: 400 13px/1.6 var(--font);
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+/* The Calculator's editable page title until the hero header lands. */
+.page-title-field {
+  display: block;
+}
+.page-title-field input {
+  font: 600 20px/1.25 var(--font);
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-input);
+  padding: 1px 6px;
+  margin-left: -7px;
+  width: 100%;
+  max-width: 420px;
+}
+.page-title-field input:hover {
+  border-color: var(--line);
+}
+.page-title-field input:focus {
+  border-color: var(--line);
+  background: var(--panel);
+}
+/* Routes that render their own full-bleed layout (the roster editor) still need the gutter. */
+.main-region > .roster-editor {
+  padding: 16px 22px 26px;
+  min-width: 0;
+}
+
+/* ---- notices (float above the shell; auto-dismiss lives in AppContext) ---- */
+.notice-layer {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 45;
+  max-width: min(460px, calc(100vw - 36px));
+}
+.notice-layer .notice {
+  margin-bottom: 0;
+  box-shadow: 0 12px 32px var(--shadow);
+  animation: gs-fade 0.12s ease-out;
+}
+
+/* ---- command palette ---- */
+.pal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 12, 0.44);
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.pal-panel {
+  width: min(560px, 86vw);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-overlay);
+  box-shadow: 0 24px 64px var(--shadow);
+  overflow: hidden;
+  animation: gs-fade 0.12s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+.pal-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.pal-diamond {
+  width: 9px;
+  height: 9px;
+  margin: 0 3px;
+  flex: none;
+  background: var(--accent);
+  transform: rotate(45deg);
+}
+.pal-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: 400 14px/1.4 var(--font);
+  padding: 0;
+}
+.pal-input::placeholder {
+  color: var(--faint);
+}
+.pal-esc {
+  font: 400 10px/1 var(--mono);
+  color: var(--faint);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 6px;
+  flex: none;
+}
+.pal-results {
+  max-height: 46vh;
+  overflow: auto;
+}
+.pal-group-label {
+  padding: 9px 14px 5px;
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--faint);
+}
+.pal-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.pal-row:hover,
+.pal-row.active {
+  background: var(--hover);
+}
+.pal-glyph {
+  width: 18px;
+  flex: none;
+  font: 400 11px/1 var(--mono);
+  color: var(--faint);
+}
+.pal-label {
+  font: 400 13px/1.3 var(--font);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pal-hint {
+  font: 400 10px/1 var(--mono);
+  color: var(--faint);
+  flex: none;
+}
+.pal-empty {
+  padding: 22px 14px;
+  text-align: center;
+  font: 400 13px/1.4 var(--font);
+  color: var(--faint);
+}
+.pal-foot {
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--rail);
+  display: flex;
+  gap: 14px;
+  font: 400 10px/1.4 var(--mono);
+  color: var(--faint);
+}
+
+/* ---- phone reduction (<900px): rail to the bottom, context column into a sheet ---- */
+.ctx-bar {
+  display: none;
+}
 @media (max-width: 899px) {
-  .app {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto;
-  }
-  .sidebar {
-    grid-row: auto;
-    position: static;
-    height: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: nowrap;
-    gap: 0.5rem;
-    padding: 0.45rem 0.6rem;
-    overflow: hidden;
-  }
-  .brand {
-    padding: 0;
-    flex: none;
-  }
-  .brand-sub {
-    display: none;
-  }
-  .nav {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    flex: 1;
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 56px;
     min-width: 0;
   }
-  .nav::-webkit-scrollbar {
+  .rail {
+    order: 2;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 0 10px;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+  }
+  .rail-mark {
+    margin-bottom: 0;
+  }
+  .rail-nav {
+    flex-direction: row;
+    gap: 2px;
+  }
+  .rail-item {
+    width: 36px;
+    height: 36px;
+  }
+  .rail-spacer {
     display: none;
   }
-  .nav a,
-  .nav .nav-item {
-    border-left: 0;
-    border-bottom: 3px solid transparent;
-    padding: 0.35rem 0.5rem;
-    white-space: nowrap;
+  .rail-theme-menu {
+    left: auto;
+    right: 0;
+    bottom: 46px;
   }
-  .nav a[aria-current="page"] {
-    border-left-color: transparent;
-    border-bottom-color: var(--accent);
+  .main-region {
+    order: 1;
   }
-  .main {
-    padding: 1rem;
-  }
-  .footer {
-    grid-column: 1;
-  }
-  .footer-tools {
+  .ctx-bar {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.6rem;
-    padding-bottom: 0.6rem;
-    border-bottom: 1px solid var(--border);
+    gap: 8px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--rail);
+    flex: none;
+    position: sticky;
+    top: 0;
+    z-index: 4;
   }
-  .footer-tools .nav-item {
+  .ctx-bar-btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    color: var(--muted);
+    gap: 8px;
+    padding: 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-btn);
+    background: var(--panel);
+    font: 500 11px/1.3 var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .ctx-sheet .ctx-col {
+    border-right: 0;
+    overflow: visible;
+    background: transparent;
+  }
+  .ctx-sheet .ctx-spacer {
+    display: none;
+  }
+  .main-region {
+    overflow-x: hidden;
+  }
+  .page-header {
+    /* The context bar already owns the sticky top slot on phones. */
+    position: static;
+    padding: 14px 16px 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .page-header-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .page-header-sub {
+    white-space: normal;
+  }
+  /* Wide content scrolls in its own container; the page itself never scrolls sideways. */
+  .page-body select,
+  .page-body input,
+  .page-body textarea {
+    max-width: 100%;
+  }
+  .page-body .table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .page-body {
+    padding: 14px 16px 24px;
+  }
+  .notice-layer {
+    right: 12px;
+    left: 12px;
+    bottom: 68px;
+    max-width: none;
   }
 }
 
@@ -794,8 +1412,12 @@ table.data input.dice {
 }
 @media (max-width: 899px) {
   .calc {
-    grid-template-columns: 1fr;
+    /* minmax(0,…) so a wide select or table shrinks the track instead of overflowing it. */
+    grid-template-columns: minmax(0, 1fr);
   }
+}
+.calc > * {
+  min-width: 0;
 }
 .unit-summary {
   font-size: 0.8rem;
@@ -2706,10 +3328,6 @@ a.btn:hover {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-}
-.footer-credits {
-  display: block;
-  margin-top: 0.25rem;
 }
 code.cmd {
   font-family: var(--mono);

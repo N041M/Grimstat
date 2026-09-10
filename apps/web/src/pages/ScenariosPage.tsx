@@ -3,11 +3,12 @@ import type { Scenario } from "@grimstat/schema";
 import { db } from "../db";
 import { useApp } from "../state/AppContext";
 import { navigate } from "../router";
-import { forStorage, touch } from "../lib/scenario";
+import { forStorage, newScenario, touch } from "../lib/scenario";
 import { newId, nowIso } from "../lib/ids";
 import { permalinkUrl } from "../lib/permalink";
 import { fmtDate } from "../lib/format";
 import { Empty } from "../components/ui";
+import { PageHeader, useContextNewAction } from "../components/shell";
 import { t } from "../i18n";
 
 export function ScenariosPage() {
@@ -30,6 +31,11 @@ export function ScenariosPage() {
     notify(t("scenario.saved", { name: rec.name }), "success");
     await refresh();
   };
+
+  // The context column's "+ New scenario" affordance starts a fresh scenario in the calculator.
+  useContextNewAction("scenarios", () => {
+    void replaceScenario(newScenario()).then(() => navigate("calculator"));
+  });
 
   const load = async (s: Scenario) => {
     await replaceScenario(s, s.snapshotId);
@@ -61,16 +67,18 @@ export function ScenariosPage() {
   };
 
   return (
-    <div className="stack">
-      <div className="page-head">
-        <div>
-          <h1>{t("nav.scenarios")}</h1>
-          <p>{t("scenarios.intro")}</p>
-        </div>
-        <button type="button" className="primary" onClick={() => void saveCurrent()}>
-          {t("scenarios.saveCurrent", { name: scenario.name })}
-        </button>
-      </div>
+    <>
+      <PageHeader
+        title={t("nav.scenarios")}
+        subtitle={t("page.sub.scenarios", { n: items?.length ?? 0 })}
+        actions={
+          <button type="button" className="primary" onClick={() => void saveCurrent()}>
+            {t("scenarios.saveCurrent", { name: scenario.name })}
+          </button>
+        }
+      />
+      <div className="page-body stack">
+      <p className="page-lede">{t("scenarios.intro")}</p>
       {items === undefined ? null : items.length === 0 ? (
         <Empty>{t("scenarios.empty")}</Empty>
       ) : (
@@ -105,6 +113,7 @@ export function ScenariosPage() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

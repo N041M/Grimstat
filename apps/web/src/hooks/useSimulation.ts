@@ -9,6 +9,8 @@ export interface SimulationState {
   elapsedMs: number | undefined;
   /** Scenario revision the current result belongs to. */
   resultFor: string | undefined;
+  /** True from the moment an input changes until the worker's answer for it lands. */
+  stale: boolean;
 }
 
 const DEBOUNCE_MS = 150;
@@ -23,7 +25,7 @@ function fingerprint(s: Scenario): string {
  * cancellation: only the most recent request's result is ever surfaced.
  */
 export function useSimulation(scenario: Scenario, snapshot: Snapshot | undefined): SimulationState {
-  const [state, setState] = useState<SimulationState>({ result: undefined, running: false, error: undefined, elapsedMs: undefined, resultFor: undefined });
+  const [state, setState] = useState<Omit<SimulationState, "stale">>({ result: undefined, running: false, error: undefined, elapsedMs: undefined, resultFor: undefined });
   const fp = fingerprint(scenario);
   const latestScenario = useRef(scenario);
   latestScenario.current = scenario;
@@ -55,5 +57,6 @@ export function useSimulation(scenario: Scenario, snapshot: Snapshot | undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fp, snapshot]);
 
-  return state;
+  // Stale covers the debounce window too, so the shell's solve dot reacts to the first keystroke.
+  return { ...state, stale: state.running || state.resultFor !== fp };
 }

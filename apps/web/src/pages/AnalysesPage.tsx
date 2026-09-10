@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getSetting, setSetting } from "../db";
 import { Tabs } from "../components/ui";
+import { PageHeader } from "../components/shell";
 import { MatrixTab } from "../components/analyses/MatrixTab";
 import { DurabilityTab } from "../components/analyses/DurabilityTab";
 import { EfficiencyTab } from "../components/analyses/EfficiencyTab";
@@ -45,13 +46,10 @@ export function AnalysesPage() {
   };
 
   return (
-    <div className="stack">
-      <div className="page-head">
-        <div>
-          <h1>{t("analyses.title")}</h1>
-          <p>{t("analyses.intro")}</p>
-        </div>
-      </div>
+    <>
+      <PageHeader title={t("analyses.title")} subtitle={t("page.sub.analyses")} />
+      <div className="page-body stack">
+      <p className="page-lede">{t("analyses.intro")}</p>
       <Tabs<AnalysisTab>
         label={t("analyses.tabs")}
         value={tab}
@@ -61,6 +59,7 @@ export function AnalysesPage() {
       <div role="tabpanel" aria-label={tabLabel(tab)}>
         {tab === "matrix" ? <MatrixTab /> : tab === "durability" ? <DurabilityTab /> : tab === "efficiency" ? <EfficiencyTab /> : tab === "turn" ? <TurnTab /> : <ReverseTab />}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

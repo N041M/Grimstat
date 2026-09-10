@@ -10,6 +10,7 @@ import { newId } from "../lib/ids";
 import { fmtDate, fmtInt } from "../lib/format";
 import { download } from "../lib/download";
 import { Dialog, Empty, Field, Icon, PointsMeter, Popover } from "../components/ui";
+import { PageHeader, useContextNewAction } from "../components/shell";
 import { t, type I18nKey } from "../i18n";
 
 export const battleSizeKey = (s: BattleSize): I18nKey => `battleSize.${s}` as I18nKey;
@@ -200,30 +201,37 @@ export function ArmiesPage() {
     void readFile(e.dataTransfer.files[0]);
   };
 
+  // The context column's "+ New army" affordance opens this page's dialog.
+  useContextNewAction("armies", () => {
+    if (snapshot) setDialog("new");
+  });
+
   const exportAll = () => download(`grimstat-armies-${new Date().toISOString().slice(0, 10)}.json`, { format: "grimstat-rosters", version: 1, exportedAt: new Date().toISOString(), rosters: items ?? [] });
 
   return (
-    <div className="stack">
-      <div className="page-head">
-        <div>
-          <h1>{t("nav.armies")}</h1>
-          <p>{t("armies.intro")}</p>
-        </div>
-        <div className="row">
-          <button type="button" className="primary" disabled={!snapshot || busy} onClick={() => setDialog("new")}>
-            <Icon name="plus" />
-            {t("armies.new")}
-          </button>
-          <button type="button" disabled={!snapshot || busy} onClick={() => setDialog("import")}>
-            <Icon name="file" />
-            {t("armies.importText")}
-          </button>
-          <button type="button" className="ghost" disabled={!items?.length || busy} onClick={exportAll}>
-            <Icon name="export" />
-            {t("armies.exportAll")}
-          </button>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title={t("nav.armies")}
+        subtitle={t("page.sub.armies", { n: items?.length ?? 0 })}
+        actions={
+          <>
+            <button type="button" className="primary" disabled={!snapshot || busy} onClick={() => setDialog("new")}>
+              <Icon name="plus" />
+              {t("armies.new")}
+            </button>
+            <button type="button" disabled={!snapshot || busy} onClick={() => setDialog("import")}>
+              <Icon name="file" />
+              {t("armies.importText")}
+            </button>
+            <button type="button" className="ghost" disabled={!items?.length || busy} onClick={exportAll}>
+              <Icon name="export" />
+              {t("armies.exportAll")}
+            </button>
+          </>
+        }
+      />
+      <div className="page-body stack">
+      <p className="page-lede">{t("armies.intro")}</p>
 
       {!snapshot ? (
         <Empty>
@@ -394,6 +402,7 @@ export function ArmiesPage() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

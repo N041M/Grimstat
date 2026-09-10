@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ScenarioUnit } from "@grimstat/schema";
-import { useApp } from "../state/AppContext";
+import { useApp, useReportSolveState } from "../state/AppContext";
 import { useSimulation } from "../hooks/useSimulation";
 import { UnitPicker } from "../components/UnitPicker";
 import { ContextControls } from "../components/ContextControls";
@@ -11,11 +11,14 @@ import { db } from "../db";
 import { forStorage, newScenario, touch } from "../lib/scenario";
 import { permalinkUrl } from "../lib/permalink";
 import { relay } from "../services";
+import { PageHeader } from "../components/shell";
 import { t } from "../i18n";
 
 export function CalculatorPage() {
   const { scenario, snapshot, activeSnapshotId, updateScenario, replaceScenario, scenarioLoadKey, notify } = useApp();
   const sim = useSimulation(scenario, snapshot);
+  // Publishes the solve state to the shell's brand-mark dot.
+  useReportSolveState(sim.stale);
   const [link, setLink] = useState<string | undefined>(undefined);
 
   const setUnit = (side: "attacker" | "defender") => (unit: ScenarioUnit) =>
@@ -50,26 +53,30 @@ export function CalculatorPage() {
   const inputs = useMemo(() => ({ scenario, result: sim.result, snapshot, running: sim.running, error: sim.error }), [scenario, sim.result, snapshot, sim.running, sim.error]);
 
   return (
-    <div className="stack">
-      <div className="page-head">
-        <div className="row">
-          <label className="field">
-            <span>{t("scenario.name")}</span>
-            <input type="text" value={scenario.name} style={{ minWidth: 260 }} onChange={(e) => updateScenario((s) => ({ ...s, name: e.target.value }))} />
+    <>
+      <PageHeader
+        title={
+          <label className="field page-title-field">
+            <span className="sr-only">{t("scenario.name")}</span>
+            <input type="text" value={scenario.name} aria-label={t("scenario.name")} onChange={(e) => updateScenario((s) => ({ ...s, name: e.target.value }))} />
           </label>
-        </div>
-        <div className="row">
-          <button type="button" className="primary" onClick={() => void save()}>
-            {t("scenario.save")}
-          </button>
-          <button type="button" onClick={() => void share()}>
-            {t("scenario.share")}
-          </button>
-          <button type="button" className="ghost" onClick={reset}>
-            {t("scenario.new")}
-          </button>
-        </div>
-      </div>
+        }
+        subtitle={t("page.sub.calculator", { att: scenario.attacker.name, def: scenario.defender.name })}
+        actions={
+          <>
+            <button type="button" className="primary" onClick={() => void save()}>
+              {t("scenario.save")}
+            </button>
+            <button type="button" onClick={() => void share()}>
+              {t("scenario.share")}
+            </button>
+            <button type="button" className="ghost" onClick={reset}>
+              {t("scenario.new")}
+            </button>
+          </>
+        }
+      />
+      <div className="page-body stack">
       {link ? (
         <div className="link-box">
           <input type="text" readOnly value={link} aria-label={t("scenario.permalink")} onFocus={(e) => e.currentTarget.select()} />
@@ -117,6 +124,7 @@ export function CalculatorPage() {
           <Dashboard id="calculator" inputs={inputs} />
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

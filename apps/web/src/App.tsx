@@ -1,15 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { NARROW_QUERY, useMediaQuery } from "./hooks/useMediaQuery";
-import { can } from "@grimstat/entitlements";
-import { currentPlan } from "@grimstat/entitlements";
 import { useApp } from "./state/AppContext";
-import { navigate, useRouteInfo, type Route } from "./router";
+import { navigate, useRouteInfo } from "./router";
 import { useTheme } from "./theme";
 import { decodePermalink, permalinkTokenFromHash } from "./lib/permalink";
 import { decodeRosterPermalink, rosterTokenFromHash } from "./lib/rosterPermalink";
 import { cloneRoster } from "./lib/roster";
 import { db, saveRosterWithVersion } from "./db";
-import { attributionSummary } from "./lib/attribution";
 import { CalculatorPage } from "./pages/CalculatorPage";
 import { ScenariosPage } from "./pages/ScenariosPage";
 import { ArmiesPage } from "./pages/ArmiesPage";
@@ -19,32 +16,22 @@ import { DataPage } from "./pages/DataPage";
 import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { Sheet } from "./components/ui";
+import { CommandPalette, ContextColumn, contextEyebrow, IconRail } from "./components/shell";
 import { t } from "./i18n";
-
-const NAV: Array<{ route: Route; label: () => string }> = [
-  { route: "calculator", label: () => t("nav.calculator") },
-  { route: "scenarios", label: () => t("nav.scenarios") },
-  { route: "armies", label: () => t("nav.armies") },
-  { route: "analyses", label: () => t("nav.analyses") },
-  { route: "data", label: () => t("nav.data") },
-  { route: "about", label: () => t("nav.about") },
-];
-
-function BrandMark() {
-  return (
-    <svg className="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
-      <rect width="64" height="64" rx="12" fill="var(--bg)" />
-      <path d="M32 8 56 32 32 56 8 32Z" fill="var(--accent)" />
-      <path d="M32 20 44 32 32 44 20 32Z" fill="var(--bg)" />
-      <path d="M32 26 38 32 32 38 26 32Z" fill="var(--text)" />
-    </svg>
-  );
-}
 
 export function App() {
   const { route, param } = useRouteInfo();
   const theme = useTheme();
-  const { ready, notice, dismissNotice, replaceScenario, notify, snapshot, activeSnapshotId } = useApp();
+  const { ready, notice, dismissNotice, replaceScenario, notify } = useApp();
+  const narrow = useMediaQuery(NARROW_QUERY);
+  const [sheet, setSheet] = useState(false);
+
+  // The context sheet is per-screen; leaving the screen closes it.
+  useEffect(() => setSheet(false), [route, param]);
+  useEffect(() => {
+    if (!narrow) setSheet(false);
+  }, [narrow]);
 
   // Permalinks: "#s=<token>" opens the scenario in the calculator (on load and when pasted later).
   useEffect(() => {
@@ -92,48 +79,36 @@ export function App() {
     return () => window.removeEventListener("hashchange", handle);
   }, [ready, notify]);
 
-  const themeLabel = theme.preference === "system" ? t("theme.system", { r: theme.resolved }) : theme.preference === "dark" ? t("theme.dark") : t("theme.light");
-  const narrow = useMediaQuery(NARROW_QUERY);
-
-  // Data label, theme, plan and the future Sync entry: sidebar foot on desktop, footer "More" row on narrow screens.
-  const sync = can("sync") ? (
-    <span className="nav-item disabled" aria-disabled="true" title={t("nav.syncHint")}>
-      {t("nav.sync")}
-      <span className="badge">{t("nav.soon")}</span>
-    </span>
-  ) : null;
-  const tools = (
-    <>
-      <span title={activeSnapshotId}>{snapshot ? t("shell.activeSnapshot", { label: snapshot.label ?? snapshot.id }) : t("shell.noSnapshot")}</span>
-      <button type="button" className="sm" onClick={theme.cycle} aria-label={t("theme.toggleAria")}>
-        {themeLabel}
-      </button>
-      <span className="badge">{t("shell.plan", { plan: currentPlan() })}</span>
-    </>
+  const page = !ready ? (
+    <p className="muted shell-loading">{t("shell.loading")}</p>
+  ) : (
+    <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
+      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "analyses" ? <AnalysesPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
+    </ErrorBoundary>
   );
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <BrandMark />
-          <div>
-            <div className="brand-name">Grimstat</div>
-            <div className="brand-sub">{t("brand.sub")}</div>
+    <div className={`shell ${narrow ? "narrow" : ""}`.trim()}>
+      <IconRail route={route} theme={theme} />
+      {narrow ? null : <ContextColumn route={route} param={param} />}
+      <main className="main-region">
+        {narrow ? (
+          <div className="ctx-bar">
+            <button type="button" className="ctx-bar-btn" onClick={() => setSheet(true)} aria-haspopup="dialog" aria-expanded={sheet} aria-label={t("ctxcol.openSheet")}>
+              <span aria-hidden="true">☰</span>
+              {contextEyebrow(route)}
+            </button>
           </div>
-        </div>
-        <nav className="nav" aria-label={t("nav.label")}>
-          {NAV.map((n) => (
-            <a key={n.route} href={`#/${n.route}`} aria-current={route === n.route ? "page" : undefined}>
-              {n.label()}
-            </a>
-          ))}
-          {narrow ? null : sync}
-        </nav>
-        {narrow ? null : <div className="sidebar-foot">{tools}</div>}
-      </aside>
-      <main className="main">
-        {notice ? (
+        ) : null}
+        {page}
+      </main>
+      {narrow ? (
+        <Sheet open={sheet} onClose={() => setSheet(false)} label={contextEyebrow(route)} className="ctx-sheet">
+          <ContextColumn route={route} param={param} inSheet />
+        </Sheet>
+      ) : null}
+      {notice ? (
+        <div className="notice-layer">
           <div className={`notice ${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}>
             <div>
               <div>{notice.text}</div>
@@ -149,25 +124,9 @@ export function App() {
               ×
             </button>
           </div>
-        ) : null}
-        {!ready ? (
-          <p className="muted">{t("shell.loading")}</p>
-        ) : (
-          <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
-            {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "analyses" ? <AnalysesPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
-          </ErrorBoundary>
-        )}
-      </main>
-      <footer className="footer">
-        {narrow ? (
-          <div className="footer-tools" aria-label={t("nav.more")}>
-            {tools}
-            {sync}
-          </div>
-        ) : null}
-        <span>{t("footer.disclaimer")}</span>
-        {snapshot?.sources.length ? <span className="footer-credits">{t("footer.poweredBy", { list: attributionSummary(snapshot.sources) })}</span> : null}
-      </footer>
+        </div>
+      ) : null}
+      <CommandPalette theme={theme} />
     </div>
   );
 }
