@@ -373,7 +373,7 @@ function resolveLinks(links: Link[], ctx: RosterImportContext, bySelectionId: Ma
 
 /** Imports a raw `.ros` document (BattleScribe roster XML). */
 export function importRosterXml(xml: string, snapshot: Snapshot, opts: RoszImportOptions = {}): { roster: Roster; warnings: string[] } {
-  const text = xml.replace(/^﻿/, "");
+  const text = xml.replace(/^\uFEFF/, "");
   const valid = XMLValidator.validate(text);
   if (valid !== true) throw new Error(`Invalid roster XML: ${valid.err.msg} (line ${valid.err.line}).`);
   const doc = parser.parse(text) as Record<string, unknown>;
@@ -431,7 +431,7 @@ function isZip(bytes: Uint8Array): boolean {
 function extractRosterXml(bytes: Uint8Array): string {
   if (!isZip(bytes)) {
     const text = strFromU8(bytes);
-    if (/^﻿?\s*<(\?xml|roster)\b/i.test(text)) return text;
+    if (/^\uFEFF?\s*<(\?xml|roster)\b/i.test(text)) return text;
     throw new Error("Not a .rosz archive (no zip signature) and not a .ros XML document.");
   }
   let entries: Record<string, Uint8Array>;
@@ -441,7 +441,7 @@ function extractRosterXml(bytes: Uint8Array): string {
     throw new Error(`Could not read the .rosz archive: ${e instanceof Error ? e.message : String(e)}`);
   }
   const names = Object.keys(entries).filter((n) => !n.endsWith("/"));
-  const pick = names.find((n) => /\.ros$/i.test(n)) ?? names.find((n) => /\.xml$/i.test(n)) ?? names.find((n) => /^﻿?\s*<\?xml/.test(strFromU8(entries[n]!.subarray(0, 64))));
+  const pick = names.find((n) => /\.ros$/i.test(n)) ?? names.find((n) => /\.xml$/i.test(n)) ?? names.find((n) => /^\uFEFF?\s*<\?xml/.test(strFromU8(entries[n]!.subarray(0, 64))));
   if (!pick) throw new Error(`No .ros roster found in the .rosz archive${names.length ? ` (entries: ${names.join(", ")})` : " (the archive is empty)"}.`);
   return strFromU8(entries[pick]!);
 }

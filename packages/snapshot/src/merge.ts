@@ -534,7 +534,14 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
   // ---- publications & game system -------------------------------------------------------------
   const publications: Publication[] = [];
   const seenPub = new Set<string>();
-  for (const part of ordered) for (const p of part.publications ?? []) if (!seenPub.has(p.id)) (seenPub.add(p.id), publications.push(p));
+  for (const part of ordered) {
+    for (const p of part.publications ?? []) {
+      if (!seenPub.has(p.id)) {
+        seenPub.add(p.id);
+        publications.push(p);
+      }
+    }
+  }
   const gameSystem: GameSystem = policy.gameSystem ?? sortMembers(ordered.map((p) => ({ adapter: adapterOf(p), item: p })), T).map((m) => m.item.gameSystem).find((g): g is GameSystem => !!g) ?? {
     id: datasheets[0]?.gameSystemId ?? "wh40k-11e",
     name: "Warhammer 40,000",

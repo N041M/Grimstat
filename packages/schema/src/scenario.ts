@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DiceExpr, Id, RecordMeta } from "./common";
-import { ModelProfile, WeaponKeyword, WeaponProfile } from "./gamedata";
+import type { ModelProfile, WeaponProfile } from "./gamedata";
+import { WeaponKeyword } from "./gamedata";
 import { EffectRecord } from "./effects";
 
 /** Defender allocation policy under 11e fast rolling (defender assigns save results in roll order). */

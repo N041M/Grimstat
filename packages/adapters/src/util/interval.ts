@@ -6,7 +6,7 @@ export interface CopyRange {
 
 /** Parse MFM interval notation: "[1,2]" -> {min:1,max:2}, "[3,)" -> {min:3}. Returns null when unparseable. */
 export function parseInterval(text: string): CopyRange | null {
-  const m = /^\s*[\[(]\s*(\d+)\s*,\s*(\d+)?\s*([\])])\s*$/.exec(text);
+  const m = /^\s*[[(]\s*(\d+)\s*,\s*(\d+)?\s*([\])])\s*$/.exec(text);
   if (!m) return null;
   let min = Number(m[1]);
   if (text.trim().startsWith("(")) min += 1;

@@ -5,21 +5,28 @@
   "description": "Unofficial, local-first Warhammer 40,000 statistics dashboard and army builder. Ships no Games Workshop data.",
   "packageManager": "pnpm@10.12.1",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "eslint .",
     "dev": "pnpm --filter @grimstat/web dev",
     "build": "pnpm --filter @grimstat/web build",
     "cli": "tsx apps/cli/src/main.ts"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/node": "^22.15.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "fast-check": "^4.1.1",
+    "globals": "^17.12.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^3.2.4"
   }
 }

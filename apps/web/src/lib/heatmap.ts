@@ -109,7 +109,17 @@ export function heatmapModel(matrix: MatrixResult, metric: MatrixMetric): Heatma
   const colTotals = matrix.defenders.map((_, d) => aggregate(values.map((row) => row[d]), average));
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
-  for (const row of values) for (const v of row) if (v !== undefined && Number.isFinite(v)) (min = Math.min(min, v)), (max = Math.max(max, v));
-  if (!Number.isFinite(min)) (min = 0), (max = 0);
+  for (const row of values) {
+    for (const v of row) {
+      if (v !== undefined && Number.isFinite(v)) {
+        min = Math.min(min, v);
+        max = Math.max(max, v);
+      }
+    }
+  }
+  if (!Number.isFinite(min)) {
+    min = 0;
+    max = 0;
+  }
   return { values, rowTotals, colTotals, min, max };
 }

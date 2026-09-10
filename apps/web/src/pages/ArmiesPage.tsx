@@ -91,7 +91,7 @@ export function ArmiesPage() {
     return () => {
       alive = false;
     };
-  }, [items, activeSnapshotId, others]);
+  }, [items, activeSnapshotId, others, withOverrides]);
 
   const factions = useMemo(() => {
     if (!snapshot) return [];

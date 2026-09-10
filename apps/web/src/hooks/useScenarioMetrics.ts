@@ -76,6 +76,7 @@ export function useScenarioMetrics(items: Scenario[] | undefined, snapshot: Snap
       get: (s: Scenario) => cache.current.get(keyOf(s)) ?? undefined,
       pending,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` is the memo-buster: it is bumped when a result lands in the ref cache.
     [version, pending],
   );
 }

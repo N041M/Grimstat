@@ -13,13 +13,13 @@ const normKeywords = (s: string) => keywordsToText(parseKeywordText(s));
 function TextCell({ value, onCommit, validate, normalize, className, label }: { value: string; onCommit: (v: string) => void; validate?: (v: string) => boolean; normalize?: (v: string) => string; className?: string; label: string }) {
   const [text, setText] = useState(value);
   const last = useRef(value);
-  const norm = normalize ?? ((v: string) => v);
   useEffect(() => {
+    const norm = normalize ?? ((v: string) => v);
     if (norm(value) !== norm(last.current)) {
       last.current = value;
       setText(value);
     }
-  }, [value, norm]);
+  }, [value, normalize]);
   const invalid = validate ? !validate(text) : false;
   return (
     <input

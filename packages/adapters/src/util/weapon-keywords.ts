@@ -20,7 +20,7 @@ export function parseWeaponKeywords(text: string | undefined | null): WeaponKeyw
 
 function splitKeywords(text: string): string[] {
   return text
-    .replace(/ /g, " ")
+    .replace(/\u00a0/g, " ")
     .split(/,|;|\n/)
     .map((s) => s.trim())
     .filter(Boolean);

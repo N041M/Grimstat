@@ -30,7 +30,7 @@ export function keywordToText(k: WeaponKeyword): string {
 
 function splitKeywords(text: string): string[] {
   return text
-    .replace(/[\[\]]/g, "")
+    .replace(/[[\]]/g, "")
     .split(/[,;\n]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);

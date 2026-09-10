@@ -40,7 +40,7 @@ export function stripHtml(html: string | undefined | null): string {
   t = t.replace(/<\s*\/\s*t[dh]\s*>/gi, "\t");
   t = t.replace(/<[^>]+>/g, "");
   t = decodeEntities(t);
-  t = t.replace(/ /g, " ");
+  t = t.replace(/\u00a0/g, " ");
   // tidy whitespace: trim each line, drop leading/trailing blank lines, collapse 3+ newlines
   t = t
     .split("\n")

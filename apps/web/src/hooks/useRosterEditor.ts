@@ -130,7 +130,7 @@ export function useRosterSnapshot(roster: Roster | undefined): { snapshot: Snaps
     return () => {
       alive = false;
     };
-  }, [wanted, activeSnapshotId]);
+  }, [wanted, activeSnapshotId, withOverrides]);
 
   if (!wanted) return { snapshot: active, fallback: false, loading: false };
   if (wanted === activeSnapshotId) return { snapshot: active, fallback: false, loading: false };
