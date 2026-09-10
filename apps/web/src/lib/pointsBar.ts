@@ -12,7 +12,7 @@ import type { UnitSection } from "./roster";
 export type SegmentTone = "ink" | "mid" | "dim";
 
 /** Bar order and tone per section. The design's four roles are the first four entries. */
-const BAR_ORDER: Array<{ section: UnitSection; tone: SegmentTone }> = [
+export const BAR_ORDER: Array<{ section: UnitSection; tone: SegmentTone }> = [
   { section: "battleline", tone: "ink" },
   { section: "other", tone: "mid" },
   { section: "transport", tone: "mid" },

@@ -8,9 +8,19 @@ import { PageHeader } from "../shell";
 import { PointsBar } from "./PointsBar";
 import { battleSizeKey } from "../../pages/ArmiesPage";
 import { Icon } from "../ui";
-import { t, tn } from "../../i18n";
+import { t, tn, type I18nKey } from "../../i18n";
 
 export type EditorMode = "unit" | "export" | "history";
+
+/** The editor's two views: the list you build, and the description of what you built. */
+export type EditorTab = "units" | "stats";
+export const EDITOR_TABS: EditorTab[] = ["units", "stats"];
+const TAB_LABEL: Record<EditorTab, I18nKey> = { units: "roster.tab.units", stats: "roster.tab.stats" };
+
+/** Reject anything but a known tab id when reading the remembered value back. */
+export function parseEditorTab(raw: unknown): EditorTab | undefined {
+  return EDITOR_TABS.find((x) => x === raw);
+}
 
 interface Props {
   roster: Roster;
@@ -26,6 +36,8 @@ interface Props {
   onBattleSize: (size: BattleSize) => void;
   onPointsLimit: (limit: number) => void;
   onAddUnit: () => void;
+  tab: EditorTab;
+  onTab: (tab: EditorTab) => void;
   /** Detachment chips, hung under the points bar. */
   children?: ReactNode;
 }
@@ -43,8 +55,8 @@ function statusLabel(status: SaveStatus, savedAt: string | undefined): string {
   }
 }
 
-/** Editor header: editable name, the army's context line, the points bar and the detachment chips. */
-export function RosterHeader({ roster, factionName, points, status, savedAt, errors, warns, mode, onMode, onRename, onBattleSize, onPointsLimit, onAddUnit, children }: Props) {
+/** Editor header: editable name, the army's context line, the points bar, the detachment chips and the view tabs. */
+export function RosterHeader({ roster, factionName, points, status, savedAt, errors, warns, mode, onMode, onRename, onBattleSize, onPointsLimit, onAddUnit, tab, onTab, children }: Props) {
   const issueText = errors || warns ? [errors ? tn(errors, "roster.issues.error.one", "roster.issues.error.many") : "", warns ? tn(warns, "roster.issues.warn.one", "roster.issues.warn.many") : ""].filter(Boolean).join(" · ") : t("roster.issues.none");
   const toggle = (m: EditorMode) => onMode(mode === m ? "unit" : m);
 
@@ -83,7 +95,7 @@ export function RosterHeader({ roster, factionName, points, status, savedAt, err
 
   return (
     <PageHeader
-      className="roster-header"
+      className="roster-header tabbed"
       title={title}
       subtitle={subtitle}
       actions={
@@ -102,6 +114,13 @@ export function RosterHeader({ roster, factionName, points, status, savedAt, err
     >
       <PointsBar model={points} />
       {children}
+      <div className="tabbar" role="tablist" aria-label={t("roster.tabs")}>
+        {EDITOR_TABS.map((id) => (
+          <button key={id} type="button" role="tab" id={`roster-tab-${id}`} aria-selected={id === tab} aria-controls="roster-panel" className={`tabbar-tab ${id === tab ? "on" : ""}`.trim()} onClick={() => onTab(id)}>
+            {t(TAB_LABEL[id])}
+          </button>
+        ))}
+      </div>
     </PageHeader>
   );
 }

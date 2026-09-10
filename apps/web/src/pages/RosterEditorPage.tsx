@@ -5,13 +5,15 @@ import { rosterSummary, validateRoster } from "@grimstat/resolver";
 import { useApp } from "../state/AppContext";
 import { useRosterEditor, useRosterSnapshot } from "../hooks/useRosterEditor";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
+import { usePersistedSetting } from "../hooks/usePersistedSetting";
 import { hrefFor, navigate } from "../router";
 import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, enhancementsFor, newRosterUnit, pointsLimitFor, sectionOf } from "../lib/roster";
 import { pointsBarModel } from "../lib/pointsBar";
-import { RosterHeader, type EditorMode } from "../components/roster/RosterHeader";
+import { RosterHeader, parseEditorTab, type EditorMode, type EditorTab } from "../components/roster/RosterHeader";
 import { DetachmentStrip } from "../components/roster/DetachmentsBlock";
 import { UnitTable, type CalcSide } from "../components/roster/UnitTable";
 import { UnitInspector } from "../components/roster/UnitInspector";
+import { StatisticsTab } from "../components/roster/StatisticsTab";
 import { RosterDock, type DockBudget } from "../components/roster/RosterDock";
 import { ExportDrawer } from "../components/roster/ExportDrawer";
 import { HistoryPanel } from "../components/roster/HistoryPanel";
@@ -26,6 +28,8 @@ export function RosterEditorPage({ id }: { id: string }) {
   const narrow = useMediaQuery(NARROW_QUERY);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [mode, setMode] = useState<EditorMode>("unit");
+  // Which of the two views this army was last left on; remembered per roster in the settings store.
+  const [tab, setTab] = usePersistedSetting<EditorTab>(`roster.tab.${id}`, "units", parseEditorTab);
   const [adding, setAdding] = useState(false);
   const [detPicker, setDetPicker] = useState(false);
   const [warnedFallback, setWarnedFallback] = useState(false);
@@ -61,6 +65,14 @@ export function RosterEditorPage({ id }: { id: string }) {
     setSelectedId(unitId);
     setMode("unit");
   }, []);
+  /** A row in the Statistics table hands the reader back to the list, with the inspector open. */
+  const selectFromStats = useCallback(
+    (unitId: string) => {
+      setTab("units");
+      selectUnit(unitId);
+    },
+    [selectUnit, setTab],
+  );
   const closePanel = useCallback(() => {
     setMode("unit");
     setSelectedId(undefined);
@@ -174,7 +186,8 @@ export function RosterEditorPage({ id }: { id: string }) {
         onClose={closePanel}
       />
     ) : null;
-  const panelOpen = mode !== "unit" || !!selected;
+  // The unit inspector belongs to the units list; Export and History stay reachable from both tabs.
+  const panelOpen = mode !== "unit" || (!!selected && tab === "units");
 
   return (
     <div className={`roster-editor ${narrow ? "narrow" : ""}`.trim()}>
@@ -195,28 +208,40 @@ export function RosterEditorPage({ id }: { id: string }) {
           onRename={(name) => update((r) => ({ ...r, name }))}
           onBattleSize={setBattleSize}
           onPointsLimit={(limit) => update((r) => ({ ...r, pointsLimit: limit }))}
-          onAddUnit={() => setAdding((v) => !v)}
+          onAddUnit={() => {
+            // The picker lives in the units list, so Add unit always lands the reader there.
+            setTab("units");
+            setAdding((v) => !v);
+          }}
+          tab={tab}
+          onTab={setTab}
         >
           <DetachmentStrip roster={roster} snapshot={snapshot} onChange={update} pickerOpen={detPicker} onPickerOpen={setDetPicker} />
         </RosterHeader>
 
-        <UnitTable
-          roster={roster}
-          snapshot={snapshot}
-          datasheets={datasheets}
-          costById={costById}
-          diagnostics={diagnostics}
-          selectedId={selectedId}
-          adding={adding}
-          onAdding={setAdding}
-          onSelect={selectUnit}
-          onAdd={addUnit}
-          onDuplicate={duplicate}
-          onRemove={remove}
-          onOpenInCalculator={(u, side) => void openInCalculator(u, side)}
-          onOpenDetachmentPicker={() => setDetPicker(true)}
-          onExport={() => setMode("export")}
-        />
+        <div role="tabpanel" id="roster-panel" aria-labelledby={`roster-tab-${tab}`} className="roster-panel">
+          {tab === "units" ? (
+            <UnitTable
+              roster={roster}
+              snapshot={snapshot}
+              datasheets={datasheets}
+              costById={costById}
+              diagnostics={diagnostics}
+              selectedId={selectedId}
+              adding={adding}
+              onAdding={setAdding}
+              onSelect={selectUnit}
+              onAdd={addUnit}
+              onDuplicate={duplicate}
+              onRemove={remove}
+              onOpenInCalculator={(u, side) => void openInCalculator(u, side)}
+              onOpenDetachmentPicker={() => setDetPicker(true)}
+              onExport={() => setMode("export")}
+            />
+          ) : (
+            <StatisticsTab roster={roster} snapshot={snapshot} datasheets={datasheets} costById={costById} onSelectUnit={selectFromStats} />
+          )}
+        </div>
       </div>
 
       <RosterDock

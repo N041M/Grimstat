@@ -4021,6 +4021,230 @@ a.btn:hover {
   color: var(--faint);
 }
 
+/* ---------- Armies: Statistics tab ----------
+   Sections stacked in the main column: metric tiles, then grid tables reusing the Kit parts. The
+   tables keep the units list's 22px gutters so both tabs line up under the same header. */
+.army-stats {
+  min-width: 0;
+  padding: 4px 0 26px;
+}
+.army-stats .empty {
+  margin: 18px 22px;
+}
+.roster-panel {
+  min-width: 0;
+}
+.stat-section {
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--line-soft);
+}
+.stat-section:first-child {
+  border-top: 0;
+}
+.stat-section > .panel-head-row {
+  padding: 0 22px 10px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.stat-note {
+  margin: -4px 22px 12px;
+  max-width: 74ch;
+  font: 400 11.5px/1.55 var(--font);
+  color: var(--muted);
+  text-wrap: pretty;
+}
+.stat-aside {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.stat-aside .dock-field {
+  grid-template-columns: auto 132px;
+}
+.stat-pending {
+  font: 400 10px/1 var(--mono);
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* metric tiles: a 10px mono uppercase label over a 24px mono value */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(186px, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 16px;
+}
+.stat-tile {
+  background: var(--bg);
+  padding: 12px 22px 13px;
+  min-width: 0;
+}
+.stat-tile-label {
+  display: block;
+  margin-bottom: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-tile-value {
+  display: block;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* the bar and its percentage share one "share of the list" cell */
+.stat-share {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.stat-share .pbar {
+  flex: 1;
+  min-width: 40px;
+}
+.stat-share-pct {
+  flex: none;
+  width: 42px;
+  text-align: right;
+  font: 400 12px/1.4 var(--mono);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the section tables scroll inside their own box, never the page */
+.stat-table {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.stat-row.static {
+  cursor: default;
+}
+.stat-row.static:hover {
+  background: transparent;
+}
+.stat-table .gtable-cell .pbar {
+  width: 100%;
+}
+.stat-unit {
+  overflow: visible;
+  white-space: normal;
+}
+.stat-unit-btn {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.stat-unit-btn:hover:not(:disabled) {
+  border-color: transparent;
+}
+.stat-unit-name {
+  display: block;
+  font: 500 13px/1.35 var(--font);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-unit-sub {
+  display: block;
+  font: 400 10px/1.4 var(--mono);
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-keys {
+  margin: 0;
+  padding: 10px 22px 4px;
+  font: 400 10px/1.4 var(--mono);
+  color: var(--faint);
+}
+
+/* durability extremes */
+.stat-extremes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 22px;
+  margin: 2px 22px 8px;
+}
+.stat-extremes dt {
+  margin-bottom: 4px;
+}
+.stat-extremes dd {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 6px;
+  min-width: 0;
+}
+.stat-extreme-name {
+  font: 400 12px/1.4 var(--font);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-extreme-val {
+  font: 600 13px/1.4 var(--mono);
+  color: var(--ink);
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* keyword chips: the pill-chip shape, static, with a mono count */
+.stat-kw-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 22px 6px;
+}
+.stat-kw-title {
+  margin: 0 0 8px;
+}
+.stat-kw-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.stat-kw {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+}
+.stat-kw-name {
+  font: 400 11px/1.4 var(--font);
+  color: var(--ink-2);
+}
+.stat-kw-count {
+  font: 400 10px/1.4 var(--mono);
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
 /* dock: validation, budgets, history */
 .val-list {
   list-style: none;
@@ -4826,6 +5050,12 @@ button.val-row:hover {
     height: auto;
     overflow: visible;
   }
+  /* Stacked, the editor's columns stop scrolling themselves, so the region has to (it is held at
+     `overflow: hidden` on desktop, where `.roster-main` and the dock own their own scrollbars). */
+  .main-region:has(> .roster-editor) {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
   .roster-main {
     overflow: visible;
   }
@@ -4849,6 +5079,14 @@ button.val-row:hover {
   }
   .mx-toolbar .dock-field {
     width: 100%;
+  }
+  .stat-aside {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .stat-aside .dock-field {
+    grid-template-columns: auto minmax(0, 1fr);
+    flex: 1;
   }
   .ovr-card {
     grid-template-columns: 1fr;
