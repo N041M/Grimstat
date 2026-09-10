@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Roster } from "@grimstat/schema";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import { exportRosterText, importRosterText, exportRosterPrintHtml } from "./index";
+import { parseWargearList, splitList } from "./import";
 
 const snapshot = loadSyntheticSnapshot();
 const now = new Date().toISOString();
@@ -81,5 +82,56 @@ describe("roster text export/import", () => {
     expect(html).not.toContain("SURGE OF THORNS");
     expect(html).toContain("&#39;s Aegis".replace("&#39;s Aegis", "Ember Blade"));
     expect(html).not.toContain("<script");
+  });
+});
+
+describe("New Recruit tournament export", () => {
+  const nr = [
+    "+++++++++++++++++++++++++++++++++++++++++++++++",
+    "+ FACTION KEYWORD: Imperium - Ashen Wardens",
+    "+ DETACHMENT: Ember Vanguard (Some Variant)",
+    "+ FORCE DISPOSITION: Priority Assets",
+    "+ TOTAL ARMY POINTS: 505pts",
+    "+",
+    "+ WARLORD: Char1: Warden Captain",
+    "+ ENHANCEMENT: Ember Blade (on Char1: Warden Captain)",
+    "& Warden's Aegis (on Char2: Warden Captain)",
+    "+ NUMBER OF UNITS: 3",
+    "+ SECONDARY: - Bring It Down: (1x2)",
+    "+++++++++++++++++++++++++++++++++++++++++++++++",
+    "",
+    "Char1: 1x Warden Captain (80 pts): Flux pistol, Relic blade",
+    "Enhancement: Ember Blade (+15 pts)",
+    "1x Ashen Crusher (150 pts): Vortex cannon, 2x Twin hail gun, Crusher fists",
+    "10x Warden Squad (180 pts)",
+    "• 1x Warden Sergeant: Flux carbine, Power fist",
+    "• 9x Warden: 9 with Flux carbine, Shock maul",
+    "",
+    "Created with newrecruit.eu v35.80",
+  ].join("\n");
+  it("parses the header block, CharN prefixes, bullet model lines and multiplicities", () => {
+    const { roster: r, warnings } = importRosterText(nr, snapshot);
+    expect(warnings).toEqual([]);
+    expect(r.factionId).toBe("faction:ashen-wardens");
+    expect(r.battleSize).toBe("incursion");
+    expect(r.detachments).toEqual([{ id: "d1", detachmentId: "det:ashen-wardens:ember-vanguard", forceDisposition: "Priority Assets" }]);
+    const cap = r.units.find((u) => u.datasheetId === "ds:ashen-wardens:warden-captain")!;
+    expect(cap.isWarlord).toBe(true);
+    expect(cap.enhancementId).toBe("enh:ashen-wardens:ember-blade");
+    expect(cap.models[0]!.wargear).toEqual(["Flux pistol", "Relic blade"]);
+    const crusher = r.units.find((u) => u.datasheetId === "ds:ashen-wardens:ashen-crusher")!;
+    expect(crusher.models[0]!.wargear).toEqual(["Vortex cannon", "Twin hail gun", "Twin hail gun", "Crusher fists"]);
+    const squad = r.units.find((u) => u.datasheetId === "ds:ashen-wardens:warden-squad")!;
+    expect(squad.models.map((g) => [g.modelProfileId.split(":").pop(), g.count, g.wargear.join("+")])).toEqual([
+      ["warden-sergeant", 1, "Flux carbine+Power fist"],
+      ["warden", 9, "Flux carbine+Shock maul"],
+    ]);
+    expect(splitList("a, b,c")).toEqual(["a", "b", "c"]);
+    expect(parseWargearList(" 9 with Bolt pistol, Boltgun")).toEqual(["Bolt pistol", "Boltgun"]);
+  });
+  it("fuzzy-matches unit names by token set and containment", () => {
+    const { roster: r, warnings } = importRosterText("1x Squad Warden (90 pts)\n1x Wardens of Ashen Crusher (150 pts)\n", snapshot);
+    expect(warnings).toEqual([]);
+    expect(r.units.map((u) => u.datasheetId)).toEqual(["ds:ashen-wardens:warden-squad", "ds:ashen-wardens:ashen-crusher"]);
   });
 });

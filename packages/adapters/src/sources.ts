@@ -125,20 +125,44 @@ export async function fetchSource(id: SourceId, fetchImpl: FetchLike = globalThi
   // bsdata-json: list the repository tree, then download every top-level JSON file.
   const treeText = await getText(fetchImpl, entry);
   const tree = JSON.parse(treeText) as GitTree;
-  const names = tree.tree
-    .filter((t) => t.type === "blob" && /\.json$/i.test(t.path) && !t.path.includes("/"))
-    .map((t) => t.path)
-    .filter((p) => {
-      if (!opts.filter) return true;
-      if (/library/i.test(p) || /^Warhammer 40,000\.json$/i.test(p)) return true;
-      return opts.filter(p);
-    });
+  const all = tree.tree.filter((t) => t.type === "blob" && /\.json$/i.test(t.path) && !t.path.includes("/")).map((t) => t.path);
+  const queue = all.filter((p) => !opts.filter || isAlwaysFetchedCatalogue(p) || opts.filter(p));
+  const queued = new Set(queue);
   const raw = `${BSDATA_RAW_URL}${tree.sha}/`;
   let i = 0;
-  for (const name of names) {
+  while (queue.length) {
+    const name = queue.shift()!;
     const url = raw + encodeURIComponent(name);
-    progress(url, ++i, names.length);
-    files[name] = await getText(fetchImpl, url);
+    progress(url, ++i, queued.size);
+    const text = await getText(fetchImpl, url);
+    files[name] = text;
+    // A filtered fetch follows `catalogueLinks` (they name other top-level files): a Chapter needs its parent
+    // codex, Imperium armies need Agents of the Imperium, and "Unaligned Forces" is a library whose file
+    // name does not say so. Dependencies are pulled in transitively; the total grows as they are discovered.
+    if (opts.filter) {
+      for (const dep of catalogueLinkFiles(text)) {
+        if (!queued.has(dep) && all.includes(dep)) {
+          queued.add(dep);
+          queue.push(dep);
+        }
+      }
+    }
   }
   return { id, files, ref: tree.sha, url: raw };
+}
+
+/** Shared libraries and the game-system file are downloaded by every filtered BSData fetch. */
+export function isAlwaysFetchedCatalogue(fileName: string): boolean {
+  return /library/i.test(fileName) || /^Warhammer 40,000\.json$/i.test(fileName);
+}
+
+/** File names of the catalogues a BSData JSON document links to (`catalogueLinks[].name` + ".json"). */
+export function catalogueLinkFiles(text: string): string[] {
+  try {
+    const doc = JSON.parse(text) as { catalogue?: { catalogueLinks?: Array<{ name?: unknown }> }; gameSystem?: unknown; catalogueLinks?: Array<{ name?: unknown }> };
+    const links = doc.catalogue?.catalogueLinks ?? doc.catalogueLinks ?? [];
+    return links.map((l) => l.name).filter((n): n is string => typeof n === "string" && n.length > 0).map((n) => `${n}.json`);
+  } catch {
+    return [];
+  }
 }
