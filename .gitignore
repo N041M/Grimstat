@@ -7,6 +7,6 @@ coverage/
 .env.*
 
 # Imported game data (fetched to the user's machine at runtime; never committed)
-data/
+/data/
 .grimstat/
 apps/web/dev-dist/
