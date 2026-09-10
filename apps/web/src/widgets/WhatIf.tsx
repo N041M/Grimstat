@@ -183,6 +183,6 @@ export const whatIfWidget = defineWidget({
   title: t("widget.whatIf"),
   description: t("widget.whatIf.desc"),
   inputs: ["scenario", "result", "snapshot"],
-  defaultSize: { w: 8, h: 9 },
+  defaultSize: { w: 6, h: 9 },
   render: WhatIf,
 });

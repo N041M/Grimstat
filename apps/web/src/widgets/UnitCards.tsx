@@ -111,6 +111,6 @@ export const unitCardsWidget = defineWidget({
   title: t("widget.units"),
   description: t("widget.units.desc"),
   inputs: ["scenario"],
-  defaultSize: { w: 5, h: 9 },
+  defaultSize: { w: 6, h: 9 },
   render: UnitCards,
 });

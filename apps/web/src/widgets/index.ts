@@ -3,6 +3,7 @@ import { PLUGIN_API_VERSION } from "@grimstat/schema";
 import { summaryTilesWidget } from "./SummaryTiles";
 import { damageDistributionWidget } from "./DamageDistribution";
 import { modelsSlainWidget } from "./ModelsSlain";
+import { damageByWeaponWidget } from "./DamageByWeapon";
 import { weaponBreakdownWidget } from "./WeaponBreakdown";
 import { unitCardsWidget } from "./UnitCards";
 import { coverageMeterWidget } from "./CoverageMeter";
@@ -12,7 +13,7 @@ import { analysisWidgets } from "./analyses";
 import type { ReactWidgetDef } from "./registry";
 
 /** Built-in widgets, in default dashboard order. Analysis widgets only show where their `requires` input is provided. */
-export const coreWidgets: ReactWidgetDef[] = [summaryTilesWidget, damageDistributionWidget, modelsSlainWidget, weaponBreakdownWidget, whatIfWidget, unitCardsWidget, coverageMeterWidget, warningsWidget, ...analysisWidgets];
+export const coreWidgets: ReactWidgetDef[] = [summaryTilesWidget, damageDistributionWidget, modelsSlainWidget, damageByWeaponWidget, whatIfWidget, coverageMeterWidget, warningsWidget, unitCardsWidget, weaponBreakdownWidget, ...analysisWidgets];
 
 /** The built-ins are themselves a plugin so third-party widget packs use the same door. */
 export const coreWidgetsPlugin: PluginModule = {

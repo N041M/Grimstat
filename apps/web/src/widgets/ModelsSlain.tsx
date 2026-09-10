@@ -1,36 +1,37 @@
 import { defineWidget, type WidgetProps } from "./registry";
-import { BarChart } from "../components/charts/BarChart";
+import { PanelHead, ProportionBar } from "../components/kit";
 import { Empty } from "../components/ui";
+import { slainRows } from "../lib/distribution";
 import { fmt, pct } from "../lib/format";
 import { t } from "../i18n";
 
+/**
+ * Rows of `18px | 1fr | 46px`: the model count, a proportional bar in a `--fill` trough and the
+ * probability. Outcomes at the mode are drawn in `--ink`, the rest in `--dim`.
+ */
 export function ModelsSlain({ result, running }: WidgetProps) {
-  if (!result) return <Empty>{running ? t("results.running") : t("results.none")}</Empty>;
-  const pmf = result.slainPMF;
-  const atLeast = result.pAtLeastSlain;
-  return (
-    <div className="widget-body chart" style={{ padding: 0 }}>
-      <BarChart
-        values={pmf}
-        stepLine={atLeast}
-        marker={result.expectedSlain}
-        markerLabel={t("chart.mean", { v: fmt(result.expectedSlain) })}
-        maxIndex={Math.max(1, pmf.length - 1)}
-        xLabel={t("chart.slain")}
-        yLabel={t("chart.probability")}
-        ariaLabel={t("chart.slain.aria")}
-        tooltip={(k) => [t("chart.slain.k", { k }), `P(X = ${k}) = ${pct(pmf[k] ?? 0, 2)}`, `P(X ≥ ${k}) = ${pct(atLeast[k] ?? 0, 2)}`]}
-      />
-      <div className="chart-legend" style={{ padding: "0 0.75rem 0.5rem" }}>
-        <span>
-          <span className="sw" style={{ background: "var(--chart-bar)" }} />
-          {t("chart.legend.slainPmf")}
-        </span>
-        <span>
-          <span className="sw" style={{ borderTop: "2px dashed var(--chart-line)", height: 0, background: "none" }} />
-          {t("chart.legend.atLeast")}
-        </span>
+  if (!result)
+    return (
+      <div className="w-pad">
+        <PanelHead title={t("widget.slain")} />
+        <Empty>{running ? t("results.running") : t("results.none")}</Empty>
       </div>
+    );
+  const rows = slainRows(result.slainPMF);
+  const meta = [t("slain.mean", { v: fmt(result.expectedSlain, 2) }), t("slain.wasted", { v: fmt(result.expectedWasted, 1) }), ...(result.pointsSlain === undefined ? [] : [t("slain.points", { v: fmt(result.pointsSlain, 0) })]), ...(result.expectedSelfMortals > 0 ? [t("slain.selfMortals", { v: fmt(result.expectedSelfMortals, 2) })] : [])].join(" · ");
+  return (
+    <div className="w-pad slain">
+      <PanelHead title={t("widget.slain")} />
+      <div className="slain-rows">
+        {rows.map((r) => (
+          <div className="slain-row" key={r.n} title={t("slain.rowTitle", { n: r.n, p: pct(r.p, 1), atLeast: pct(result.pAtLeastSlain[r.n] ?? 0, 1) })}>
+            <span className="slain-n">{r.n}</span>
+            <ProportionBar value={r.width} tone={r.modal ? "ink" : "dim"} height={11} />
+            <span className="slain-p">{fmt(r.p, 2)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="slain-meta">{meta}</div>
     </div>
   );
 }
@@ -40,6 +41,6 @@ export const modelsSlainWidget = defineWidget({
   title: t("widget.slain"),
   description: t("widget.slain.desc"),
   inputs: ["result"],
-  defaultSize: { w: 5, h: 7 },
+  defaultSize: { w: 6, h: 6 },
   render: ModelsSlain,
 });

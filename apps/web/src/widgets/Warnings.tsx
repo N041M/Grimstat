@@ -21,6 +21,6 @@ export const warningsWidget = defineWidget({
   title: t("widget.warnings"),
   description: t("widget.warnings.desc"),
   inputs: ["result"],
-  defaultSize: { w: 3, h: 6 },
+  defaultSize: { w: 6, h: 6 },
   render: Warnings,
 });

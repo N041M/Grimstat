@@ -117,6 +117,6 @@ export const coverageMeterWidget = defineWidget({
   title: t("widget.coverage"),
   description: t("widget.coverage.desc"),
   inputs: ["scenario", "result", "snapshot"],
-  defaultSize: { w: 4, h: 6 },
+  defaultSize: { w: 6, h: 9 },
   render: CoverageMeter,
 });

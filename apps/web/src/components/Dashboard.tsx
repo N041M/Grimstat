@@ -11,14 +11,28 @@ const Grid = WidthProvider(ReactGridLayout);
 const COLS = 12;
 const ROW_HEIGHT = 36;
 
-/** Pack widgets left-to-right, top-to-bottom using their default sizes. */
+/**
+ * Widgets that draw their own section title (or, for the hero, no title at all) and therefore get
+ * no widget header from the dashboard. They are the four panels of the designed composition; every
+ * other widget keeps a plain section header.
+ */
+const HEADLESS = new Set(["core.summary", "core.damage-distribution", "core.models-slain", "core.damage-by-weapon"]);
+
+/**
+ * Pack widgets left-to-right, top-to-bottom using their default sizes.
+ *
+ * Widget order plus the default sizes are the designed composition: the hero full width, the damage
+ * distribution full width, then models-slain and damage-by-weapon at half width each, with the
+ * remaining widgets below. Rearranging (see the "Rearrange" affordance) overrides this per device.
+ */
 export function defaultLayout(widgets: ReactWidgetDef[]): Layout[] {
   const out: Layout[] = [];
   let x = 0;
   let y = 0;
   let rowH = 0;
   for (const w of widgets) {
-    const { w: ww, h } = w.defaultSize;
+    const ww = Math.min(w.defaultSize.w, COLS);
+    const h = w.defaultSize.h;
     if (x + ww > COLS) {
       x = 0;
       y += rowH;
@@ -57,6 +71,9 @@ export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
   const widgets = useMemo(() => widgetsFrom(host).filter((w) => widgetAvailable(w, inputs.analyses)), [provided]); // eslint-disable-line react-hooks/exhaustive-deps
   const [layout, setLayout] = useState<Layout[] | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
+  // Drag/resize stays behind this affordance: the designed composition is the default, and the grid
+  // only becomes malleable once the user asks for it.
+  const [rearranging, setRearranging] = useState(false);
   const narrow = useMedia("(max-width: 899px)");
 
   useEffect(() => {
@@ -73,6 +90,10 @@ export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
       alive = false;
     };
   }, [id, widgets]);
+
+  useEffect(() => {
+    if (narrow) setRearranging(false);
+  }, [narrow]);
 
   const persist = useCallback(
     (l: Layout[]) => {
@@ -99,41 +120,77 @@ export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
 
   if (!loaded || !layout) return null;
 
-  const effective: Layout[] = narrow
-    ? [...layout]
-        .sort((a, b) => a.y - b.y || a.x - b.x)
-        .map((l, idx) => ({ ...l, x: 0, w: 1, minW: 1, maxW: 1, y: idx, static: true }))
-    : layout;
+  const xOf = new Map(layout.map((l) => [l.i, l.x] as const));
+  const order = [...layout].sort((a, b) => a.y - b.y || a.x - b.x).map((l) => l.i);
+
+  const panel = (w: ReactWidgetDef) => {
+    const Render = w.render;
+    const headless = HEADLESS.has(w.id);
+    return (
+      <section className={`widget ${headless ? "flush" : ""}`.trim()} aria-label={w.title}>
+        {rearranging ? (
+          <div className="widget-drag" title={t("dashboard.dragHint")}>
+            <span aria-hidden="true">⠿</span>
+            {w.title}
+          </div>
+        ) : null}
+        {headless ? null : (
+          <div className="widget-head">
+            <h2 className="panel-title" title={w.description}>
+              {w.title}
+            </h2>
+          </div>
+        )}
+        <div className="widget-body">
+          <ErrorBoundary compact resetKey={inputs.result}>
+            <Render {...inputs} />
+          </ErrorBoundary>
+        </div>
+      </section>
+    );
+  };
+
+  // Phones drop the grid entirely: one column, panels sized by their own content. Positions stay
+  // untouched, so the desktop arrangement survives a trip through a narrow window.
+  if (narrow) {
+    const byId = new Map(widgets.map((w) => [w.id, w] as const));
+    return (
+      <div className="dashboard narrow">
+        <div className="dash-stack">
+          {order.map((widgetId) => {
+            const w = byId.get(widgetId);
+            return w ? <div key={widgetId}>{panel(w)}</div> : null;
+          })}
+        </div>
+        <div className="dash-bar">
+          <span className="dash-hint">{t("dashboard.narrowHint")}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="dashboard">
-      <div className="row between" style={{ marginBottom: "0.5rem" }}>
-        <span className="small muted">{narrow ? t("dashboard.narrowHint") : t("dashboard.hint")}</span>
-        <button type="button" className="sm" onClick={reset}>
-          {t("dashboard.reset")}
-        </button>
-      </div>
-      <Grid className="layout" layout={effective} cols={narrow ? 1 : COLS} rowHeight={ROW_HEIGHT} margin={[12, 12]} draggableHandle=".widget-drag" onLayoutChange={onLayoutChange} isDraggable={!narrow} isResizable={!narrow} compactType="vertical">
-        {widgets.map((w) => {
-          const Render = w.render;
-          return (
-            <div key={w.id}>
-              <section className="widget" aria-label={w.title}>
-                <div className="widget-head">
-                  <span className="widget-drag" title={w.description}>
-                    {w.title}
-                  </span>
-                </div>
-                <div className="widget-body">
-                  <ErrorBoundary compact resetKey={inputs.result}>
-                    <Render {...inputs} />
-                  </ErrorBoundary>
-                </div>
-              </section>
-            </div>
-          );
-        })}
+    <div className={`dashboard ${rearranging ? "rearranging" : ""}`.trim()}>
+      <Grid className="layout" layout={layout} cols={COLS} rowHeight={ROW_HEIGHT} margin={[0, 0]} containerPadding={[0, 0]} draggableHandle=".widget-drag" onLayoutChange={onLayoutChange} isDraggable={rearranging} isResizable={rearranging} compactType="vertical">
+        {widgets.map((w) => (
+          // Cells are separated by borders rather than gaps, so only cells away from the left edge
+          // carry one; every cell carries the bottom rule.
+          <div key={w.id} className={(xOf.get(w.id) ?? 0) > 0 ? "cell-inset" : ""}>
+            {panel(w)}
+          </div>
+        ))}
       </Grid>
+      <div className="dash-bar">
+        <span className="dash-hint">{rearranging ? t("dashboard.hint") : t("dashboard.fixedHint")}</span>
+        <span className="dash-actions">
+          <button type="button" className={`dash-btn ${rearranging ? "on" : ""}`.trim()} aria-pressed={rearranging} onClick={() => setRearranging((v) => !v)}>
+            {t("dashboard.rearrange")}
+          </button>
+          <button type="button" className="dash-btn" onClick={reset}>
+            {t("dashboard.reset")}
+          </button>
+        </span>
+      </div>
     </div>
   );
 }
