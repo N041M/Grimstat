@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ScenarioUnit, ScenarioWeapon } from "@grimstat/schema";
-import { arsenalFor, perModel, weaponAttacks } from "./arsenal";
+import { arsenalFor, bySkill, damageTiers, defensiveProfile, perModel, saveForced, weaponAttacks, woundTable } from "./arsenal";
 
 const w = (over: Partial<ScenarioWeapon> & Pick<ScenarioWeapon, "name">): ScenarioWeapon => ({ count: 1, kind: "ranged", range: 24, A: "1", skill: 3, S: 4, AP: 0, D: "1", keywords: [], enabled: true, ...over });
 
@@ -95,5 +95,68 @@ describe("perModel", () => {
 
   it("does not divide by zero for an empty army", () => {
     expect(perModel(arsenalFor([])).shootingAttacks).toBe(0);
+  });
+});
+
+describe("wound table", () => {
+  const army = [unit("A", 1, [w({ name: "Bolter", count: 10, A: "1", S: 4 }), w({ name: "Lascannon", count: 2, A: "1", S: 12 })])];
+
+  it("reports the roll each attack needs against every toughness", () => {
+    const rows = woundTable(army, "shooting", [4, 8]);
+    // S4 vs T4 is 4+, S12 vs T4 is 2+ (twice the toughness)
+    expect(rows[0]!.byRoll).toMatchObject({ 2: 2, 4: 10 });
+    // S4 vs T8 is 6+ (half or less), S12 vs T8 is 3+
+    expect(rows[1]!.byRoll).toMatchObject({ 3: 2, 6: 10 });
+    expect(rows[0]!.attacks).toBe(12);
+  });
+
+  it("counts attacks wounding on 4+ or better as the comfortable share", () => {
+    expect(woundTable(army, "shooting", [4])[0]!.comfortable).toBe(12);
+    expect(woundTable(army, "shooting", [8])[0]!.comfortable).toBe(2);
+  });
+});
+
+describe("skill and saves", () => {
+  const army = [unit("A", 1, [w({ name: "Bolter", count: 6, skill: 3, AP: 1 }), w({ name: "Flamer", count: 2, skill: null, AP: 0, keywords: [{ name: "TORRENT" }] }), w({ name: "Plasma", count: 2, skill: 2, AP: 3 })])];
+
+  it("groups attacks by the roll they need to hit, auto-hits first", () => {
+    expect(bySkill(army, "shooting")).toEqual([
+      { skill: null, attacks: 2 },
+      { skill: 2, attacks: 2 },
+      { skill: 3, attacks: 6 },
+    ]);
+  });
+
+  it("reports the save left after AP, and what leaves none", () => {
+    const rows = saveForced(army, "shooting", [3, 6]);
+    // a 3+ save: AP0 leaves 3+, AP-1 leaves 4+, AP-3 leaves 6+
+    expect(rows[0]!.byModified).toEqual({ 3: 2, 4: 6, 6: 2 });
+    expect(rows[0]!.noSave).toBe(0);
+    // a 6+ save: AP-1 and AP-3 leave nothing
+    expect(rows[1]!.noSave).toBe(8);
+  });
+});
+
+describe("damage tiers and the defensive profile", () => {
+  it("separates flat damage from random damage", () => {
+    const tiers = damageTiers([unit("A", 1, [w({ name: "a", count: 4, D: "1" }), w({ name: "b", count: 2, D: "2" }), w({ name: "c", count: 1, D: "3" }), w({ name: "d", count: 1, D: "D6" })])], "shooting");
+    expect(tiers.map((t) => [t.key, t.attacks])).toEqual([
+      ["1", 4],
+      ["2", 2],
+      ["3+", 1],
+      ["dice", 1],
+    ]);
+    expect(tiers[3]!.meanDamage).toBeCloseTo(3.5, 9);
+  });
+
+  it("groups wounds by toughness, save and invulnerable", () => {
+    const a: ScenarioUnit = { name: "Squad", keywords: [], effects: [], weapons: [], models: [{ name: "m", count: 5, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }] };
+    const b: ScenarioUnit = { name: "Tank", keywords: [], effects: [], weapons: [], models: [{ name: "t", count: 1, T: 11, Sv: 2, InvSv: 5, W: 14, isCharacter: false, keywords: [] }] };
+    const rows = defensiveProfile([a, b]);
+    expect(rows.map((r) => [r.toughness, r.save, r.invuln, r.models, r.wounds])).toEqual([
+      [11, 2, 5, 1, 14],
+      [4, 3, null, 5, 10],
+    ]);
+    expect(rows[1]!.units).toEqual(["Squad"]);
   });
 });
