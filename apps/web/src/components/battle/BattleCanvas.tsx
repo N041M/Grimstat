@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Vector3 } from "three";
+import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { ReachNode, Vec2, Vec3 } from "@grimstat/board";
 import type { BattleState, BattleUnit } from "../../lib/battle";
 import { anchorOf, dragVerdict, findUnit, indexOf, translateUnit } from "../../lib/battle";
@@ -69,6 +69,8 @@ export function BattleCanvas(props: BattleCanvasProps) {
  */
 function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labelsRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
+  const camera = useThree((s) => s.camera);
+  const canvas = useThree((s) => s.gl.domElement);
   const [drag, setDrag] = useState<DragState | undefined>();
   const index = useMemo(() => indexOf(state), [state]);
   const grabbed = useRef<string | undefined>();
@@ -103,17 +105,6 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labe
     onDrag?.(undefined);
   }, [controls, onMove, onDrag]);
 
-  // The pointer is often released outside the canvas — over the panel, or off the window entirely.
-  // Listening on the window is what makes a drag that ends anywhere still end.
-  useEffect(() => {
-    window.addEventListener("pointerup", drop);
-    window.addEventListener("pointercancel", drop);
-    return () => {
-      window.removeEventListener("pointerup", drop);
-      window.removeEventListener("pointercancel", drop);
-    };
-  }, [drop]);
-
   /** Following the pointer while a unit is held: re-judge the move and move the ghost. */
   const onHover = useCallback(
     (at: Vec2) => {
@@ -130,13 +121,52 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labe
     [state, index, onDrag],
   );
 
+  /**
+   * A drag follows the window, not the table mesh.
+   *
+   * Asking three.js which object is under the pointer answers "the ruin" or "another unit" as often
+   * as "the table", and nothing at all once the pointer leaves the canvas — so a drag wired to the
+   * table's own hover events stops updating exactly when the player moves somewhere interesting.
+   * Casting against a mathematical plane at the unit's own height has no such gaps, and it is the
+   * right plane anyway: a unit being dragged along a gantry should track the gantry, not the floor.
+   *
+   * The same reasoning applies to the release. It happens over the side panel as often as not.
+   */
+  useEffect(() => {
+    const ray = new Raycaster();
+    const ndc = new Vector2();
+    const hit = new Vector3();
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!grabbed.current) return;
+      const unit = findUnit(state, grabbed.current);
+      if (!unit) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
+      ray.setFromCamera(ndc, camera);
+      const plane = new Plane(new Vector3(0, 1, 0), -anchorOf(unit).pos.z);
+      if (!ray.ray.intersectPlane(plane, hit)) return;
+      onHover({ x: hit.x, y: -hit.z });
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", drop);
+    window.addEventListener("pointercancel", drop);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", drop);
+      window.removeEventListener("pointercancel", drop);
+    };
+  }, [drop, onHover, state, camera, canvas]);
+
   const onDown = useCallback((at: Vec2) => (grabbed.current ? undefined : onTableDown?.(at)), [onTableDown]);
 
   return (
     <>
       <Cameras mode={cameraMode} size={state.layout.size} />
       <Lighting size={state.layout.size} />
-      <Table size={state.layout.size} onHover={onHover} onDown={onDown} />
+      <Table size={state.layout.size} onDown={onDown} />
       <Zones zones={state.zones} />
       <Terrain pieces={state.layout.pieces} />
       <Objectives objectives={state.layout.objectives} />

@@ -28,11 +28,10 @@ const FLAT: [number, number, number] = [-Math.PI / 2, 0, 0];
 /**
  * The table itself: a slab, an edge, and a grid to measure against by eye.
  *
- * Hovering and pressing are reported separately. A drag follows the pointer, but a measuring tape
- * takes deliberate picks — wired to the same callback it would take a new reading every time the
- * mouse twitched.
+ * Only presses are reported. A measuring tape takes deliberate picks, and a drag does not go through
+ * here at all — it casts against a plane from window events, which has no gaps.
  */
-export function Table({ size, onHover, onDown }: { size: BoardSize; onHover?: (at: Vec2) => void; onDown?: (at: Vec2) => void }) {
+export function Table({ size, onDown }: { size: BoardSize; onDown?: (at: Vec2) => void }) {
   const relay = (to?: (at: Vec2) => void) => (e: ThreeEvent<PointerEvent>) => {
     if (!to) return;
     const p = fromScene(e.point.x, e.point.y, e.point.z);
@@ -40,7 +39,7 @@ export function Table({ size, onHover, onDown }: { size: BoardSize; onHover?: (a
   };
   return (
     <group>
-      <mesh rotation={FLAT} position={[size.width / 2, -0.02, -size.depth / 2]} onPointerMove={relay(onHover)} onPointerDown={relay(onDown)}>
+      <mesh rotation={FLAT} position={[size.width / 2, -0.02, -size.depth / 2]} onPointerDown={relay(onDown)}>
         <planeGeometry args={[size.width, size.depth]} />
         <meshStandardMaterial color={SCENE_COLOURS.table} roughness={0.95} />
       </mesh>
