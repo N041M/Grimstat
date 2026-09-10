@@ -18,6 +18,7 @@ export const RAIL_ENTRIES: readonly RailEntry[] = [
   { route: "scenarios", glyph: "S", labelKey: "nav.scenarios" },
   { route: "armies", glyph: "A", labelKey: "nav.armies" },
   { route: "analyses", glyph: "N", labelKey: "nav.analyses" },
+  { route: "battle", glyph: "B", labelKey: "nav.battle" },
   { route: "data", glyph: "D", labelKey: "nav.data" },
   { route: "about", glyph: "?", labelKey: "nav.about" },
 ];

@@ -19,7 +19,7 @@ Warhammer 40,000 and all associated marks are the property of Games Workshop Lim
 ```
 packages/schema        canonical data model (Zod) — no GW text
 packages/engine        pure probability engine (exact PMF + Monte Carlo)
-packages/board         3D battle-board geometry kernel (true line of sight, cover, measurement)
+packages/board         3D battle-board geometry kernel (true line of sight, cover, measurement, movement)
 packages/effects       Tier-1 keyword / Tier-2 effect record registry
 packages/game-40k-11e  40k 11th edition game-system plugin (keywords, patterns, constraints, analyses)
 packages/resolver      roster legality runner + costing (shared by UI, CLI, tests)
@@ -29,7 +29,7 @@ packages/snapshot      merge, overrides, immutable snapshots, diffs
 packages/entitlements  feature gating abstraction (local: everything unlocked)
 packages/plugin-host   plugin manifest loader + registration API
 apps/cli               node CLI: import → snapshot → simulate
-apps/web               Vite + React offline PWA
+apps/web               Vite + React offline PWA (the Battle table is three.js, code-split)
 docs/DESIGN.md         full design & research document
 docs/BATTLE-SIM.md     3D battle simulator design plan
 ```

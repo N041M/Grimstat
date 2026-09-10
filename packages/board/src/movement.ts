@@ -13,7 +13,7 @@
 import type { ModelHull } from "./shapes";
 import { footReach } from "./shapes";
 import type { TerrainPiece , TerrainIndex} from "./terrain";
-import { floorHeights, hasTrait, topOf } from "./terrain";
+import { floorHeights, hasTrait, mayClimb, topOf } from "./terrain";
 import { ENGAGEMENT_HORIZONTAL, ENGAGEMENT_VERTICAL, horizontalGap, inEngagementRange, verticalGap } from "./distance";
 import type { Vec2, Vec3 } from "./vec";
 import { EPS, dist2, norm2 } from "./vec";
@@ -196,7 +196,11 @@ export function chargeGeometry(unit: readonly ModelHull[], targets: readonly Mod
 
   for (const i of order) {
     const model = unit[i]!;
-    if (straightGap(model, targets) - ENGAGEMENT_HORIZONTAL >= best.distance) continue;
+    // A straight line is the shortest a route can be, so it is a lower bound on the charge: a model
+    // whose lower bound already fails needs no search at all. Without this a hopeless charge across
+    // a table costs a full 12" flood fill per model.
+    const floor = straightGap(model, targets) - ENGAGEMENT_HORIZONTAL;
+    if (floor > MAX_CHARGE + EPS || floor >= best.distance) continue;
     const reach = reachable(model, Math.min(MAX_CHARGE, best.distance), index, search);
     for (let n = 0; n < reach.nodes.length; n++) {
       const node = reach.nodes[n]!;
@@ -297,7 +301,10 @@ class SurfaceMap {
    */
   at(p: Vec2): number[] {
     const out = [0];
-    for (const piece of this.index.at(p)) for (const z of floorHeights(piece)) if (z > EPS) out.push(z);
+    for (const piece of this.index.at(p)) {
+      if (!mayClimb(piece, this.keywords)) continue;
+      for (const z of floorHeights(piece)) if (z > EPS) out.push(z);
+    }
     return out.length > 1 ? [...new Set(out)].sort((a, b) => a - b) : out;
   }
 
@@ -324,6 +331,10 @@ class SurfaceMap {
   permitted(piece: TerrainPiece): boolean {
     return piece.passableBy.some((k) => this.keywords.has(k.toUpperCase()));
   }
+
+  climbable(piece: TerrainPiece): boolean {
+    return mayClimb(piece, this.keywords);
+  }
 }
 
 /* ---- step costs and legality ------------------------------------------------------------------ */
@@ -343,7 +354,7 @@ function passable(from: Vec3, to: Vec3, model: ModelHull, index: TerrainIndex, r
     // A climb needs a piece under one of the two points that can be climbed.
     const here = index.at({ x: to.x, y: to.y });
     const there = index.at({ x: from.x, y: from.y });
-    const climbable = [...here, ...there].some((p) => hasTrait(p, "scalable") || p.floors.length > 1 || p.passableBy.some((k) => keywords.has(k.toUpperCase())));
+    const climbable = [...here, ...there].some((p) => mayClimb(p, keywords) && (hasTrait(p, "scalable") || p.floors.length > 1 || p.passableBy.some((k) => keywords.has(k.toUpperCase()))));
     if (!climbable) return false;
   }
   // Guard against slipping diagonally through a thin wall between two legal cells.

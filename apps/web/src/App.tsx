@@ -12,6 +12,7 @@ import { ScenariosPage } from "./pages/ScenariosPage";
 import { ArmiesPage } from "./pages/ArmiesPage";
 import { RosterEditorPage } from "./pages/RosterEditorPage";
 import { AnalysesPage } from "./pages/AnalysesPage";
+import { BattlePage } from "./pages/BattlePage";
 import { DataPage } from "./pages/DataPage";
 import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
@@ -83,7 +84,7 @@ export function App() {
     <p className="muted shell-loading">{t("shell.loading")}</p>
   ) : (
     <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
-      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "analyses" ? <AnalysesPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
+      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "analyses" ? <AnalysesPage /> : route === "battle" ? <BattlePage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
     </ErrorBoundary>
   );
 

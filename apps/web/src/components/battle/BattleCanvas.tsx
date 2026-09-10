@@ -1,0 +1,181 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Vector3 } from "three";
+import type { ReachNode, Vec2, Vec3 } from "@grimstat/board";
+import type { BattleState, BattleUnit } from "../../lib/battle";
+import { anchorOf, dragVerdict, findUnit, indexOf, translateUnit } from "../../lib/battle";
+import { Cameras, type CameraMode } from "./Cameras";
+import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
+import { GhostUnit, UnitTokens } from "./UnitTokens";
+import { MeasureLine, PathLine, ReachOverlay, SightRays } from "./Overlays";
+
+export type { CameraMode };
+
+export interface DragState {
+  readonly unitId: string;
+  readonly to: Vec2;
+  readonly legal: boolean;
+  readonly cost?: number;
+  readonly problems: readonly string[];
+}
+
+export interface BattleCanvasProps {
+  state: BattleState;
+  cameraMode: CameraMode;
+  selectedId?: string;
+  reach?: readonly ReachNode[];
+  rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
+  path?: readonly Vec3[];
+  measure?: readonly [Vec3, Vec3];
+  /** One child per unit, in the same order; the projector moves them to follow the table. */
+  labelsRef?: RefObject<HTMLDivElement>;
+  onSelect(id: string | undefined): void;
+  onMove(unitId: string, to: Vec2): void;
+  onDrag?(drag: DragState | undefined): void;
+  /** A press on the table itself. What it means is the page's business, not the canvas's. */
+  onTableDown?(at: Vec2): void;
+}
+
+/**
+ * The table.
+ *
+ * The frame loop runs continuously rather than on demand. On-demand drawing is the cheaper default,
+ * but it leaves the canvas holding whatever it drew last whenever a redraw is missed — and a request
+ * made while the tab is hidden is missed, so returning to the page could show a stale table or an
+ * empty one. A scene this size is nothing to draw, and a table that is always right is worth more
+ * than the frames saved.
+ *
+ * Everything the scene draws comes from the geometry kernel — the reach overlay is the search's own
+ * output, the rays are the ones line of sight actually tested. The canvas adds no rules of its own;
+ * if it draws something, the kernel said it.
+ */
+export function BattleCanvas(props: BattleCanvasProps) {
+  return (
+    <Canvas className="battle-canvas" dpr={[1, 2]} gl={{ antialias: true }}>
+      <color attach="background" args={["#15161a"]} />
+      <Scene {...props} />
+    </Canvas>
+  );
+}
+
+/**
+ * Everything inside the canvas, including the drag.
+ *
+ * The drag lives in here rather than around the canvas because it has to reach the orbit controls.
+ * Orbiting and moving a unit are the same gesture — press and drag — and the controls listen on the
+ * canvas element, underneath R3F's object picking, so the controls have to be switched off in the
+ * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
+ * started to swing.
+ */
+function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labelsRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+  const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
+  const [drag, setDrag] = useState<DragState | undefined>();
+  const index = useMemo(() => indexOf(state), [state]);
+  const grabbed = useRef<string | undefined>();
+  const dragRef = useRef<DragState | undefined>();
+
+  const ghost: BattleUnit | undefined = useMemo(() => {
+    if (!drag) return undefined;
+    const unit = findUnit(state, drag.unitId);
+    if (!unit) return undefined;
+    const anchor = anchorOf(unit);
+    return translateUnit(unit, { x: drag.to.x - anchor.pos.x, y: drag.to.y - anchor.pos.y });
+  }, [drag, state]);
+
+  const grab = useCallback(
+    (id: string) => {
+      grabbed.current = id;
+      if (controls) controls.enabled = false;
+      document.body.style.cursor = "grabbing";
+    },
+    [controls],
+  );
+
+  const drop = useCallback(() => {
+    if (!grabbed.current) return;
+    const pending = dragRef.current;
+    if (pending?.legal) onMove(pending.unitId, pending.to);
+    grabbed.current = undefined;
+    dragRef.current = undefined;
+    if (controls) controls.enabled = true;
+    document.body.style.cursor = "";
+    setDrag(undefined);
+    onDrag?.(undefined);
+  }, [controls, onMove, onDrag]);
+
+  // The pointer is often released outside the canvas — over the panel, or off the window entirely.
+  // Listening on the window is what makes a drag that ends anywhere still end.
+  useEffect(() => {
+    window.addEventListener("pointerup", drop);
+    window.addEventListener("pointercancel", drop);
+    return () => {
+      window.removeEventListener("pointerup", drop);
+      window.removeEventListener("pointercancel", drop);
+    };
+  }, [drop]);
+
+  /** Following the pointer while a unit is held: re-judge the move and move the ghost. */
+  const onHover = useCallback(
+    (at: Vec2) => {
+      const unitId = grabbed.current;
+      if (!unitId) return;
+      const unit = findUnit(state, unitId);
+      if (!unit) return;
+      const verdict = dragVerdict(state, unit, at, index);
+      const next: DragState = { unitId, to: at, legal: verdict.ok, cost: verdict.cost, problems: verdict.problems };
+      dragRef.current = next;
+      setDrag(next);
+      onDrag?.(next);
+    },
+    [state, index, onDrag],
+  );
+
+  const onDown = useCallback((at: Vec2) => (grabbed.current ? undefined : onTableDown?.(at)), [onTableDown]);
+
+  return (
+    <>
+      <Cameras mode={cameraMode} size={state.layout.size} />
+      <Lighting size={state.layout.size} />
+      <Table size={state.layout.size} onHover={onHover} onDown={onDown} />
+      <Zones zones={state.zones} />
+      <Terrain pieces={state.layout.pieces} />
+      <Objectives objectives={state.layout.objectives} />
+      {reach?.length ? <ReachOverlay nodes={reach} /> : null}
+      {rays?.length ? <SightRays rays={rays} /> : null}
+      {path?.length ? <PathLine path={path} /> : null}
+      {measure ? <MeasureLine from={measure[0]} to={measure[1]} /> : null}
+      <UnitTokens units={state.units} selectedId={selectedId} onSelect={onSelect} onGrab={grab} />
+      {ghost && drag ? <GhostUnit unit={ghost} legal={drag.legal} /> : null}
+      {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}
+    </>
+  );
+}
+
+/**
+ * Unit names as HTML, positioned by projecting each unit's anchor into screen space every frame.
+ *
+ * HTML rather than 3D text: it stays crisp at any zoom, it is selectable and readable by a screen
+ * reader, and it costs no draw calls. The transforms are written straight to the DOM so following
+ * the camera never re-renders React.
+ */
+function LabelProjector({ labelsRef, units }: { labelsRef: RefObject<HTMLDivElement>; units: readonly BattleUnit[] }) {
+  const { camera, size } = useThree();
+  const scratch = useMemo(() => new Vector3(), []);
+
+  useFrame(() => {
+    const host = labelsRef.current;
+    if (!host) return;
+    const children = host.children;
+    for (let i = 0; i < units.length && i < children.length; i++) {
+      const unit = units[i]!;
+      const anchor = anchorOf(unit);
+      scratch.set(anchor.pos.x, anchor.pos.z + anchor.height + 0.6, -anchor.pos.y).project(camera);
+      const el = children[i] as HTMLElement;
+      const behind = scratch.z > 1;
+      el.style.visibility = behind ? "hidden" : "visible";
+      if (behind) continue;
+      el.style.transform = `translate(-50%, -100%) translate(${((scratch.x + 1) / 2) * size.width}px, ${((1 - scratch.y) / 2) * size.height}px)`;
+    }
+  });
+  return null;
+}

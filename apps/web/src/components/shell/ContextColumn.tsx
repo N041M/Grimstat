@@ -299,6 +299,24 @@ function AboutBody({ inSheet }: BodyProps) {
   );
 }
 
+/**
+ * What the battle table is modelling, and — just as important — what it is assuming. A height the
+ * app guessed decides whether a shot is blocked, so it belongs where the player can see it.
+ */
+function BattleBody({ inSheet }: BodyProps) {
+  return (
+    <ContextFrame eyebrow={t("ctxcol.battle")} meta={t("ctxcol.battle.meta")} inSheet={inSheet}>
+      <ContextList>
+        <ContextRow name={t("ctxcol.battle.measure")} value={t("ctxcol.battle.measureValue")} meta={t("ctxcol.battle.measureMeta")} />
+        <ContextRow name={t("ctxcol.battle.sight")} value={t("ctxcol.battle.sightValue")} meta={t("ctxcol.battle.sightMeta")} />
+        <ContextRow name={t("ctxcol.battle.heights")} value={t("ctxcol.battle.heightsValue")} meta={t("ctxcol.battle.heightsMeta")} />
+        <ContextRow name={t("ctxcol.battle.movement")} value={t("ctxcol.battle.movementValue")} meta={t("ctxcol.battle.movementMeta")} />
+        <ContextRow name={t("ctxcol.battle.mode")} value={t("ctxcol.battle.modeValue")} meta={t("ctxcol.battle.modeMeta")} />
+      </ContextList>
+    </ContextFrame>
+  );
+}
+
 /** The 240–264px context column. On phones the same component is rendered inside a sheet. */
 export function ContextColumn({ route, param, inSheet }: { route: Route; param?: string | undefined; inSheet?: boolean }) {
   const props: BodyProps = { param, ...(inSheet === undefined ? {} : { inSheet }) };
@@ -311,6 +329,8 @@ export function ContextColumn({ route, param, inSheet }: { route: Route; param?:
       return <ArmiesBody {...props} />;
     case "analyses":
       return <AnalysesBody {...props} />;
+    case "battle":
+      return <BattleBody {...props} />;
     case "data":
       return <DataBody {...props} />;
     case "about":
@@ -329,6 +349,8 @@ export function contextEyebrow(route: Route): string {
       return t("ctxcol.armies");
     case "analyses":
       return t("ctxcol.unitSet");
+    case "battle":
+      return t("ctxcol.battle");
     case "data":
       return t("ctxcol.sources");
     case "about":

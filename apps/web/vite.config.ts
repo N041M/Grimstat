@@ -67,6 +67,10 @@ function countPackages(): number {
  * this token and swapped for the real figure once every chunk exists. In dev the token survives and
  * the screen shows "dev build" instead. The figure is the gzipped JS + CSS — what a visitor
  * actually downloads — which is the only version of "bundle size" worth printing.
+ *
+ * Lazily loaded routes are excluded for exactly that reason. The battle table pulls in three.js,
+ * which is bigger than the rest of the app put together, and nobody who never opens it downloads a
+ * byte of it. Counting it would make the headline figure a number no visitor experiences.
  */
 const BUNDLE_TOKEN = "__GS_BUNDLE_SIZE__";
 
@@ -77,7 +81,10 @@ function bundleSizePlugin(): Plugin {
     generateBundle(_options, bundle) {
       let bytes = 0;
       for (const file of Object.values(bundle)) {
-        if (file.type === "chunk") bytes += gzipSync(Buffer.from(file.code, "utf8")).byteLength;
+        if (file.type === "chunk") {
+          if (file.isDynamicEntry) continue;
+          bytes += gzipSync(Buffer.from(file.code, "utf8")).byteLength;
+        }
         else if (file.fileName.endsWith(".css")) bytes += gzipSync(typeof file.source === "string" ? Buffer.from(file.source, "utf8") : Buffer.from(file.source)).byteLength;
       }
       const label = `${Math.round(bytes / 1024)} kB`;
@@ -90,6 +97,9 @@ function bundleSizePlugin(): Plugin {
 
 export default defineConfig({
   base,
+  // pnpm gives each package its own node_modules, so @react-three/fiber can end up resolving a
+  // second copy of React and its hooks then throw. One React for the whole app.
+  resolve: { dedupe: ["react", "react-dom", "three"] },
   define: {
     __GS_TESTS__: JSON.stringify(countTests()),
     __GS_PACKAGES__: JSON.stringify(countPackages()),

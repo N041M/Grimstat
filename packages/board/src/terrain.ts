@@ -43,12 +43,19 @@ export interface TerrainPiece {
   readonly traits: readonly TerrainTrait[];
   /** Walkable surface heights **relative to `base`**, ascending. `[0]` is the ground inside it. */
   readonly floors: readonly number[];
-  /** Keywords allowed through walls and up floors regardless of `impassable`. */
+  /** Keywords allowed through walls regardless of `impassable`. Empty means nobody. */
   readonly passableBy: readonly string[];
+  /**
+   * Keywords allowed onto this piece's upper floors. Empty means anyone who can reach them.
+   *
+   * This is what keeps a tank off the first floor of a ruin. It is a keyword list rather than a
+   * hard-coded rule because which keywords may climb is an edition's business, not geometry's.
+   */
+  readonly climbableBy: readonly string[];
 }
 
-export type TerrainInput = Omit<TerrainPiece, "floors" | "passableBy" | "base" | "traits"> &
-  Partial<Pick<TerrainPiece, "floors" | "passableBy" | "base" | "traits">>;
+export type TerrainInput = Omit<TerrainPiece, "floors" | "passableBy" | "climbableBy" | "base" | "traits"> &
+  Partial<Pick<TerrainPiece, "floors" | "passableBy" | "climbableBy" | "base" | "traits">>;
 
 /** Normalise a piece: counter-clockwise ring, sorted floors, defaults filled in. */
 export function terrain(input: TerrainInput): TerrainPiece {
@@ -61,6 +68,7 @@ export function terrain(input: TerrainInput): TerrainPiece {
     traits: input.traits ?? [],
     floors: [...(input.floors ?? [])].sort((a, b) => a - b),
     passableBy: input.passableBy ?? [],
+    climbableBy: input.climbableBy ?? [],
   };
 }
 
@@ -76,6 +84,17 @@ export const grantsCover = (p: TerrainPiece): boolean => hasTrait(p, "light-cove
 
 /** Absolute heights of the surfaces a model could stand on, lowest first. */
 export const floorHeights = (p: TerrainPiece): number[] => p.floors.map((f) => p.base + f);
+
+/**
+ * May a model with these keywords stand on this piece's upper floors?
+ *
+ * An empty `climbableBy` means anyone who can physically get up there. A non-empty one is how a
+ * layout keeps tanks off the first floor of a ruin — a rules question, so it lives in the data.
+ */
+export function mayClimb(p: TerrainPiece, keywords: ReadonlySet<string>): boolean {
+  if (p.climbableBy.length === 0) return true;
+  return p.climbableBy.some((k) => keywords.has(k.toUpperCase()));
+}
 
 export const containsPoint = (p: TerrainPiece, at: Vec2): boolean => pointInPolygon(at, p.polygon);
 

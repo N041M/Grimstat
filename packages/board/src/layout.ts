@@ -9,8 +9,8 @@
  * `mirrored` builds one that way from a half-table's worth of pieces.
  */
 
-import type { BoardSize, Objective } from "./board";
-import { BATTLE_SIZES } from "./board";
+import type { BoardSize, Objective, Zone } from "./board";
+import { BATTLE_SIZES, rectZone } from "./board";
 import type { TerrainPiece, TerrainTrait } from "./terrain";
 import { terrain, topOf } from "./terrain";
 import type { Vec2 } from "./vec";
@@ -27,7 +27,7 @@ export interface TerrainLayout {
 }
 
 /** An axis-aligned rectangular piece, given by its centre and extents. */
-export function box(id: string, centre: Vec2, width: number, depth: number, height: number, traits: readonly TerrainTrait[] = [], floors?: readonly number[]): TerrainPiece {
+export function box(id: string, centre: Vec2, width: number, depth: number, height: number, traits: readonly TerrainTrait[] = [], floors?: readonly number[], climbableBy?: readonly string[]): TerrainPiece {
   const w = width / 2;
   const d = depth / 2;
   return terrain({
@@ -41,13 +41,17 @@ export function box(id: string, centre: Vec2, width: number, depth: number, heig
     height,
     traits,
     floors: floors ?? [0],
+    climbableBy: climbableBy ?? [],
   });
 }
+
+/** Who can get up a ruin: models on their own feet, not a tank. An edition may say otherwise. */
+export const CLIMBERS = ["INFANTRY", "CHARACTER", "BEAST", "SWARM"] as const;
 
 /** A ruin: obscuring, gives heavy cover, hollow at ground level with storeys every 4". */
 export function ruin(id: string, centre: Vec2, width: number, depth: number, storeys = 2): TerrainPiece {
   const floors = Array.from({ length: storeys }, (_, i) => i * 4);
-  return box(id, centre, width, depth, storeys * 4 + 1, ["obscuring", "heavy-cover", "scalable", "breachable"], floors);
+  return box(id, centre, width, depth, storeys * 4 + 1, ["obscuring", "heavy-cover", "scalable", "breachable"], floors, CLIMBERS);
 }
 
 /** A crater or wreck: low, gives light cover, never blocks a sight line. */
@@ -114,6 +118,14 @@ export function quincunx(size: BoardSize): Vec2[] {
   ];
 }
 
+/**
+ * A generic pair of deployment zones: a strip along each short edge, facing one another. Published
+ * missions use more interesting shapes; those are user-imported data, and any `Zone` polygon works.
+ */
+export function edgeZones(size: BoardSize, depth = 12): readonly [Zone, Zone] {
+  return [rectZone("attacker-zone", "attacker", 0, 0, size.width, depth), rectZone("defender-zone", "defender", 0, size.depth - depth, size.width, size.depth)];
+}
+
 /* ---- the shipped layouts ---------------------------------------------------------------------- */
 
 const SF = BATTLE_SIZES.strikeForce;
@@ -151,7 +163,7 @@ export const CROSSFIRE: TerrainLayout = mirrored({
   size: SF,
   note: "One three-storey centrepiece and four flanking ruins. Whoever holds the middle sees everything.",
   objectives: quincunx(SF),
-  half: ({ ruin, box }) => [box("core", { x: 30, y: 22 }, 12, 10, 13, ["obscuring", "heavy-cover", "scalable", "breachable"], [0, 4, 8]), ruin("f1", { x: 13, y: 32 }, 8, 6, 2), ruin("f2", { x: 47, y: 32 }, 8, 6, 2)],
+  half: ({ ruin, box }) => [box("core", { x: 30, y: 22 }, 12, 10, 13, ["obscuring", "heavy-cover", "scalable", "breachable"], [0, 4, 8], CLIMBERS), ruin("f1", { x: 13, y: 32 }, 8, 6, 2), ruin("f2", { x: 47, y: 32 }, 8, 6, 2)],
 });
 
 /** Hard cover that cannot be walked through, plus low craters: a layout about angles, not floors. */

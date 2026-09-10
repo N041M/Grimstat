@@ -199,7 +199,8 @@ apps/web
 |---|---|---|
 | **B1 Geometry kernel** | `packages/board`: vectors, hulls, terrain prisms with floors, 3D distance, engagement range, true LoS, cover, coherency, zones, objective control | **done** |
 | **B1b Movement & charge** | `reachable` with climbing and path cost, `chargeGeometry` with an exact final leg, `hidden`, the layout schema and four generic layouts with a validator | **done** |
-| B2 The table | Battle page: r3f renderer, both cameras, deploy both lists, drag with legality overlays, measure/LoS/cover/threat/charge tools, expected shooting from any unit to any target, save/share plans | 2 sessions |
+| **B2a The table** | Battle page: r3f renderer, orbit and orthographic top-down cameras, terrain with floors, unit tokens and labels, drag *and* click to move with a live legality verdict, reach overlay, LoS ray tool, cover and charge readouts, measuring tape, layout picker | **done** |
+| B2b Real armies | Deploy from a saved roster instead of the placeholder force, expected shooting from any unit to any target through the engine, save and share plans as permalinks | 1 session |
 | B3 Resolution & missions | `packages/game`: phases, actions, dice mode, casualty allocation, CP/VP, generic missions, Force Disposition generation, hot-seat play, replay/undo, battle report | 2 sessions |
 | B4 AI opponent v1 | `packages/ai`: deployment, movement, shooting, charges, fights, scoring; Easy/Normal; play vs computer end to end | 2 sessions |
 | B5 Depth | Stratagems from data, Tier-2 abilities applied automatically, transports/reserves/deep strike, overwatch, battle-shock, leaders/support on the table, Hard difficulty with rollouts, coach mode | 2+ sessions |
@@ -220,6 +221,21 @@ Two performance notes for B4, where the AI will call all of this in a loop: a 6"
 ten-model unit costs about 60 ms at half-inch resolution, and a 10-versus-10 charge about 30 ms once
 the search is bounded by the best answer found so far (it was 350 ms before that bound). Both need
 the caching the AI section describes before they run inside a search.
+
+### What the table settled
+
+- **Both gestures, one verdict.** Dragging shows the cost as the pointer moves; clicking a
+  destination commits. They share `dragVerdict`, so they can never disagree, and click-to-move is
+  what makes the table usable with a finger or a trackpad.
+- **The frame loop runs continuously.** Drawing on demand is cheaper, but a redraw requested while
+  the tab is hidden is simply lost, and the page then shows a stale table or an empty one. This scene
+  is nothing to draw; correctness wins.
+- **Orbiting and dragging are the same gesture**, and the orbit controls listen below R3F's object
+  picking, so grabbing a unit has to switch the camera off in the same tick — which is why the drag
+  lives inside the canvas rather than around it.
+- **three.js is lazily loaded and excluded from the reported bundle size.** It is 232 kB gzipped,
+  bigger than the rest of the app together, and nobody who never opens the Battle page downloads any
+  of it. Counting it in the About screen's figure would print a number no visitor experiences.
 
 ## Decisions (defaults chosen)
 

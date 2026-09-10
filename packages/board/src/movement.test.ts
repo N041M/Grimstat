@@ -85,6 +85,19 @@ describe("reachability with terrain", () => {
     expect(costTo(reachable(model(0, 0), 12, noFloors), 5, 0, 9)).toBeUndefined();
   });
 
+  it("keeps off an upper floor when the terrain says who may climb it", () => {
+    const ruin = index(terrain({ id: "ruin", polygon: rect(2, -4, 8, 4), height: 9, traits: ["scalable"], floors: [0, 4.5], climbableBy: ["INFANTRY"] }));
+    expect(costTo(reachable(model(0, 0), 12, ruin, { keywords: ["INFANTRY"] }), 5, 0, 4.5)).toBeDefined();
+    expect(costTo(reachable(model(0, 0), 12, ruin, { keywords: ["VEHICLE"] }), 5, 0, 4.5)).toBeUndefined();
+    // The ground floor of a ruin is still a place a tank can drive through.
+    expect(costTo(reachable(model(0, 0), 12, ruin, { keywords: ["VEHICLE"] }), 5, 0, 0)).toBeCloseTo(5, 1);
+  });
+
+  it("lets anyone climb when the terrain names nobody", () => {
+    const ruin = index(terrain({ id: "ruin", polygon: rect(2, -4, 8, 4), height: 9, traits: ["scalable"], floors: [0, 4.5] }));
+    expect(costTo(reachable(model(0, 0), 12, ruin, { keywords: ["VEHICLE"] }), 5, 0, 4.5)).toBeDefined();
+  });
+
   it("stands on a hill top but not inside the hill", () => {
     const hill = index(terrain({ id: "hill", polygon: rect(2, -4, 8, 4), height: 1.8, floors: [1.8] }));
     const reach = reachable(model(0, 0), 8, hill);

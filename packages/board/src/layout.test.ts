@@ -9,6 +9,8 @@ import {
   circleBase,
   control,
   crater,
+  edgeZones,
+  inZone,
   layoutIssues,
   mirrored,
   opposite,
@@ -120,7 +122,9 @@ describe("the shipped layouts", () => {
 
   it("puts a ruin's upper floor within reach and worth standing on", () => {
     const index = new TerrainIndex(CROSSFIRE.pieces);
-    const reach = reachable(model(30, 16), 12, index);
+    // A ruin's storeys are for models on their own feet: without a climbing keyword there is no way up.
+    expect(reachable(model(30, 16), 12, index, { keywords: ["VEHICLE"] }).nodes.every((n) => n.at.z < 3)).toBe(true);
+    const reach = reachable(model(30, 16), 12, index, { keywords: ["INFANTRY"] });
     const upstairs = reach.nodes.filter((n) => n.at.z > 3);
     expect(upstairs.length).toBeGreaterThan(0);
     // Standing on the second storey of the centrepiece, a model sees across the table.
@@ -135,6 +139,33 @@ describe("the shipped layouts", () => {
       { side: "defender", hull: model(objective.at.x - 1, objective.at.y), oc: 1 },
     ]);
     expect(result.controlledBy).toBe("attacker");
+  });
+});
+
+describe("deployment zones", () => {
+  const size = BATTLE_SIZES.strikeForce;
+
+  it("puts a strip along each short edge, facing one another", () => {
+    const [attacker, defender] = edgeZones(size);
+    expect(attacker.owner).toBe("attacker");
+    expect(defender.owner).toBe("defender");
+    expect(inZone(model(30, 6), attacker)).toBe(true);
+    expect(inZone(model(30, 38), defender)).toBe(true);
+    expect(inZone(model(30, 22), attacker)).toBe(false);
+    expect(inZone(model(30, 22), defender)).toBe(false);
+  });
+
+  it("mirrors: whatever is in one zone is in the other when rotated", () => {
+    const [attacker, defender] = edgeZones(size);
+    const here = model(18, 5);
+    const there = { ...here, pos: { ...opposite(here.pos, size), z: 0 } };
+    expect(inZone(here, attacker)).toBe(inZone(there, defender));
+  });
+
+  it("takes a depth", () => {
+    const [attacker] = edgeZones(size, 9);
+    expect(inZone(model(30, 8), attacker)).toBe(true);
+    expect(inZone(model(30, 11), attacker)).toBe(false);
   });
 });
 
