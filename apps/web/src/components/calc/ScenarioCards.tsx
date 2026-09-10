@@ -1,6 +1,7 @@
-import type { ScenarioUnit, ScenarioWeapon } from "@grimstat/schema";
+import type { CoverageReport, ScenarioUnit, ScenarioWeapon } from "@grimstat/schema";
 import { dice, fmtInt, fmtRelative, skill } from "../../lib/format";
 import { modelCount } from "../../lib/scenario";
+import { hrefFor } from "../../router";
 import { t } from "../../i18n";
 
 /** "18A · 3+ · S4 AP1 D1" — the 10px mono line under a weapon name in the context column. */
@@ -70,6 +71,50 @@ function UnitCard({ unit, side, showWeapons, onEdit }: { unit: ScenarioUnit; sid
  * cards (each with an edit affordance that opens the unit picker), and the Save / Share pair pinned
  * to the bottom of the column.
  */
+/**
+ * What the engine could and could not model for this scenario, in the space the pinned actions
+ * leave under the unit cards. Coverage is a fact about the scenario rather than a result, and the
+ * abilities it cannot model are the ones worth acting on, so each links to the override editor.
+ */
+function CoverageBlock({ coverage }: { coverage: CoverageReport }) {
+  const total = coverage.tier1 + coverage.tier2 + coverage.tier3;
+  if (!total) return null;
+  const modelled = coverage.tier1 + coverage.tier2;
+  const pct = (n: number) => (total ? `${(n / total) * 100}%` : "0%");
+  return (
+    <section className="calc-ctx-cov" aria-labelledby="calc-cov-h">
+      <div className="calc-ctx-cov-head">
+        <span className="t-eyebrow" id="calc-cov-h">
+          {t("calc.coverage")}
+        </span>
+        <span className="calc-ctx-cov-count mono">{t("coverage.summary", { modelled, total })}</span>
+      </div>
+      <div className="calc-ctx-cov-bar" role="img" aria-label={t("coverage.aria", { t1: coverage.tier1, t2: coverage.tier2, t3: coverage.tier3 })}>
+        <span className="t1" style={{ width: pct(coverage.tier1) }} />
+        <span className="t2" style={{ width: pct(coverage.tier2) }} />
+        <span className="t3" style={{ width: pct(coverage.tier3) }} />
+      </div>
+      {coverage.unmodelled.length ? (
+        <>
+          <div className="calc-ctx-cov-label t-micro">{t("calc.coverage.notModelled")}</div>
+          <ul className="calc-ctx-cov-list">
+            {coverage.unmodelled.map((u) => (
+              <li key={u}>
+                <span title={u}>{u}</span>
+                <a href={`${hrefFor("data", "overrides")}?q=${encodeURIComponent(u)}`} title={t("calc.coverage.fixHint", { name: u })}>
+                  {t("coverage.override")}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="calc-ctx-cov-all">{t("calc.coverage.allModelled")}</p>
+      )}
+    </section>
+  );
+}
+
 export function ScenarioCards({
   name,
   updatedAt,
@@ -77,6 +122,7 @@ export function ScenarioCards({
   attacker,
   defender,
   fightPhase,
+  coverage,
   onRename,
   onEdit,
   onSave,
@@ -91,6 +137,8 @@ export function ScenarioCards({
   defender: ScenarioUnit;
   /** In the fight phase the defender's own weapons matter, so the card lists them too. */
   fightPhase: boolean;
+  /** Undefined until the first solve returns. */
+  coverage?: CoverageReport | undefined;
   onRename: (name: string) => void;
   onEdit: (side: "attacker" | "defender") => void;
   onSave: () => void;
@@ -109,6 +157,7 @@ export function ScenarioCards({
       </div>
       <UnitCard unit={attacker} side="attacker" showWeapons onEdit={() => onEdit("attacker")} />
       <UnitCard unit={defender} side="defender" showWeapons={fightPhase} onEdit={() => onEdit("defender")} />
+      {coverage ? <CoverageBlock coverage={coverage} /> : <div className="calc-ctx-filler" />}
       <div className="calc-ctx-actions">
         <button type="button" className="btn-primary" onClick={onSave}>
           {t("calc.save")}

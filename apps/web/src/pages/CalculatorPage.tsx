@@ -96,6 +96,7 @@ export function CalculatorPage() {
           attacker={scenario.attacker}
           defender={scenario.defender}
           fightPhase={scenario.context.phase === "fight"}
+          coverage={sim.result?.coverage}
           onRename={(name) => updateScenario((s) => ({ ...s, name }))}
           onEdit={setEditing}
           onSave={() => void save()}

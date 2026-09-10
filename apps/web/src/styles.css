@@ -3343,6 +3343,90 @@ a.btn:hover {
   font: 400 10px/1.35 var(--mono);
   color: var(--faint);
 }
+/* Modelling coverage fills the column between the unit cards and the pinned actions. */
+.calc-ctx-cov {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.calc-ctx-filler {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.calc-ctx-cov-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.calc-ctx-cov-count {
+  font: 400 10px/1.3 var(--mono);
+  color: var(--faint);
+  white-space: nowrap;
+}
+.calc-ctx-cov-bar {
+  display: flex;
+  height: 5px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--fill);
+}
+.calc-ctx-cov-bar .t1 {
+  background: var(--good);
+}
+.calc-ctx-cov-bar .t2 {
+  background: var(--mid);
+}
+.calc-ctx-cov-bar .t3 {
+  background: var(--accent);
+}
+.calc-ctx-cov-label {
+  color: var(--muted);
+  margin-top: 2px;
+}
+.calc-ctx-cov-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.calc-ctx-cov-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font: 400 12px/1.35 var(--font);
+  color: var(--ink-2);
+}
+.calc-ctx-cov-list li span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calc-ctx-cov-list li a {
+  flex: none;
+  font: 400 10px/1.3 var(--mono);
+  color: var(--accent);
+  text-decoration: none;
+}
+.calc-ctx-cov-list li a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+.calc-ctx-cov-all {
+  margin: 0;
+  font: 400 11px/1.45 var(--font);
+  color: var(--faint);
+  text-wrap: pretty;
+}
 .calc-ctx-actions {
   margin-top: auto;
   padding: 12px 16px;

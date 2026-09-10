@@ -383,6 +383,10 @@ export const en = {
   "weapons.none": "No weapons were resolved.",
 
   "coverage.total": "Scenario",
+  "calc.coverage": "Modelling",
+  "calc.coverage.notModelled": "Not modelled",
+  "calc.coverage.allModelled": "Every ability and keyword in this scenario is modelled.",
+  "calc.coverage.fixHint": "Write an effect record for {name}",
   "coverage.summary": "{modelled} of {total} modelled",
   "coverage.aria": "Tier 1: {t1}, tier 2: {t2}, tier 3: {t3}",
   "coverage.tier1": "Tier 1 native ({n})",
