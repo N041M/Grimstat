@@ -18,6 +18,10 @@ export { constraints11e, BATTLE_SIZES, compositionBounds } from "./constraints";
 export { makeScenario, runMatrix, durabilityProfile, efficiencyRanking } from "./analysis";
 export type { MatrixResult, MatrixCell, DurabilityEntry, EfficiencyRow } from "./analysis";
 export { optimiseTurn, evaluateTurnPlan, DEFAULT_TURN_OPTIONS } from "./optimiser";
+export { reverseMathhammer } from "./reverse";
+export type { ReverseCandidate, ReverseInput, ReverseRow, ReverseResult } from "./reverse";
+export { sensitivity, SENSITIVITY_VARIANTS, CHANNEL_INFO } from "./sensitivity";
+export type { SensitivityVariant, SensitivityResult, SensitivityVariantDef } from "./sensitivity";
 export type { TurnOption, TurnAttacker, TurnTarget, TurnPlanInput, TurnAssignment, TurnTargetOutcome, TurnPlanResult } from "./optimiser";
 
 /** Extension point: add or override a Tier-1 weapon keyword without touching this package. */

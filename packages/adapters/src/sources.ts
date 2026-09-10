@@ -5,6 +5,18 @@ import { bsdataJsonAdapter, BSDATA_RAW_URL, BSDATA_TREE_URL } from "./bsdata-jso
 
 export type SourceId = "mfm-yaml" | "wahapedia-csv" | "bsdata-json";
 
+/** Wahapedia keeps one export per edition; the same adapter reads both. */
+export const WAHAPEDIA_BASE_URL_10E = "https://wahapedia.ru/wh40k10ed/";
+
+export function wahapediaUrlFor(gameSystemId: string): string {
+  return gameSystemId === "wh40k-10e" ? WAHAPEDIA_BASE_URL_10E : WAHAPEDIA_BASE_URL;
+}
+
+/** Sources that carry data for a game system. MFM YAML and BSData JSON are 11th-edition only. */
+export function sourcesForSystem(gameSystemId: string): SourceId[] {
+  return gameSystemId === "wh40k-10e" ? ["wahapedia-csv"] : ["mfm-yaml", "bsdata-json", "wahapedia-csv"];
+}
+
 export interface SourceDef {
   id: SourceId;
   adapter: Adapter;

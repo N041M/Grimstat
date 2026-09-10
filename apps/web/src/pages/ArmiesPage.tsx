@@ -15,7 +15,7 @@ import { t, type I18nKey } from "../i18n";
 export const battleSizeKey = (s: BattleSize): I18nKey => `battleSize.${s}` as I18nKey;
 
 export function ArmiesPage() {
-  const { snapshot, activeSnapshotId, notify } = useApp();
+  const { snapshot, activeSnapshotId, notify, withOverrides } = useApp();
   const [items, setItems] = useState<Roster[] | undefined>(undefined);
   const [others, setOthers] = useState<Map<string, Snapshot | null>>(new Map());
   const [panel, setPanel] = useState<"new" | "import" | undefined>(undefined);
@@ -41,7 +41,7 @@ export function ArmiesPage() {
     const missing = [...new Set(items.map((r) => r.snapshotId))].filter((id) => id !== activeSnapshotId && !others.has(id));
     if (!missing.length) return;
     let alive = true;
-    void Promise.all(missing.map(async (id) => [id, (await db.snapshots.get(id)) ?? null] as const)).then((pairs) => {
+    void Promise.all(missing.map(async (id) => [id, (await db.snapshots.get(id).then((s) => (s ? withOverrides(s) : undefined))) ?? null] as const)).then((pairs) => {
       if (!alive) return;
       setOthers((m) => {
         const next = new Map(m);

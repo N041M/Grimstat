@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { Override, Snapshot } from "@grimstat/schema";
-import { SOURCES, fetchSource, exportJson, type AdapterOutput, type SourceId } from "@grimstat/adapters";
+import { SOURCES, fetchSource, exportJson, sourcesForSystem, wahapediaUrlFor, type AdapterOutput, type SourceId } from "@grimstat/adapters";
 import { applyOverrides, buildSnapshot, mergeSources, type MergeResult } from "@grimstat/snapshot";
 import { exists, readDirFiles, readJson, writeText } from "../io";
 
@@ -46,14 +46,14 @@ export function parseImportArgs(argv: string[]): ImportOptions {
 }
 
 /** Conventional on-disk layout under the data dir (git-ignored). */
-export function localFilesFor(id: SourceId, dataDir: string): { files: Record<string, string>; ref?: string; dir: string } {
+export function localFilesFor(id: SourceId, dataDir: string, system = "wh40k-11e"): { files: Record<string, string>; ref?: string; dir: string } {
   if (id === "mfm-yaml") {
     const repoData = join(dataDir, "mfm", "repo", "data");
     const dir = exists(repoData) ? repoData : join(dataDir, "mfm");
     return { files: readDirFiles(dir, /\.ya?ml$/i), dir };
   }
   if (id === "wahapedia-csv") {
-    const dir = join(dataDir, "wahapedia");
+    const dir = join(dataDir, system === "wh40k-10e" ? "wahapedia-10e" : "wahapedia");
     return { files: readDirFiles(dir, /\.csv$/i), dir };
   }
   const dir = join(dataDir, "bsdata");
@@ -80,12 +80,17 @@ export interface ImportRun {
 export async function runImport(opts: ImportOptions, log: (s: string) => void = console.log): Promise<ImportRun> {
   const parts: AdapterOutput[] = [];
   const fetchedAt = new Date().toISOString();
+  const allowed = sourcesForSystem(opts.system);
   for (const id of opts.sources) {
+    if (!allowed.includes(id)) {
+      log(`[${id}] skipped: no ${opts.system} data in this source`);
+      continue;
+    }
     const def = SOURCES[id];
-    let { files, ref, dir } = localFilesFor(id, opts.fromDir);
+    let { files, ref, dir } = localFilesFor(id, opts.fromDir, opts.system);
     if (opts.refresh || Object.keys(files).length === 0) {
       log(`[${id}] downloading (${def.attribution})`);
-      const fetched = await fetchSource(id, undefined, { onProgress: ({ index, total }) => (index % 10 === 0 || index === total) && log(`[${id}]   ${index}/${total}`) });
+      const fetched = await fetchSource(id, undefined, { ...(id === "wahapedia-csv" ? { urls: [wahapediaUrlFor(opts.system)] } : {}), onProgress: ({ index, total }) => (index % 10 === 0 || index === total) && log(`[${id}]   ${index}/${total}`) });
       files = fetched.files;
       ref = fetched.ref;
       dir = id === "mfm-yaml" ? join(opts.fromDir, "mfm") : dir;
@@ -94,8 +99,9 @@ export async function runImport(opts: ImportOptions, log: (s: string) => void = 
       log(`[${id}] saved ${Object.keys(files).length} files to ${dir}`);
     } else log(`[${id}] using ${Object.keys(files).length} local files from ${dir}`);
     const t0 = Date.now();
-    const parseOpts: { gameSystemId: string; fetchedAt: string; ref?: string } = { gameSystemId: opts.system, fetchedAt };
+    const parseOpts: { gameSystemId: string; fetchedAt: string; ref?: string; url?: string } = { gameSystemId: opts.system, fetchedAt };
     if (ref) parseOpts.ref = ref;
+    if (id === "wahapedia-csv") parseOpts.url = wahapediaUrlFor(opts.system);
     const out = def.adapter.parse(files, parseOpts);
     log(`[${id}] parsed in ${Date.now() - t0} ms: ${describe(out)}${out.warnings.length ? ` (${out.warnings.length} warnings)` : ""}`);
     if (!opts.quiet) for (const w of out.warnings.slice(0, 8)) log(`[${id}]   warn: ${w}`);

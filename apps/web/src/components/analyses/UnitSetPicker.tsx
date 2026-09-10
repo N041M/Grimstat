@@ -103,6 +103,7 @@ export function UnitSetPicker({ label, entries, onChange, single, archetypeFilte
 }
 
 function ArmySource({ snapshot, single, onAdd }: { snapshot: Snapshot | undefined; single: boolean; onAdd: (e: UnitEntry[]) => void }) {
+  const { withOverrides } = useApp();
   const [rosters, setRosters] = useState<Roster[] | undefined>(undefined);
   const [rosterId, setRosterId] = useState("");
   const [rosterSnap, setRosterSnap] = useState<{ id: string; snapshot: Snapshot | undefined } | undefined>(undefined);
@@ -125,11 +126,11 @@ function ArmySource({ snapshot, single, onAdd }: { snapshot: Snapshot | undefine
   useEffect(() => {
     if (!wanted || wanted === snapshot?.id) return;
     let alive = true;
-    void db.snapshots.get(wanted).then((s) => alive && setRosterSnap({ id: wanted, snapshot: s }));
+    void db.snapshots.get(wanted).then((s) => alive && setRosterSnap({ id: wanted, snapshot: s ? withOverrides(s) : undefined }));
     return () => {
       alive = false;
     };
-  }, [wanted, snapshot?.id]);
+  }, [wanted, snapshot?.id, withOverrides]);
 
   const snap = !roster ? undefined : roster.snapshotId === snapshot?.id ? snapshot : rosterSnap?.id === roster.snapshotId ? (rosterSnap.snapshot ?? snapshot) : undefined;
   const units = useMemo(() => (roster && snap ? rosterHostEntries(roster, snap) : []), [roster, snap]);

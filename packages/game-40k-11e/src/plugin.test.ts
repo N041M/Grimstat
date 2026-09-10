@@ -207,5 +207,8 @@ describe("pattern library", () => {
     expect(c.tier).toBe("tier3");
     const d = abilityEffects({ id: "w", name: "Core", scope: "core", text: "", coreKeyword: "FEEL NO PAIN", coreValue: 6, isLegends: false });
     expect(d.tier).toBe("tier1");
+    const e = abilityEffects({ id: "v", name: "Curated", scope: "datasheet", text: "Something narrative.", effects: [], isLegends: false });
+    expect(e.tier).toBe("tier2");
+    expect(e.notes).toEqual(["no combat effect"]);
   });
 });

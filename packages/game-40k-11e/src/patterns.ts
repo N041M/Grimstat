@@ -129,7 +129,8 @@ export function patternEffects(ability: Ability): AbilityEffects | null {
 
 /** Full tiering: explicit effects > core keyword > text patterns > tier3. */
 export function abilityEffects(ability: Ability): AbilityEffects {
-  if (ability.effects && ability.effects.length) return { tier: "tier2", effects: ability.effects.map((e) => ({ ...e, source: e.source ?? ability.name })) };
+  // An explicit `effects` array (even empty, from an override pack) is curated data: modelled as Tier 2.
+  if (ability.effects) return { tier: "tier2", effects: ability.effects.map((e) => ({ ...e, source: e.source ?? ability.name })), ...(ability.effects.length ? {} : { notes: ["no combat effect"] }) };
   const core = coreAbilityEffects(ability);
   if (core) return core;
   const pat = patternEffects(ability);

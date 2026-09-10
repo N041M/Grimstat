@@ -39,7 +39,7 @@ export function parseInt0(v: string | undefined | null): number | null {
   if (v === undefined || v === null) return null;
   const s = v.trim();
   if (!s || s === "-") return null;
-  const m = /^(\d+)$/.exec(s);
+  const m = /^(\d+)\s*\*?$/.exec(s); // "5*" carries a footnote in some exports
   return m ? Number(m[1]) : null;
 }
 

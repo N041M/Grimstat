@@ -3,7 +3,7 @@ import { run, percentiles, delta, mean, type EngineInput, type TargetGroup, type
 import type { Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, SimResult, Snapshot } from "@grimstat/schema";
 import { CH, POLICY } from "./channels";
 import { create11eKeywordRegistry } from "./keywords";
-import { RULES, type RulesParams } from "./manifest";
+import { RULES, RULES_10E, type RulesParams } from "./manifest";
 import { attacksPMF, classifyHit, classifyWound, damagePMF, hitGate, pUnsaved, sustainedPMF, woundGate, woundTarget } from "./attack";
 import { activeToggleEffects, coverageFor, listToggles, resolveScenarioUnit, upper } from "./resolve";
 
@@ -70,7 +70,14 @@ function evalContext(attacker: ScenarioUnit, defender: ScenarioUnit, weapon: Sce
   };
 }
 
+let tenthRegistry: ReturnType<typeof create11eKeywordRegistry> | null = null;
+
+/** Runs under the edition named by `scenario.gameSystemId` ("wh40k-10e" → 10th-edition rules; anything else → 11th). */
 export function runScenario(scenario: Scenario, opts: { snapshot?: Snapshot; initialState?: number[] } = {}): SimResult {
+  if (scenario.gameSystemId === "wh40k-10e") {
+    tenthRegistry ??= create11eKeywordRegistry(RULES_10E);
+    return runScenarioWith(RULES_10E, tenthRegistry, scenario, opts);
+  }
   return runScenarioWith(RULES, keywordRegistry, scenario, opts);
 }
 

@@ -14,6 +14,7 @@ import { ArmiesPage } from "./pages/ArmiesPage";
 import { RosterEditorPage } from "./pages/RosterEditorPage";
 import { AnalysesPage } from "./pages/AnalysesPage";
 import { DataPage } from "./pages/DataPage";
+import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { t } from "./i18n";
@@ -144,7 +145,7 @@ export function App() {
           <p className="muted">{t("shell.loading")}</p>
         ) : (
           <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
-            {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "analyses" ? <AnalysesPage /> : route === "data" ? <DataPage /> : <AboutPage />}
+            {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "analyses" ? <AnalysesPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
           </ErrorBoundary>
         )}
       </main>

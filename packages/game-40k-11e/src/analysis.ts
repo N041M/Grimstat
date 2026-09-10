@@ -4,7 +4,7 @@ import { runScenario } from "./scenario";
 
 const now = () => new Date().toISOString();
 
-export function makeScenario(attacker: ScenarioUnit, defender: ScenarioUnit, context: Partial<ScenarioContext> = {}, enabledToggles: string[] = []): Scenario {
+export function makeScenario(attacker: ScenarioUnit, defender: ScenarioUnit, context: Partial<ScenarioContext> = {}, enabledToggles: string[] = [], gameSystemId = "wh40k-11e"): Scenario {
   return {
     id: "adhoc",
     ownerId: "local",
@@ -12,7 +12,7 @@ export function makeScenario(attacker: ScenarioUnit, defender: ScenarioUnit, con
     updatedAt: now(),
     revision: 0,
     name: `${attacker.name} vs ${defender.name}`,
-    gameSystemId: "wh40k-11e",
+    gameSystemId,
     attacker,
     defender,
     context: {
@@ -54,7 +54,7 @@ export interface MatrixResult {
 }
 
 /** Melee-only attackers are resolved in the fight phase (charged); everyone else as given. */
-function phaseFor(a: ScenarioUnit, context: Partial<ScenarioContext>): Partial<ScenarioContext> {
+export function phaseFor(a: ScenarioUnit, context: Partial<ScenarioContext>): Partial<ScenarioContext> {
   if (context.phase) return context;
   const enabled = a.weapons.filter((w) => w.enabled && w.count > 0);
   const meleeOnly = enabled.length > 0 && enabled.every((w) => w.kind === "melee");

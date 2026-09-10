@@ -5,10 +5,26 @@ import { MatrixTab } from "../components/analyses/MatrixTab";
 import { DurabilityTab } from "../components/analyses/DurabilityTab";
 import { EfficiencyTab } from "../components/analyses/EfficiencyTab";
 import { TurnTab } from "../components/analyses/TurnTab";
+import { ReverseTab } from "../components/analyses/ReverseTab";
 import { t } from "../i18n";
 
-export type AnalysisTab = "matrix" | "durability" | "efficiency" | "turn";
-const TABS: AnalysisTab[] = ["matrix", "durability", "efficiency", "turn"];
+export type AnalysisTab = "matrix" | "durability" | "efficiency" | "turn" | "reverse";
+const TABS: AnalysisTab[] = ["matrix", "durability", "efficiency", "turn", "reverse"];
+
+function tabLabel(tab: AnalysisTab): string {
+  switch (tab) {
+    case "matrix":
+      return t("analyses.tab.matrix");
+    case "durability":
+      return t("analyses.tab.durability");
+    case "efficiency":
+      return t("analyses.tab.efficiency");
+    case "turn":
+      return t("analyses.tab.turn");
+    case "reverse":
+      return t("analyses.tab.reverse");
+  }
+}
 const TAB_KEY = "analyses.tab";
 
 export function AnalysesPage() {
@@ -40,15 +56,10 @@ export function AnalysesPage() {
         label={t("analyses.tabs")}
         value={tab}
         onChange={select}
-        tabs={[
-          { id: "matrix", label: t("analyses.tab.matrix") },
-          { id: "durability", label: t("analyses.tab.durability") },
-          { id: "efficiency", label: t("analyses.tab.efficiency") },
-          { id: "turn", label: t("analyses.tab.turn") },
-        ]}
+        tabs={TABS.map((id) => ({ id, label: tabLabel(id) }))}
       />
-      <div role="tabpanel" aria-label={t(tab === "matrix" ? "analyses.tab.matrix" : tab === "durability" ? "analyses.tab.durability" : tab === "efficiency" ? "analyses.tab.efficiency" : "analyses.tab.turn")}>
-        {tab === "matrix" ? <MatrixTab /> : tab === "durability" ? <DurabilityTab /> : tab === "efficiency" ? <EfficiencyTab /> : <TurnTab />}
+      <div role="tabpanel" aria-label={tabLabel(tab)}>
+        {tab === "matrix" ? <MatrixTab /> : tab === "durability" ? <DurabilityTab /> : tab === "efficiency" ? <EfficiencyTab /> : tab === "turn" ? <TurnTab /> : <ReverseTab />}
       </div>
     </div>
   );

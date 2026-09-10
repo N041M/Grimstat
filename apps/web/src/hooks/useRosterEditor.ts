@@ -117,7 +117,7 @@ export function useRosterEditor(id: string): RosterEditorState {
  * the local database; falls back to the active snapshot (with `fallback: true`) when it is gone.
  */
 export function useRosterSnapshot(roster: Roster | undefined): { snapshot: Snapshot | undefined; fallback: boolean; loading: boolean } {
-  const { snapshot: active, activeSnapshotId } = useApp();
+  const { snapshot: active, activeSnapshotId, withOverrides } = useApp();
   const wanted = roster?.snapshotId;
   const [state, setState] = useState<{ id: string; snapshot: Snapshot | undefined } | undefined>(undefined);
 
@@ -125,7 +125,7 @@ export function useRosterSnapshot(roster: Roster | undefined): { snapshot: Snaps
     if (!wanted || wanted === activeSnapshotId) return;
     let alive = true;
     void db.snapshots.get(wanted).then((s) => {
-      if (alive) setState({ id: wanted, snapshot: s });
+      if (alive) setState({ id: wanted, snapshot: s ? withOverrides(s) : undefined });
     });
     return () => {
       alive = false;

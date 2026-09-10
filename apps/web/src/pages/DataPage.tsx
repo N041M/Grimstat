@@ -1,11 +1,15 @@
 import { useRef, useState, type ChangeEvent } from "react";
-import { Roster, Scenario, Snapshot } from "@grimstat/schema";
-import { db, exportAll, importAll, type ExportBundle } from "../db";
+import { Override, Roster, Scenario, Snapshot } from "@grimstat/schema";
+import { db, exportAll, importAll, overrideKey, type ExportBundle, type OverrideRecord } from "../db";
+import { nowIso } from "../lib/ids";
 import { download } from "../lib/download";
 import { useApp } from "../state/AppContext";
 import { loadSampleSnapshot } from "../lib/snapshotSource";
 import { fmtDate } from "../lib/format";
 import { Empty } from "../components/ui";
+import { SnapshotCompare } from "../components/data/SnapshotCompare";
+import { OverridesPill } from "./OverridesPage";
+import { hrefFor } from "../router";
 import { t } from "../i18n";
 
 function zodIssues(err: { issues: Array<{ path: Array<string | number>; message: string }> }, max = 15): string[] {
@@ -21,7 +25,7 @@ async function readFile(e: ChangeEvent<HTMLInputElement>): Promise<{ name: strin
 }
 
 export function DataPage() {
-  const { snapshotList, activeSnapshotId, setActiveSnapshot, refreshSnapshots, notify } = useApp();
+  const { snapshotList, activeSnapshotId, setActiveSnapshot, refreshSnapshots, refreshOverrides, notify, overrides, overrideStatus } = useApp();
   const [busy, setBusy] = useState(false);
   const snapInput = useRef<HTMLInputElement>(null);
   const bundleInput = useRef<HTMLInputElement>(null);
@@ -116,13 +120,21 @@ export function DataPage() {
         if (p.success) rosters.push(p.data);
         else errors.push(`roster ${(r as { id?: string })?.id ?? "?"}: ${p.error.issues[0]?.message ?? "invalid"}`);
       }
+      const overridesIn: OverrideRecord[] = [];
+      for (const o of b.stores.overrides ?? []) {
+        const p = Override.safeParse(o);
+        const rec = o as Partial<OverrideRecord>;
+        if (p.success) overridesIn.push({ ...p.data, key: overrideKey(p.data.entity, p.data.id), ownerId: typeof rec.ownerId === "string" ? rec.ownerId : "local", createdAt: typeof rec.createdAt === "string" ? rec.createdAt : nowIso(), updatedAt: typeof rec.updatedAt === "string" ? rec.updatedAt : nowIso() });
+        else errors.push(`override ${rec.entity ?? "?"}:${rec.id ?? "?"}: ${p.error.issues[0]?.message ?? "invalid"}`);
+      }
       const counts = await importAll({
         format: "grimstat-export",
         version: 1,
         exportedAt: b.exportedAt ?? new Date().toISOString(),
-        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings: Array.isArray(b.stores.settings) ? b.stores.settings : [], rosters },
+        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings: Array.isArray(b.stores.settings) ? b.stores.settings : [], rosters, overrides: overridesIn },
       });
       await refreshSnapshots();
+      await refreshOverrides();
       notify(t("data.bundleImported", { snapshots: counts.snapshots, scenarios: counts.scenarios }), errors.length ? "error" : "success", errors.length ? errors : undefined);
     });
 
@@ -154,6 +166,7 @@ export function DataPage() {
       <section className="panel">
         <div className="panel-head">
           <h2>{t("data.stored")}</h2>
+          <OverridesPill />
         </div>
         {snapshotList.length === 0 ? (
           <Empty>{t("data.empty")}</Empty>
@@ -210,6 +223,28 @@ export function DataPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="panel" aria-labelledby="data-overrides-h">
+        <div className="panel-head">
+          <h2 id="data-overrides-h">{t("overrides.title")}</h2>
+          <OverridesPill />
+        </div>
+        <p className="small muted">{t("overrides.intro")}</p>
+        <div className="row">
+          <a className="btn" href={hrefFor("data", "overrides")}>
+            {t("overrides.open")}
+          </a>
+          <span className="small muted">{t("overrides.dataSummary", { n: overrides.length, applied: overrideStatus.applied })}</span>
+        </div>
+      </section>
+
+      <section className="panel" aria-labelledby="data-compare-h">
+        <div className="panel-head">
+          <h2 id="data-compare-h">{t("data.compare")}</h2>
+        </div>
+        <p className="small muted">{t("data.compare.intro")}</p>
+        <SnapshotCompare snapshotList={snapshotList} activeSnapshotId={activeSnapshotId} />
       </section>
 
       <section className="panel">

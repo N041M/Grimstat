@@ -39,3 +39,8 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - Options model stratagem-like effects with CP costs (one per attacking unit, per phase, as in 11e); a CP budget constrains the plan.
 - Objectives: expected points of *destroyed* models (default; a chipped tank scores nothing), expected models slain, or expected wounds dealt.
 - Whole-unit targeting only (no split fire); if the exact path refuses a target (state space too large) that pair falls back to unchained Monte Carlo and a warning is raised.
+
+## Reverse mathhammer and what-if (`reverse.ts`, `sensitivity.ts`)
+- Reverse: every candidate and every combination up to the chosen size is evaluated exactly with chained defender states (combinations fire in the listed order); rows that meet the threshold are ranked by points, the rest by value. Capped at 1,500 combinations.
+- What-if: one change at a time against the base scenario (26 variants: attacker buffs, context changes, defender debuffs). Deltas are exact differences, not approximations, so interactions between two changes are not shown.
+- Overrides: an ability whose override sets `effects: []` counts as modelled ("no combat effect") and leaves the coverage list.

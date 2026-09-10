@@ -1,8 +1,54 @@
 # apps/web — notes and requests for other packages
 
-Status: Phase 3 web app (Vite + React 18 + TypeScript, offline PWA), the Phase 4 army builder ("Armies" section) and
-the Phase 5 army-level analyses ("Analyses" section). `pnpm typecheck` clean, `pnpm vitest run apps/web` green,
-`pnpm --filter @grimstat/web build` green.
+Status: Phase 3 web app (Vite + React 18 + TypeScript, offline PWA), the Phase 4 army builder ("Armies" section),
+the Phase 5 army-level analyses ("Analyses" section) and the Phase 6 additions (reverse mathhammer, what-if widget,
+snapshot comparison, rules overrides). `pnpm typecheck` clean, `pnpm vitest run apps/web` green.
+
+## Phase 6 — reverse, what-if, compare, overrides — what is where
+
+- **Reverse tab** (`#/analyses`, `src/components/analyses/ReverseTab.tsx`): one target (`UnitSetPicker single`), a
+  candidate set (attack-capable archetypes / army / datasheets / calculator), metric (P(kill) / E[damage] / E[slain]),
+  threshold (`null` = auto: 0.8 for P(kill), the target's total wounds for E[damage], its model count for E[slain]),
+  combination size 1–3, range/phase/cover/charged. Runs `reverseMathhammer` in the worker (`SimClient.reverse`).
+  Table: ranked rows, points, meets/short badge, the chosen metric bolded, the cheapest meeting row highlighted,
+  "Open in calculator" for single-candidate rows (`replaceScenario` + navigate). Persists under
+  `analyses.reverse.{target,candidates,options}`.
+- **What-if widget** (`src/widgets/WhatIf.tsx`, id `core.what-if`, in the default calculator layout after the weapon
+  breakdown): 400 ms after every main result it runs `sensitivity(scenario, { snapshot })` in the worker
+  (`SimClient.sensitivity`, same sequencing → a newer main run supersedes it). Signed `HBarChart` (new `signed` and
+  `onSelect` props; negative bars red, positive green) grouped attacker/defender + a Δslain / ΔP(kill) table. Clicking a
+  variant applies it from its `SensitivityVariantDef` (`context` fields set / reset to `ScenarioContext` defaults,
+  `toggles` switched with `setToggle`); clicking an active variant removes it.
+- **Compare snapshots** (Data page, `src/components/data/SnapshotCompare.tsx`): two stored snapshots →
+  `diffSnapshots` on the main thread (memoised). Per-entity added/removed/changed counts, points list (old → new,
+  Δ badge, "price rules only" when only the rules changed), added/removed/changed lists (capped at 40 + "more"),
+  a name filter and a faction select. The faction of an entity is derived across both snapshots
+  (`factionIndex`): datasheet → `factionId`; ability → `factionId`, else the carrying datasheets / detachment rules
+  (an ability carried by several factions matches every faction); enhancement → detachment; stratagem → own or
+  detachment faction; wargear price → datasheet; publications never match a faction filter.
+- **Rules overrides** (`#/data/overrides`, `src/pages/OverridesPage.tsx`, `src/components/overrides/*`,
+  pure model + tests in `src/lib/overrides.ts` / `overrides.test.ts`):
+  - Dexie **v3** adds `overrides` (`&key, entity, id, updatedAt`; `key = entity:id`; record = schema `Override` +
+    `ownerId/createdAt/updatedAt`). The export-all bundle gained `stores.overrides`.
+  - `AppContext` now exposes `rawSnapshot` (as stored) and `snapshot` = `effectiveSnapshot(raw, overrides)` (memoised),
+    `overrides`, `overrideStatus {applied, missing}`, `refreshOverrides()` and `withOverrides(s)` for snapshots loaded
+    directly from Dexie (roster editor, army source of the unit-set picker, unit-set resolution, armies list). The
+    effective snapshot keeps the id but its `checksum` gets a `+ov<fnv1a>` suffix so the worker cache
+    (`id|checksum|updatedAt`) never serves un-patched data.
+  - Effect editor: ability search over the raw snapshot (name/id, carriers listed, tier badge from
+    `abilityEffects` of the *effective* ability), effect form (stage/side/op/target from `CHANNEL_INFO` or free text,
+    value by kind: number / re-roll policy / boolean / text-dice, optional condition), edit/remove pending effects,
+    note, save → `{ entity: "ability", id, patch: { effects }, note }`. Quick actions: Feel No Pain X+
+    (`patch: { coreKeyword: "FEEL NO PAIN", coreValue: X, effects: null }`) and "no combat effect"
+    (`patch: { effects: [] }`). List with edit (abilities → the editor; anything else / missing ids → inline JSON patch
+    editor), delete, export pack (plain `Override[]`), import pack (file → `Override.safeParse` each → merge by
+    `entity + id`, later entries win, `createdAt` kept).
+  - Coverage widget: "N override(s) applied" pill, "Add override" link (`#/data/overrides?q=<name>`) next to every
+    unmodelled *ability*, and abilities whose effective `effects` is an explicit `[]` are reclassified from tier 3 to
+    tier 1 ("marked as no combat effect") — see the request below.
+- Worker: `reverse` and `sensitivity` were added to `SimWorkerApi` / `SimClient`. `src/lib/gameExtras.ts` re-exports
+  them (with `CHANNEL_INFO`, `SENSITIVITY_VARIANTS` and the types) from `@grimstat/game-40k-11e`; the temporary local
+  shim that lived there was deleted once the package exported them. **No shims remain.**
 
 ## Analyses (Phase 5) — what is where
 
@@ -85,6 +131,29 @@ the Phase 5 army-level analyses ("Analyses" section). `pnpm typecheck` clean, `p
 - Nice-to-have: `MatrixCell` could expose `attackerPoints` / `defenderPoints` directly (they are on the nested
   `SimResult` today) so consumers do not need the unit list to label headers.
 
+### packages/game-40k-11e (reverse / sensitivity / overrides)
+- **`abilityEffects` ignores an explicit empty `effects: []`** (`if (ability.effects && ability.effects.length)`), so
+  an override that marks an ability as "no combat effect" still lands in tier 3 and `coverageFor` keeps listing it.
+  The coverage widget reclassifies such abilities to tier 1 on the UI side as a stopgap; please treat an explicit
+  empty array as "modelled, no effect" (tier 1, like the core no-op keywords) so `SimResult.coverage` agrees.
+- `reverseMathhammer` evaluates every candidate under the one `context` it is given; melee-only candidates score 0
+  in the shooting phase (the UI's context controls always send a phase). `runMatrix` has a `phaseFor()` that
+  switches melee-only attackers to `phase: "fight", charged: true` when no phase is given — the same auto-detection
+  in `reverseMathhammer` (when `context.phase` is absent) would let mixed candidate sets rank sensibly; the UI would
+  then stop sending `phase` unless the user picked one.
+- `ReverseRow.points` is 0 when no candidate has points (a warning is emitted); an `undefined` would let the UI show
+  "–" without guessing. The UI currently prints "–" for 0.
+- `SENSITIVITY_VARIANTS` labels are shown verbatim (not translated), like the toggle labels.
+- Nice-to-have: `sensitivity` appends `v.toggles` to `enabledToggles` even when that toggle is already on (harmless)
+  or explicitly disabled with `-id` (the `-id` then still wins in `activeToggleEffects`); a `setToggle`-style merge
+  would make the variant reflect "as if on".
+
+### packages/snapshot
+- `applyOverrides` is applied on the main thread for every snapshot read from Dexie (active + roster snapshots);
+  fine at current sizes. If snapshots grow, an incremental version (only the patched collections cloned) would help.
+- `diffSnapshots` runs on the main thread from the Data page (memoised per pair); the synthetic fixtures diff in
+  well under a frame. A worker wrapper is easy to add if real snapshots make it noticeable.
+
 ### packages/game-40k-11e (army builder)
 - **`constraints11e` `units.size` mis-handles multi-line compositions.** For a datasheet whose `composition` has one
   line per model profile (fixture: Warden Squad = `[{min 1, max 1}, {min 4, max 9}]`) it takes `max(...mins)` /
@@ -134,6 +203,14 @@ the Phase 5 army-level analyses ("Analyses" section). `pnpm typecheck` clean, `p
   CLI output as a single `Snapshot` object (not wrapped) so it round-trips.
 
 ## Local decisions worth knowing
+- Overrides are global (not keyed by snapshot): every stored snapshot gets the same override list; ones whose entity id
+  is not in a snapshot are counted as "missing" for that snapshot and left untouched. The Data page keeps showing the
+  *raw* snapshot's checksum.
+- `#/data/overrides?q=<ability name>` pre-selects the exact-name match in the editor (that is what the coverage widget
+  links to).
+- Threshold default for E[slain] is the target's model count (the task said "total wounds" for every non-P(kill)
+  metric; a wound count is unreachable as a slain count, so slain uses models). Users can type any threshold; "Use
+  default" returns to auto.
 - Analyses persist per tab in `settings`: `analyses.tab`, `analyses.matrix.{attackers,defenders,options}`,
   `analyses.durability.{defender,options}`, `analyses.efficiency.{attackers,options}`,
   `analyses.turn.{attackers,targets,options}`. Unit sets store sources, not units.

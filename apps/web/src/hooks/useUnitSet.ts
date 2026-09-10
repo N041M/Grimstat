@@ -19,12 +19,12 @@ export interface UnitSetState {
  * scenario; entries whose source vanished are dropped silently.
  */
 export function useUnitSet(key: string): UnitSetState {
-  const { snapshot, scenario } = useApp();
+  const { snapshot, scenario, withOverrides } = useApp();
   const [entries, setEntriesState] = useState<UnitEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const timer = useRef<number | undefined>(undefined);
-  const envRef = useRef({ snapshot, scenario });
-  envRef.current = { snapshot, scenario };
+  const envRef = useRef({ snapshot, scenario, withOverrides });
+  envRef.current = { snapshot, scenario, withOverrides };
 
   useEffect(() => {
     let alive = true;
@@ -34,10 +34,14 @@ export function useUnitSet(key: string): UnitSetState {
       try {
         const raw = await getSetting<unknown>(key);
         const stored = Array.isArray(raw) ? raw.filter(isStoredEntry) : [];
+        const { withOverrides: apply, ...rest } = envRef.current;
         const env = {
-          ...envRef.current,
+          ...rest,
           getRoster: (id: string) => db.rosters.get(id),
-          getSnapshot: (id: string) => db.snapshots.get(id),
+          getSnapshot: async (id: string) => {
+            const s = await db.snapshots.get(id);
+            return s ? apply(s) : undefined;
+          },
         };
         const labels = { archetype: t("analyses.picker.originArchetype"), calculator: t("analyses.picker.originCalculator") };
         const resolved = await Promise.all(stored.map((s) => resolveStored(s, env, labels)));

@@ -3,6 +3,7 @@ import * as Comlink from "comlink";
 import type { Scenario, ScenarioContext, ScenarioUnit, SimResult, Snapshot } from "@grimstat/schema";
 import { durabilityProfile, efficiencyRanking, runMatrix, runScenario, type DurabilityEntry, type EfficiencyRow, type MatrixResult } from "@grimstat/game-40k-11e";
 import { evaluateTurnPlan, optimiseTurn, type TurnPlanInput, type TurnPlanResult, type TurnPlanStep } from "../lib/turn";
+import { reverseMathhammer, sensitivity, type ReverseInput, type ReverseResult, type SensitivityResult } from "../lib/gameExtras";
 
 /** Snapshots are large; the worker caches them by id so each run only ships the scenario. */
 const cache = new Map<string, Snapshot>();
@@ -36,6 +37,10 @@ export interface SimWorkerApi {
   optimiseTurn(input: Omit<TurnPlanInput, "snapshot">, snapshot?: SnapshotRef): Timed<TurnPlanResult>;
   /** Re-score a manually edited plan. */
   evaluateTurnPlan(input: Omit<TurnPlanInput, "snapshot">, plan: TurnPlanStep[], snapshot?: SnapshotRef): Timed<TurnPlanResult>;
+  /** "What kills X?": candidates (and combinations) ranked against one target (Analyses → Reverse). */
+  reverse(input: Omit<ReverseInput, "snapshot">, snapshot?: SnapshotRef): Timed<ReverseResult>;
+  /** One-step variations of the scenario (Calculator → What if widget). */
+  sensitivity(scenario: Scenario, variantIds: string[] | undefined, snapshot?: SnapshotRef): Timed<SensitivityResult>;
 }
 
 function resolve(snapshot: SnapshotRef): Snapshot | undefined {
@@ -102,6 +107,14 @@ const api: SimWorkerApi = {
   evaluateTurnPlan(input, plan, snapshot) {
     const snap = resolve(snapshot);
     return timed(() => evaluateTurnPlan({ ...input, ...(snap ? { snapshot: snap } : {}) }, plan));
+  },
+  reverse(input, snapshot) {
+    const snap = resolve(snapshot);
+    return timed(() => reverseMathhammer({ ...input, ...(snap ? { snapshot: snap } : {}) }));
+  },
+  sensitivity(scenario, variantIds, snapshot) {
+    const snap = resolve(snapshot);
+    return timed(() => sensitivity(scenario, { ...(snap ? { snapshot: snap } : {}), ...(variantIds ? { variantIds } : {}) }));
   },
 };
 

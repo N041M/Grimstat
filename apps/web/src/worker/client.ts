@@ -3,6 +3,7 @@ import type { Scenario, ScenarioContext, ScenarioUnit, SimResult, Snapshot } fro
 import type { DurabilityEntry, EfficiencyRow, MatrixResult } from "@grimstat/game-40k-11e";
 import type { SimWorkerApi, SnapshotRef, Timed } from "./sim.worker";
 import type { TurnPlanInput, TurnPlanResult, TurnPlanStep } from "../lib/turn";
+import type { ReverseInput, ReverseResult, SensitivityResult } from "../lib/gameExtras";
 
 export type RunOutcome = Timed<SimResult>;
 
@@ -100,6 +101,14 @@ export class SimClient {
 
   evaluateTurnPlan(input: Omit<TurnPlanInput, "snapshot">, plan: TurnPlanStep[], snapshot: Snapshot | undefined): Promise<Sequenced<Timed<TurnPlanResult>>> {
     return this.call(snapshot, (p, ref) => p.evaluateTurnPlan(input, plan, ref));
+  }
+
+  reverse(input: Omit<ReverseInput, "snapshot">, snapshot: Snapshot | undefined): Promise<Sequenced<Timed<ReverseResult>>> {
+    return this.call(snapshot, (p, ref) => p.reverse(input, ref));
+  }
+
+  sensitivity(scenario: Scenario, variantIds: string[] | undefined, snapshot: Snapshot | undefined): Promise<Sequenced<Timed<SensitivityResult>>> {
+    return this.call(snapshot, (p, ref) => p.sensitivity(scenario, variantIds, ref));
   }
 
   dispose(): void {

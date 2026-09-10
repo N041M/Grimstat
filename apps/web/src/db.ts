@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { Roster, Scenario, Snapshot } from "@grimstat/schema";
+import type { OverrideRecord } from "./lib/overrides";
 import type { Layout } from "react-grid-layout";
 
 /** Persisted dashboard layout for one dashboard id (e.g. "calculator"). */
@@ -30,6 +31,9 @@ export interface RosterVersionRecord {
 /** Versions kept per roster; older ones are pruned on every save. */
 export const ROSTER_VERSION_CAP = 30;
 
+export type { OverrideRecord } from "./lib/overrides";
+export { overrideKey } from "./lib/overrides";
+
 export class GrimstatDb extends Dexie {
   snapshots!: Table<Snapshot, string>;
   scenarios!: Table<Scenario, string>;
@@ -37,6 +41,7 @@ export class GrimstatDb extends Dexie {
   settings!: Table<SettingRecord, string>;
   rosters!: Table<Roster, string>;
   rosterVersions!: Table<RosterVersionRecord, string>;
+  overrides!: Table<OverrideRecord, string>;
 
   constructor(name = "grimstat") {
     super(name);
@@ -54,6 +59,16 @@ export class GrimstatDb extends Dexie {
       settings: "key",
       rosters: "id, name, factionId, snapshotId, updatedAt",
       rosterVersions: "id, rosterId, updatedAt",
+    });
+    // v3: hand-authored rules overrides applied on top of every snapshot.
+    this.version(3).stores({
+      snapshots: "id, gameSystemId, updatedAt",
+      scenarios: "id, name, updatedAt, snapshotId",
+      layouts: "id",
+      settings: "key",
+      rosters: "id, name, factionId, snapshotId, updatedAt",
+      rosterVersions: "id, rosterId, updatedAt",
+      overrides: "&key, entity, id, updatedAt",
     });
   }
 }
@@ -145,23 +160,32 @@ export interface ExportBundle {
     settings: SettingRecord[];
     /** Added with db v2; absent in older bundles. */
     rosters?: Roster[];
+    /** Added with db v3; absent in older bundles. */
+    overrides?: OverrideRecord[];
   };
 }
 
 export async function exportAll(): Promise<ExportBundle> {
-  const [snapshots, scenarios, layouts, settings, rosters] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray()]);
-  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters } };
+  const [snapshots, scenarios, layouts, settings, rosters, overrides] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray()]);
+  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides } };
 }
 
-export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number }> {
+export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number }> {
   const s = bundle.stores;
   const rosters = s.rosters ?? [];
-  await db.transaction("rw", db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, async () => {
+  const overrides = s.overrides ?? [];
+  await db.transaction("rw", [db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, db.overrides], async () => {
     if (s.snapshots.length) await db.snapshots.bulkPut(s.snapshots);
     if (s.scenarios.length) await db.scenarios.bulkPut(s.scenarios);
     if (s.layouts.length) await db.layouts.bulkPut(s.layouts);
     if (s.settings.length) await db.settings.bulkPut(s.settings);
     if (rosters.length) await db.rosters.bulkPut(rosters);
+    if (overrides.length) await db.overrides.bulkPut(overrides);
   });
-  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length };
+  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length };
+}
+
+/** Every stored override, oldest first. */
+export async function listOverrides(): Promise<OverrideRecord[]> {
+  return db.overrides.orderBy("updatedAt").toArray();
 }

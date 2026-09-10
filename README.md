@@ -42,9 +42,12 @@ pnpm dev           # calculator PWA at http://localhost:5173 (use "Load sample d
 Import real game data onto your own machine (never committed), then load the resulting JSON on the Data page:
 
 ```bash
-pnpm cli import --system wh40k-11e --out data/snapshots
+pnpm cli import --system wh40k-11e --out data/snapshots            # MFM points + BSData structure + Wahapedia text
+pnpm cli import --system wh40k-10e --out data/snapshots            # 10th edition (Wahapedia's 10e export; 10e codexes stay legal)
 pnpm cli show data/snapshots/<snapshot>.json "Intercessor Squad"
 pnpm cli diff data/snapshots/<old>.json data/snapshots/<new>.json
 ```
+
+Scenarios built from a 10th-edition snapshot run under the 10th-edition rules model automatically (`scenario.gameSystemId`).
 
 See `docs/DESIGN.md` for the research findings, architecture and roadmap.

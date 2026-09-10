@@ -1552,3 +1552,125 @@ button.diag-btn:hover {
   font-size: 0.8rem;
   color: var(--muted);
 }
+
+/* ---------- Reverse mathhammer, what-if, overrides, snapshot compare ---------- */
+table.data td.wrap {
+  white-space: normal;
+  min-width: 14em;
+}
+table.data .metric-col {
+  color: var(--text-strong);
+}
+table.data tr.row-best td {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.hbar-track.signed {
+  position: relative;
+}
+.hbar-track.signed::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--border-strong);
+}
+.hbar-track.signed .hbar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.hbar-label.hbar-btn {
+  padding: 0.1rem 0.3rem;
+  min-height: 0;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  width: 100%;
+}
+.hbar-label.hbar-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ability-list {
+  max-height: 60vh;
+}
+.ability-list button {
+  align-items: center;
+  gap: 0.5rem;
+}
+.ability-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+.ability-text {
+  white-space: pre-wrap;
+  border-left: 3px solid var(--border-strong);
+  padding-left: 0.6rem;
+  margin: 0 0 0.4rem;
+  max-height: 14rem;
+  overflow: auto;
+}
+.effect-list {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+.effect-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.effect-list li.editing {
+  color: var(--text-strong);
+}
+.effect-list .grow {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.effect-form {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.75rem;
+  background: var(--bg);
+}
+.cond-details summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.overrides-layout {
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+}
+@media (max-width: 1099px) {
+  .overrides-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.unmodelled-list li {
+  margin-bottom: 0.15rem;
+}
+a.btn {
+  text-decoration: none;
+  color: var(--text-strong);
+}
+a.btn:hover {
+  border-color: var(--brass);
+}

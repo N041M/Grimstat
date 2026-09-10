@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Scenario, Snapshot } from "@grimstat/schema";
-import { db, getSetting, listSnapshotMeta, setSetting, SETTING_ACTIVE_SNAPSHOT, type SnapshotMeta } from "../db";
+import { db, getSetting, listOverrides, listSnapshotMeta, setSetting, SETTING_ACTIVE_SNAPSHOT, type OverrideRecord, type SnapshotMeta } from "../db";
 import { newScenario } from "../lib/scenario";
+import { effectiveSnapshot } from "../lib/overrides";
 import { t } from "../i18n";
 
 export type NoticeKind = "info" | "success" | "error";
@@ -13,9 +14,19 @@ export interface Notice {
 
 export interface AppContextValue {
   ready: boolean;
+  /** The active snapshot with every stored override applied — what the calculator, armies and analyses read. */
   snapshot: Snapshot | undefined;
+  /** The active snapshot exactly as stored (Data page, ability text in the override editor). */
+  rawSnapshot: Snapshot | undefined;
   snapshotList: SnapshotMeta[];
   activeSnapshotId: string | undefined;
+  /** Every stored override, oldest first. */
+  overrides: OverrideRecord[];
+  /** How many overrides hit / missed an entity in the active snapshot. */
+  overrideStatus: { applied: number; missing: number };
+  /** Apply the current overrides to any stored snapshot (rosters built against another snapshot). Memoised per input. */
+  withOverrides(s: Snapshot): Snapshot;
+  refreshOverrides(): Promise<void>;
   scenario: Scenario;
   /** Increments whenever a whole scenario is loaded (permalink, storage) so pickers re-sync. */
   scenarioLoadKey: number;
@@ -32,7 +43,8 @@ const Ctx = createContext<AppContextValue | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
-  const [snapshot, setSnapshot] = useState<Snapshot | undefined>(undefined);
+  const [rawSnapshot, setSnapshot] = useState<Snapshot | undefined>(undefined);
+  const [overrides, setOverrides] = useState<OverrideRecord[]>([]);
   const [snapshotList, setSnapshotList] = useState<SnapshotMeta[]>([]);
   const [activeSnapshotId, setActiveId] = useState<string | undefined>(undefined);
   const [scenario, setScenario] = useState<Scenario>(() => newScenario());
@@ -75,9 +87,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [loadActive],
   );
 
+  const refreshOverrides = useCallback(async () => {
+    setOverrides(await listOverrides());
+  }, []);
+
   useEffect(() => {
     let alive = true;
-    refreshSnapshots()
+    Promise.all([refreshSnapshots(), refreshOverrides()])
       .catch((e: unknown) => notify(t("data.dbError", { msg: e instanceof Error ? e.message : String(e) }), "error"))
       .finally(() => {
         if (alive) setReady(true);
@@ -85,7 +101,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [refreshSnapshots, notify]);
+  }, [refreshSnapshots, refreshOverrides, notify]);
+
+  // Effective snapshot: recomputed only when the stored snapshot or the override set changes.
+  const effective = useMemo(() => (rawSnapshot ? effectiveSnapshot(rawSnapshot, overrides) : undefined), [rawSnapshot, overrides]);
+  const snapshot = effective?.snapshot;
+  const overrideStatus = useMemo(() => ({ applied: effective?.applied ?? 0, missing: effective?.missing ?? 0 }), [effective]);
+
+  // Other snapshots (rosters built against a non-active one) get the same treatment, memoised by object identity.
+  const otherCache = useRef(new WeakMap<Snapshot, Snapshot>());
+  useEffect(() => {
+    otherCache.current = new WeakMap();
+  }, [overrides]);
+  const withOverrides = useCallback(
+    (s: Snapshot): Snapshot => {
+      if (rawSnapshot && s.id === rawSnapshot.id && s.checksum === rawSnapshot.checksum && snapshot) return snapshot;
+      const hit = otherCache.current.get(s);
+      if (hit) return hit;
+      const out = effectiveSnapshot(s, overrides).snapshot;
+      otherCache.current.set(s, out);
+      return out;
+    },
+    [rawSnapshot, snapshot, overrides],
+  );
 
   const updateScenario = useCallback((fn: (s: Scenario) => Scenario) => setScenario((s) => fn(s)), []);
 
@@ -108,8 +146,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AppContextValue>(
-    () => ({ ready, snapshot, snapshotList, activeSnapshotId, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice }),
-    [ready, snapshot, snapshotList, activeSnapshotId, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice],
+    () => ({ ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice }),
+    [ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
