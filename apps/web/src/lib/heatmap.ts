@@ -43,10 +43,21 @@ export const ALPHA_SPAN = 0.7;
 /** Scale position past which the label flips to the inverse ink so it stays legible on a dark cell. */
 export const FLIP_AT = 0.55;
 
-/** Position of `value` on the linear scale between `min` and `max`, clamped to 0..1. */
+/**
+ * How many steps the ramp is quantised into. A continuous opacity looks precise but is not readable:
+ * past about six classes the eye cannot separate neighbouring cells, so cells that differ are only
+ * told apart by their printed number anyway. Six steps keep every class distinct.
+ */
+export const HEAT_STEPS = 6;
+
+/**
+ * Position of `value` on the scale between `min` and `max`, clamped to 0..1 and snapped to
+ * `HEAT_STEPS` classes.
+ */
 export function heatT(value: number, min: number, max: number): number {
   if (!Number.isFinite(min) || !Number.isFinite(max) || max - min <= 1e-12) return value > 0 ? 0.5 : 0;
-  return Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const raw = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  return Math.round(raw * (HEAT_STEPS - 1)) / (HEAT_STEPS - 1);
 }
 
 /**
@@ -67,8 +78,8 @@ export function heatColour(value: number | undefined, min: number, max: number):
   };
 }
 
-/** Eight swatches sampling the same ramp, for the legend strip under the matrix. */
-export function heatRamp(min: number, max: number, steps = 8): HeatColour[] {
+/** One swatch per class, for the legend strip under the matrix. */
+export function heatRamp(min: number, max: number, steps = HEAT_STEPS): HeatColour[] {
   return Array.from({ length: steps }, (_, i) => heatColour(min + (i / Math.max(1, steps - 1)) * (max - min), min, max));
 }
 

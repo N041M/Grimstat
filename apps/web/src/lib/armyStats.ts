@@ -199,7 +199,7 @@ export function armyComposition(roster: Roster, datasheets: Map<string, Datashee
 
 // ---------- sorting ----------
 
-export type StatSortCol = "unit" | "points" | "models" | "wounds" | "oc" | "damage" | "durability";
+export type StatSortCol = "unit" | "points" | "models" | "wounds" | "oc" | "damage" | "durability" | "effective" | "trade";
 export type SortDir = "asc" | "desc";
 export interface StatSort {
   col: StatSortCol;
@@ -212,6 +212,10 @@ export interface ArmyStatRow extends ArmyUnitRow {
   damagePer100: number | undefined;
   /** Points of shooting needed to remove the unit; undefined until the worker answers. */
   durability: number | undefined;
+  /** Reference attacks expected to remove the unit; undefined until the worker answers. */
+  effectiveWounds: number | undefined;
+  /** Enemy points destroyed in one round against the chosen target, per point of the unit's own cost. */
+  trade: number | undefined;
 }
 
 function valueOf(row: ArmyStatRow, col: StatSortCol): number | string | undefined {
@@ -230,6 +234,10 @@ function valueOf(row: ArmyStatRow, col: StatSortCol): number | string | undefine
       return row.damagePer100;
     case "durability":
       return row.durability;
+    case "effective":
+      return row.effectiveWounds;
+    case "trade":
+      return row.trade;
   }
 }
 
@@ -254,4 +262,136 @@ export function compareStatRows(a: ArmyStatRow, b: ArmyStatRow, sort: StatSort):
 /** Sorted copy; the input array is untouched. */
 export function sortStatRows(rows: ArmyStatRow[], sort: StatSort): ArmyStatRow[] {
   return [...rows].sort((a, b) => compareStatRows(a, b, sort));
+}
+
+
+// ---------- casualty curve ----------
+
+/**
+ * Attacker-point levels the casualty curve is sampled at — roughly "a quarter of a list" up to
+ * "a whole list of shooting".
+ */
+export const CASUALTY_LEVELS = [250, 500, 750, 1000, 1500, 2000] as const;
+
+/** What the curve needs to know about one unit: its size and how fast it comes apart. */
+export interface CasualtyUnit {
+  points: number;
+  models: number;
+  wounds: number;
+  /** Wounds removed per 100 attacker points (the slope of `incomingFire`). */
+  woundsPer100: number;
+  /** Models removed per 100 attacker points. */
+  slainPer100: number;
+}
+
+export interface CasualtyPoint {
+  attackerPoints: number;
+  woundsLost: number;
+  modelsLost: number;
+  /** 0..1 of the measured army's wounds / models. */
+  woundsFraction: number;
+  modelsFraction: number;
+}
+
+/**
+ * The army under `attackerPoints` of incoming fire.
+ *
+ * The incoming points are split across the units in proportion to their own points — an even
+ * spread over the list rather than focused fire — and each unit loses wounds and models at its own
+ * measured rate, capped at what it has. Denominators are the units passed in, so a curve built
+ * while the worker is still solving describes the part of the army that has answers rather than
+ * pretending the rest is unhurt.
+ */
+export function casualtyAt(units: CasualtyUnit[], attackerPoints: number): CasualtyPoint {
+  const totalWounds = units.reduce((s, u) => s + u.wounds, 0);
+  const totalModels = units.reduce((s, u) => s + u.models, 0);
+  const totalPoints = units.reduce((s, u) => s + u.points, 0);
+  let woundsLost = 0;
+  let modelsLost = 0;
+  for (const u of units) {
+    // A unit with no points value (or an army with none at all) takes an equal share instead.
+    const share = totalPoints > 0 ? u.points / totalPoints : units.length > 0 ? 1 / units.length : 0;
+    const incoming = Math.max(0, attackerPoints) * share;
+    woundsLost += Math.min(u.wounds, (incoming * u.woundsPer100) / 100);
+    modelsLost += Math.min(u.models, (incoming * u.slainPer100) / 100);
+  }
+  return {
+    attackerPoints,
+    woundsLost,
+    modelsLost,
+    woundsFraction: totalWounds > 0 ? woundsLost / totalWounds : 0,
+    modelsFraction: totalModels > 0 ? modelsLost / totalModels : 0,
+  };
+}
+
+/** The curve, sampled at each level. */
+export function casualtyCurve(units: CasualtyUnit[], levels: readonly number[] = CASUALTY_LEVELS): CasualtyPoint[] {
+  return levels.map((p) => casualtyAt(units, p));
+}
+
+/**
+ * Attacker points at which the army has lost `fraction` of its wounds. The loss function is
+ * piecewise linear and never decreases, so a doubling search for an upper bound followed by
+ * bisection lands on the exact knee; Infinity when the army cannot be hurt that far at all.
+ */
+export function pointsForLoss(units: CasualtyUnit[], fraction = 0.5): number {
+  if (units.length === 0) return Number.POSITIVE_INFINITY;
+  const target = Math.max(0, Math.min(1, fraction));
+  if (target <= 0) return 0;
+  let hi = 100;
+  while (casualtyAt(units, hi).woundsFraction < target) {
+    hi *= 2;
+    if (hi > 1e7) return Number.POSITIVE_INFINITY;
+  }
+  let lo = 0;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (casualtyAt(units, mid).woundsFraction < target) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
+// ---------- threat saturation ----------
+
+/** A unit can remove the target on its own when it kills it at least this often. */
+export const SOLO_THRESHOLD = 0.5;
+/** Units are combined until they remove the target at least this often. */
+export const JOINT_THRESHOLD = 0.9;
+
+/** One row of `reverseMathhammer`, reduced to what the saturation summary needs. */
+export interface SaturationCandidate {
+  candidateIds: string[];
+  names: string[];
+  points: number;
+  pKill: number;
+}
+
+export interface SaturationSummary {
+  /** Names of the units that reach `solo` on their own, cheapest first. */
+  soloNames: string[];
+  /** How many units the cheapest combination reaching `joint` uses; undefined when none does. */
+  needed: number | undefined;
+  cheapestNames: string[];
+  cheapestPoints: number | undefined;
+  cheapestPKill: number | undefined;
+}
+
+/**
+ * Reduce every combination the reverse search tried to the three facts the row shows: who can do it
+ * alone, how many are needed together, and the cheapest such group. "Cheapest" is fewest points,
+ * then fewest units, then the surest kill — so a cheaper pair beats a pricier single.
+ */
+export function summariseSaturation(rows: SaturationCandidate[], solo = SOLO_THRESHOLD, joint = JOINT_THRESHOLD): SaturationSummary {
+  const eps = 1e-9;
+  const soloRows = rows.filter((r) => r.candidateIds.length === 1 && r.pKill >= solo - eps).sort((a, b) => a.points - b.points || b.pKill - a.pKill);
+  const meets = rows.filter((r) => r.pKill >= joint - eps).sort((a, b) => a.points - b.points || a.candidateIds.length - b.candidateIds.length || b.pKill - a.pKill);
+  const best = meets[0];
+  return {
+    soloNames: soloRows.map((r) => r.names[0] ?? ""),
+    needed: best?.candidateIds.length,
+    cheapestNames: best?.names ?? [],
+    cheapestPoints: best?.points,
+    cheapestPKill: best?.pKill,
+  };
 }

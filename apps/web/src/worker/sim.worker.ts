@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import * as Comlink from "comlink";
 import type { Scenario, ScenarioContext, ScenarioUnit, SimResult, Snapshot } from "@grimstat/schema";
-import { durabilityIndex, durabilityProfile, efficiencyRanking, runMatrix, runScenario, type DurabilityEntry, type DurabilityIndexRow, type EfficiencyRow, type MatrixResult } from "@grimstat/game-40k-11e";
+import { durabilityIndex, durabilityProfile, efficiencyRanking, incomingFire, runMatrix, runScenario, type DurabilityEntry, type DurabilityIndexRow, type EfficiencyRow, type IncomingFireRow, type MatrixResult } from "@grimstat/game-40k-11e";
 import { evaluateTurnPlan, optimiseTurn, type TurnPlanInput, type TurnPlanResult, type TurnPlanStep } from "../lib/turn";
 import { reverseMathhammer, sensitivity, type ReverseInput, type ReverseResult, type SensitivityResult } from "../lib/gameExtras";
 
@@ -33,6 +33,11 @@ export interface SimWorkerApi {
   durability(defender: ScenarioUnit, opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, snapshot?: SnapshotRef): Timed<DurabilityEntry[]>;
   /** Points of shooting needed to remove each unit (Analyses → Matrix's durability index card). */
   durabilityIndex(defenders: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, snapshot?: SnapshotRef): Timed<DurabilityIndexRow[]>;
+  /**
+   * The same runs as `durabilityIndex`, reporting the rate as well as the endpoint plus effective
+   * wounds (Armies → Statistics: durability, casualty curve and effective wounds all read this).
+   */
+  incoming(defenders: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, snapshot?: SnapshotRef): Timed<IncomingFireRow[]>;
   /** Attackers ranked by damage per point across target archetypes (Analyses → Efficiency). */
   efficiency(attackers: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { targetIds?: string[] }, snapshot?: SnapshotRef): Timed<EfficiencyRow[]>;
   /** Joint target allocation for one turn (Analyses → Turn optimiser). */
@@ -92,6 +97,10 @@ const api: SimWorkerApi = {
   durabilityIndex(defenders, opts, snapshot) {
     const snap = resolve(snapshot);
     return timed(() => durabilityIndex(defenders, { ...opts, ...(snap ? { snapshot: snap } : {}) }));
+  },
+  incoming(defenders, opts, snapshot) {
+    const snap = resolve(snapshot);
+    return timed(() => incomingFire(defenders, { ...opts, ...(snap ? { snapshot: snap } : {}) }));
   },
   efficiency(attackers, opts, snapshot) {
     const snap = resolve(snapshot);

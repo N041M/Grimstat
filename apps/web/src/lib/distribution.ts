@@ -53,6 +53,22 @@ export function damageBars(pmf: readonly number[], iqr: { p25: number; p75: numb
   }));
 }
 
+/**
+ * The same bars read cumulatively: P(damage >= value). This is the question a player actually asks
+ * ("will this kill it?"), which the density view cannot answer by eye.
+ */
+export function cumulativeBars(pmf: readonly number[], iqr: { p25: number; p75: number }, opts: BarOptions = {}): DamageBar[] {
+  const n = barCount(pmf, opts);
+  const slice = Array.from({ length: n }, (_, i) => pmf[i] ?? 0);
+  const total = pmf.reduce((s2, p) => s2 + p, 0);
+  let seen = 0;
+  return slice.map((p, value) => {
+    const atLeast = Math.max(0, Math.min(1, total - seen));
+    seen += p;
+    return { value, p: atLeast, height: atLeast, inIqr: value >= iqr.p25 && value <= iqr.p75 };
+  });
+}
+
 /** How close to the peak an outcome must be to count as "modal" (drawn in `--ink`, not `--dim`). */
 export const MODAL_SHARE = 0.8;
 

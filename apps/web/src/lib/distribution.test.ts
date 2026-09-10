@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { axisTick, barCount, damageBars, slainRows } from "./distribution";
+import { cumulativeBars, axisTick, barCount, damageBars, slainRows } from "./distribution";
 
 describe("damageBars", () => {
   const pmf = [0.05, 0.1, 0.2, 0.3, 0.2, 0.1, 0.05];
@@ -76,5 +76,22 @@ describe("slainRows", () => {
 describe("axisTick", () => {
   it("labels every fifth value", () => {
     expect([0, 1, 4, 5, 10, 13].map((v) => axisTick(v))).toEqual(["0", "", "", "5", "10", ""]);
+  });
+});
+
+describe("cumulativeBars", () => {
+  it("reads as the chance of at least that much damage, falling to zero", () => {
+    const bars = cumulativeBars([0.5, 0.25, 0.25], { p25: 0, p75: 1 });
+    expect(bars.map((b) => Number(b.p.toFixed(6)))).toEqual([1, 0.5, 0.25]);
+    expect(bars[0]!.height).toBe(1);
+  });
+
+  it("never rises as damage increases", () => {
+    const bars = cumulativeBars([0.1, 0.3, 0.4, 0.2], { p25: 1, p75: 2 });
+    for (let i = 1; i < bars.length; i++) expect(bars[i]!.p).toBeLessThanOrEqual(bars[i - 1]!.p + 1e-9);
+  });
+
+  it("keeps the interquartile flag so both views highlight the same range", () => {
+    expect(cumulativeBars([0.2, 0.6, 0.2], { p25: 1, p75: 1 }).map((b) => b.inIqr)).toEqual([false, true, false]);
   });
 });

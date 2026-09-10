@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Datasheet, Roster, RosterUnit } from "@grimstat/schema";
 import type { UnitCost } from "@grimstat/resolver";
-import { armyComposition, compareStatRows, sortStatRows, type ArmyStatRow, type StatSort } from "./armyStats";
+import { armyComposition, casualtyAt, casualtyCurve, CASUALTY_LEVELS, compareStatRows, pointsForLoss, sortStatRows, summariseSaturation, type ArmyStatRow, type CasualtyUnit, type SaturationCandidate, type StatSort } from "./armyStats";
 
 // ---------- fixtures ----------
 
@@ -166,7 +166,7 @@ describe("armyComposition", () => {
 // ---------- sorting ----------
 
 function row(name: string, over: Partial<ArmyStatRow> = {}): ArmyStatRow {
-  return { id: name, name, section: "other", role: "", models: 1, wounds: 1, oc: 0, points: 100, memberIds: [name], damagePer100: undefined, durability: undefined, ...over };
+  return { id: name, name, section: "other", role: "", models: 1, wounds: 1, oc: 0, points: 100, memberIds: [name], damagePer100: undefined, durability: undefined, effectiveWounds: undefined, trade: undefined, ...over };
 }
 
 describe("compareStatRows", () => {
@@ -209,5 +209,103 @@ describe("compareStatRows", () => {
 
   it("returns 0 for two rows equal on the column and the name", () => {
     expect(compareStatRows(row("a", { wounds: 3 }), row("a", { wounds: 3 }), { col: "wounds", dir: "asc" })).toBe(0);
+  });
+});
+
+// ---------- casualty curve ----------
+
+/** 10 wounds, 10 models, 100 points, losing 1 wound and 1 model per 100 attacker points. */
+const flat = (over: Partial<CasualtyUnit> = {}): CasualtyUnit => ({ points: 100, models: 10, wounds: 10, woundsPer100: 1, slainPer100: 1, ...over });
+
+describe("casualty curve", () => {
+  it("is linear in attacker points until the unit runs out of wounds", () => {
+    const units = [flat()];
+    expect(casualtyAt(units, 0).woundsLost).toBe(0);
+    expect(casualtyAt(units, 500).woundsLost).toBeCloseTo(5, 9);
+    expect(casualtyAt(units, 500).woundsFraction).toBeCloseTo(0.5, 9);
+    // capped: 2000 points would strip 20 wounds off a 10-wound unit
+    expect(casualtyAt(units, 2000).woundsLost).toBe(10);
+    expect(casualtyAt(units, 2000).woundsFraction).toBe(1);
+  });
+
+  it("splits the incoming fire in proportion to each unit's points", () => {
+    // The 300-point unit soaks three quarters of the fire, so both empty at the same moment.
+    const units = [flat({ points: 100, wounds: 10, models: 10 }), flat({ points: 300, wounds: 30, models: 30 })];
+    const at = casualtyAt(units, 400);
+    expect(at.woundsLost).toBeCloseTo(1 + 3, 9); // 100 pts on the small unit, 300 on the large
+    expect(at.woundsFraction).toBeCloseTo(4 / 40, 9);
+  });
+
+  it("shares the fire evenly when nothing has a points value", () => {
+    const units = [flat({ points: 0 }), flat({ points: 0 })];
+    expect(casualtyAt(units, 400).woundsLost).toBeCloseTo(4, 9); // 200 points each
+  });
+
+  it("tracks models on their own rate, not as a share of wounds", () => {
+    const units = [flat({ models: 5, wounds: 10, slainPer100: 0.25 })];
+    const at = casualtyAt(units, 800);
+    expect(at.woundsLost).toBe(8);
+    expect(at.modelsLost).toBeCloseTo(2, 9);
+    expect(at.modelsFraction).toBeCloseTo(0.4, 9);
+  });
+
+  it("samples the documented levels and never goes backwards", () => {
+    const curve = casualtyCurve([flat(), flat({ points: 200, wounds: 6, models: 3, woundsPer100: 3, slainPer100: 1.5 })]);
+    expect(curve.map((p) => p.attackerPoints)).toEqual([...CASUALTY_LEVELS]);
+    for (let i = 1; i < curve.length; i++) expect(curve[i]!.woundsFraction).toBeGreaterThanOrEqual(curve[i - 1]!.woundsFraction);
+  });
+
+  it("interpolates the points needed to halve the army", () => {
+    expect(pointsForLoss([flat()], 0.5)).toBeCloseTo(500, 3);
+    // Two units of different toughness: the soft one empties first, so the knee is past the average.
+    const units = [flat({ points: 100, wounds: 10, woundsPer100: 4 }), flat({ points: 100, wounds: 10, woundsPer100: 0.5 })];
+    const half = pointsForLoss(units, 0.5);
+    expect(casualtyAt(units, half).woundsFraction).toBeCloseTo(0.5, 6);
+    expect(pointsForLoss(units, 0)).toBe(0);
+  });
+
+  it("reports Infinity when nothing can be hurt, and for an empty army", () => {
+    expect(pointsForLoss([flat({ woundsPer100: 0, slainPer100: 0 })], 0.5)).toBe(Number.POSITIVE_INFINITY);
+    expect(pointsForLoss([], 0.5)).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+// ---------- threat saturation ----------
+
+const cand = (names: string[], points: number, pKill: number): SaturationCandidate => ({ candidateIds: names, names, points, pKill });
+
+describe("threat saturation", () => {
+  it("counts the units that clear the solo threshold and picks the cheapest group that clears the joint one", () => {
+    const rows = [cand(["a"], 200, 0.62), cand(["b"], 150, 0.5), cand(["c"], 90, 0.2), cand(["a", "b"], 350, 0.95), cand(["b", "c"], 240, 0.91), cand(["a", "c"], 290, 0.88)];
+    const s = summariseSaturation(rows);
+    expect(s.soloNames).toEqual(["b", "a"]); // exactly at 0.5 counts; cheapest listed first
+    expect(s.needed).toBe(2);
+    expect(s.cheapestNames).toEqual(["b", "c"]);
+    expect(s.cheapestPoints).toBe(240);
+    expect(s.cheapestPKill).toBeCloseTo(0.91, 9);
+  });
+
+  it("prefers a cheaper pair over a pricier single", () => {
+    const s = summariseSaturation([cand(["big"], 400, 0.97), cand(["x"], 100, 0.4), cand(["y"], 120, 0.55), cand(["x", "y"], 220, 0.93)]);
+    expect(s.needed).toBe(2);
+    expect(s.cheapestNames).toEqual(["x", "y"]);
+  });
+
+  it("leaves the combination undefined when nothing reaches the joint threshold", () => {
+    const s = summariseSaturation([cand(["a"], 100, 0.3), cand(["b"], 100, 0.2), cand(["a", "b"], 200, 0.55)]);
+    expect(s.soloNames).toEqual([]);
+    expect(s.needed).toBeUndefined();
+    expect(s.cheapestNames).toEqual([]);
+    expect(s.cheapestPoints).toBeUndefined();
+  });
+});
+
+describe("new sort columns", () => {
+  it("sorts on effective wounds and trade ratio, keeping unanswered rows last", () => {
+    const rows = [row("waiting"), row("tough", { effectiveWounds: 90 }), row("soft", { effectiveWounds: 20 })];
+    expect(sortStatRows(rows, { col: "effective", dir: "desc" }).map((r) => r.name)).toEqual(["tough", "soft", "waiting"]);
+    const trades = [row("bad", { trade: 0.2 }), row("good", { trade: 1.4 }), row("waiting")];
+    expect(sortStatRows(trades, { col: "trade", dir: "desc" }).map((r) => r.name)).toEqual(["good", "bad", "waiting"]);
+    expect(compareStatRows(row("a", { trade: 1 }), row("b", { trade: 1 }), { col: "trade", dir: "desc" })).toBeLessThan(0);
   });
 });

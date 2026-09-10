@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MatrixCell, MatrixResult } from "@grimstat/game-40k-11e";
 import type { SimResult } from "@grimstat/schema";
-import { ALPHA_BASE, ALPHA_SPAN, FLIP_AT, heatColour, heatRamp, heatT, heatmapModel, metricIsAverage, metricValue } from "./heatmap";
+import { HEAT_STEPS, ALPHA_BASE, ALPHA_SPAN, FLIP_AT, heatColour, heatRamp, heatT, heatmapModel, metricIsAverage, metricValue } from "./heatmap";
 import { MATRIX_CSV_HEADER, csvEscape, csvLine, matrixToCsv } from "./matrixCsv";
 
 function result(over: Partial<SimResult>): SimResult {
@@ -40,25 +40,32 @@ const matrix: MatrixResult = {
 describe("heatColour", () => {
   it("runs the alpha ramp from 0.04 to 0.74 across the range", () => {
     const lo = heatColour(0, 0, 10);
-    const mid = heatColour(5, 0, 10);
     const hi = heatColour(10, 0, 10);
     expect(lo.t).toBe(0);
-    expect(mid.t).toBeCloseTo(0.5);
     expect(hi.t).toBe(1);
     expect(lo.alpha).toBeCloseTo(ALPHA_BASE);
-    expect(mid.alpha).toBeCloseTo(ALPHA_BASE + ALPHA_SPAN / 2);
     expect(hi.alpha).toBeCloseTo(ALPHA_BASE + ALPHA_SPAN);
     // Painted as the ink token at that opacity, so it is rgba(23,24,27,α) light and rgba(237,236,232,α) dark.
     expect(lo.background).toBe("color-mix(in srgb, var(--ink) 4.0%, transparent)");
     expect(hi.background).toBe("color-mix(in srgb, var(--ink) 74.0%, transparent)");
-    expect(heatT(2.5, 0, 10)).toBeCloseTo(0.25);
   });
 
-  it("flips the label to the inverse ink past the halfway-ish point only", () => {
-    expect(heatColour(5, 0, 10).color).toBe("var(--ink-2)");
-    expect(heatColour(FLIP_AT * 10, 0, 10).color).toBe("var(--ink-2)");
-    expect(heatColour(FLIP_AT * 10 + 0.01, 0, 10).color).toBe("var(--btn-fg)");
+  it("snaps to six classes, so neighbouring cells are always separable", () => {
+    const classes = [...new Set(Array.from({ length: 101 }, (_, i) => heatT(i / 10, 0, 10)))].sort((a, b) => a - b);
+    expect(classes).toHaveLength(HEAT_STEPS);
+    expect(classes[0]).toBe(0);
+    expect(classes[HEAT_STEPS - 1]).toBe(1);
+    // values within a class share a shade; the printed number carries the detail
+    expect(heatT(2.5, 0, 10)).toBe(heatT(2.9, 0, 10));
+    expect(heatT(2.5, 0, 10)).not.toBe(heatT(4.5, 0, 10));
+  });
+
+  it("flips the label to the inverse ink for the dark classes, and does so per class", () => {
+    // with six classes the flip lands between them, so no cell sits ambiguously on the threshold
+    expect(heatColour(0, 0, 10).color).toBe("var(--ink-2)");
+    expect(heatColour(4, 0, 10).color).toBe("var(--ink-2)");
     expect(heatColour(10, 0, 10).color).toBe("var(--btn-fg)");
+    expect(heatColour(FLIP_AT * 10 + 1, 0, 10).color).toBe("var(--btn-fg)");
   });
 
   it("clamps out-of-range values and tolerates a degenerate range", () => {
@@ -77,9 +84,9 @@ describe("heatColour", () => {
 describe("heatRamp", () => {
   it("samples the ramp end to end for the legend strip", () => {
     const swatches = heatRamp(1.2, 14.6);
-    expect(swatches).toHaveLength(8);
+    expect(swatches).toHaveLength(HEAT_STEPS);
     expect(swatches[0]!.alpha).toBeCloseTo(ALPHA_BASE);
-    expect(swatches[7]!.alpha).toBeCloseTo(ALPHA_BASE + ALPHA_SPAN);
+    expect(swatches[HEAT_STEPS - 1]!.alpha).toBeCloseTo(ALPHA_BASE + ALPHA_SPAN);
     const alphas = swatches.map((s) => s.alpha);
     expect([...alphas].sort((a, b) => a - b)).toEqual(alphas);
   });

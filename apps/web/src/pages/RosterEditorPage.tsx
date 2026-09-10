@@ -14,6 +14,7 @@ import { DetachmentStrip } from "../components/roster/DetachmentsBlock";
 import { UnitTable, type CalcSide } from "../components/roster/UnitTable";
 import { UnitInspector } from "../components/roster/UnitInspector";
 import { StatisticsTab } from "../components/roster/StatisticsTab";
+import { ArsenalTab } from "../components/roster/ArsenalTab";
 import { RosterDock, type DockBudget } from "../components/roster/RosterDock";
 import { ExportDrawer } from "../components/roster/ExportDrawer";
 import { HistoryPanel } from "../components/roster/HistoryPanel";
@@ -238,8 +239,10 @@ export function RosterEditorPage({ id }: { id: string }) {
               onOpenDetachmentPicker={() => setDetPicker(true)}
               onExport={() => setMode("export")}
             />
-          ) : (
+          ) : tab === "stats" ? (
             <StatisticsTab roster={roster} snapshot={snapshot} datasheets={datasheets} costById={costById} onSelectUnit={selectFromStats} />
+          ) : (
+            <ArsenalTab roster={roster} snapshot={snapshot} />
           )}
         </div>
       </div>

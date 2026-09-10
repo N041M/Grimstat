@@ -2,6 +2,7 @@ import { useMemo, type CSSProperties } from "react";
 import type { MatrixResult } from "@grimstat/game-40k-11e";
 import { heatColour, heatRamp, heatmapModel, type MatrixMetric } from "../../lib/heatmap";
 import { fmt, fmtInt, pct } from "../../lib/format";
+import { useHover } from "../charts/HoverLayer";
 import { t } from "../../i18n";
 
 export interface HeatmapProps {
@@ -40,6 +41,7 @@ export function formatMetric(metric: MatrixMetric, v: number | undefined): strin
  * panel. Cells are buttons — clicking one loads that pair into the calculator.
  */
 export function Heatmap({ matrix, metric, view = "values", attackerPoints, defenderPoints, onSelect }: HeatmapProps) {
+  const hover = useHover();
   const model = useMemo(() => heatmapModel(matrix, metric), [matrix, metric]);
   const D = matrix.defenders.length;
   if (!matrix.attackers.length || !D) return <div className="empty">{t("analyses.matrix.empty")}</div>;
@@ -71,7 +73,17 @@ export function Heatmap({ matrix, metric, view = "values", attackerPoints, defen
               const title = t("analyses.matrix.cellTitle", { a: name, d: dname, v: shown, metric: metricLabel(metric) });
               return (
                 <div key={d} role="cell" className="mx-cell">
-                  <button type="button" style={{ background: c.background, color: c.color }} title={title} aria-label={title} onClick={() => onSelect?.(a, d)}>
+                  <button
+                    type="button"
+                    style={{ background: c.background, color: c.color }}
+                    aria-label={title}
+                    onClick={() => onSelect?.(a, d)}
+                    {...hover.bind({
+                      title: `${name} → ${dname}`,
+                      rows: [{ label: metricLabel(metric), value: shown }],
+                      note: t("analyses.matrix.cellNote"),
+                    })}
+                  >
                     {view === "values" ? shown : <span className="sr-only">{shown}</span>}
                   </button>
                 </div>
@@ -80,11 +92,12 @@ export function Heatmap({ matrix, metric, view = "values", attackerPoints, defen
           </div>
         ))}
       </div>
+      {hover.layer}
     </div>
   );
 }
 
-/** Eight swatches sampling the cell ramp, with the numeric range beside them. */
+/** One swatch per shade class, with the numeric range beside them. */
 export function HeatLegend({ matrix, metric }: { matrix: MatrixResult; metric: MatrixMetric }) {
   const model = useMemo(() => heatmapModel(matrix, metric), [matrix, metric]);
   const swatches = useMemo(() => heatRamp(model.min, model.max), [model.min, model.max]);

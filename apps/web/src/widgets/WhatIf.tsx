@@ -113,7 +113,10 @@ export function WhatIf({ scenario, result, snapshot, running }: WidgetProps) {
         label: v.label,
         value: v.deltaDamage,
         display: signedDisplay(v.deltaDamage, (x) => fmt(x)),
-        tone: v.deltaDamage < -1e-9 ? "danger" : v.deltaDamage > 1e-9 ? "ok" : "info",
+        // Gains are ink, losses accent. Green is reserved for status (modelled / not modelled), and a
+        // red-green pair would be the one colour combination a colour-blind reader cannot separate;
+        // the bars already run left or right of centre, so colour only reinforces the sign.
+        tone: v.deltaDamage < -1e-9 ? "danger" : v.deltaDamage > 1e-9 ? "bar" : "info",
         pressed: active.has(v.id),
         actionLabel: t(active.has(v.id) ? "whatIf.remove" : "whatIf.apply", { label: v.label }),
         title: `${v.label}: ${t("whatIf.deltaDamage")} ${signedDisplay(v.deltaDamage, (x) => fmt(x))} · ${t("whatIf.deltaSlain")} ${signedDisplay(v.deltaSlain, (x) => fmt(x))} · ${t("whatIf.deltaPKill")} ${signedDisplay(v.deltaPKill, (x) => pct(x))}`,
