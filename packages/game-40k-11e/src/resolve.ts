@@ -301,6 +301,25 @@ export function coverageFor(unit: ScenarioUnit, snapshot?: Snapshot): CoverageRe
   return { tier1, tier2, tier3, unmodelled: [...new Set(unmodelled)] };
 }
 
+function provenanceOf(scope: Ability["scope"]): string {
+  switch (scope) {
+    case "datasheet":
+      return "datasheet ability";
+    case "detachment":
+      return "detachment rule";
+    case "enhancement":
+      return "enhancement";
+    case "faction":
+      return "faction rule";
+    case "stratagem":
+      return "stratagem";
+    case "core":
+      return "core ability";
+    default:
+      return "ability";
+  }
+}
+
 export const GENERIC_TOGGLES: ManualToggle[] = [
   {
     id: "cmd-reroll-hit",
@@ -404,7 +423,7 @@ export function abilityToggles(unit: ScenarioUnit, side: "attacker" | "defender"
         const tid = `ability:${side}:${a.id}`;
         if (seen.has(tid)) continue;
         seen.add(tid);
-        out.push({ id: tid, label: a.name, description: a.text.slice(0, 300), side, effects: relevant, defaultOn: true });
+        out.push({ id: tid, label: a.name, description: a.text.slice(0, 300), side, effects: relevant, defaultOn: true, provenance: provenanceOf(a.scope) });
       }
     }
   } else {
@@ -414,13 +433,13 @@ export function abilityToggles(unit: ScenarioUnit, side: "attacker" | "defender"
       const k = e.source ?? "effect";
       groups.set(k, [...(groups.get(k) ?? []), e]);
     }
-    for (const [name, effects] of groups) out.push({ id: `ability:${side}:${name}`, label: name, side, effects, defaultOn: true });
+    for (const [name, effects] of groups) out.push({ id: `ability:${side}:${name}`, label: name, side, effects, defaultOn: true, provenance: "unit ability" });
   }
   return out;
 }
 
 export function listToggles(scenario: Scenario, snapshot?: Snapshot): ManualToggle[] {
-  return [...abilityToggles(scenario.attacker, "attacker", snapshot), ...abilityToggles(scenario.defender, "defender", snapshot), ...GENERIC_TOGGLES];
+  return [...abilityToggles(scenario.attacker, "attacker", snapshot), ...abilityToggles(scenario.defender, "defender", snapshot), ...GENERIC_TOGGLES.map((t) => ({ ...t, provenance: t.id.startsWith("cmd-") || t.id.startsWith("miracle") ? "stratagem" : "manual" }))];
 }
 
 /** Effects active for the scenario after applying enabledToggles ("-id" disables a default-on toggle). */

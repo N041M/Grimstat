@@ -131,3 +131,42 @@ export function efficiencyRanking(attackers: ScenarioUnit[], opts: { targetIds?:
   });
   return rows.sort((x, y) => y.damagePer100 - x.damagePer100);
 }
+
+export interface DurabilityIndexRow {
+  unit: string;
+  points?: number;
+  /** Expected points of attacker needed to remove the unit, averaged over the attacker archetypes. */
+  pointsToRemove: number;
+  /** Per-archetype: expected attacker points needed (attacker points × unit wounds / expected damage). */
+  byArchetype: Record<string, number>;
+}
+
+/**
+ * Durability index: how many points of shooting (from the attacker archetypes) it takes, in expectation,
+ * to remove the unit entirely. Higher is tougher. Uses expected damage from one activation, scaled linearly.
+ */
+export function durabilityIndex(defenders: ScenarioUnit[], opts: { attackerIds?: string[]; snapshot?: Snapshot; context?: Partial<ScenarioContext> } = {}): DurabilityIndexRow[] {
+  const ids = opts.attackerIds ?? DEFAULT_ATTACKER_ARCHETYPES;
+  const attackers = ids.flatMap((id) => archetypes.find((a) => a.id === id) ?? []);
+  return defenders.map((d) => {
+    const totalWounds = d.models.reduce((s, m) => s + m.count * m.W, 0);
+    const byArchetype: Record<string, number> = {};
+    let sum = 0;
+    let n = 0;
+    for (const a of attackers) {
+      const isMelee = a.unit.weapons.every((w) => w.kind === "melee");
+      const ctx: Partial<ScenarioContext> = { ...(opts.context ?? {}), phase: isMelee ? "fight" : "shooting", rangeBand: "half", charged: isMelee };
+      const r = runScenario(makeScenario(a.unit, d, ctx), { snapshot: opts.snapshot });
+      const pts = a.unit.points ?? 100;
+      const need = r.expectedDamage > 1e-9 ? (pts * totalWounds) / r.expectedDamage : Number.POSITIVE_INFINITY;
+      byArchetype[a.name] = need;
+      if (Number.isFinite(need)) {
+        sum += need;
+        n++;
+      }
+    }
+    const row: DurabilityIndexRow = { unit: d.name, pointsToRemove: n ? sum / n : Number.POSITIVE_INFINITY, byArchetype };
+    if (d.points !== undefined) row.points = d.points;
+    return row;
+  });
+}

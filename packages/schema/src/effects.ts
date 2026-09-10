@@ -90,6 +90,8 @@ export const ManualToggle = z.object({
   side: Side.default("attacker"),
   effects: z.array(EffectRecord).default([]),
   defaultOn: z.boolean().default(false),
+  /** Where the toggle comes from, for the UI: "datasheet ability", "detachment rule", "enhancement", "faction rule", "stratagem", "manual". */
+  provenance: z.string().optional(),
 });
 export type ManualToggle = z.infer<typeof ManualToggle>;
 

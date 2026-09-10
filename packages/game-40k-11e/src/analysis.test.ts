@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { archetypes, durabilityProfile, efficiencyRanking, runMatrix } from "./index";
+import { archetypes, durabilityIndex, durabilityProfile, efficiencyRanking, runMatrix } from "./index";
 
 const byId = (id: string) => archetypes.find((a) => a.id === id)!.unit;
 
@@ -15,6 +15,11 @@ describe("army-level analyses", () => {
     const d = durabilityProfile(byId("terminator-like"));
     expect(d.length).toBe(4);
     for (const e of d) expect(e.expectedDamage).toBeGreaterThanOrEqual(0);
+  });
+  it("durability index: a heavy tank needs more points of shooting to remove than light infantry", () => {
+    const rows = durabilityIndex([byId("guardsman-like"), byId("heavy-tank")]);
+    expect(rows[1]!.pointsToRemove).toBeGreaterThan(rows[0]!.pointsToRemove);
+    expect(Object.keys(rows[0]!.byArchetype).length).toBe(4);
   });
   it("efficiency ranking sorts descending and ranks melee-only units in the fight phase", () => {
     const rows = efficiencyRanking([byId("bolter-squad"), byId("lascannon-team"), byId("melta-squad"), byId("chainsword-mob")]);
