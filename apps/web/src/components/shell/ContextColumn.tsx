@@ -6,7 +6,7 @@ import { db } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { useUnitSet } from "../../hooks/useUnitSet";
 import { hrefFor, navigate, type Route } from "../../router";
-import { fmtInt, fmtRelative } from "../../lib/format";
+import { fmtInt, fmtRelative, shortRef } from "../../lib/format";
 import { totalPoints } from "../../lib/unitSet";
 import { useContextHostRef, useContextSlotFilled } from "./ContextSlot";
 import { t, type I18nKey, tn } from "../../i18n";
@@ -269,7 +269,7 @@ function DataBody({ param, inSheet }: BodyProps) {
       <ContextList>
         {sources.length === 0 ? <ContextEmpty>{t("ctxcol.noSources")}</ContextEmpty> : null}
         {sources.map((s, i) => (
-          <ContextRow key={`${s.adapter}:${i}`} name={s.adapter} value={s.ref} meta={fmtRelative(s.fetchedAt)} title={s.url ?? s.adapter} href={hrefFor("data")} />
+          <ContextRow key={`${s.adapter}:${i}`} name={s.adapter} value={shortRef(s.ref)} meta={fmtRelative(s.fetchedAt)} title={[s.adapter, s.ref, s.url].filter(Boolean).join(" · ")} href={hrefFor("data")} />
         ))}
         <ContextRow name={t("ctxcol.localOverrides")} value={String(overrides.length)} meta={t("ctxcol.overridesMeta")} selected={param === "overrides"} href={hrefFor("data", "overrides")} />
       </ContextList>

@@ -57,3 +57,12 @@ export function ap(n: number): string {
 export function dice(v: string | number): string {
   return String(v).toUpperCase().replace(/\s+/g, "");
 }
+
+/**
+ * Shorten a source reference for display. Git object ids are shown at the usual eight characters;
+ * anything else (a version tag, a timestamp) is already readable and is left alone.
+ */
+export function shortRef(ref: string | undefined): string | undefined {
+  if (!ref) return undefined;
+  return /^[0-9a-f]{12,}$/i.test(ref) ? ref.slice(0, 8) : ref;
+}
