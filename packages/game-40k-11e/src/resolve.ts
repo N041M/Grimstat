@@ -51,16 +51,72 @@ export function baseWeaponName(name: string): string {
   return name.split(/\s+[–—-]\s+/)[0]!.trim();
 }
 
-/** Weapon base names mentioned in the datasheet's default loadout text (lower-case). */
-function defaultWeaponNames(ds: Datasheet): Set<string> {
-  const out = new Set<string>();
-  const text = (ds.loadout ?? "").toLowerCase();
+export interface ParsedLoadout {
+  /** Weapon base names (lower-case) every model carries. */
+  all: string[];
+  /** Weapon base names carried only by a named model profile (key: lower-case profile name). */
+  byProfile: Record<string, string[]>;
+}
+
+const strip = (s: string) => s.replace(/^(?:an?|one|\d+x?|the)\s+/i, "").trim();
+
+/**
+ * Parse default-loadout prose such as
+ *   "Every model is equipped with: flux carbine; shock maul.\nThe Warden Sergeant is also equipped with a power fist."
+ * into weapons for every model and weapons for a specific profile. Option/replacement text is ignored.
+ */
+export function parseLoadout(ds: Datasheet): ParsedLoadout {
+  const out: ParsedLoadout = { all: [], byProfile: {} };
+  const text = ds.loadout ?? "";
   if (!text) return out;
-  for (const w of ds.weapons) {
-    const base = baseWeaponName(w.name).toLowerCase();
-    if (base && text.includes(base)) out.add(base);
+  const bases = [...new Set(ds.weapons.map((w) => baseWeaponName(w.name).toLowerCase()).filter(Boolean))];
+  const matchItems = (itemsText: string): string[] => {
+    const items = itemsText.split(/[;,]|\band\b/).map((i) => strip(i.replace(/\.$/, "")).toLowerCase()).filter(Boolean);
+    const found: string[] = [];
+    for (const item of items) for (const b of bases) if ((item.includes(b) || b.includes(item)) && !found.includes(b)) found.push(b);
+    return found;
+  };
+  const profiles = ds.models.map((m) => m.name.toLowerCase());
+  for (const raw of text.split(/(?<=\.)\s+|\n+/)) {
+    const sentence = raw.trim();
+    const m = /^(.*?)(?:\b(?:is|are)\s+)?(?:also\s+)?\bequipped\s+with\s*:?\s*(.+)$/i.exec(sentence);
+    if (!m) continue;
+    const subject = (m[1] ?? "").toLowerCase().replace(/^(?:the|each|every|all|this)\s+/, "").trim();
+    const items = matchItems(m[2] ?? "");
+    if (!items.length) continue;
+    if (/^(model|models|this model)$/.test(subject) || subject === "") {
+      for (const i of items) if (!out.all.includes(i)) out.all.push(i);
+      continue;
+    }
+    const profile = profiles.find((p) => p === subject || p.includes(subject) || subject.includes(p));
+    if (profile) out.byProfile[profile] = [...new Set([...(out.byProfile[profile] ?? []), ...items])];
+    else for (const i of items) if (!out.all.includes(i)) out.all.push(i);
+  }
+  // no recognisable clause: fall back to a plain substring match over the whole text
+  if (!out.all.length && !Object.keys(out.byProfile).length) {
+    const lower = text.toLowerCase();
+    for (const b of bases) if (lower.includes(b)) out.all.push(b);
   }
   return out;
+}
+
+/** Weapon base names mentioned in the datasheet's default loadout (lower-case), across all profiles. */
+function defaultWeaponNames(ds: Datasheet): Set<string> {
+  const p = parseLoadout(ds);
+  return new Set([...p.all, ...Object.values(p.byProfile).flat()]);
+}
+
+/** How many models of the unit carry a weapon by default: every model, or just the named profile's models. */
+function defaultWeaponCount(ds: Datasheet, base: string, modelCount: number, groups: ScenarioModel[]): number {
+  const p = parseLoadout(ds);
+  if (p.all.includes(base)) return modelCount;
+  let n = 0;
+  for (const [profile, items] of Object.entries(p.byProfile)) {
+    if (!items.includes(base)) continue;
+    const g = groups.find((m) => m.name.toLowerCase() === profile);
+    n += g ? g.count : 1;
+  }
+  return n || modelCount;
 }
 
 function modelsFromDatasheet(ds: Datasheet, modelCount: number, isCharacter: boolean): ScenarioModel[] {
@@ -102,7 +158,9 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
       if (w.kind === "ranged") anyRanged = true;
       else anyMelee = true;
     }
-    weapons.push(weaponToScenario(w, isCharacterSheet ? 1 : modelCount, opts.weaponNames ? true : enabled));
+    const base = baseWeaponName(w.name).toLowerCase();
+    const count = isCharacterSheet ? 1 : enabled ? defaultWeaponCount(ds, base, modelCount, models) : modelCount;
+    weapons.push(weaponToScenario(w, count, opts.weaponNames ? true : enabled));
   }
   // fall back to the first weapon of each kind when the loadout text named nothing usable
   for (const kind of ["ranged", "melee"] as const) {

@@ -13,6 +13,11 @@ export function t(key: I18nKey, vars?: Vars): string {
   return s;
 }
 
+/** Count-aware pick between a singular and a plural key; both receive `{n}`. */
+export function tn(n: number, one: I18nKey, many: I18nKey, vars?: Vars): string {
+  return t(n === 1 ? one : many, { ...vars, n });
+}
+
 export function setDictionary(d: Partial<Record<I18nKey, string>>): void {
   dict = { ...en, ...d };
 }

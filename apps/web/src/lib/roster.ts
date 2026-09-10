@@ -1,5 +1,5 @@
 import { Roster, type BattleSize, type Datasheet, type RosterUnit, type Snapshot } from "@grimstat/schema";
-import { BATTLE_SIZES, baseWeaponName } from "@grimstat/game-40k-11e";
+import { BATTLE_SIZES, baseWeaponName, parseLoadout } from "@grimstat/game-40k-11e";
 import { rosterSummary } from "@grimstat/resolver";
 import { newId, nowIso } from "./ids";
 
@@ -150,20 +150,16 @@ export function distributeModelCount(groups: ModelGroup[], target: number): Mode
  * match on the part of the weapon name before " – "), in weapon order, de-duplicated.
  */
 export function loadoutWargear(ds: Datasheet): string[] {
-  const text = (ds.loadout ?? "").toLowerCase();
-  if (!text) return [];
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const w of ds.weapons) {
-    const base = baseWeaponName(w.name);
-    const key = base.toLowerCase();
-    if (!key || seen.has(key)) continue;
-    if (text.includes(key)) {
-      seen.add(key);
-      out.push(base);
-    }
-  }
-  return out;
+  const parsed = parseLoadout(ds);
+  const wanted = new Set([...parsed.all, ...Object.values(parsed.byProfile).flat()]);
+  return weaponBaseNames(ds).filter((b) => wanted.has(b.toLowerCase()));
+}
+
+/** Default wargear for one model profile: every-model weapons plus that profile's own. */
+export function loadoutWargearFor(ds: Datasheet, profileName: string): string[] {
+  const parsed = parseLoadout(ds);
+  const wanted = new Set([...parsed.all, ...(parsed.byProfile[profileName.toLowerCase()] ?? [])]);
+  return weaponBaseNames(ds).filter((b) => wanted.has(b.toLowerCase()));
 }
 
 /** Distinct weapon base names of a datasheet (multi-profile weapons collapse to one entry). */
@@ -187,10 +183,9 @@ export function weaponBaseNames(ds: Datasheet): string[] {
 export function groupsFromDatasheet(ds: Datasheet, count?: number): ModelGroup[] {
   const bounds = compositionBounds(ds);
   const total = Math.max(1, count ?? bounds.min);
-  const wargear = loadoutWargear(ds);
   const profiles = ds.models;
-  if (profiles.length <= 1) return [{ modelProfileId: profiles[0]?.id ?? ds.id, count: total, wargear: [...wargear] }];
-  const base = profiles.map((p) => ({ modelProfileId: p.id, count: 1, wargear: [...wargear] }));
+  if (profiles.length <= 1) return [{ modelProfileId: profiles[0]?.id ?? ds.id, count: total, wargear: loadoutWargear(ds) }];
+  const base = profiles.map((p) => ({ modelProfileId: p.id, count: 1, wargear: loadoutWargearFor(ds, p.name) }));
   return distributeModelCount(base, total);
 }
 
@@ -257,4 +252,128 @@ export function diffRosters(prev: Roster, next: Roster, snapshot: Snapshot): Ros
 export function unitIndexFromPath(path: string | undefined): number | undefined {
   const m = path ? /^\/units\/(\d+)(?:\/|$)/.exec(path) : null;
   return m ? Number(m[1]) : undefined;
+}
+
+// ---------- display helpers (units list, picker, header) ----------
+
+export function unitDisplayName(unit: RosterUnit, ds: Datasheet | undefined): string {
+  return unit.customName?.trim() || ds?.name || unit.datasheetId;
+}
+
+export interface WargearSummaryItem {
+  name: string;
+  /** Number of models carrying the item (sum of the group counts that have it). */
+  count: number;
+  /** Not a weapon of the datasheet ("other wargear" typed by the user). */
+  extra: boolean;
+}
+
+/**
+ * Wargear carried by a unit, aggregated over its model groups: datasheet weapons first (in datasheet
+ * order, cased as on the datasheet), then anything else the user added. Names are de-duplicated
+ * case-insensitively; a group counts each item once.
+ */
+export function wargearSummaryItems(unit: RosterUnit, ds: Datasheet | undefined): WargearSummaryItem[] {
+  const counts = new Map<string, { name: string; count: number }>();
+  for (const g of unit.models) {
+    const seen = new Set<string>();
+    for (const raw of g.wargear) {
+      const name = raw.trim();
+      const key = name.toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const cur = counts.get(key);
+      if (cur) cur.count += g.count;
+      else counts.set(key, { name, count: g.count });
+    }
+  }
+  const out: WargearSummaryItem[] = [];
+  for (const name of ds ? weaponBaseNames(ds) : []) {
+    const key = name.toLowerCase();
+    const hit = counts.get(key);
+    if (!hit) continue;
+    out.push({ name, count: hit.count, extra: false });
+    counts.delete(key);
+  }
+  for (const v of counts.values()) out.push({ name: v.name, count: v.count, extra: true });
+  return out;
+}
+
+/**
+ * One-line wargear summary for a list row, e.g. "Flux carbine ×5, Shock maul ×5, Power fist ×1 · +1 Banner".
+ * Single-model units drop the "×1" noise ("Flux pistol, Relic blade"). Empty string when nothing is carried.
+ */
+export function wargearSummary(unit: RosterUnit, ds: Datasheet | undefined): string {
+  const items = wargearSummaryItems(unit, ds);
+  const single = modelCountOf(unit) <= 1;
+  const main = items.filter((i) => !i.extra).map((i) => (single ? i.name : `${i.name} ×${i.count}`));
+  const extra = items.filter((i) => i.extra).map((i) => `+${i.count} ${i.name}`);
+  return [main.join(", "), extra.join(", ")].filter(Boolean).join(" · ");
+}
+
+export interface DuplicateCap {
+  /** Maximum copies of the datasheet in the army. */
+  cap: number;
+  kind: "epicHero" | "battleline" | "standard";
+}
+
+/**
+ * Copies of one datasheet an army may contain; mirrors the `units.duplicates` rule of constraints11e:
+ * the battle size's figure (custom = Strike Force), doubled for Battleline, always 1 for Epic Heroes.
+ */
+export function duplicateCap(ds: Pick<Datasheet, "isEpicHero" | "isBattleline">, size: BattleSize): DuplicateCap {
+  const base = size === "custom" ? BATTLE_SIZES["strike-force"].duplicates : BATTLE_SIZES[size].duplicates;
+  if (ds.isEpicHero) return { cap: 1, kind: "epicHero" };
+  if (ds.isBattleline) return { cap: base * 2, kind: "battleline" };
+  return { cap: base, kind: "standard" };
+}
+
+/** Whether one more copy of `ds` may be added given the copies already in the roster. */
+export function canAddCopy(ds: Pick<Datasheet, "isEpicHero" | "isBattleline">, copies: number, size: BattleSize): boolean {
+  return copies < duplicateCap(ds, size).cap;
+}
+
+export type PickerGroup = "character" | "battleline" | "transport" | "other" | "legends";
+export const PICKER_GROUP_ORDER: PickerGroup[] = ["character", "battleline", "transport", "other", "legends"];
+
+/** Group of the add-unit picker a datasheet is listed under; Legends sheets always go last. */
+export function pickerGroupOf(ds: Datasheet): PickerGroup {
+  if (ds.isLegends) return "legends";
+  if (isCharacterSheet(ds)) return "character";
+  if (isBattlelineSheet(ds)) return "battleline";
+  if (isTransportSheet(ds)) return "transport";
+  return "other";
+}
+
+export type MeterTone = "ok" | "warn" | "danger";
+
+/** Colour of the points meter: danger over the limit, warn above 90 % of it. */
+export function pointsTone(points: number, limit: number): MeterTone {
+  if (points > limit) return "danger";
+  if (limit > 0 && points > limit * 0.9) return "warn";
+  return "ok";
+}
+
+/**
+ * Model-count bounds of one model group of a unit. When the datasheet has one composition line per
+ * group ("1 Sergeant" + "4-9 Wardens") the matching line is used; otherwise the unit's total bounds
+ * are shared out so that the other groups keep their current counts.
+ */
+export function groupBounds(ds: Datasheet | undefined, groups: ModelGroup[], index: number): ModelBounds {
+  if (!ds) return { min: 1, max: undefined };
+  const lines = ds.composition;
+  if (lines.length > 1 && lines.length === groups.length) {
+    const line = lines[index]!;
+    const min = Math.max(1, line.min ?? 1);
+    return { min, max: line.max !== undefined ? Math.max(min, line.max) : undefined };
+  }
+  const total = compositionBounds(ds);
+  const others = groups.reduce((s, g, i) => (i === index ? s : s + g.count), 0);
+  const min = Math.max(1, total.min - others);
+  return { min, max: total.max !== undefined ? Math.max(min, total.max - others) : undefined };
+}
+
+/** Diagnostics attached to the unit at `index` (path "/units/<index>"). */
+export function diagnosticsForUnit<T extends { path?: string | undefined }>(diagnostics: T[], index: number): T[] {
+  return diagnostics.filter((d) => unitIndexFromPath(d.path) === index);
 }

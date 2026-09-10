@@ -1,7 +1,8 @@
 import type { GameSystemPluginApi } from "./api";
 import { archetypes } from "./archetypes";
 import { gameSystem, manifest, RULES, RULES_10E } from "./manifest";
-import { coverageFor, listToggles, resolveScenarioUnit, unitFromDatasheet, unitFromRosterUnit, baseWeaponName, GENERIC_TOGGLES, activeToggleEffects, pointsFor } from "./resolve";
+import { coverageFor, listToggles, resolveScenarioUnit, unitFromDatasheet, unitFromRosterUnit, baseWeaponName, parseLoadout, GENERIC_TOGGLES, activeToggleEffects, pointsFor } from "./resolve";
+export type { ParsedLoadout } from "./resolve";
 import { runScenario, runScenarioWith, keywordRegistry } from "./scenario";
 import { create11eKeywordRegistry } from "./keywords";
 import type { GameSystem, PluginManifest, Scenario, Snapshot } from "@grimstat/schema";
@@ -9,12 +10,14 @@ import type { RulesParams } from "./manifest";
 import type { KeywordHandler } from "@grimstat/effects";
 
 export type { GameSystemPluginApi, UnitFromDatasheetOptions } from "./api";
-export { archetypes, gameSystem, manifest, RULES, RULES_10E, coverageFor, listToggles, resolveScenarioUnit, unitFromDatasheet, unitFromRosterUnit, baseWeaponName, runScenario, GENERIC_TOGGLES, activeToggleEffects, pointsFor };
+export { archetypes, gameSystem, manifest, RULES, RULES_10E, coverageFor, listToggles, resolveScenarioUnit, unitFromDatasheet, unitFromRosterUnit, baseWeaponName, parseLoadout, runScenario, GENERIC_TOGGLES, activeToggleEffects, pointsFor };
 export { CH, POLICY } from "./channels";
 export { create11eKeywordRegistry } from "./keywords";
 export { abilityEffects, coreAbilityEffects, patternEffects } from "./patterns";
 export { hitGate, woundGate, woundTarget, pUnsaved, damagePMF } from "./attack";
-export { constraints11e, BATTLE_SIZES, compositionBounds } from "./constraints";
+export { constraints11e, BATTLE_SIZES, compositionBounds, RESERVES_FRACTION, reservesLimit, startsInReserves } from "./constraints";
+export { parseTransportCapacity, unitFitsKeywords, hasKeywordPhrase } from "./transport";
+export type { TransportCapacity } from "./transport";
 export { makeScenario, runMatrix, durabilityProfile, efficiencyRanking } from "./analysis";
 export type { MatrixResult, MatrixCell, DurabilityEntry, EfficiencyRow } from "./analysis";
 export { optimiseTurn, evaluateTurnPlan, DEFAULT_TURN_OPTIONS } from "./optimiser";

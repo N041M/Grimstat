@@ -1,53 +1,40 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BattleSize, Datasheet, Roster, RosterUnit } from "@grimstat/schema";
 import { constraints11e, unitFromRosterUnit } from "@grimstat/game-40k-11e";
 import { rosterSummary, validateRoster } from "@grimstat/resolver";
 import { useApp } from "../state/AppContext";
-import { useRosterEditor, useRosterSnapshot, type SaveStatus } from "../hooks/useRosterEditor";
+import { useRosterEditor, useRosterSnapshot } from "../hooks/useRosterEditor";
+import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { hrefFor, navigate } from "../router";
-import { BATTLE_SIZE_ORDER, detachmentPointsFor, duplicateUnit, newRosterUnit, pointsLimitFor } from "../lib/roster";
-import { fmtInt } from "../lib/format";
-import { DetachmentsBlock } from "../components/roster/DetachmentsBlock";
-import { UnitsBlock } from "../components/roster/UnitsBlock";
+import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, newRosterUnit, pointsLimitFor } from "../lib/roster";
+import { RosterHeader, type EditorMode } from "../components/roster/RosterHeader";
+import { DetachmentStrip } from "../components/roster/DetachmentsBlock";
+import { UnitsBlock, type CalcSide } from "../components/roster/UnitsBlock";
 import { UnitInspector } from "../components/roster/UnitInspector";
 import { DiagnosticsPanel } from "../components/roster/DiagnosticsPanel";
 import { ExportDrawer } from "../components/roster/ExportDrawer";
 import { HistoryPanel } from "../components/roster/HistoryPanel";
-import { Empty } from "../components/ui";
-import { battleSizeKey } from "./ArmiesPage";
+import { Empty, Sheet } from "../components/ui";
 import { t } from "../i18n";
-
-type Mode = "unit" | "export" | "history";
-
-function statusLabel(status: SaveStatus, savedAt: string | undefined): string {
-  switch (status) {
-    case "dirty":
-      return t("roster.status.dirty");
-    case "saving":
-      return t("roster.status.saving");
-    case "error":
-      return t("roster.status.error");
-    default:
-      return savedAt ? t("roster.status.savedAt", { time: new Date(savedAt).toLocaleTimeString() }) : t("roster.status.saved");
-  }
-}
 
 export function RosterEditorPage({ id }: { id: string }) {
   const { scenario, replaceScenario, notify } = useApp();
   const editor = useRosterEditor(id);
   const { roster, status, savedAt, update } = editor;
   const { snapshot, fallback, loading } = useRosterSnapshot(roster);
+  const narrow = useMediaQuery(NARROW_QUERY);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
-  const [mode, setMode] = useState<Mode>("unit");
-  const inspectorRef = useRef<HTMLElement>(null);
-  const warnedFallback = useRef(false);
+  const [mode, setMode] = useState<EditorMode>("unit");
+  const [adding, setAdding] = useState(false);
+  const [detPicker, setDetPicker] = useState(false);
+  const [warnedFallback, setWarnedFallback] = useState(false);
 
   useEffect(() => {
-    if (fallback && roster && !warnedFallback.current) {
-      warnedFallback.current = true;
+    if (fallback && roster && !warnedFallback) {
+      setWarnedFallback(true);
       notify(t("armies.snapshotMissing", { id: roster.snapshotId }), "info");
     }
-  }, [fallback, roster, notify]);
+  }, [fallback, roster, notify, warnedFallback]);
 
   const datasheets = useMemo(() => new Map((snapshot?.data.datasheets ?? []).map((d) => [d.id, d] as const)), [snapshot]);
   const summary = useMemo(() => (roster && snapshot ? rosterSummary(roster, snapshot) : undefined), [roster, snapshot]);
@@ -58,15 +45,23 @@ export function RosterEditorPage({ id }: { id: string }) {
   const selectUnit = useCallback((unitId: string) => {
     setSelectedId(unitId);
     setMode("unit");
-    if (window.matchMedia("(max-width: 899px)").matches) window.setTimeout(() => inspectorRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 0);
+  }, []);
+  const closePanel = useCallback(() => {
+    setMode("unit");
+    setSelectedId(undefined);
   }, []);
 
   const selected = roster?.units.find((u) => u.id === selectedId);
+  const selectedIndex = roster && selected ? roster.units.indexOf(selected) : -1;
+  const selectedIssues = useMemo(() => (selectedIndex >= 0 ? diagnosticsForUnit(diagnostics, selectedIndex) : []), [diagnostics, selectedIndex]);
 
-  const addUnit = (ds: Datasheet) => {
+  const addUnit = (ds: Datasheet, edit: boolean) => {
     const u = newRosterUnit(ds);
     update((r) => ({ ...r, units: [...r.units, u] }));
-    selectUnit(u.id);
+    if (edit) {
+      setAdding(false);
+      selectUnit(u.id);
+    }
   };
   const changeUnit = (unit: RosterUnit) => update((r) => ({ ...r, units: r.units.map((u) => (u.id === unit.id ? unit : u)) }));
   const duplicate = (unit: RosterUnit) => {
@@ -95,7 +90,7 @@ export function RosterEditorPage({ id }: { id: string }) {
 
   const setBattleSize = (size: BattleSize) => update((r) => ({ ...r, battleSize: size, pointsLimit: pointsLimitFor(size, r.pointsLimit) }));
 
-  const openInCalculator = async (unit: RosterUnit, side: "attacker" | "defender") => {
+  const openInCalculator = async (unit: RosterUnit, side: CalcSide) => {
     if (!roster || !snapshot) return;
     try {
       const su = unitFromRosterUnit(unit, roster, snapshot);
@@ -111,6 +106,14 @@ export function RosterEditorPage({ id }: { id: string }) {
     editor.replace(r);
     setSelectedId(undefined);
     notify(t("roster.history.restored", { n: revision }), "success");
+  };
+
+  const showIssues = () => {
+    const el = document.getElementById("diagnostics");
+    if (!el) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
+    el.focus({ preventScroll: true });
   };
 
   if (status === "loading" || (roster && loading)) return <p className="muted">{t("armies.loading")}</p>;
@@ -134,70 +137,83 @@ export function RosterEditorPage({ id }: { id: string }) {
   }
 
   const points = summary?.points ?? 0;
-  const over = points > roster.pointsLimit;
   const dpSpent = summary?.detachmentPoints ?? 0;
   const dpLimit = detachmentPointsFor(roster.battleSize);
-  const toggleMode = (m: Mode) => setMode((cur) => (cur === m ? "unit" : m));
+  const errors = diagnostics.filter((d) => d.severity === "error").length;
+  const warns = diagnostics.filter((d) => d.severity === "warn").length;
+
+  const strip = <DetachmentStrip roster={roster} snapshot={snapshot} onChange={update} pickerOpen={detPicker} onPickerOpen={setDetPicker} />;
+  const panelLabel = mode === "export" ? t("roster.export.title") : mode === "history" ? t("roster.history.title") : t("roster.inspector.aria");
+  const panel =
+    mode === "export" ? (
+      <ExportDrawer roster={roster} snapshot={snapshot} onClose={closePanel} />
+    ) : mode === "history" ? (
+      <HistoryPanel roster={roster} snapshot={snapshot} onRestore={restore} onClose={closePanel} />
+    ) : selected ? (
+      <UnitInspector
+        key={selected.id}
+        unit={selected}
+        roster={roster}
+        snapshot={snapshot}
+        datasheets={datasheets}
+        cost={costById.get(selected.id)}
+        issues={selectedIssues}
+        onChange={changeUnit}
+        onOpenInCalculator={(side) => void openInCalculator(selected, side)}
+        onDuplicate={() => duplicate(selected)}
+        onRemove={() => remove(selected)}
+        onClose={closePanel}
+      />
+    ) : (
+      <div className="empty insp-empty">{t("roster.inspector.empty")}</div>
+    );
+  const panelOpen = mode !== "unit" || !!selected;
 
   return (
-    <div className="roster-editor">
-      <header className="roster-head">
-        <div className="roster-head-main">
-          <a href={hrefFor("armies")} className="small">
-            ← {t("armies.back")}
-          </a>
-          <input type="text" className="roster-name" value={roster.name} aria-label={t("roster.nameAria")} onChange={(e) => update((r) => ({ ...r, name: e.target.value }))} />
-          <span className="badge" title={roster.factionId}>
-            {faction?.name ?? t("roster.factionMissing", { id: roster.factionId })}
-          </span>
-          <label className="field inline-field">
-            <span>{t("armies.battleSize")}</span>
-            <select value={roster.battleSize} onChange={(e) => setBattleSize(e.target.value as BattleSize)}>
-              {BATTLE_SIZE_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {t(battleSizeKey(s))}
-                </option>
-              ))}
-            </select>
-          </label>
-          {roster.battleSize === "custom" ? (
-            <label className="field inline-field">
-              <span>{t("roster.pointsLimit")}</span>
-              <input type="number" min={1} step={5} value={roster.pointsLimit} onChange={(e) => update((r) => ({ ...r, pointsLimit: Math.max(1, Math.floor(Number(e.target.value)) || 1) }))} />
-            </label>
-          ) : null}
-        </div>
-        <div className="roster-head-stats">
-          <span className={`stat ${over ? "over" : ""}`.trim()} title={over ? t("roster.overLimit") : t("roster.points")} aria-label={`${t("roster.points")}: ${fmtInt(points)} / ${fmtInt(roster.pointsLimit)}`}>
-            <span className="k">{t("roster.points")}</span>
-            <span className="v">
-              {fmtInt(points)} / {fmtInt(roster.pointsLimit)}
-            </span>
-          </span>
-          <span className={`stat ${dpSpent > dpLimit ? "over" : ""}`.trim()} aria-label={`${t("roster.dp")}: ${dpSpent} / ${dpLimit}`}>
-            <span className="k">{t("roster.dp")}</span>
-            <span className="v">
-              {dpSpent} / {dpLimit}
-            </span>
-          </span>
-          <span className={`save-status ${status}`} role="status" aria-live="polite">
-            {statusLabel(status, savedAt)}
-          </span>
-          <span className="row">
-            <button type="button" className="sm" aria-pressed={mode === "export"} onClick={() => toggleMode("export")}>
-              {t("roster.export")}
-            </button>
-            <button type="button" className="sm" aria-pressed={mode === "history"} onClick={() => toggleMode("history")}>
-              {t("roster.history")}
-            </button>
-          </span>
-        </div>
-      </header>
+    <div className={`roster-editor ${narrow ? "narrow" : ""}`.trim()}>
+      <RosterHeader
+        roster={roster}
+        factionName={faction?.name ?? t("roster.factionMissing", { id: roster.factionId })}
+        points={points}
+        dpSpent={dpSpent}
+        dpLimit={dpLimit}
+        status={status}
+        savedAt={savedAt}
+        errors={errors}
+        warns={warns}
+        mode={mode}
+        narrow={narrow}
+        onMode={(m) => {
+          setMode(m);
+          if (m === "unit") setSelectedId(undefined);
+        }}
+        onRename={(name) => update((r) => ({ ...r, name }))}
+        onBattleSize={setBattleSize}
+        onPointsLimit={(limit) => update((r) => ({ ...r, pointsLimit: limit }))}
+        onShowIssues={showIssues}
+      >
+        {narrow ? null : strip}
+      </RosterHeader>
+      {narrow ? strip : null}
 
       <div className="roster-body">
         <div className="roster-main stack">
-          <DetachmentsBlock roster={roster} snapshot={snapshot} onChange={update} />
-          <UnitsBlock roster={roster} snapshot={snapshot} datasheets={datasheets} costById={costById} selectedId={selectedId} onSelect={selectUnit} onAdd={addUnit} onDuplicate={duplicate} onRemove={remove} />
+          <UnitsBlock
+            roster={roster}
+            snapshot={snapshot}
+            datasheets={datasheets}
+            costById={costById}
+            selectedId={selectedId}
+            adding={adding}
+            onAdding={setAdding}
+            onSelect={selectUnit}
+            onAdd={addUnit}
+            onDuplicate={duplicate}
+            onRemove={remove}
+            onOpenInCalculator={(u, side) => void openInCalculator(u, side)}
+            onOpenDetachmentPicker={() => setDetPicker(true)}
+            onExport={() => setMode("export")}
+          />
           <DiagnosticsPanel
             diagnostics={diagnostics}
             onSelectUnit={(i) => {
@@ -206,17 +222,15 @@ export function RosterEditorPage({ id }: { id: string }) {
             }}
           />
         </div>
-        <aside className="roster-inspector panel" ref={inspectorRef} aria-label={mode === "unit" ? t("roster.units") : mode === "export" ? t("roster.export.title") : t("roster.history.title")}>
-          {mode === "export" ? (
-            <ExportDrawer roster={roster} snapshot={snapshot} onClose={() => setMode("unit")} />
-          ) : mode === "history" ? (
-            <HistoryPanel roster={roster} snapshot={snapshot} onRestore={restore} onClose={() => setMode("unit")} />
-          ) : selected ? (
-            <UnitInspector key={selected.id} unit={selected} roster={roster} snapshot={snapshot} datasheets={datasheets} cost={costById.get(selected.id)} onChange={changeUnit} onOpenInCalculator={(side) => void openInCalculator(selected, side)} />
-          ) : (
-            <div className="empty">{t("roster.inspector.empty")}</div>
-          )}
-        </aside>
+        {narrow ? (
+          <Sheet open={panelOpen} onClose={closePanel} label={panelLabel} className="roster-sheet">
+            {panel}
+          </Sheet>
+        ) : (
+          <aside className={`roster-inspector panel ${panelOpen ? "open" : "idle"}`} aria-label={panelLabel}>
+            {panel}
+          </aside>
+        )}
       </div>
     </div>
   );

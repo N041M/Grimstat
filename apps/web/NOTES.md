@@ -304,3 +304,20 @@ snapshot comparison, rules overrides) and the Phase 7 in-browser data import for
   respawns the worker (the only true cancellation for synchronous work).
 - Dev server: `pnpm dev` (note: `pnpm --filter @grimstat/web dev -- --port N` forwards the `--` to vite; pass flags directly).
 - The `react-resizable` handle CSS is inlined in `styles.css` because pnpm's strict layout does not expose it to apps/web.
+
+## Army builder UX pass (2026-09-10) — what changed, and one request
+
+- Editor reads as an army list: sticky header (`components/roster/RosterHeader.tsx`: editable title, faction chip,
+  quiet size select, points meter + DP pips, save status, "2 errors · 1 warning" summary that scrolls to
+  `#diagnostics`, Export/History), detachments as a chip row with a popover picker (`DetachmentsBlock.tsx` →
+  `DetachmentStrip`), role sections with counts/points and wargear-summary rows (`UnitsBlock.tsx`), grouped add-unit
+  picker with the duplication cap (`AddUnitPanel.tsx`), inspector with sticky head / sections / footer
+  (`UnitInspector.tsx`), a bottom sheet under 900 px (`components/ui.tsx`: `Sheet`, `Popover`, `Dialog`, `PointsMeter`,
+  `DpPips`, `Icon`). Pure helpers + tests live in `lib/roster.ts` (`wargearSummary`, `duplicateCap`, `pickerGroupOf`,
+  `pointsTone`, `groupBounds`, `diagnosticsForUnit`).
+- **Request for `@grimstat/game-40k-11e`**: export the duplication-cap rule used by `constraints11e`'s
+  `units.duplicates` evaluator (battle-size `duplicates`, ×2 for Battleline, 1 for Epic Heroes, custom = Strike Force)
+  as a function, e.g. `duplicateCapFor(ds, battleSize)`. The web app currently mirrors it in `lib/roster.ts`
+  (`duplicateCap`) so the picker can disable rows before the diagnostics fire; a shared export would keep the two from
+  drifting. Likewise a `legalHostsFor(character, roster)` helper (one Leader / one Support per unit) would let the
+  inspector's Leader/Support select share the resolver's rule instead of re-deriving it.

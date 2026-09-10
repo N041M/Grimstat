@@ -39,6 +39,8 @@ export interface AppContextValue {
   dismissNotice(): void;
 }
 
+export const NOTICE_AUTO_DISMISS_MS = 4000;
+
 const Ctx = createContext<AppContextValue | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -55,7 +57,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const notify = useCallback((text: string, kind: NoticeKind = "info", details?: string[]) => {
     setNotice(details ? { kind, text, details } : { kind, text });
     if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
-    if (kind !== "error") noticeTimer.current = window.setTimeout(() => setNotice(undefined), 6000);
+    // Info/success notices dismiss themselves; errors stay until closed.
+    if (kind !== "error") noticeTimer.current = window.setTimeout(() => setNotice(undefined), NOTICE_AUTO_DISMISS_MS);
   }, []);
   const dismissNotice = useCallback(() => setNotice(undefined), []);
 

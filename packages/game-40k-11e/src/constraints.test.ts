@@ -25,6 +25,10 @@ const snapshot: Snapshot = {
       { id: "cap", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Captain", isLegends: false, isCharacter: true, isEpicHero: false, isBattleline: false, isSupport: false, keywords: ["CHARACTER", "INFANTRY"], factionKeywords: [], models: [{ ...model, id: "c", name: "Captain", W: 5 }], weapons: [], abilityIds: [], leaderTo: ["squad"], supportTo: [], composition: [{ description: "1 model", min: 1, max: 1 }], wargearOptions: [] },
       { id: "medic", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Medic", isLegends: false, isCharacter: true, isEpicHero: false, isBattleline: false, isSupport: true, keywords: ["CHARACTER", "INFANTRY"], factionKeywords: [], models: [{ ...model, id: "d", name: "Medic", W: 4 }], weapons: [], abilityIds: [], leaderTo: [], supportTo: ["squad"], composition: [{ description: "1 model", min: 1, max: 1 }], wargearOptions: [] },
       { id: "hero", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Epic Hero", isLegends: false, isCharacter: true, isEpicHero: true, isBattleline: false, isSupport: false, keywords: ["CHARACTER", "EPIC HERO"], factionKeywords: [], models: [{ ...model, id: "h", name: "Hero", W: 6 }], weapons: [], abilityIds: [], leaderTo: ["squad"], supportTo: [], composition: [{ description: "1 model", min: 1, max: 1 }], wargearOptions: [] },
+      { id: "rhino", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Rhino", isLegends: false, isCharacter: false, isEpicHero: false, isBattleline: false, isSupport: false, transportCapacity: "This model has a transport capacity of 12 INFANTRY models. Each TERMINATOR model takes up the space of 2 models. It cannot transport JUMP PACK models.", keywords: ["VEHICLE", "TRANSPORT", "DEDICATED TRANSPORT"], factionKeywords: [], models: [{ ...model, id: "rh", name: "Rhino", T: 9, W: 10 }], weapons: [], abilityIds: [], leaderTo: [], supportTo: [], composition: [{ description: "1 model", min: 1, max: 1 }], wargearOptions: [] },
+      { id: "termies", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Terminators", isLegends: false, isCharacter: false, isEpicHero: false, isBattleline: false, isSupport: false, keywords: ["INFANTRY", "TERMINATOR"], factionKeywords: [], models: [{ ...model, id: "t", name: "Terminator", W: 3 }], weapons: [], abilityIds: [], leaderTo: [], supportTo: [], composition: [{ description: "5-10 models", min: 5, max: 10 }], wargearOptions: [] },
+      { id: "jumpers", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Assault Squad", isLegends: false, isCharacter: false, isEpicHero: false, isBattleline: false, isSupport: false, keywords: ["INFANTRY", "JUMP PACK", "FLY"], factionKeywords: [], models: [{ ...model, id: "j", name: "Jumper" }], weapons: [], abilityIds: [], leaderTo: [], supportTo: [], composition: [{ description: "5-10 models", min: 5, max: 10 }], wargearOptions: [] },
+      { id: "tank", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Tank", isLegends: false, isCharacter: false, isEpicHero: false, isBattleline: false, isSupport: false, keywords: ["VEHICLE"], factionKeywords: [], models: [{ ...model, id: "tk", name: "Tank", T: 11, W: 14 }], weapons: [], abilityIds: [], leaderTo: [], supportTo: [], composition: [{ description: "1 model", min: 1, max: 1 }], wargearOptions: [] },
     ],
     abilities: [],
     detachments: [
@@ -44,6 +48,10 @@ const snapshot: Snapshot = {
       { datasheetId: "cap", copyRange: { min: 1 }, tiers: [{ models: 1, points: 70 }] },
       { datasheetId: "medic", copyRange: { min: 1 }, tiers: [{ models: 1, points: 50 }] },
       { datasheetId: "hero", copyRange: { min: 1 }, tiers: [{ models: 1, points: 120 }] },
+      { datasheetId: "rhino", copyRange: { min: 1 }, tiers: [{ models: 1, points: 75 }] },
+      { datasheetId: "termies", copyRange: { min: 1 }, tiers: [{ models: 5, points: 170 }, { models: 10, points: 340 }] },
+      { datasheetId: "jumpers", copyRange: { min: 1 }, tiers: [{ models: 5, points: 90 }, { models: 10, points: 180 }] },
+      { datasheetId: "tank", copyRange: { min: 1 }, tiers: [{ models: 1, points: 150 }] },
     ],
     wargearPrices: [{ datasheetId: "squad", item: "Big gun", points: 10 }],
   },
@@ -142,5 +150,90 @@ describe("11e constraints", () => {
   });
   it("warlord", () => {
     expect(validateRoster(roster({ units: [roster().units[0]!] }), snapshot, [constraints11e]).some((d) => d.code === "warlord.none")).toBe(true);
+  });
+});
+
+describe("transports and reserves", () => {
+  type Unit = Roster["units"][number];
+  const all = (r: Roster) => validateRoster(r, snapshot, [constraints11e]);
+  const unit = (id: string, datasheetId: string, count: number, extra: Partial<Unit> = {}): Unit => ({ id, datasheetId, models: [{ modelProfileId: "m", count, wargear: [] }], isWarlord: false, ...extra });
+  const rhino = (extra: Partial<Unit> = {}) => unit("rh1", "rhino", 1, extra);
+  const captain = (extra: Partial<Unit> = {}) => unit("cap1", "cap", 1, { isWarlord: true, ...extra });
+
+  it("a unit that fits reports the load as info", () => {
+    const r = roster({ units: [rhino(), unit("s1", "squad", 10, { embarkedIn: "rh1" }), captain()] });
+    const d = all(r);
+    expect(d.filter((x) => x.severity === "error")).toEqual([]);
+    expect(d.find((x) => x.code === "transport.capacity")).toMatchObject({ severity: "info", message: "Test Rhino carries 10 / 12.", path: "/units/0" });
+  });
+  it("over capacity is an error naming the transport, occupancy and capacity", () => {
+    const r = roster({ units: [rhino(), unit("s1", "squad", 10, { embarkedIn: "rh1" }), unit("e1", "elite", 3, { embarkedIn: "rh1" }), captain()] });
+    const err = all(r).find((x) => x.code === "transport.capacity");
+    expect(err).toMatchObject({ severity: "error", message: "Test Rhino carries 13 models; its transport capacity is 12.", fix: "Disembark a unit.", path: "/units/0" });
+  });
+  it("size multiplier: each TERMINATOR takes two slots", () => {
+    expect(codes(roster({ units: [rhino(), unit("t1", "termies", 6, { embarkedIn: "rh1" }), captain()] }))).toEqual([]);
+    expect(all(roster({ units: [rhino(), unit("t1", "termies", 6, { embarkedIn: "rh1" }), captain()] })).find((x) => x.code === "transport.capacity")?.message).toBe("Test Rhino carries 12 / 12.");
+    expect(codes(roster({ units: [rhino(), unit("t1", "termies", 7, { embarkedIn: "rh1" }), captain()] }))).toContain("transport.capacity");
+    expect(codes(roster({ units: [rhino(), unit("t1", "termies", 5, { embarkedIn: "rh1" }), unit("s1", "squad", 5, { embarkedIn: "rh1" }), captain()] }))).toContain("transport.capacity");
+  });
+  it("excluded keyword", () => {
+    const d = all(roster({ units: [rhino(), unit("j1", "jumpers", 5, { embarkedIn: "rh1" }), captain()] }));
+    expect(d.find((x) => x.code === "transport.excluded")).toMatchObject({ severity: "error", message: "Test Rhino cannot transport Test Assault Squad (JUMP PACK models).", path: "/units/1" });
+    expect(d.some((x) => x.code === "transport.keywords")).toBe(false);
+  });
+  it("keyword mismatch and embarking in something that is not a transport", () => {
+    const d = all(roster({ units: [rhino(), unit("tk1", "tank", 1, { embarkedIn: "rh1" }), captain()] }));
+    expect(d.find((x) => x.code === "transport.keywords")).toMatchObject({ severity: "error", message: "Test Rhino cannot transport Test Tank (only INFANTRY models).", path: "/units/1" });
+    const notTransport = all(roster({ units: [unit("tk1", "tank", 1), unit("s1", "squad", 5, { embarkedIn: "tk1" }), captain()] }));
+    expect(notTransport.find((x) => x.code === "transport.none")).toMatchObject({ severity: "error", message: "Test Squad is embarked in Test Tank, which is not a transport.", path: "/units/1" });
+    expect(notTransport.some((x) => x.code === "transport.capacity")).toBe(false);
+  });
+  it("transport not in the army", () => {
+    const d = all(roster({ units: [unit("s1", "squad", 5, { embarkedIn: "ghost" }), captain()] }));
+    expect(d.find((x) => x.code === "transport.missing")).toMatchObject({ severity: "error", message: "Test Squad is embarked in a unit that is not in the army.", path: "/units/0" });
+  });
+  it("a transport embarked in a transport is ignored with a warning", () => {
+    const d = all(roster({ units: [rhino(), unit("rh2", "rhino", 1, { embarkedIn: "rh1" }), captain()] }));
+    expect(d.find((x) => x.code === "transport.nested")?.severity).toBe("warn");
+    expect(d.some((x) => x.code === "transport.capacity")).toBe(false);
+  });
+  it("attached characters ride with their host and count towards capacity", () => {
+    const base = [rhino(), unit("s1", "squad", 5, { embarkedIn: "rh1" }), unit("e1", "elite", 6, { embarkedIn: "rh1" })];
+    const withLeader = all(roster({ units: [...base, captain({ attachedTo: { unitId: "s1", role: "leader" } })] }));
+    expect(withLeader.filter((x) => x.severity === "error")).toEqual([]);
+    expect(withLeader.find((x) => x.code === "transport.capacity")?.message).toBe("Test Rhino carries 12 / 12.");
+    const withBoth = all(roster({ units: [...base, captain({ attachedTo: { unitId: "s1", role: "leader" } }), unit("md1", "medic", 1, { attachedTo: { unitId: "s1", role: "support" } })] }));
+    expect(withBoth.find((x) => x.code === "transport.capacity")).toMatchObject({ severity: "error", message: "Test Rhino carries 13 models; its transport capacity is 12." });
+    // A character that also lists its own embarkation is warned about and not counted twice.
+    const doubled = all(roster({ units: [rhino(), unit("s1", "squad", 10, { embarkedIn: "rh1" }), captain({ attachedTo: { unitId: "s1", role: "leader" }, embarkedIn: "rh1" })] }));
+    expect(doubled.find((x) => x.code === "transport.attached")?.severity).toBe("warn");
+    expect(doubled.find((x) => x.code === "transport.capacity")?.message).toBe("Test Rhino carries 11 / 12.");
+    // An attached character that does not fit the transport is reported by name.
+    const badRider = all(roster({ units: [rhino(), unit("s1", "squad", 5, { embarkedIn: "rh1" }), captain({ attachedTo: { unitId: "s1", role: "leader" }, datasheetId: "jumpers", models: [{ modelProfileId: "j", count: 1, wargear: [] }] })] }));
+    expect(badRider.find((x) => x.code === "transport.excluded")?.message).toBe("Test Rhino cannot transport Test Assault Squad (JUMP PACK models).");
+  });
+  it("reserves: silent when nothing is reserved, info under the limit, error over it", () => {
+    expect(all(roster()).some((x) => x.code === "reserves.limit")).toBe(false);
+    // Strike Force: 25% of 2000 = 500 (assumed). Squad of 10 = 160.
+    const under = all(roster({ units: [unit("s1", "squad", 10, { inReserves: true }), captain()] }));
+    expect(under.find((x) => x.code === "reserves.limit")).toMatchObject({ severity: "info", message: "160 / 500 points in Reserves (assumed)." });
+    // 160 + 200 + 170 = 530 > 500
+    const over = all(roster({ units: [unit("s1", "squad", 10, { inReserves: true }), unit("e1", "elite", 6, { inReserves: true }), unit("t1", "termies", 5, { inReserves: true }), captain()] }));
+    expect(over.find((x) => x.code === "reserves.limit")).toMatchObject({ severity: "error", message: "530 points start in Reserves; the limit is 500 (assumed).", fix: "Deploy a unit on the battlefield instead." });
+    // An attached character (70 + enhancement 20) counts with its reserved host: 160 + 90 = 250 fits exactly at 1000 points, 251 would not.
+    const attached = all(roster({ pointsLimit: 1000, battleSize: "incursion", units: [unit("s1", "squad", 10, { inReserves: true }), captain({ attachedTo: { unitId: "s1", role: "leader" }, enhancementId: "e1" })] }));
+    expect(attached.find((x) => x.code === "reserves.limit")).toMatchObject({ severity: "info", message: "250 / 250 points in Reserves (assumed)." });
+  });
+  it("units embarked in a reserved transport are in Reserves too", () => {
+    // Rhino 75 + squad 160 = 235 of 250 (Incursion, 1000 points).
+    const base = [rhino({ inReserves: true }), unit("s1", "squad", 10, { embarkedIn: "rh1" })];
+    const fits = all(roster({ pointsLimit: 1000, battleSize: "incursion", units: [...base, captain()] }));
+    expect(fits.find((x) => x.code === "reserves.limit")).toMatchObject({ severity: "info", message: "235 / 250 points in Reserves (assumed)." });
+    // Attaching the captain (70) to the embarked squad pulls him into Reserves as well: 305 > 250.
+    const over = all(roster({ pointsLimit: 1000, battleSize: "incursion", units: [...base, captain({ attachedTo: { unitId: "s1", role: "leader" } })] }));
+    expect(over.find((x) => x.code === "reserves.limit")).toMatchObject({ severity: "error", message: "305 points start in Reserves; the limit is 250 (assumed)." });
+    // A transport embarked in a reserved transport does not recurse forever.
+    expect(() => all(roster({ units: [rhino({ embarkedIn: "rh2" }), unit("rh2", "rhino", 1, { embarkedIn: "rh1" }), captain()] }))).not.toThrow();
   });
 });

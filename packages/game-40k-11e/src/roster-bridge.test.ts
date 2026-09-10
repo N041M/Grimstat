@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Roster } from "@grimstat/schema";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
-import { unitFromRosterUnit } from "./index";
+import { unitFromRosterUnit, unitFromDatasheet, parseLoadout } from "./index";
 
 const snapshot = loadSyntheticSnapshot();
 const now = new Date().toISOString();
@@ -33,5 +33,19 @@ describe("unitFromRosterUnit", () => {
     expect(byName["Twin hail gun"]!.enabled).toBe(false);
     expect(byName["Crusher fists"]!.enabled).toBe(true);
     expect(u.points).toBe(150 + 10);
+  });
+});
+
+describe("parseLoadout", () => {
+  it("separates every-model weapons from profile-specific ones and ignores option text", () => {
+    const squad = snapshot.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;
+    const p = parseLoadout(squad);
+    expect(p.all).toEqual(["flux carbine", "shock maul"]);
+    expect(p.byProfile["warden sergeant"]).toEqual(["power fist"]);
+    const u = unitFromDatasheet(squad, snapshot, { modelCount: 10 });
+    const by = Object.fromEntries(u.weapons.map((w) => [w.name, w]));
+    expect(by["Flux carbine"]!.count).toBe(10);
+    expect(by["Power fist"]!.count).toBe(1);
+    expect(by["Power fist"]!.enabled).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { NARROW_QUERY, useMediaQuery } from "./hooks/useMediaQuery";
 import { can } from "@grimstat/entitlements";
 import { currentPlan } from "@grimstat/entitlements";
 import { useApp } from "./state/AppContext";
@@ -92,6 +93,24 @@ export function App() {
   }, [ready, notify]);
 
   const themeLabel = theme.preference === "system" ? t("theme.system", { r: theme.resolved }) : theme.preference === "dark" ? t("theme.dark") : t("theme.light");
+  const narrow = useMediaQuery(NARROW_QUERY);
+
+  // Data label, theme, plan and the future Sync entry: sidebar foot on desktop, footer "More" row on narrow screens.
+  const sync = can("sync") ? (
+    <span className="nav-item disabled" aria-disabled="true" title={t("nav.syncHint")}>
+      {t("nav.sync")}
+      <span className="badge">{t("nav.soon")}</span>
+    </span>
+  ) : null;
+  const tools = (
+    <>
+      <span title={activeSnapshotId}>{snapshot ? t("shell.activeSnapshot", { label: snapshot.label ?? snapshot.id }) : t("shell.noSnapshot")}</span>
+      <button type="button" className="sm" onClick={theme.cycle} aria-label={t("theme.toggleAria")}>
+        {themeLabel}
+      </button>
+      <span className="badge">{t("shell.plan", { plan: currentPlan() })}</span>
+    </>
+  );
 
   return (
     <div className="app">
@@ -109,20 +128,9 @@ export function App() {
               {n.label()}
             </a>
           ))}
-          {can("sync") ? (
-            <span className="nav-item disabled" aria-disabled="true" title={t("nav.syncHint")}>
-              {t("nav.sync")}
-              <span className="badge">{t("nav.soon")}</span>
-            </span>
-          ) : null}
+          {narrow ? null : sync}
         </nav>
-        <div className="sidebar-foot">
-          <span title={activeSnapshotId}>{snapshot ? t("shell.activeSnapshot", { label: snapshot.label ?? snapshot.id }) : t("shell.noSnapshot")}</span>
-          <button type="button" className="sm" onClick={theme.cycle} aria-label={t("theme.toggleAria")}>
-            {themeLabel}
-          </button>
-          <span className="badge">{t("shell.plan", { plan: currentPlan() })}</span>
-        </div>
+        {narrow ? null : <div className="sidebar-foot">{tools}</div>}
       </aside>
       <main className="main">
         {notice ? (
@@ -151,6 +159,12 @@ export function App() {
         )}
       </main>
       <footer className="footer">
+        {narrow ? (
+          <div className="footer-tools" aria-label={t("nav.more")}>
+            {tools}
+            {sync}
+          </div>
+        ) : null}
         <span>{t("footer.disclaimer")}</span>
         {snapshot?.sources.length ? <span className="footer-credits">{t("footer.poweredBy", { list: attributionSummary(snapshot.sources) })}</span> : null}
       </footer>

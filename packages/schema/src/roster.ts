@@ -20,6 +20,10 @@ export const RosterUnit = z.object({
   models: z.array(RosterModelGroup).min(1),
   /** If this unit is a character attached to another unit. */
   attachedTo: z.object({ unitId: Id, role: z.enum(["leader", "support"]) }).optional(),
+  /** Id of the TRANSPORT roster unit this unit starts the battle embarked in. */
+  embarkedIn: Id.optional(),
+  /** Starts the battle in Reserves (Strategic Reserves, Deep Strike, etc.). */
+  inReserves: z.boolean().optional(),
   enhancementId: Id.optional(),
   isWarlord: z.boolean().default(false),
   notes: z.string().optional(),

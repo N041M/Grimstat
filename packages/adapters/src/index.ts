@@ -7,7 +7,7 @@ export { parse as parseBsdataJson, bsdataJsonAdapter, BSDATA_RAW_URL, BSDATA_TRE
 export type { BsdataStaging, BsEntry, BsCatalogue, BsProfile, BsRule, BsAssociation } from "./bsdata-json/index";
 export { exportJson, importJson, jsonExporter } from "./json/index";
 export type { Exporter, JsonExportOptions } from "./json/index";
-export { SOURCES, fetchSource, sourcesForSystem, wahapediaUrlFor, WAHAPEDIA_BASE_URL_10E } from "./sources";
+export { SOURCES, fetchSource, sourcesForSystem, wahapediaUrlFor, WAHAPEDIA_BASE_URL_10E, isAlwaysFetchedCatalogue } from "./sources";
 export type { SourceId, SourceDef, FetchLike, FetchSourceOptions, FetchedSource } from "./sources";
 export { parsePipeCsv } from "./util/pipe-csv";
 export type { PipeCsvResult, PipeCsvOptions } from "./util/pipe-csv";

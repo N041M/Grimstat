@@ -1,30 +1,67 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Roster, type BattleSize, type Snapshot } from "@grimstat/schema";
 import { importRosterText } from "@grimstat/adapters";
 import { rosterSummary } from "@grimstat/resolver";
 import { db, deleteRoster, saveRosterWithVersion } from "../db";
 import { useApp } from "../state/AppContext";
 import { hrefFor, navigate } from "../router";
-import { BATTLE_SIZE_ORDER, cloneRoster, newRoster, pointsLimitFor } from "../lib/roster";
+import { BATTLE_SIZE_ORDER, cloneRoster, newRoster, pointsLimitFor, pointsTone } from "../lib/roster";
 import { newId } from "../lib/ids";
 import { fmtDate, fmtInt } from "../lib/format";
 import { download } from "../lib/download";
-import { Empty, Field } from "../components/ui";
+import { Dialog, Empty, Field, Icon, PointsMeter, Popover } from "../components/ui";
 import { t, type I18nKey } from "../i18n";
 
 export const battleSizeKey = (s: BattleSize): I18nKey => `battleSize.${s}` as I18nKey;
+
+function CardMenu({ name, busy, onDuplicate, onDelete }: { name: string; busy: boolean; onDuplicate: () => void; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const run = (fn: () => void) => () => {
+    close();
+    fn();
+  };
+  return (
+    <Popover
+      open={open}
+      onClose={close}
+      align="end"
+      label={t("armies.cardActions", { name })}
+      trigger={
+        <button type="button" className="ghost sm icon-btn" aria-haspopup="menu" aria-expanded={open} aria-label={t("armies.cardActions", { name })} disabled={busy} onClick={() => setOpen((v) => !v)}>
+          <Icon name="more" />
+        </button>
+      }
+    >
+      <div className="menu" role="menu">
+        <button type="button" role="menuitem" onClick={run(onDuplicate)}>
+          <Icon name="copy" />
+          {t("armies.duplicate")}
+        </button>
+        <button type="button" role="menuitem" className="danger" onClick={run(onDelete)}>
+          <Icon name="trash" />
+          {t("armies.delete")}
+        </button>
+      </div>
+    </Popover>
+  );
+}
 
 export function ArmiesPage() {
   const { snapshot, activeSnapshotId, notify, withOverrides } = useApp();
   const [items, setItems] = useState<Roster[] | undefined>(undefined);
   const [others, setOthers] = useState<Map<string, Snapshot | null>>(new Map());
-  const [panel, setPanel] = useState<"new" | "import" | undefined>(undefined);
+  const [dialog, setDialog] = useState<"new" | "import" | undefined>(undefined);
   const [factionId, setFactionId] = useState("");
   const [battleSize, setBattleSize] = useState<BattleSize>("strike-force");
   const [name, setName] = useState("");
   const [customLimit, setCustomLimit] = useState(2000);
   const [text, setText] = useState("");
+  const [fileName, setFileName] = useState<string | undefined>(undefined);
+  const [over, setOver] = useState(false);
+  const [imported, setImported] = useState<{ id: string; name: string; warnings: string[] } | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     const all = await db.rosters.toArray();
@@ -93,12 +130,19 @@ export function ArmiesPage() {
     }
   };
 
+  const closeDialog = () => {
+    setDialog(undefined);
+    setImported(undefined);
+    setFileName(undefined);
+    setOver(false);
+  };
+
   const create = () =>
     run(async () => {
       if (!snapshot || !factionId) return;
       const r = newRoster({ snapshot, factionId, battleSize, ...(name.trim() ? { name: name.trim() } : {}), ...(battleSize === "custom" ? { pointsLimit: Math.max(1, Math.floor(customLimit) || 2000) } : {}) });
       await saveRosterWithVersion(r);
-      setPanel(undefined);
+      closeDialog();
       setName("");
       navigate("armies", false, r.id);
     });
@@ -128,13 +172,33 @@ export function ArmiesPage() {
       }
       const r = Roster.parse({ ...result.roster, id: newId("roster"), snapshotId: snapshot.id, gameSystemId: snapshot.gameSystemId });
       await saveRosterWithVersion(r);
-      if (result.warnings.length) notify(t("armies.importWarnings", { name: r.name, n: result.warnings.length }), "info", result.warnings);
-      else notify(t("armies.imported", { name: r.name }), "success");
-      setPanel(undefined);
       setText("");
       setName("");
+      setFileName(undefined);
+      if (result.warnings.length) {
+        // Keep the dialog open so the warnings can be read; "Open army" navigates.
+        setImported({ id: r.id, name: r.name, warnings: result.warnings });
+        return;
+      }
+      notify(t("armies.imported", { name: r.name }), "success");
+      closeDialog();
       navigate("armies", false, r.id);
     });
+
+  const readFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      setText(await file.text());
+      setFileName(file.name);
+    } catch {
+      notify(t("armies.fileReadFailed", { name: file.name }), "error");
+    }
+  };
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setOver(false);
+    void readFile(e.dataTransfer.files[0]);
+  };
 
   const exportAll = () => download(`grimstat-armies-${new Date().toISOString().slice(0, 10)}.json`, { format: "grimstat-rosters", version: 1, exportedAt: new Date().toISOString(), rosters: items ?? [] });
 
@@ -146,13 +210,16 @@ export function ArmiesPage() {
           <p>{t("armies.intro")}</p>
         </div>
         <div className="row">
-          <button type="button" className="primary" disabled={!snapshot || busy} onClick={() => setPanel(panel === "new" ? undefined : "new")} aria-expanded={panel === "new"}>
+          <button type="button" className="primary" disabled={!snapshot || busy} onClick={() => setDialog("new")}>
+            <Icon name="plus" />
             {t("armies.new")}
           </button>
-          <button type="button" disabled={!snapshot || busy} onClick={() => setPanel(panel === "import" ? undefined : "import")} aria-expanded={panel === "import"}>
+          <button type="button" disabled={!snapshot || busy} onClick={() => setDialog("import")}>
+            <Icon name="file" />
             {t("armies.importText")}
           </button>
           <button type="button" className="ghost" disabled={!items?.length || busy} onClick={exportAll}>
+            <Icon name="export" />
             {t("armies.exportAll")}
           </button>
         </div>
@@ -164,28 +231,25 @@ export function ArmiesPage() {
         </Empty>
       ) : null}
 
-      {panel === "new" && snapshot ? (
-        <section className="panel" aria-labelledby="new-army-h">
-          <div className="panel-head">
-            <h2 id="new-army-h">{t("armies.new")}</h2>
-          </div>
-          <form
-            className="field-row"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void create();
-            }}
-          >
-            <Field label={t("armies.faction")}>
-              <select value={factionId} onChange={(e) => setFactionId(e.target.value)}>
-                {factions.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label={t("armies.battleSize")}>
+      <Dialog open={dialog === "new" && !!snapshot} onClose={closeDialog} title={t("armies.newTitle")}>
+        <form
+          className="stack"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void create();
+          }}
+        >
+          <Field label={t("armies.faction")}>
+            <select value={factionId} onChange={(e) => setFactionId(e.target.value)} autoFocus>
+              {factions.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="field-row">
+            <Field label={t("armies.battleSize")} className="grow">
               <select value={battleSize} onChange={(e) => setBattleSize(e.target.value as BattleSize)}>
                 {BATTLE_SIZE_ORDER.map((s) => (
                   <option key={s} value={s}>
@@ -200,76 +264,133 @@ export function ArmiesPage() {
                 <input type="number" min={1} step={5} value={customLimit} onChange={(e) => setCustomLimit(Number(e.target.value))} />
               </Field>
             ) : null}
-            <Field label={t("armies.nameOptional")} className="grow">
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
-            </Field>
+          </div>
+          <Field label={t("armies.nameOptional")}>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <div className="dialog-actions">
+            <button type="button" className="ghost" onClick={closeDialog}>
+              {t("common.cancel")}
+            </button>
             <button type="submit" className="primary" disabled={!factionId || busy}>
               {t("armies.create")}
             </button>
-            <button type="button" className="ghost" onClick={() => setPanel(undefined)}>
-              {t("armies.cancel")}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {panel === "import" && snapshot ? (
-        <section className="panel" aria-labelledby="import-army-h">
-          <div className="panel-head">
-            <h2 id="import-army-h">{t("armies.importText")}</h2>
           </div>
-          <p className="small muted">{t("armies.importTextHint")}</p>
+        </form>
+      </Dialog>
+
+      <Dialog open={dialog === "import" && !!snapshot} onClose={closeDialog} title={t("armies.importTitle")} wide>
+        {imported ? (
           <div className="stack">
-            <Field label={t("armies.nameOptional")}>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={{ maxWidth: 320 }} />
-            </Field>
-            <Field label={t("armies.importText")}>
-              <textarea rows={12} className="mono" value={text} placeholder={t("armies.importPlaceholder")} onChange={(e) => setText(e.target.value)} />
-            </Field>
-            <div className="row">
-              <button type="button" className="primary" disabled={!text.trim() || busy} onClick={() => void importText()}>
-                {t("armies.import")}
+            <p style={{ margin: 0 }}>
+              <strong>{t("armies.importWarningsTitle", { name: imported.name, n: imported.warnings.length })}</strong>
+            </p>
+            <p className="small muted" style={{ margin: 0 }}>
+              {t("armies.importWarningsHint")}
+            </p>
+            <ul className="warn-list">
+              {imported.warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  closeDialog();
+                  void refresh();
+                }}
+              >
+                {t("common.close")}
               </button>
-              <button type="button" className="ghost" onClick={() => setPanel(undefined)}>
-                {t("armies.cancel")}
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  const id = imported.id;
+                  closeDialog();
+                  navigate("armies", false, id);
+                }}
+              >
+                {t("armies.openArmy")}
               </button>
             </div>
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <div className="stack">
+            <p className="small muted" style={{ margin: 0 }}>
+              {t("armies.importTextHint")}
+            </p>
+            <div
+              className={`dropzone ${over ? "over" : ""}`.trim()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setOver(true);
+              }}
+              onDragLeave={() => setOver(false)}
+              onDrop={onDrop}
+            >
+              <Icon name="file" /> {t("armies.dropHint")}{" "}
+              <button type="button" className="link-btn" onClick={() => fileInput.current?.click()}>
+                {t("armies.chooseFile")}
+              </button>
+              <input ref={fileInput} type="file" accept=".txt,text/plain" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(e) => void readFile(e.target.files?.[0])} />
+              {fileName ? <div className="small ok-text">{t("armies.fileLoaded", { name: fileName })}</div> : null}
+            </div>
+            <Field label={t("armies.importText")}>
+              <textarea rows={12} className="mono" value={text} placeholder={t("armies.importPlaceholder")} autoFocus onChange={(e) => setText(e.target.value)} />
+            </Field>
+            <Field label={t("armies.nameOptional")}>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={{ maxWidth: 320 }} />
+            </Field>
+            <div>
+              <span className="small muted">{t("armies.importFormats")}</span>
+              <ul className="format-list">
+                <li>{t("armies.format.gw")}</li>
+                <li>{t("armies.format.nr")}</li>
+                <li>{t("armies.format.grimstat")}</li>
+              </ul>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="ghost" onClick={closeDialog}>
+                {t("common.cancel")}
+              </button>
+              <button type="button" className="primary" disabled={!text.trim() || busy} onClick={() => void importText()}>
+                {t("armies.import")}
+              </button>
+            </div>
+          </div>
+        )}
+      </Dialog>
 
       {items === undefined ? null : items.length === 0 ? (
         snapshot ? <Empty>{t("armies.empty")}</Empty> : null
       ) : (
-        <div className="list">
+        <div className="army-cards">
           {rows.map(({ r, faction, points, otherSnapshot }) => (
-            <div key={r.id} className="list-item">
-              <div className="grow">
-                <div className="row">
-                  <a href={hrefFor("armies", r.id)}>
-                    <strong>{r.name}</strong>
-                  </a>
-                  <span className="badge">{faction}</span>
-                  <span className="badge">{t(battleSizeKey(r.battleSize))}</span>
-                  {points !== undefined ? <span className={`badge ${points > r.pointsLimit ? "danger" : "accent"}`}>{t("armies.pointsOf", { points: fmtInt(points), limit: fmtInt(r.pointsLimit) })}</span> : null}
-                </div>
-                <div className="small muted">
-                  {t("armies.unitsCount", { n: r.units.length })} · {t("armies.updated", { date: fmtDate(r.updatedAt) })}
-                  {otherSnapshot ? ` · ${t("armies.snapshotOther", { id: r.snapshotId })}` : ""}
-                </div>
+            <article key={r.id} className="army-card">
+              <div className="row between" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+                <a href={hrefFor("armies", r.id)} className="army-card-title">
+                  {r.name}
+                </a>
+                <CardMenu name={r.name} busy={busy} onDuplicate={() => void duplicate(r)} onDelete={() => void remove(r)} />
               </div>
-              <div className="actions">
+              <div className="army-card-meta">
+                <span className="badge">{faction}</span>
+                <span className="badge">{t(battleSizeKey(r.battleSize))}</span>
+              </div>
+              {points !== undefined ? <PointsMeter compact points={fmtInt(points)} limit={fmtInt(r.pointsLimit)} tone={pointsTone(points, r.pointsLimit)} label={t("roster.meter.aria", { points: fmtInt(points), limit: fmtInt(r.pointsLimit) })} /> : null}
+              <div className="small muted">
+                {t("armies.unitsCount", { n: r.units.length })} · {t("armies.lastEdited", { date: fmtDate(r.updatedAt) })}
+                {otherSnapshot ? ` · ${t("armies.snapshotOther", { id: r.snapshotId })}` : ""}
+              </div>
+              <div className="army-card-foot">
                 <button type="button" className="sm primary" onClick={() => navigate("armies", false, r.id)}>
                   {t("armies.open")}
                 </button>
-                <button type="button" className="sm" disabled={busy} onClick={() => void duplicate(r)}>
-                  {t("armies.duplicate")}
-                </button>
-                <button type="button" className="sm danger" disabled={busy} onClick={() => void remove(r)}>
-                  {t("armies.delete")}
-                </button>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       )}

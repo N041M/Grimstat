@@ -1,5 +1,7 @@
+import { modelCountOf } from "@grimstat/resolver";
 import type { ConstraintSet, RosterContext } from "@grimstat/resolver";
 import type { BattleSize, Diagnostic, RosterUnit } from "@grimstat/schema";
+import { hasKeywordPhrase, parseTransportCapacity, unitFitsKeywords } from "./transport";
 
 /**
  * 11th-edition army construction rules. Battle-size figures for Incursion and Strike Force
@@ -46,6 +48,38 @@ function sizeRules(ctx: RosterContext): BattleSizeRules {
 
 const unitName = (ctx: RosterContext, u: RosterUnit) => u.customName ?? ctx.datasheet(u.datasheetId)?.name ?? u.datasheetId;
 const path = (ctx: RosterContext, u: RosterUnit) => `/units/${ctx.roster.units.indexOf(u)}`;
+const unitById = (ctx: RosterContext) => new Map(ctx.roster.units.map((u) => [u.id, u] as const));
+/** Datasheet keywords plus faction keywords, which is what transport prose refers to ("ADEPTUS ASTARTES INFANTRY"). */
+const allKeywords = (ctx: RosterContext, u: RosterUnit): string[] => {
+  const ds = ctx.datasheet(u.datasheetId);
+  return ds ? [...ds.keywords, ...ds.factionKeywords] : [];
+};
+const transportCapacityOf = (ctx: RosterContext, u: RosterUnit) => parseTransportCapacity(ctx.datasheet(u.datasheetId)?.transportCapacity);
+
+/**
+ * Share of the points limit that may start the battle in Reserves. The 11th-edition figure has not
+ * been verified against the published rules, so diagnostics label it "(assumed)".
+ */
+export const RESERVES_FRACTION = 0.25;
+export const reservesLimit = (pointsLimit: number) => Math.floor(pointsLimit * RESERVES_FRACTION);
+
+/**
+ * A unit starts in Reserves when flagged itself, when embarked in a transport that does, or when
+ * attached to a host that does (an attached character travels with its host).
+ */
+export function startsInReserves(ctx: RosterContext, unit: RosterUnit, byId = unitById(ctx)): boolean {
+  const seen = new Set<string>();
+  const visit = (u: RosterUnit): boolean => {
+    if (seen.has(u.id)) return false;
+    seen.add(u.id);
+    if (u.inReserves) return true;
+    const host = u.attachedTo ? byId.get(u.attachedTo.unitId) : undefined;
+    if (host && visit(host)) return true;
+    const transport = u.embarkedIn ? byId.get(u.embarkedIn) : undefined;
+    return !!transport && visit(transport);
+  };
+  return visit(unit);
+}
 
 export const constraints11e: ConstraintSet = {
   id: "wh40k-11e",
@@ -194,6 +228,71 @@ export const constraints11e: ConstraintSet = {
         const w = ctx.roster.units.find((u) => u.isWarlord)!;
         const ds = ctx.datasheet(w.datasheetId);
         return ds && !ds.isCharacter ? [{ severity: "error", code: "warlord.character", message: `${ds.name} is not a CHARACTER and cannot be the Warlord.` }] : [];
+      },
+    },
+    {
+      code: "transport.capacity",
+      run: (ctx) => {
+        const out: Diagnostic[] = [];
+        const byId = unitById(ctx);
+        // Embarked units grouped by transport, after the per-unit sanity checks.
+        const loads = new Map<string, RosterUnit[]>();
+        for (const u of ctx.roster.units) {
+          if (!u.embarkedIn) continue;
+          const t = byId.get(u.embarkedIn);
+          if (!t) {
+            out.push({ severity: "error", code: "transport.missing", message: `${unitName(ctx, u)} is embarked in a unit that is not in the army.`, path: path(ctx, u), fix: "Disembark the unit or pick a transport from the army." });
+            continue;
+          }
+          if (u.attachedTo) {
+            const host = byId.get(u.attachedTo.unitId);
+            out.push({ severity: "warn", code: "transport.attached", message: `${unitName(ctx, u)} is attached to ${host ? unitName(ctx, host) : "another unit"} and travels with it; its own embarkation is ignored.`, path: path(ctx, u), fix: "Embark the host unit instead." });
+            continue;
+          }
+          if (transportCapacityOf(ctx, u)) {
+            out.push({ severity: "warn", code: "transport.nested", message: `${unitName(ctx, u)} is itself a transport and cannot embark in ${unitName(ctx, t)}; ignored.`, path: path(ctx, u) });
+            continue;
+          }
+          if (!transportCapacityOf(ctx, t)) {
+            out.push({ severity: "error", code: "transport.none", message: `${unitName(ctx, u)} is embarked in ${unitName(ctx, t)}, which is not a transport.`, path: path(ctx, u), fix: "Disembark the unit." });
+            continue;
+          }
+          loads.set(t.id, [...(loads.get(t.id) ?? []), u]);
+        }
+        for (const [transportId, hosts] of loads) {
+          const t = byId.get(transportId)!;
+          const cap = transportCapacityOf(ctx, t)!;
+          const tName = unitName(ctx, t);
+          let occupancy = 0;
+          for (const host of hosts) {
+            // An attached character travels with its host and takes up space too.
+            const party = [host, ...ctx.roster.units.filter((c) => c.attachedTo?.unitId === host.id)];
+            for (const p of party) {
+              const keywords = allKeywords(ctx, p);
+              const pName = unitName(ctx, p);
+              if (ctx.datasheet(p.datasheetId)) {
+                if (!unitFitsKeywords(keywords, cap)) out.push({ severity: "error", code: "transport.keywords", message: `${tName} cannot transport ${pName} (only ${cap.keywords.join(" or ")} models).`, path: path(ctx, p), fix: "Disembark the unit." });
+                const banned = cap.excluded.find((k) => hasKeywordPhrase(keywords, k));
+                if (banned) out.push({ severity: "error", code: "transport.excluded", message: `${tName} cannot transport ${pName} (${banned} models).`, path: path(ctx, p), fix: "Disembark the unit." });
+              }
+              const size = cap.sizes.find((s) => hasKeywordPhrase(keywords, s.keyword));
+              occupancy += modelCountOf(p) * (size?.takes ?? 1);
+            }
+          }
+          if (occupancy > cap.capacity) out.push({ severity: "error", code: "transport.capacity", message: `${tName} carries ${occupancy} models; its transport capacity is ${cap.capacity}.`, path: path(ctx, t), fix: "Disembark a unit." });
+          else out.push({ severity: "info", code: "transport.capacity", message: `${tName} carries ${occupancy} / ${cap.capacity}.`, path: path(ctx, t) });
+        }
+        return out;
+      },
+    },
+    {
+      code: "reserves.limit",
+      run: (ctx) => {
+        const byId = unitById(ctx);
+        const points = ctx.roster.units.filter((u) => startsInReserves(ctx, u, byId)).reduce((s, u) => s + ctx.unitCost(u).total, 0);
+        const limit = reservesLimit(ctx.roster.pointsLimit);
+        if (points > limit) return [{ severity: "error", code: "reserves.limit", message: `${points} points start in Reserves; the limit is ${limit} (assumed).`, fix: "Deploy a unit on the battlefield instead." }];
+        return points > 0 ? [{ severity: "info", code: "reserves.limit", message: `${points} / ${limit} points in Reserves (assumed).` }] : [];
       },
     },
   ],

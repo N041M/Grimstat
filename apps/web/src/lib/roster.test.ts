@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Datasheet, Roster, Snapshot } from "@grimstat/schema";
-import { compositionBounds, diffRosters, distributeModelCount, groupsFromDatasheet, loadoutWargear, newRoster, newRosterUnit, sectionOf, unitIndexFromPath, weaponBaseNames, type ModelGroup } from "./roster";
+import { canAddCopy, compositionBounds, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, groupBounds, groupsFromDatasheet, loadoutWargear, newRoster, newRosterUnit, pickerGroupOf, pointsTone, sectionOf, unitDisplayName, unitIndexFromPath, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
 import { decodeRosterPermalink, encodeRosterPermalink, rosterPermalinkUrl, rosterTokenFromHash } from "./rosterPermalink";
 
 const NOW = "2026-09-09T10:00:00.000Z";
@@ -156,7 +156,8 @@ describe("loadout-based wargear prefill", () => {
       ["m-sgt", 1],
       ["m-trooper", 4],
     ]);
-    expect(g.every((x) => x.wargear.join("|") === "Flux carbine|Shock maul|Power fist")).toBe(true);
+    // the sergeant's power fist stays on the sergeant; troopers get only the every-model loadout
+    expect(g.map((x) => x.wargear.join("|"))).toEqual(["Flux carbine|Shock maul|Power fist", "Flux carbine|Shock maul"]);
     expect(groupsFromDatasheet(captain)).toEqual([{ modelProfileId: "m-cap", count: 1, wargear: ["Flux pistol", "Relic blade"] }]);
     expect(groupsFromDatasheet(squad, 10).map((x) => x.count)).toEqual([1, 9]);
   });
@@ -231,5 +232,127 @@ describe("diagnostic paths and permalinks", () => {
     expect(rosterTokenFromHash("#/armies/abc")).toBeUndefined();
     expect(() => decodeRosterPermalink("garbage")).toThrow();
     expect(() => decodeRosterPermalink(encodeRosterPermalink({ roster: { nope: 1 } as unknown as Roster, snapshotId: "s" }))).toThrow();
+  });
+});
+
+describe("wargearSummary", () => {
+  it("aggregates weapons over model groups in datasheet order with ×N counts", () => {
+    const unit = newRosterUnit(squad);
+    // 1 Sergeant + 4 Wardens, every model: flux carbine + shock maul; only the sergeant has the power fist.
+    unit.models[1] = { ...unit.models[1]!, wargear: ["Flux carbine", "Shock maul"] };
+    expect(wargearSummary(unit, squad)).toBe("Flux carbine ×5, Shock maul ×5, Power fist ×1");
+  });
+
+  it("drops the ×1 noise on single-model units", () => {
+    expect(wargearSummary(newRosterUnit(captain), captain)).toBe("Flux pistol, Relic blade");
+  });
+
+  it("lists other wargear after the weapons, prefixed with +count, and de-duplicates case-insensitively", () => {
+    const unit = newRosterUnit(squad);
+    unit.models[0] = { ...unit.models[0]!, wargear: ["flux carbine", "Banner", "banner"] };
+    unit.models[1] = { ...unit.models[1]!, wargear: ["Flux carbine", "Banner", "Shock maul"] };
+    const items = wargearSummaryItems(unit, squad);
+    expect(items).toEqual([
+      { name: "Flux carbine", count: 5, extra: false },
+      { name: "Shock maul", count: 4, extra: false },
+      { name: "Banner", count: 5, extra: true },
+    ]);
+    expect(wargearSummary(unit, squad)).toBe("Flux carbine ×5, Shock maul ×4 · +5 Banner");
+  });
+
+  it("returns an empty string for a bare unit and tolerates a missing datasheet", () => {
+    const unit = { ...newRosterUnit(captain), models: [{ modelProfileId: "m-cap", count: 1, wargear: [] }] };
+    expect(wargearSummary(unit, captain)).toBe("");
+    expect(wargearSummary({ ...unit, models: [{ modelProfileId: "x", count: 3, wargear: ["Club"] }] }, undefined)).toBe("+3 Club");
+  });
+
+  it("uses the custom name when set", () => {
+    const unit = newRosterUnit(captain);
+    expect(unitDisplayName(unit, captain)).toBe("Warden Captain");
+    expect(unitDisplayName({ ...unit, customName: "  " }, captain)).toBe("Warden Captain");
+    expect(unitDisplayName({ ...unit, customName: "Old Tomas" }, captain)).toBe("Old Tomas");
+    expect(unitDisplayName(unit, undefined)).toBe("ds-captain");
+  });
+});
+
+describe("duplicateCap / canAddCopy (mirrors the diagnostics rule)", () => {
+  const plain = { isEpicHero: false, isBattleline: false };
+  const battleline = { isEpicHero: false, isBattleline: true };
+  const epic = { isEpicHero: true, isBattleline: true };
+
+  it("uses the battle size figure, doubled for Battleline, one for Epic Heroes", () => {
+    expect(duplicateCap(plain, "strike-force")).toEqual({ cap: 3, kind: "standard" });
+    expect(duplicateCap(battleline, "strike-force")).toEqual({ cap: 6, kind: "battleline" });
+    expect(duplicateCap(epic, "strike-force")).toEqual({ cap: 1, kind: "epicHero" });
+    expect(duplicateCap(plain, "incursion").cap).toBe(2);
+    expect(duplicateCap(battleline, "onslaught").cap).toBe(8);
+    expect(duplicateCap(plain, "combat-patrol").cap).toBe(99);
+  });
+
+  it("treats a custom size like Strike Force", () => {
+    expect(duplicateCap(plain, "custom").cap).toBe(3);
+    expect(duplicateCap(battleline, "custom").cap).toBe(6);
+  });
+
+  it("allows copies strictly below the cap", () => {
+    expect(canAddCopy(plain, 2, "strike-force")).toBe(true);
+    expect(canAddCopy(plain, 3, "strike-force")).toBe(false);
+    expect(canAddCopy(epic, 0, "onslaught")).toBe(true);
+    expect(canAddCopy(epic, 1, "onslaught")).toBe(false);
+    expect(canAddCopy(battleline, 5, "strike-force")).toBe(true);
+    expect(canAddCopy(battleline, 6, "strike-force")).toBe(false);
+  });
+});
+
+describe("pickerGroupOf", () => {
+  it("groups by role flags and sends Legends last", () => {
+    expect(pickerGroupOf(captain)).toBe("character");
+    expect(pickerGroupOf(squad)).toBe("battleline");
+    expect(pickerGroupOf(sheet({ id: "t", name: "Truck", role: "Dedicated Transports", models: [{ id: "m", name: "Truck", T: 9, Sv: 3, W: 10 }] }))).toBe("transport");
+    expect(pickerGroupOf(sheet({ id: "v", name: "Tank", role: "Vehicles", models: [{ id: "m", name: "Tank", T: 10, Sv: 3, W: 12 }] }))).toBe("other");
+    expect(pickerGroupOf({ ...captain, isLegends: true })).toBe("legends");
+  });
+});
+
+describe("pointsTone", () => {
+  it("warns above 90 % and flags anything over the limit", () => {
+    expect(pointsTone(0, 2000)).toBe("ok");
+    expect(pointsTone(1800, 2000)).toBe("ok");
+    expect(pointsTone(1801, 2000)).toBe("warn");
+    expect(pointsTone(2000, 2000)).toBe("warn");
+    expect(pointsTone(2005, 2000)).toBe("danger");
+    expect(pointsTone(5, 0)).toBe("danger");
+  });
+});
+
+describe("groupBounds", () => {
+  it("uses the matching composition line when there is one per group", () => {
+    const unit = newRosterUnit(squad);
+    expect(groupBounds(squad, unit.models, 0)).toEqual({ min: 1, max: 1 });
+    expect(groupBounds(squad, unit.models, 1)).toEqual({ min: 4, max: 9 });
+  });
+
+  it("shares the total bounds out when the lines do not match the groups", () => {
+    const g = [
+      { modelProfileId: "a", count: 2, wargear: [] },
+      { modelProfileId: "b", count: 3, wargear: [] },
+    ];
+    const ds = sheet({ id: "x", name: "Blob", models: [{ id: "a", name: "A", T: 4, Sv: 4, W: 1 }, { id: "b", name: "B", T: 4, Sv: 4, W: 1 }], composition: [{ description: "5-10 models", min: 5, max: 10 }] });
+    expect(groupBounds(ds, g, 0)).toEqual({ min: 2, max: 7 });
+    expect(groupBounds(ds, g, 1)).toEqual({ min: 3, max: 8 });
+    expect(groupBounds(undefined, g, 0)).toEqual({ min: 1, max: undefined });
+  });
+});
+
+describe("diagnosticsForUnit", () => {
+  it("filters by the /units/<index> path", () => {
+    const diags = [
+      { code: "a", path: "/units/0" },
+      { code: "b", path: "/units/1/models" },
+      { code: "c" },
+      { code: "d", path: "/units/1" },
+    ];
+    expect(diagnosticsForUnit(diags, 1).map((d) => d.code)).toEqual(["b", "d"]);
+    expect(diagnosticsForUnit(diags, 2)).toEqual([]);
   });
 });
