@@ -2,7 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+/** Deployed under a sub-path on GitHub Pages (e.g. "/Grimstat/"); "/" for local dev. */
+const base = process.env.VITE_BASE ?? "/";
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     VitePWA({
@@ -15,8 +19,8 @@ export default defineConfig({
         theme_color: "#15161a",
         background_color: "#15161a",
         display: "standalone",
-        start_url: "/",
-        scope: "/",
+        start_url: base,
+        scope: base,
         icons: [
           { src: "icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "icon-512.png", sizes: "512x512", type: "image/png" },
