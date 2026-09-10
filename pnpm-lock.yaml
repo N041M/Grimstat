@@ -143,6 +143,8 @@ importers:
         specifier: workspace:*
         version: link:../snapshot
 
+  packages/board: {}
+
   packages/effects:
     dependencies:
       '@grimstat/schema':

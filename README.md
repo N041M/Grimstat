@@ -19,6 +19,7 @@ Warhammer 40,000 and all associated marks are the property of Games Workshop Lim
 ```
 packages/schema        canonical data model (Zod) — no GW text
 packages/engine        pure probability engine (exact PMF + Monte Carlo)
+packages/board         3D battle-board geometry kernel (true line of sight, cover, measurement)
 packages/effects       Tier-1 keyword / Tier-2 effect record registry
 packages/game-40k-11e  40k 11th edition game-system plugin (keywords, patterns, constraints, analyses)
 packages/resolver      roster legality runner + costing (shared by UI, CLI, tests)
@@ -30,6 +31,7 @@ packages/plugin-host   plugin manifest loader + registration API
 apps/cli               node CLI: import → snapshot → simulate
 apps/web               Vite + React offline PWA
 docs/DESIGN.md         full design & research document
+docs/BATTLE-SIM.md     3D battle simulator design plan
 ```
 
 ## Getting started
@@ -37,7 +39,8 @@ docs/DESIGN.md         full design & research document
 ```bash
 corepack enable
 pnpm install
-pnpm test          # 204 tests: engine golden cases, MC-vs-exact, rules plugin, adapters, resolver, web
+pnpm lint          # eslint (flat config, typescript-eslint + react-hooks)
+pnpm test          # engine golden cases, MC-vs-exact, rules plugin, adapters, resolver, board geometry, web
 pnpm dev           # calculator PWA at http://localhost:5173 (use "Load sample data" on the Data page)
 ```
 
@@ -56,4 +59,4 @@ Scenarios built from a 10th-edition snapshot run under the 10th-edition rules mo
 
 `.github/workflows/pages.yml` builds `apps/web` with `VITE_BASE=/<repo>/` and publishes it to GitHub Pages on every push to `master`; `ci.yml` runs the typecheck and the test suite. The app uses a hash router, so deep links work under the sub-path.
 
-See `docs/DESIGN.md` for the research findings, architecture and roadmap, `docs/MODELLING-NOTES.md` for what the maths assumes, and `docs/PLUGINS.md` for extension points.
+See `docs/DESIGN.md` for the research findings, architecture and roadmap, `docs/MODELLING-NOTES.md` for what the maths assumes, `docs/BATTLE-SIM.md` for the 3D battle simulator plan, and `docs/PLUGINS.md` for extension points.
