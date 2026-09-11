@@ -13,6 +13,13 @@ const ENTITIES: Record<string, string> = {
   rdquo: "”",
   ldquo: "“",
   deg: "°",
+  // Bullets and multiplication signs carry meaning in a list export: a wargear line is recognised by
+  // its bullet, and "2&times; Twin hail gun" is a count. Left encoded they become part of the text.
+  bull: "•",
+  middot: "·",
+  times: "×",
+  minus: "−",
+  plusmn: "±",
 };
 
 export function decodeEntities(text: string): string {

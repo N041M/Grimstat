@@ -53,6 +53,18 @@ pnpm cli show data/snapshots/<snapshot>.json "Intercessor Squad"
 pnpm cli diff data/snapshots/<old>.json data/snapshots/<new>.json
 ```
 
+Gather published tournament lists onto your own machine. The feed is read directly; article pages are
+not fetched, because their publishers gate them — open the ones you want, save the page, and point
+`--dir` at the folder:
+
+```bash
+pnpm cli competitive --feed https://<publication>/tag/competitive-innovations/feed/
+pnpm cli competitive --dir ~/Downloads/write-ups --out data/competitive
+```
+
+Each list is stored as published, with the player, faction, detachments, Force Disposition, placing
+and the URL it came from. They are other people's lists; the file records whose.
+
 Scenarios built from a 10th-edition snapshot run under the 10th-edition rules model automatically (`scenario.gameSystemId`).
 
 ## Deployment

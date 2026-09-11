@@ -4,6 +4,7 @@ import { parseImportArgs, runImport } from "./commands/import";
 import { runDiff } from "./commands/diff";
 import { runShow } from "./commands/show";
 import { runSynthetic } from "./commands/synthetic";
+import { parseCompetitiveArgs, runCompetitive } from "./commands/competitive";
 
 const USAGE = `grimstat <command> [options]
 
@@ -13,6 +14,9 @@ Commands:
   diff     <a.json> <b.json>            What changed between two snapshots (entities and points).
   show     <snapshot.json> <datasheet>  Print a datasheet (stats, weapons, abilities, points).
   synthetic [--check]                   Regenerate (or verify) the synthetic fixture snapshot.
+  competitive --feed <url> | --dir <folder of saved articles> [--out data/competitive]
+           List the tournament write-ups a feed advertises, and pull the published army lists out of
+           write-up pages you have saved. Article pages are never fetched: their publishers gate them.
 `;
 
 export async function main(argv: string[]): Promise<number> {
@@ -36,6 +40,9 @@ export async function main(argv: string[]): Promise<number> {
         if (!file || !query.length) throw new Error("show needs a snapshot file and a datasheet name");
         const hits = runShow(file, query.join(" "));
         return hits.length ? 0 : 1;
+      }
+      case "competitive": {
+        return await runCompetitive(parseCompetitiveArgs(rest));
       }
       case "synthetic": {
         const { values } = parseArgs({ args: rest, options: { check: { type: "boolean", default: false } } });

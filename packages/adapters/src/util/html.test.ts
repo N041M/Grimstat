@@ -20,3 +20,16 @@ describe("stripHtml", () => {
     expect(stripHtml("")).toBe("");
   });
 });
+
+describe("entities that carry meaning in a list", () => {
+  it("decodes bullets and multiplication signs", () => {
+    // A wargear line is recognised by its bullet and a count by its times sign; left encoded, both
+    // become part of the weapon's name.
+    expect(stripHtml("<p>&bull; 2&times; Twin hail gun</p>")).toBe("• 2× Twin hail gun");
+    expect(stripHtml("<p>3 &minus; 1 &plusmn; 2 &middot; 4</p>")).toBe("3 − 1 ± 2 · 4");
+  });
+
+  it("leaves an entity it does not know alone rather than mangling it", () => {
+    expect(stripHtml("<p>&notanentity; &amp;</p>")).toBe("&notanentity; &");
+  });
+});

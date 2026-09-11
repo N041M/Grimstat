@@ -21,3 +21,4 @@ export { parseTargetNumber, parseInches, parseWeaponRange, parseAP, parseInt0, p
 export * from "./util/ids";
 export * from "./roster/index";
 export * from "./layout/index";
+export * from "./competitive/index";

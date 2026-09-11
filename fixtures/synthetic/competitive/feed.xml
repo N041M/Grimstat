@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>Invented Wargaming Publication</title>
+  <item>
+    <title>[40k] Competitive Innovations in 11th: Club Night Invitational pt.1</title>
+    <link>https://example.invalid/competitive-innovations-club-night-pt-1/</link>
+    <pubDate>Wed, 10 Sep 2026 09:00:00 +0000</pubDate>
+  </item>
+  <item>
+    <title>[AoS] Competitive Innovations in the Mortal Realms: September</title>
+    <link>https://example.invalid/aos-september/</link>
+    <pubDate>Tue, 09 Sep 2026 09:00:00 +0000</pubDate>
+  </item>
+  <item>
+    <title>How to Paint Everything: Invented Miniature</title>
+    <link>https://example.invalid/painting/</link>
+    <pubDate>Mon, 08 Sep 2026 09:00:00 +0000</pubDate>
+  </item>
+</channel></rss>
