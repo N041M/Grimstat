@@ -17,7 +17,11 @@ import {
   anchorOf,
   applyModelMove,
   applyUnitMove,
+  autoDeploy,
   chargeBetween,
+  clearDeployment,
+  deployUnit,
+  deployVerdict,
   dragVerdict,
   enemyHulls,
   endMove,
@@ -37,14 +41,18 @@ import {
   dropMark,
   sightBetween,
   tapeDistance,
+  translateUnit,
   unitCoherency,
+  unitHulls,
   unitsOf,
+  withdrawUnit,
   type BattleModel,
   type BattleState,
   type BattleTool,
   type BattleUnit,
   type ChargeReadout,
   type SightReadout,
+  type Side,
   type Tape,
 } from "../lib/battle";
 import type { CameraMode, DragState, TerrainEditing } from "../components/battle/BattleCanvas";
@@ -73,6 +81,7 @@ function webglAvailable(): boolean {
 }
 
 const TOOLS: { id: BattleTool; label: I18nKey }[] = [
+  { id: "deploy", label: "battle.tool.deploy" },
   { id: "select", label: "battle.tool.select" },
   { id: "measure", label: "battle.tool.measure" },
   { id: "sight", label: "battle.tool.sight" },
@@ -81,6 +90,15 @@ const TOOLS: { id: BattleTool; label: I18nKey }[] = [
 
 /** Arrow keys as board directions: +y is the far edge, which is up on the screen in both views. */
 const ARROWS: Record<string, Vec2> = { ArrowUp: { x: 0, y: 1 }, ArrowDown: { x: 0, y: -1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } };
+
+/** A move worked out but not yet made: the ghost stands here until the player approves it. */
+interface Plan {
+  readonly unitId: string;
+  readonly modelId?: string;
+  readonly at: Vec3;
+  readonly cost: number;
+  readonly path?: readonly Vec3[];
+}
 
 /** Keys typed into a field belong to the field. */
 const inField = (target: EventTarget | null): boolean => {
@@ -106,6 +124,8 @@ export function BattlePage() {
   const [drag, setDrag] = useState<DragState | undefined>();
   /** Whether `drag` is a live gesture (the readout follows the pointer) or a refused click. */
   const [dragging, setDragging] = useState(false);
+  /** The move being planned for the selection, shown as a ghost until approved. */
+  const [plan, setPlan] = useState<Plan | undefined>();
   /**
    * The tapes on the table and the mark of one being laid. One state, because a mark either starts
    * a tape or finishes one, and the two halves have to change together — and never inside another
@@ -153,6 +173,7 @@ export function BattlePage() {
     setPendingMark(undefined);
     setDrag(undefined);
     setDragging(false);
+    setPlan(undefined);
   }, [tool, selectedId, activeModelId, setPendingMark]);
   useEffect(() => setTargetId(undefined), [selectedId]);
   const refreshLibrary = useCallback(async () => setLibrary(await listLayouts()), []);
@@ -212,12 +233,13 @@ export function BattlePage() {
    * pointer moves.
    */
   const reach: readonly ReachNode[] = useMemo(() => {
-    if (!selected || tool !== "select") return [];
+    if (!selected || selected.reserve || tool !== "select") return [];
     if (activeModel) return modelReach(state, selected, activeModel, index);
     return reachable(anchorOf(selected), selected.move, index, {
       keywords: selected.keywords,
       enemies: enemyHulls(state, selected.side),
       blockers: otherHulls(state, selected.id),
+      board: state.layout.size,
     }).nodes;
   }, [selected, activeModel, tool, index, state]);
 
@@ -226,10 +248,36 @@ export function BattlePage() {
   const shot: SightReadout | undefined = useMemo(() => (selected && target && tool === "sight" ? sightBetween(selected, target, index) : undefined), [selected, target, tool, index]);
   const charge: ChargeReadout | undefined = useMemo(() => (selected && target && tool === "sight" ? chargeBetween(selected, target, state, index) : undefined), [selected, target, tool, state, index]);
 
-  const onMove = useCallback(
-    (unitId: string, to: Vec3, cost: number, modelId?: string) => editUnit(unitId, (unit) => (modelId ? applyModelMove(unit, modelId, to, cost) : applyUnitMove(unit, to, cost))),
+  /** Make a move: the unit travels, along the route the search found, and pays for it. */
+  const applyMove = useCallback(
+    (unitId: string, to: Vec3, cost: number, modelId?: string, path?: readonly Vec3[]) => editUnit(unitId, (unit) => (modelId ? applyModelMove(unit, modelId, to, cost, path) : applyUnitMove(unit, to, cost, path))),
     [editUnit],
   );
+  /**
+   * Plan a move: the ghost goes where the unit would, and nothing else changes. Planning is what a
+   * player does with a tape and a finger before committing; the unit itself moves on approval.
+   */
+  const proposeMove = useCallback((unitId: string, to: Vec3, cost: number, modelId?: string, path?: readonly Vec3[]) => setPlan({ unitId, modelId, at: to, cost, path }), []);
+  const approvePlan = useCallback(() => {
+    if (!plan) return;
+    applyMove(plan.unitId, plan.at, plan.cost, plan.modelId, plan.path);
+    setPlan(undefined);
+  }, [plan, applyMove]);
+  const onDeploy = useCallback((unitId: string, at: Vec2) => editUnit(unitId, (unit) => deployUnit(unit, at)), [editUnit]);
+  const deployAll = useCallback(() => dispatch({ type: "units", change: (b) => autoDeploy(autoDeploy(b, "attacker"), "defender") }), []);
+
+  /** The planned move's ghost: the model, or the whole formation, standing where it would land. */
+  const planned = useMemo(() => {
+    if (!plan || tool !== "select") return undefined;
+    const unit = findUnit(state, plan.unitId);
+    if (!unit) return undefined;
+    if (plan.modelId) {
+      const model = findModel(unit, plan.modelId);
+      return model ? { hulls: [{ ...model.hull, pos: plan.at }], legal: true } : undefined;
+    }
+    const anchor = anchorOf(unit);
+    return { hulls: unitHulls(translateUnit(unit, { x: plan.at.x - anchor.pos.x, y: plan.at.y - anchor.pos.y }, plan.at.z)), legal: true };
+  }, [plan, state, tool]);
 
   /**
    * One rule for clicking a unit, wherever it is clicked: under the sight tool an enemy of the
@@ -267,6 +315,14 @@ export function BattlePage() {
         return;
       }
       const unit = findUnit(state, id);
+      // Deploying is about units, not models; and a unit still in reserve has nothing to do under
+      // any other tool, so picking one takes the player to the deploy tool with it in hand.
+      if (tool === "deploy" || unit?.reserve) {
+        if (tool !== "deploy") setTool("deploy");
+        setSelectedId(id);
+        setActiveModelId(undefined);
+        return;
+      }
       if (tool === "sight" && selected && unit && unit.side !== selected.side) {
         setTargetId(id);
         return;
@@ -293,14 +349,22 @@ export function BattlePage() {
         mark(at);
         return;
       }
-      if (tool !== "select" || !selected) return;
-      // A model is active: the click moves that model. Otherwise the whole unit travels as a body.
+      if (!selected) return;
+      if (tool === "deploy") {
+        const verdict = deployVerdict(state, selected, at, index);
+        if (verdict.ok) onDeploy(selected.id, at);
+        setDragging(false);
+        setDrag(verdict.ok ? undefined : { unitId: selected.id, to: at, legal: false, problems: verdict.problems });
+        return;
+      }
+      if (tool !== "select") return;
+      // A model is active: the click plans that model's move. Otherwise the whole unit travels as a body.
       const verdict = activeModel ? modelMoveVerdict(state, selected, activeModel, at, index) : dragVerdict(state, selected, at, index);
-      if (verdict.ok && verdict.at && verdict.cost !== undefined) onMove(selected.id, verdict.at, verdict.cost, activeModel?.id);
+      if (verdict.ok && verdict.at && verdict.cost !== undefined) proposeMove(selected.id, verdict.at, verdict.cost, activeModel?.id, verdict.path);
       setDragging(false);
       setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel?.id, to: at, legal: false, problems: verdict.problems });
     },
-    [tool, selected, activeModel, state, index, onMove, mark],
+    [tool, selected, activeModel, state, index, proposeMove, onDeploy, mark],
   );
 
   const onDrag = useCallback((next: DragState | undefined) => {
@@ -361,7 +425,18 @@ export function BattlePage() {
           setTerrainId(undefined);
           setObjectiveId(undefined);
         } else if (tool === "measure") setPendingMark(undefined);
+        else if (plan) setPlan(undefined);
         else pickUnit(undefined);
+        return;
+      }
+      if ((key === "Enter" || key === "Return") && tool === "select" && plan) {
+        e.preventDefault();
+        approvePlan();
+        return;
+      }
+      if (tool === "deploy" && (key === "Delete" || key === "Backspace") && selected && !selected.reserve) {
+        e.preventDefault();
+        editUnit(selected.id, withdrawUnit);
         return;
       }
 
@@ -389,18 +464,20 @@ export function BattlePage() {
         return;
       }
 
+      // Arrows nudge the ghost, from wherever it stands; the move is judged from the model's real spot.
       if (tool === "select" && arrow && selected && activeModel) {
         e.preventDefault();
-        const to = { x: activeModel.hull.pos.x + arrow.x * EDIT_STEP, y: activeModel.hull.pos.y + arrow.y * EDIT_STEP };
+        const from = plan?.modelId === activeModel.id ? plan.at : activeModel.hull.pos;
+        const to = { x: from.x + arrow.x * EDIT_STEP, y: from.y + arrow.y * EDIT_STEP };
         const verdict = modelMoveVerdict(state, selected, activeModel, to, index);
-        if (verdict.ok && verdict.at && verdict.cost !== undefined) onMove(selected.id, verdict.at, verdict.cost, activeModel.id);
+        if (verdict.ok && verdict.at && verdict.cost !== undefined) proposeMove(selected.id, verdict.at, verdict.cost, activeModel.id, verdict.path);
         setDragging(false);
         setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel.id, to, legal: false, problems: verdict.problems });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, onMove, pickUnit, setPendingMark]);
+  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, proposeMove, approvePlan, plan, editUnit, pickUnit, setPendingMark]);
 
   const measureFrom = tool === "measure" ? pendingMark : undefined;
   const live = measureFrom && aim ? tapeDistance(measureFrom, aim) : undefined;
@@ -409,7 +486,12 @@ export function BattlePage() {
    * What sits beside the pointer: a drag's verdict, or the tape's live reading. The canvas moves
    * the element; the page says what it says.
    */
-  const readout = dragging && drag && selected ? { bad: !drag.legal, text: drag.legal ? t("battle.dragCost", { cost: (drag.cost ?? 0).toFixed(1), move: activeModel ? moveOf(selected, activeModel) : selected.move }) : t((drag.problems[0] ?? "battle.problem.tooFar") as I18nKey) } : live !== undefined ? { bad: false, text: t("battle.measureLive", { d: live.toFixed(1) }) } : undefined;
+  const readout =
+    dragging && drag && selected
+      ? { bad: !drag.legal, text: drag.legal ? (tool === "deploy" ? t("battle.dragDeploy") : t("battle.dragCost", { cost: (drag.cost ?? 0).toFixed(1), move: activeModel ? moveOf(selected, activeModel) : selected.move })) : t((drag.problems[0] ?? "battle.problem.tooFar") as I18nKey) }
+      : live !== undefined
+        ? { bad: false, text: t("battle.measureLive", { d: live.toFixed(1) }) }
+        : undefined;
 
   return (
     <div className="battle-page">
@@ -448,18 +530,22 @@ export function BattlePage() {
                   incoherent={incoherent}
                   reach={tool === "select" ? reach : []}
                   rays={shot?.rays ?? []}
-                  path={charge?.path ?? []}
+                  path={tool === "sight" ? (charge?.path ?? []) : (plan?.path ?? [])}
+                  planned={planned}
                   tapes={tapes}
                   onTapeRemove={removeTape}
                   tapesRef={tapesRef}
                   measureFrom={measureFrom}
                   onMeasureHover={setAim}
-                  canDrag={tool === "select"}
+                  canDrag={tool === "select" || tool === "deploy"}
+                  dragMode={tool === "deploy" ? "deploy" : "move"}
+                  onDeploy={onDeploy}
+                  highlightZone={tool === "deploy" ? selected?.side : undefined}
                   editing={editing}
                   labelsRef={labelsRef}
                   readoutRef={readoutRef}
                   onSelect={pickUnit}
-                  onMove={onMove}
+                  onMove={proposeMove}
                   onDrag={onDrag}
                   onTableDown={onTableDown}
                 />
@@ -515,7 +601,30 @@ export function BattlePage() {
               />
             </>
           ) : (
-            <BattlePanel state={state} selected={selected} activeModel={activeModel} target={target} tool={tool} drag={drag} reach={reach} upperFloor={upperFloor} shot={shot} charge={charge} tapes={tapes} live={live} onPick={pickUnit} onEdit={editUnit} onRemoveTape={removeTape} onClearTapes={() => setTapes([])} />
+            <BattlePanel
+              state={state}
+              selected={selected}
+              activeModel={activeModel}
+              target={target}
+              tool={tool}
+              drag={drag}
+              plan={plan}
+              reach={reach}
+              upperFloor={upperFloor}
+              shot={shot}
+              charge={charge}
+              tapes={tapes}
+              live={live}
+              onPick={pickUnit}
+              onEdit={editUnit}
+              onApprove={approvePlan}
+              onDiscard={() => setPlan(undefined)}
+              onDeployAll={deployAll}
+              onAutoDeploy={(side) => dispatch({ type: "units", change: (b) => autoDeploy(b, side) })}
+              onClearDeployment={() => dispatch({ type: "units", change: clearDeployment })}
+              onRemoveTape={removeTape}
+              onClearTapes={() => setTapes([])}
+            />
           )}
         </aside>
       </div>
@@ -534,18 +643,24 @@ function MovePanel({
   selected,
   activeModel,
   drag,
+  plan,
   reach,
   upperFloor,
   onPick,
   onEdit,
+  onApprove,
+  onDiscard,
 }: {
   selected?: BattleUnit;
   activeModel?: BattleModel;
   drag?: DragState;
+  plan?: Plan;
   reach: readonly ReachNode[];
   upperFloor: number;
   onPick: (id: string | undefined, modelId?: string) => void;
   onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
+  onApprove: () => void;
+  onDiscard: () => void;
 }) {
   if (!selected) {
     return (
@@ -608,8 +723,28 @@ function MovePanel({
         </div>
       ) : null}
 
-      <p className="muted small">{activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
-      <p className="muted small">{activeModel ? t("battle.nudgeHint") : t("battle.pickModel")}</p>
+      {plan && plan.unitId === selected.id ? (
+        <div className="battle-plan">
+          <div className="battle-section-head">
+            <span className="battle-plan-title">{t("battle.plan.title")}</span>
+            <Badge tone="ok">{t("battle.dragCost", { cost: plan.cost.toFixed(1), move: activeModel ? moveOf(selected, activeModel) : selected.move })}</Badge>
+          </div>
+          <div className="battle-actions">
+            <button type="button" className="primary sm" onClick={onApprove}>
+              {t("battle.plan.approve")}
+            </button>
+            <button type="button" className="ghost sm" onClick={onDiscard}>
+              {t("battle.plan.discard")}
+            </button>
+          </div>
+          <p className="muted small">{t("battle.plan.hint")}</p>
+        </div>
+      ) : (
+        <>
+          <p className="muted small">{activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
+          <p className="muted small">{activeModel ? t("battle.nudgeHint") : t("battle.pickModel")}</p>
+        </>
+      )}
 
       {moved ? (
         <div className="battle-actions">
@@ -632,6 +767,7 @@ function BattlePanel({
   target,
   tool,
   drag,
+  plan,
   reach,
   upperFloor,
   shot,
@@ -640,6 +776,11 @@ function BattlePanel({
   live,
   onPick,
   onEdit,
+  onApprove,
+  onDiscard,
+  onDeployAll,
+  onAutoDeploy,
+  onClearDeployment,
   onRemoveTape,
   onClearTapes,
 }: {
@@ -649,6 +790,7 @@ function BattlePanel({
   target?: BattleUnit;
   tool: BattleTool;
   drag?: DragState;
+  plan?: Plan;
   reach: readonly ReachNode[];
   upperFloor: number;
   shot?: SightReadout;
@@ -658,37 +800,91 @@ function BattlePanel({
   live?: number;
   onPick: (id: string | undefined, modelId?: string) => void;
   onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
+  onApprove: () => void;
+  onDiscard: () => void;
+  onDeployAll: () => void;
+  onAutoDeploy: (side: Side) => void;
+  onClearDeployment: () => void;
   onRemoveTape: (id: string) => void;
   onClearTapes: () => void;
 }) {
+  const sides = ["attacker", "defender"] as const;
 
   return (
     <>
-      <section className="battle-section">
-        <h2>{t("battle.units")}</h2>
-        {(["attacker", "defender"] as const).map((side) => (
-          <ul key={side} className={`battle-unit-list ${side}`}>
-            {unitsOf(state, side).map((u) => (
-              <li key={u.id}>
-                <button
-                  type="button"
-                  className={`battle-unit ${u.id === selected?.id ? "is-selected" : ""} ${u.id === target?.id ? "is-target" : ""}`.trim()}
-                  onClick={() => onPick(u.id)}
-                >
-                  <UnitArt keywords={u.keywords} className={`battle-swatch ${side}`} />
-                  <span className="battle-unit-name">{t(u.name as I18nKey)}</span>
-                  <span className="battle-unit-meta">
-                    {u.models.length}× · M{u.move}"
-                  </span>
+      {tool === "deploy" ? (
+        <section className="battle-section">
+          <h2>{t("battle.deploy.title")}</h2>
+          <p className="muted small">{t("battle.deploy.hint")}</p>
+          <div className="battle-actions wrap">
+            <button type="button" className="sm" onClick={onDeployAll}>
+              {t("battle.deploy.everything")}
+            </button>
+            <button type="button" className="ghost sm" onClick={onClearDeployment}>
+              {t("battle.deploy.clear")}
+            </button>
+          </div>
+          {sides.map((side) => (
+            <div key={side} className="battle-deploy-side">
+              <div className="battle-section-head">
+                <h3 className="battle-deploy-h">{t(`side.${side}` as I18nKey)}</h3>
+                <button type="button" className="ghost sm" onClick={() => onAutoDeploy(side)}>
+                  {t("battle.deploy.auto")}
                 </button>
-              </li>
-            ))}
-          </ul>
-        ))}
-        <p className="muted small">{t("battle.samplePlaceholder")}</p>
-      </section>
+              </div>
+              <ul className={`battle-unit-list ${side}`}>
+                {unitsOf(state, side).map((u) => (
+                  <li key={u.id} className="battle-unit-row">
+                    <button type="button" className={`battle-unit ${u.id === selected?.id ? "is-selected" : ""} ${u.reserve ? "is-reserve" : ""}`.trim()} onClick={() => onPick(u.id)}>
+                      <UnitArt keywords={u.keywords} className={`battle-swatch ${side}`} />
+                      <span className="battle-unit-name">{t(u.name as I18nKey)}</span>
+                      <span className="battle-unit-meta">{u.reserve ? t("battle.deploy.reserve") : t("battle.deploy.deployed")}</span>
+                    </button>
+                    {u.reserve ? null : (
+                      <button type="button" className="ghost sm battle-unit-x" title={t("battle.deploy.withdraw")} aria-label={t("battle.deploy.withdraw")} onClick={() => onEdit(u.id, withdrawUnit)}>
+                        ×
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {selected ? <p className="muted small">{selected.reserve ? t("battle.deploy.armed", { name: t(selected.name as I18nKey) }) : t("battle.deploy.selectedDeployed")}</p> : null}
+          {drag && !drag.legal ? (
+            <ul className="battle-problems left">
+              {drag.problems.map((p) => (
+                <li key={p}>{t(p as I18nKey)}</li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : (
+        <section className="battle-section">
+          <h2>{t("battle.units")}</h2>
+          {sides.map((side) => (
+            <ul key={side} className={`battle-unit-list ${side}`}>
+              {unitsOf(state, side).map((u) => (
+                <li key={u.id}>
+                  <button
+                    type="button"
+                    className={`battle-unit ${u.id === selected?.id ? "is-selected" : ""} ${u.id === target?.id ? "is-target" : ""} ${u.reserve ? "is-reserve" : ""}`.trim()}
+                    onClick={() => onPick(u.id)}
+                    title={u.reserve ? t("battle.deploy.reserveHint") : undefined}
+                  >
+                    <UnitArt keywords={u.keywords} className={`battle-swatch ${side}`} />
+                    <span className="battle-unit-name">{t(u.name as I18nKey)}</span>
+                    <span className="battle-unit-meta">{u.reserve ? t("battle.deploy.reserve") : `${u.models.length}× · M${u.move}"`}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
+          <p className="muted small">{t("battle.samplePlaceholder")}</p>
+        </section>
+      )}
 
-      {tool === "select" ? <MovePanel selected={selected} activeModel={activeModel} drag={drag} reach={reach} upperFloor={upperFloor} onPick={onPick} onEdit={onEdit} /> : null}
+      {tool === "select" ? <MovePanel selected={selected} activeModel={activeModel} drag={drag} plan={plan} reach={reach} upperFloor={upperFloor} onPick={onPick} onEdit={onEdit} onApprove={onApprove} onDiscard={onDiscard} /> : null}
 
       {tool === "sight" ? (
         <section className="battle-section">

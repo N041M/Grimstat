@@ -1,83 +1,73 @@
-import { BufferAttribute, BufferGeometry, DoubleSide, Line, LineBasicMaterial } from "three";
-import type { ReachNode, Vec3 } from "@grimstat/board";
+import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, Line, LineBasicMaterial } from "three";
+import type { BoardSize, ReachNode, Vec3 } from "@grimstat/board";
 import { SCENE_COLOURS, toScene, writeScene } from "../../lib/battleScene";
 import { useDisposable } from "./useDisposable";
 
 /**
- * Where the selected unit can go, as one slab per reachable cell.
+ * Where the selected unit can go, as one smooth region per storey.
  *
- * Cells on an upper floor are a different colour, because "you can get there" and "you can get there
- * *and be a storey up*" are different tactical facts and the flat view cannot distinguish them.
- *
- * Drawn as a single geometry rather than a mesh per cell: a 12" advance is a couple of thousand
- * cells, and two thousand draw calls would cost more than the search that produced them.
+ * The search answers in half-inch cells, and a field of little squares reads as a staircase. So
+ * the cells are rasterised: a disc a little wider than half a cell is painted for each reachable
+ * position into an off-screen canvas at eight pixels to the inch, and the union of those discs —
+ * whose scallops are a fraction of a pixel — becomes the alpha of one plane laid over the table.
+ * Cells on an upper floor get their own plane at that height, in a different colour, because "you
+ * can get there" and "you can get there *and* be a storey up" are different tactical facts.
  */
-export function ReachOverlay({ nodes, cell = 0.5 }: { nodes: readonly ReachNode[]; cell?: number }) {
-  const split = useDisposableSplit(nodes, cell);
+export function ReachOverlay({ nodes, size, cell = 0.5 }: { nodes: readonly ReachNode[]; size: BoardSize; cell?: number }) {
+  const layers = useDisposable(() => {
+    const byStorey = new Map<number, Vec3[]>();
+    for (const n of nodes) {
+      const z = Math.round(n.at.z * 10) / 10;
+      (byStorey.get(z) ?? byStorey.set(z, []).get(z)!).push(n.at);
+    }
+    const built = [...byStorey.entries()].map(([z, points]) => ({ z, texture: rasterise(points, size, cell) }));
+    return {
+      layers: built,
+      dispose() {
+        for (const l of built) l.texture.dispose();
+      },
+    };
+  }, [nodes, size.width, size.depth, cell]);
+
   return (
     <group>
-      <mesh geometry={split.ground}>
-        <meshBasicMaterial color={SCENE_COLOURS.reachable} transparent opacity={0.3} side={DoubleSide} depthWrite={false} />
-      </mesh>
-      <mesh geometry={split.upper}>
-        <meshBasicMaterial color={SCENE_COLOURS.reachableUpper} transparent opacity={0.45} side={DoubleSide} depthWrite={false} />
-      </mesh>
+      {layers.layers.map((layer) => (
+        <mesh key={layer.z} rotation={[-Math.PI / 2, 0, 0]} position={[size.width / 2, layer.z + 0.06, -size.depth / 2]}>
+          <planeGeometry args={[size.width, size.depth]} />
+          <meshBasicMaterial color={layer.z > 0.5 ? SCENE_COLOURS.reachableUpper : SCENE_COLOURS.reachable} transparent opacity={layer.z > 0.5 ? 0.5 : 0.36} alphaMap={layer.texture} depthWrite={false} side={DoubleSide} />
+        </mesh>
+      ))}
     </group>
   );
 }
 
-/** Ground and upper-floor cells as two geometries that are freed together. */
-function useDisposableSplit(nodes: readonly ReachNode[], cell: number): { ground: BufferGeometry; upper: BufferGeometry; dispose(): void } {
-  return useDisposable(() => {
-    // One cell may be reachable on several storeys; the overlay shows the highest, which is the one
-    // the flat view would otherwise hide.
-    const best = new Map<string, Vec3>();
-    for (const n of nodes) {
-      const key = `${n.at.x.toFixed(2)},${n.at.y.toFixed(2)}`;
-      const seen = best.get(key);
-      if (!seen || n.at.z > seen.z) best.set(key, n.at);
-    }
-    const on: Vec3[] = [];
-    const up: Vec3[] = [];
-    for (const at of best.values()) (at.z > 0.5 ? up : on).push(at);
-    const ground = quads(on, cell);
-    const upper = quads(up, cell);
-    return {
-      ground,
-      upper,
-      dispose() {
-        ground.dispose();
-        upper.dispose();
-      },
-    };
-  }, [nodes, cell]);
-}
+/** Pixels to the inch in the reach mask: enough that a disc's edge is a curve, not a step. */
+const MASK_PPI = 8;
 
-/** Two triangles per cell, laid flat just above whatever surface the cell sits on. */
-function quads(points: readonly Vec3[], cell: number): BufferGeometry {
-  const half = cell / 2;
-  const data = new Float32Array(points.length * 18);
-  let i = 0;
-  for (const p of points) {
-    const z = p.z + 0.06;
-    const x0 = p.x - half;
-    const x1 = p.x + half;
-    const y0 = p.y - half;
-    const y1 = p.y + half;
-    for (const [x, y] of [
-      [x0, y0],
-      [x1, y0],
-      [x1, y1],
-      [x0, y0],
-      [x1, y1],
-      [x0, y1],
-    ] as const) {
-      i = writeScene(data, i, { x, y, z });
+/**
+ * Paint the reachable positions as overlapping discs into a canvas the size of the table.
+ *
+ * The disc radius is just over the half-diagonal of a cell, so diagonal neighbours touch and the
+ * region closes; the scallops left between them are under a tenth of an inch, less than a pixel.
+ * Canvas rows run top-down and the table's y runs away from the near edge, so a row is `depth − y`.
+ */
+function rasterise(points: readonly Vec3[], size: BoardSize, cell: number): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.ceil(size.width * MASK_PPI));
+  canvas.height = Math.max(1, Math.ceil(size.depth * MASK_PPI));
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#fff";
+    const r = cell * 0.78 * MASK_PPI;
+    for (const p of points) {
+      ctx.beginPath();
+      ctx.arc(p.x * MASK_PPI, (size.depth - p.y) * MASK_PPI, r, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new BufferAttribute(data, 3));
-  return geometry;
+  const texture = new CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
 }
 
 /**

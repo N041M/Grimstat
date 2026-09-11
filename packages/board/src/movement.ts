@@ -12,6 +12,8 @@
 
 import type { ModelHull } from "./shapes";
 import { footReach } from "./shapes";
+import type { BoardSize } from "./board";
+import { onBoard } from "./board";
 import type { TerrainPiece , TerrainIndex} from "./terrain";
 import { floorHeights, hasTrait, mayClimb, topOf } from "./terrain";
 import { ENGAGEMENT_HORIZONTAL, ENGAGEMENT_VERTICAL, horizontalGap, inEngagementRange, verticalGap } from "./distance";
@@ -53,6 +55,8 @@ export interface ReachOptions {
   readonly blockers?: readonly ModelHull[];
   /** A charge or a pile-in may close to engagement range; a normal move may not. */
   readonly allowEngagement?: boolean;
+  /** The table. Given, no position that puts any of the base over its edge is reachable. */
+  readonly board?: BoardSize;
   /** Stop as soon as this returns true for a settled node — used by the charge search. */
   readonly until?: (at: Vec3) => boolean;
 }
@@ -96,7 +100,8 @@ export function reachable(model: ModelHull, budget: number, index: TerrainIndex,
   const horizon = budget + step + footReach(model.foot) + ENGAGEMENT_HORIZONTAL + EPS;
   const nearby = (hulls: readonly ModelHull[] | undefined) => hulls?.filter((h) => dist2(h.pos, origin) <= horizon + footReach(h.foot));
   const near: ReachOptions = { ...opts, enemies: nearby(opts.enemies), blockers: nearby(opts.blockers) };
-  const legal = (at: Vec3): boolean => surfaces.standable(at) && !obstructed(at, model, near);
+  const board = opts.board;
+  const legal = (at: Vec3): boolean => (!board || onBoard({ ...model, pos: at }, board)) && surfaces.standable(at) && !obstructed(at, model, near);
 
   const nodes: ReachNode[] = [{ at: model.pos, cost: 0, from: -1 }];
   const byKey = new Map<string, number>([[key(model.pos, step, rules.floorTolerance), 0]]);

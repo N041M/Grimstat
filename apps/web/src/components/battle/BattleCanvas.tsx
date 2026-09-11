@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
-import type { ReachNode, Vec2, Vec3 } from "@grimstat/board";
+import type { ModelHull, ReachNode, Vec2, Vec3 } from "@grimstat/board";
 import type { BattleState, BattleUnit, Tape } from "../../lib/battle";
-import { anchorOf, findModel, findUnit, indexOf, modelMoveVerdict, translateUnit, unitHulls } from "../../lib/battle";
+import { anchorOf, deployVerdict, findModel, findUnit, indexOf, modelMoveVerdict, placeUnit, translateUnit, unitHulls, type Side } from "../../lib/battle";
 import { centre } from "../../lib/layoutEdit";
 import { Cameras, type CameraMode } from "./Cameras";
 import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
-import { Ghost, UnitTokens } from "./UnitTokens";
+import { Ghost, UnitTokens, livePositions } from "./UnitTokens";
 import { MeasureLine, MeasureMarker, PathLine, Protractor, ReachOverlay, SightRays, TapeObject } from "./Overlays";
 
 export type { CameraMode };
@@ -22,6 +22,8 @@ export interface DragState {
   readonly at?: Vec3;
   readonly legal: boolean;
   readonly cost?: number;
+  /** The route the search found, when the move is legal. */
+  readonly path?: readonly Vec3[];
   readonly problems: readonly string[];
 }
 
@@ -52,6 +54,8 @@ export interface BattleCanvasProps {
   reach?: readonly ReachNode[];
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
+  /** A planned move not yet approved: the unit's ghost standing where it would go. */
+  planned?: { readonly hulls: readonly ModelHull[]; readonly legal: boolean };
   /** Tapes left on the table. Each stays until its line is double-clicked. */
   tapes?: readonly Tape[];
   onTapeRemove?(id: string): void;
@@ -63,6 +67,12 @@ export interface BattleCanvasProps {
   onMeasureHover?(at: Vec2 | undefined): void;
   /** Whether pressing a unit picks it up. Off under the tools where moving is not the point. */
   canDrag?: boolean;
+  /** What a drag does: move a model within its Move, or set a whole unit down where deployment allows. */
+  dragMode?: "move" | "deploy";
+  /** A deployment drag was released somewhere legal: set the unit down as a block centred there. */
+  onDeploy?(unitId: string, at: Vec2): void;
+  /** The side whose deployment zone should be lit. */
+  highlightZone?: Side;
   /** Present while the terrain tool is active; absent, terrain and objectives are scenery. */
   editing?: TerrainEditing;
   /** One child per unit, in the same order; the projector moves them to follow the table. */
@@ -70,8 +80,8 @@ export interface BattleCanvasProps {
   /** An element the canvas keeps beside the pointer during a drag; the page decides what it says. */
   readoutRef?: RefObject<HTMLDivElement>;
   onSelect(unitId: string | undefined, modelId?: string): void;
-  /** Commit a move. `modelId` moves one model; without it the whole unit travels as a body. */
-  onMove(unitId: string, to: Vec3, cost: number, modelId?: string): void;
+  /** A legal drag was released. `modelId` names one model; without it the whole unit travels as a body. */
+  onMove(unitId: string, to: Vec3, cost: number, modelId?: string, path?: readonly Vec3[]): void;
   onDrag?(drag: DragState | undefined): void;
   /** A press on the table itself. What it means is the page's business, not the canvas's. */
   onTableDown?(at: Vec2): void;
@@ -114,7 +124,7 @@ type Held =
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, planned, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
@@ -130,8 +140,8 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
 
   // The window listeners are registered once and read the latest of everything through this ref,
   // rather than being torn down and re-added on every render — which, during a drag, is every frame.
-  const latest = useRef({ state, index, editing, measureFrom, onMeasureHover, onMove, onDrag });
-  latest.current = { state, index, editing, measureFrom, onMeasureHover, onMove, onDrag };
+  const latest = useRef({ state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy });
+  latest.current = { state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy };
 
   // A tape with no first mark has no free end.
   useEffect(() => {
@@ -160,7 +170,15 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       if (!canDrag) return;
       const unit = findUnit(latest.current.state, unitId);
       const model = unit && findModel(unit, modelId);
-      if (!model) return;
+      if (!unit || !model) return;
+      // Deploying moves the whole block, so the offset is to the block's centre, not the model's.
+      if (latest.current.dragMode === "deploy") {
+        const n = unit.models.length || 1;
+        const cx = unit.models.reduce((s, m) => s + m.hull.pos.x, 0) / n;
+        const cy = unit.models.reduce((s, m) => s + m.hull.pos.y, 0) / n;
+        hold({ kind: "model", unitId, modelId, offset: { x: cx - at.x, y: cy - at.y } });
+        return;
+      }
       hold({ kind: "model", unitId, modelId, offset: { x: model.hull.pos.x - at.x, y: model.hull.pos.y - at.y } });
     },
     [canDrag, hold],
@@ -194,13 +212,14 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
     // The ghost stands where it would land. Only when the move is refused does it follow the pointer
     // instead, so the player can see what they are pointing at and why it will not do.
     const spot = drag.at ?? drag.to;
+    if (dragMode === "deploy") return unitHulls(placeUnit(unit, spot));
     if (drag.modelId) {
       const model = findModel(unit, drag.modelId);
       return model ? [{ ...model.hull, pos: { x: spot.x, y: spot.y, z: drag.at?.z ?? model.hull.pos.z } }] : undefined;
     }
     const anchor = anchorOf(unit);
     return unitHulls(translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y }));
-  }, [drag, state]);
+  }, [drag, state, dragMode]);
 
   /**
    * A drag follows the window, not the table mesh.
@@ -271,11 +290,12 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       const unit = findUnit(now, what.unitId);
       const model = unit && findModel(unit, what.modelId);
       if (!unit || !model) return;
-      const at = pointAt(e, model.hull.pos.z);
+      const at = pointAt(e, latest.current.dragMode === "deploy" ? 0 : model.hull.pos.z);
       if (!at) return;
       const to = { x: at.x + what.offset.x, y: at.y + what.offset.y };
-      const verdict = modelMoveVerdict(now, unit, model, to, idx);
-      const next: DragState = { unitId: what.unitId, modelId: what.modelId, to, at: verdict.at, legal: verdict.ok, cost: verdict.cost, problems: verdict.problems };
+      const deploying = latest.current.dragMode === "deploy";
+      const verdict = deploying ? deployVerdict(now, unit, to, idx) : modelMoveVerdict(now, unit, model, to, idx);
+      const next: DragState = { unitId: what.unitId, ...(deploying ? {} : { modelId: what.modelId }), to, at: verdict.at, legal: verdict.ok, cost: verdict.cost, path: verdict.path, problems: verdict.problems };
       pending.current = next;
       setDrag(next);
       report?.(next);
@@ -312,7 +332,10 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         return;
       }
       const result = pending.current;
-      if (result?.legal && result.at && result.cost !== undefined) latest.current.onMove(result.unitId, result.at, result.cost, result.modelId);
+      if (result?.legal && result.at) {
+        if (latest.current.dragMode === "deploy") latest.current.onDeploy?.(result.unitId, { x: result.at.x, y: result.at.y });
+        else if (result.cost !== undefined) latest.current.onMove(result.unitId, result.at, result.cost, result.modelId, result.path);
+      }
       pending.current = undefined;
       setDrag(undefined);
       latest.current.onDrag?.(undefined);
@@ -336,10 +359,10 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       <Cameras mode={cameraMode} size={state.layout.size} />
       <Lighting size={state.layout.size} />
       <Table size={state.layout.size} onDown={onDown} />
-      <Zones zones={state.zones} />
+      <Zones zones={state.zones} highlight={highlightZone} />
       <Terrain pieces={state.layout.pieces} selectedId={editing?.pieceId} onPick={editing ? pickPiece : undefined} />
       <Objectives objectives={state.layout.objectives} selectedId={editing?.objectiveId} onPick={editing ? pickObjective : undefined} />
-      {reach?.length ? <ReachOverlay nodes={reach} /> : null}
+      {reach?.length ? <ReachOverlay nodes={reach} size={state.layout.size} /> : null}
       {rays?.length ? <SightRays rays={rays} /> : null}
       {path?.length ? <PathLine path={path} /> : null}
       {tapes?.map((tape) => (
@@ -353,7 +376,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         </>
       ) : null}
       <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grabModel} />
-      {ghost && drag ? <Ghost hulls={ghost} legal={drag.legal} /> : null}
+      {ghost && drag ? <Ghost hulls={ghost} legal={drag.legal} /> : planned ? <Ghost hulls={planned.hulls} legal={planned.legal} /> : null}
       {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}
       {tapesRef && tapes?.length ? <TapeLabelProjector tapesRef={tapesRef} tapes={tapes} /> : null}
     </>
@@ -398,9 +421,16 @@ function LabelProjector({ labelsRef, units }: { labelsRef: RefObject<HTMLDivElem
     const children = host.children;
     for (let i = 0; i < units.length && i < children.length; i++) {
       const unit = units[i]!;
-      const anchor = anchorOf(unit);
-      scratch.set(anchor.pos.x, anchor.pos.z + anchor.height + 0.6, -anchor.pos.y).project(camera);
       const el = children[i] as HTMLElement;
+      if (unit.reserve) {
+        el.style.visibility = "hidden";
+        continue;
+      }
+      const anchor = anchorOf(unit);
+      // The label follows the token, which may still be on its way.
+      const live = unit.models[0] ? livePositions.get(unit.models[0].id) : undefined;
+      const pos = live ?? anchor.pos;
+      scratch.set(pos.x, pos.z + anchor.height + 0.6, -pos.y).project(camera);
       const behind = scratch.z > 1;
       el.style.visibility = behind ? "hidden" : "visible";
       if (behind) continue;

@@ -3,6 +3,12 @@ import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, coherency, inZone } from "@grims
 import {
   anchorOf,
   applyModelMove,
+  applyUnitMove,
+  autoDeploy,
+  clearDeployment,
+  deployUnit,
+  deployVerdict,
+  deployedUnits,
   endMove,
   findModel,
   hasMoved,
@@ -26,6 +32,8 @@ import {
   tapeDistance,
   translateUnit,
   unitHulls,
+  withdrawUnit,
+  zoneOf,
   type BattleState,
   type BattleUnit,
 } from "./battle";
@@ -384,6 +392,87 @@ describe("the tape", () => {
     expect(dropMark(undefined, a, "t1")).toEqual({ pending: a });
     expect(dropMark(a, a, "t1")).toEqual({ pending: a });
     expect(dropMark(a, b, "t1")).toEqual({ tape: { id: "t1", from: a, to: b } });
+  });
+});
+
+describe("deployment", () => {
+  const base = sampleBattle(OPEN_APPROACH);
+  const attacker = base.units.find((u) => u.side === "attacker" && u.models.length === 10)!;
+
+  it("keeps a unit in reserve off the table: it blocks nothing and is not counted among the deployed", () => {
+    const withdrawn = { ...base, units: base.units.map((u) => (u.id === attacker.id ? withdrawUnit(u) : u)) };
+    expect(deployedUnits(withdrawn).map((u) => u.id)).not.toContain(attacker.id);
+    expect(withdrawn.units.find((u) => u.id === attacker.id)!.reserve).toBe(true);
+    // Its old spot is free ground for anyone else now.
+    const other = withdrawn.units.find((u) => u.side === "attacker" && u.id !== attacker.id)!;
+    const spot = { x: anchorOf(attacker).pos.x, y: anchorOf(attacker).pos.y };
+    expect(deployVerdict(withdrawn, other, spot).ok).toBe(true);
+    expect(clearDeployment(base).units.every((u) => u.reserve)).toBe(true);
+  });
+
+  it("refuses a spot outside the zone, off the table, or on top of another unit", () => {
+    const zone = zoneOf(base, "attacker");
+    expect(zone.owner).toBe("attacker");
+    expect(deployVerdict(base, attacker, { x: 30, y: 22 }).problems).toContain("battle.problem.outsideZone");
+    expect(deployVerdict(base, attacker, { x: -3, y: 6 }).problems).toContain("battle.problem.offTable");
+    const other = base.units.find((u) => u.side === "attacker" && u.id !== attacker.id)!;
+    const onTop = { x: anchorOf(other).pos.x, y: anchorOf(other).pos.y };
+    expect(deployVerdict(base, attacker, onTop).problems).toContain("battle.problem.blocked");
+  });
+
+  it("sets a unit down as a fresh block, with nothing spent and no route", () => {
+    const moved = applyUnitMove(attacker, { x: anchorOf(attacker).pos.x + 2, y: anchorOf(attacker).pos.y, z: 0 }, 2);
+    const down = deployUnit(withdrawUnit(moved), { x: 20, y: 5 });
+    expect(down.reserve).toBe(false);
+    expect(down.models.every((m) => (m.spent ?? 0) === 0 && m.from === undefined && m.route === undefined)).toBe(true);
+    expect(deployVerdict(base, down, { x: 20, y: 5 }).at).toEqual({ x: 20, y: 5, z: 0 });
+  });
+
+  it("auto-deploys every reserve unit of a side somewhere legal in its zone, back edge first", () => {
+    const empty = clearDeployment(base);
+    const done = autoDeploy(empty, "attacker");
+    const zone = zoneOf(done, "attacker");
+    for (const u of done.units) {
+      if (u.side !== "attacker") continue;
+      expect(u.reserve).toBe(false);
+      for (const m of u.models) expect(inZone(m.hull, zone)).toBe(true);
+    }
+    // The defender is untouched.
+    expect(done.units.filter((u) => u.side === "defender").every((u) => u.reserve)).toBe(true);
+    // Nobody stands on anybody: each unit's spot is refused to the next.
+    const first = done.units.find((u) => u.side === "attacker")!;
+    const anchor = anchorOf(first).pos;
+    expect(first.models[0]!.hull.pos.y).toBeLessThan(6);
+    expect(deployVerdict(done, done.units.find((u) => u.side === "attacker" && u.id !== first.id)!, { x: anchor.x, y: anchor.y }).ok).toBe(false);
+  });
+});
+
+describe("routes", () => {
+  it("remembers the way a model went, so the table can animate it round a corner", () => {
+    const state = sampleBattle(RUINED_CITY);
+    const unit = state.units.find((u) => u.side === "attacker" && u.models.length === 10)!;
+    const model = unit.models[0]!;
+    const index = indexOf(state);
+    // Straight towards the near edge: open ground, away from the rest of the unit.
+    const verdict = modelMoveVerdict(state, unit, model, { x: model.hull.pos.x, y: model.hull.pos.y - 2.5 }, index);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.path!.length).toBeGreaterThanOrEqual(2);
+    expect(verdict.path![0]).toEqual(model.hull.pos);
+    const moved = applyModelMove(unit, model.id, verdict.at!, verdict.cost!, verdict.path);
+    expect(moved.models[0]!.route).toEqual(verdict.path);
+    expect(applyModelMove(unit, model.id, verdict.at!, verdict.cost!).models[0]!.route).toEqual([model.hull.pos, verdict.at]);
+  });
+
+  it("never reaches past the table's edge", () => {
+    const state = sampleBattle(OPEN_APPROACH);
+    const unit = state.units.find((u) => u.side === "attacker")!;
+    const edge = { ...state, units: state.units.map((u) => (u.id === unit.id ? placeUnit(u, { x: 5, y: 5 }) : u)) };
+    const model = edge.units.find((u) => u.id === unit.id)!.models[0]!;
+    const nodes = modelReach(edge, edge.units.find((u) => u.id === unit.id)!, model, indexOf(edge));
+    for (const n of nodes) {
+      expect(n.at.x).toBeGreaterThanOrEqual(model.hull.foot.r - 1e-6);
+      expect(n.at.y).toBeGreaterThanOrEqual(model.hull.foot.r - 1e-6);
+    }
   });
 });
 

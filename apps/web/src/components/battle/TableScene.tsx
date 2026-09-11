@@ -150,23 +150,35 @@ const TerrainSolid = memo(function TerrainSolid({ piece, selected, onPick }: { p
   );
 });
 
-/** Deployment zones, tinted into the table rather than fenced off — they are advisory, not walls. */
-export const Zones = memo(function Zones({ zones }: { zones: readonly Zone[] }) {
+/**
+ * Deployment zones, tinted into the table rather than fenced off — they are advisory, not walls.
+ * The side being deployed gets its zone lit, so the edge a unit must stay inside is the edge on show.
+ */
+export const Zones = memo(function Zones({ zones, highlight }: { zones: readonly Zone[]; highlight?: Zone["owner"] }) {
   return (
     <group>
       {zones.map((zone) => (
-        <ZoneShape key={zone.id} zone={zone} />
+        <ZoneShape key={zone.id} zone={zone} lit={zone.owner === highlight} />
       ))}
     </group>
   );
 });
 
-function ZoneShape({ zone }: { zone: Zone }) {
+function ZoneShape({ zone, lit }: { zone: Zone; lit: boolean }) {
   const geometry = useDisposable(() => new ShapeGeometry(shapeOf(zone.polygon)), [zone.polygon]);
+  const edge = useDisposable(() => new EdgesGeometry(new ShapeGeometry(shapeOf(zone.polygon))), [zone.polygon]);
+  const colour = zone.owner === "attacker" ? SIDE_COLOURS.attacker : SIDE_COLOURS.defender;
   return (
-    <mesh geometry={geometry} rotation={FLAT} position={[0, 0.002, 0]}>
-      <meshBasicMaterial color={zone.owner === "attacker" ? SIDE_COLOURS.attacker : SIDE_COLOURS.defender} transparent opacity={0.12} side={DoubleSide} />
-    </mesh>
+    <group>
+      <mesh geometry={geometry} rotation={FLAT} position={[0, 0.002, 0]}>
+        <meshBasicMaterial color={colour} transparent opacity={lit ? 0.28 : 0.12} side={DoubleSide} />
+      </mesh>
+      {lit ? (
+        <lineSegments geometry={edge} rotation={FLAT} position={[0, 0.03, 0]}>
+          <lineBasicMaterial color={colour} transparent opacity={0.9} />
+        </lineSegments>
+      ) : null}
+    </group>
   );
 }
 

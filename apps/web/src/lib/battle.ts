@@ -14,10 +14,10 @@
  */
 
 import type { CoherencyReport, ModelHull, ReachNode, TerrainLayout, Vec2, Vec3, Zone } from "@grimstat/board";
-import { LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, edgeZones, heightForKeywords, inEngagementRange, onBoard, reachable, sight, unitDistance } from "@grimstat/board";
+import { LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, edgeZones, heightForKeywords, inEngagementRange, inZone, onBoard, pointInPolygon, reachable, sight, unitDistance } from "@grimstat/board";
 
 export type Side = "attacker" | "defender";
-export type BattleTool = "select" | "measure" | "sight" | "terrain";
+export type BattleTool = "deploy" | "select" | "measure" | "sight" | "terrain";
 
 export interface BattleModel {
   readonly id: string;
@@ -32,6 +32,12 @@ export interface BattleModel {
   readonly spent?: number;
   /** Move characteristic, when this model differs from the rest of its unit. */
   readonly move?: number;
+  /**
+   * The route of this model's latest move, start first — the path the movement search actually
+   * found, so the table can animate the model round the corner it went round rather than through
+   * the wall it did not.
+   */
+  readonly route?: readonly Vec3[];
 }
 
 export interface BattleUnit {
@@ -44,6 +50,8 @@ export interface BattleUnit {
   readonly oc: number;
   readonly keywords: readonly string[];
   readonly models: readonly BattleModel[];
+  /** Not on the table yet: waiting in reserve to be deployed. Its models' positions mean nothing. */
+  readonly reserve?: boolean;
 }
 
 export interface BattleState {
@@ -56,8 +64,10 @@ export interface BattleState {
 
 export const unitHulls = (unit: BattleUnit): ModelHull[] => unit.models.map((m) => m.hull);
 export const unitsOf = (state: BattleState, side: Side): BattleUnit[] => state.units.filter((u) => u.side === side);
-export const enemyHulls = (state: BattleState, side: Side): ModelHull[] => state.units.filter((u) => u.side !== side).flatMap(unitHulls);
-export const otherHulls = (state: BattleState, unitId: string): ModelHull[] => state.units.filter((u) => u.id !== unitId).flatMap(unitHulls);
+/** The units actually standing on the table: only they block, threaten or can be moved. */
+export const deployedUnits = (state: BattleState): BattleUnit[] => state.units.filter((u) => !u.reserve);
+export const enemyHulls = (state: BattleState, side: Side): ModelHull[] => deployedUnits(state).filter((u) => u.side !== side).flatMap(unitHulls);
+export const otherHulls = (state: BattleState, unitId: string): ModelHull[] => deployedUnits(state).filter((u) => u.id !== unitId).flatMap(unitHulls);
 export const findUnit = (state: BattleState, id: string | undefined): BattleUnit | undefined => state.units.find((u) => u.id === id);
 
 /** The model a whole-unit move is measured from: the first. */
@@ -88,7 +98,7 @@ export function incoherentModels(unit: BattleUnit): string[] {
 
 /** Put every model back where this move started and give back what it spent. */
 export function resetMove(unit: BattleUnit): BattleUnit {
-  return { ...unit, models: unit.models.map((m) => (m.from ? { ...m, hull: { ...m.hull, pos: m.from }, from: undefined, spent: 0 } : m)) };
+  return { ...unit, models: unit.models.map((m) => (m.from ? { ...m, hull: { ...m.hull, pos: m.from }, route: [m.hull.pos, m.from], from: undefined, spent: 0 } : m)) };
 }
 
 /** Lock the move in: this is where the models started from now. */
@@ -154,6 +164,8 @@ export interface MoveVerdict {
   readonly at?: Vec3;
   /** Inches travelled by this move alone. */
   readonly cost?: number;
+  /** The route the search found, start first, when it found one. */
+  readonly path?: readonly Vec3[];
   /** Why not, in the order a player would notice them. */
   readonly problems: readonly string[];
 }
@@ -175,7 +187,7 @@ function obstacles(state: BattleState, unit: BattleUnit): { enemies: ModelHull[]
 /** Where one model of a unit can go with what it has left. */
 export function modelReach(state: BattleState, unit: BattleUnit, model: BattleModel, index = indexOf(state)): readonly ReachNode[] {
   const { enemies, blockers } = obstacles(state, unit);
-  return reachable(model.hull, remainingMove(unit, model), index, { keywords: unit.keywords, enemies, blockers: [...blockers, ...unitHulls(unit).filter((h) => h !== model.hull)] }).nodes;
+  return reachable(model.hull, remainingMove(unit, model), index, { keywords: unit.keywords, enemies, blockers: [...blockers, ...unitHulls(unit).filter((h) => h !== model.hull)], board: state.layout.size }).nodes;
 }
 
 /**
@@ -195,6 +207,7 @@ export function modelMoveVerdict(state: BattleState, unit: BattleUnit, model: Ba
     keywords: unit.keywords,
     enemies,
     blockers: [...blockers, ...others],
+    board: state.layout.size,
     until: (at) => Math.hypot(at.x - to.x, at.y - to.y) <= SNAP,
   });
   const landed = reach.stoppedAt === undefined ? undefined : reach.nodes[reach.stoppedAt];
@@ -206,14 +219,14 @@ export function modelMoveVerdict(state: BattleState, unit: BattleUnit, model: Ba
   if (!canStand(moved, at, index, { keywords: unit.keywords, blockers: [...blockers, ...others] })) problems.push("battle.problem.blocked");
   if (enemies.some((e) => inEngagementRange(moved, e))) problems.push("battle.problem.engagement");
 
-  return { ok: problems.length === 0, at: landed ? at : undefined, cost: landed?.cost, problems };
+  return { ok: problems.length === 0, at: landed ? at : undefined, cost: landed?.cost, path: landed ? reach.pathTo(reach.stoppedAt!) : undefined, problems };
 }
 
-/** Apply a model's move, remembering where it started and adding to what it has spent. */
-export function applyModelMove(unit: BattleUnit, modelId: string, to: Vec3, cost: number): BattleUnit {
+/** Apply a model's move, remembering where it started, what it spent, and the way it went. */
+export function applyModelMove(unit: BattleUnit, modelId: string, to: Vec3, cost: number, path?: readonly Vec3[]): BattleUnit {
   return {
     ...unit,
-    models: unit.models.map((m) => (m.id === modelId ? { ...m, hull: { ...m.hull, pos: to }, from: m.from ?? m.hull.pos, spent: (m.spent ?? 0) + cost } : m)),
+    models: unit.models.map((m) => (m.id === modelId ? { ...m, hull: { ...m.hull, pos: to }, route: path ?? [m.hull.pos, to], from: m.from ?? m.hull.pos, spent: (m.spent ?? 0) + cost } : m)),
   };
 }
 
@@ -235,6 +248,7 @@ export function dragVerdict(state: BattleState, unit: BattleUnit, to: Vec2, inde
     keywords: unit.keywords,
     enemies,
     blockers,
+    board: state.layout.size,
     until: (at) => Math.hypot(at.x - to.x, at.y - to.y) <= SNAP,
   });
   const landed = reach.stoppedAt === undefined ? undefined : reach.nodes[reach.stoppedAt];
@@ -246,22 +260,100 @@ export function dragVerdict(state: BattleState, unit: BattleUnit, to: Vec2, inde
   if (moved.models.some((m) => !canStand(m.hull, m.hull.pos, index, { keywords: unit.keywords, blockers }))) problems.push("battle.problem.blocked");
   if (moved.models.some((m) => enemies.some((e) => inEngagementRange(m.hull, e)))) problems.push("battle.problem.engagement");
 
-  return { ok: problems.length === 0, at: landed ? landed.at : undefined, cost: landed?.cost, problems };
+  return { ok: problems.length === 0, at: landed ? landed.at : undefined, cost: landed?.cost, path: landed ? reach.pathTo(reach.stoppedAt!) : undefined, problems };
 }
 
-/** Apply a whole-unit move: every model travels the same offset and is charged the same distance. */
-export function applyUnitMove(unit: BattleUnit, to: Vec3, cost: number): BattleUnit {
+/**
+ * Apply a whole-unit move: every model travels the same offset and is charged the same distance,
+ * and each takes the lead model's route shifted to where it stands in the formation.
+ */
+export function applyUnitMove(unit: BattleUnit, to: Vec3, cost: number, path?: readonly Vec3[]): BattleUnit {
   const anchor = anchorOf(unit);
   const by = { x: to.x - anchor.pos.x, y: to.y - anchor.pos.y };
   return {
     ...unit,
-    models: unit.models.map((m) => ({
-      ...m,
-      hull: { ...m.hull, pos: { x: m.hull.pos.x + by.x, y: m.hull.pos.y + by.y, z: to.z } },
-      from: m.from ?? m.hull.pos,
-      spent: (m.spent ?? 0) + cost,
-    })),
+    models: unit.models.map((m) => {
+      const pos = { x: m.hull.pos.x + by.x, y: m.hull.pos.y + by.y, z: to.z };
+      const offset = { x: m.hull.pos.x - anchor.pos.x, y: m.hull.pos.y - anchor.pos.y };
+      const route = path ? path.map((p) => ({ x: p.x + offset.x, y: p.y + offset.y, z: p.z })) : [m.hull.pos, pos];
+      return { ...m, hull: { ...m.hull, pos }, route, from: m.from ?? m.hull.pos, spent: (m.spent ?? 0) + cost };
+    }),
   };
+}
+
+/* ---- deployment -------------------------------------------------------------------------------- */
+
+/** The zone a side deploys into. */
+export const zoneOf = (state: BattleState, side: Side): Zone => state.zones.find((z) => z.owner === side) ?? state.zones[side === "attacker" ? 0 : 1];
+
+/**
+ * May this unit be set down here, as a block centred on `at`?
+ *
+ * Deployment asks more of a position than a move does — every base wholly within the side's zone —
+ * and less: nothing is spent, so there is no route to search. Only the ground has to take them.
+ */
+export function deployVerdict(state: BattleState, unit: BattleUnit, at: Vec2, index = indexOf(state)): MoveVerdict {
+  const placed = placeUnit(unit, at);
+  const zone = zoneOf(state, unit.side);
+  const { enemies, blockers } = obstacles(state, unit);
+  const problems: string[] = [];
+  if (placed.models.some((m) => !onBoard(m.hull, state.layout.size))) problems.push("battle.problem.offTable");
+  else if (placed.models.some((m) => !inZone(m.hull, zone))) problems.push("battle.problem.outsideZone");
+  if (placed.models.some((m) => !canStand(m.hull, m.hull.pos, index, { keywords: unit.keywords, blockers }))) problems.push("battle.problem.blocked");
+  if (placed.models.some((m) => enemies.some((e) => inEngagementRange(m.hull, e)))) problems.push("battle.problem.engagement");
+  return { ok: problems.length === 0, at: { x: at.x, y: at.y, z: 0 }, cost: 0, problems };
+}
+
+/** Set a unit down as a block centred on `at`, fresh: nothing moved, nothing spent. */
+export function deployUnit(unit: BattleUnit, at: Vec2): BattleUnit {
+  const placed = placeUnit(unit, at);
+  return { ...placed, reserve: false, models: placed.models.map((m) => ({ ...m, from: undefined, spent: 0, route: undefined })) };
+}
+
+/** Take a unit off the table and back into reserve. */
+export const withdrawUnit = (unit: BattleUnit): BattleUnit => ({ ...unit, reserve: true });
+
+export const clearDeployment = (state: BattleState): BattleState => ({ ...state, units: state.units.map(withdrawUnit) });
+
+/**
+ * Put every reserve unit of a side somewhere legal in its zone.
+ *
+ * Back edge first and centre outwards, one inch at a time, first legal spot wins: the way a player
+ * fills a zone when the terrain, not the plan, is deciding. Units that fit nowhere stay in reserve.
+ */
+export function autoDeploy(state: BattleState, side: Side, index = indexOf(state)): BattleState {
+  let next = state;
+  const zone = zoneOf(state, side);
+  const xs = zone.polygon.map((p) => p.x);
+  const ys = zone.polygon.map((p) => p.y);
+  const box = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+  const { width, depth } = state.layout.size;
+  // The zone's far edge from the table's centre is the back edge: the row deployment starts on.
+  const backFirst = (box.minY + box.maxY) / 2 < depth / 2;
+  const rows: number[] = [];
+  for (let y = Math.floor(box.minY) + 1; y <= box.maxY - 1; y++) rows.push(y);
+  if (!backFirst) rows.reverse();
+  const cols: number[] = [];
+  for (let d = 0; d <= width / 2; d++) {
+    for (const x of [width / 2 - d, width / 2 + d]) if (x >= box.minX && x <= box.maxX && !cols.includes(x)) cols.push(x);
+  }
+
+  for (const unit of state.units) {
+    if (unit.side !== side || !unit.reserve) continue;
+    let placed: BattleUnit | undefined;
+    search: for (const y of rows) {
+      for (const x of cols) {
+        if (!pointInPolygon({ x, y }, zone.polygon)) continue;
+        const verdict = deployVerdict(next, unit, { x, y }, index);
+        if (verdict.ok) {
+          placed = deployUnit(unit, { x, y });
+          break search;
+        }
+      }
+    }
+    if (placed) next = replaceUnit(next, placed);
+  }
+  return next;
 }
 
 /* ---- the tools --------------------------------------------------------------------------------- */

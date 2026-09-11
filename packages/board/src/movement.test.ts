@@ -27,6 +27,18 @@ function costTo(result: ReturnType<typeof reachable>, x: number, y: number, z?: 
 describe("reachability on open ground", () => {
   const open = index();
 
+  it("stops at the table's edge when told where the edge is", () => {
+    const edge = reachable(model(2, 2), 6, open, { board: { width: 60, depth: 44 } });
+    for (const n of edge.nodes) {
+      expect(n.at.x).toBeGreaterThanOrEqual(0.63 - 1e-6);
+      expect(n.at.y).toBeGreaterThanOrEqual(0.63 - 1e-6);
+    }
+    expect(costTo(edge, 1, 2)).toBeCloseTo(1, 1);
+    expect(costTo(edge, 0, 2)).toBeUndefined();
+    // Without a board there is no edge, which is what the kernel's own tests rely on.
+    expect(costTo(reachable(model(2, 2), 6, open), -2, 2)).toBeDefined();
+  });
+
   it("reaches straight ahead for the cost of the distance", () => {
     const reach = reachable(model(0, 0), 6, open);
     expect(costTo(reach, 5, 0)).toBeCloseTo(5, 1);
