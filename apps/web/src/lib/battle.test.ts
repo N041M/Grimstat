@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, coherency, inZone } from "@grimstat/board";
 import {
   anchorOf,
+  applyModelMove,
+  endMove,
+  findModel,
+  hasMoved,
+  incoherentModels,
+  modelMoveVerdict,
+  modelReach,
+  remainingMove,
+  resetMove,
+  unitCoherency,
   chargeBetween,
   chargeOdds,
   dragVerdict,
@@ -14,6 +24,7 @@ import {
   sightBetween,
   translateUnit,
   unitHulls,
+  type BattleState,
   type BattleUnit,
 } from "./battle";
 
@@ -164,6 +175,117 @@ describe("drag legality", () => {
     const verdict = dragVerdict(next, mover, { x: 30, y: 20.5 }, indexOf(next));
     expect(verdict.ok).toBe(false);
     expect(verdict.problems).toContain("battle.problem.engagement");
+  });
+});
+
+describe("moving models one at a time", () => {
+  // A single squad on empty ground. The sample battle packs units along the deployment edge, and a
+  // neighbouring unit's bases make every verdict about them rather than about the model being moved.
+  const open = sampleBattle(OPEN_APPROACH);
+  const index = indexOf(open);
+  const squad = () => placeUnit(open.units[0]!, { x: 30, y: 16 });
+  const alone = (unit: BattleUnit): BattleState => ({ ...open, units: [unit] });
+  /** Model 0 sits at the front-left of the block, so −x is open ground and +x is its neighbours. */
+  const OPEN = -1;
+
+  it("moves one model and leaves the rest where they stand", () => {
+    const unit = squad();
+    const before = unit.models.map((m) => ({ ...m.hull.pos }));
+    const model = unit.models[0]!;
+    const verdict = modelMoveVerdict(alone(unit), unit, model, { x: model.hull.pos.x + 3 * OPEN, y: model.hull.pos.y }, index);
+    expect(verdict.ok).toBe(true);
+    const after = applyModelMove(unit, model.id, verdict.at!, verdict.cost!);
+    expect(after.models[0]!.hull.pos.x).toBeCloseTo(verdict.at!.x);
+    for (let i = 1; i < after.models.length; i++) expect(after.models[i]!.hull.pos).toEqual(before[i]);
+  });
+
+  it("spends a model's move and will not let it spend the same inches twice", () => {
+    const unit = squad();
+    const model = unit.models[0]!;
+    expect(remainingMove(unit, model)).toBe(unit.move);
+
+    // Three inches out, then three inches back: six spent, not zero.
+    const out = modelMoveVerdict(alone(unit), unit, model, { x: model.hull.pos.x + 3 * OPEN, y: model.hull.pos.y }, index);
+    const afterOut = applyModelMove(unit, model.id, out.at!, out.cost!);
+    const moved = findModel(afterOut, model.id)!;
+    const back = modelMoveVerdict(alone(afterOut), afterOut, moved, { x: model.hull.pos.x, y: model.hull.pos.y }, index);
+    const afterBack = applyModelMove(afterOut, model.id, back.at!, back.cost!);
+    const done = findModel(afterBack, model.id)!;
+
+    expect(done.spent).toBeCloseTo(6, 1);
+    expect(remainingMove(afterBack, done)).toBeCloseTo(unit.move - 6, 1);
+    expect(done.hull.pos.x).toBeCloseTo(model.hull.pos.x, 1); // back where it started
+  });
+
+  it("refuses a model's move once its own allowance is gone", () => {
+    const unit = squad();
+    const model = unit.models[0]!;
+    const first = modelMoveVerdict(alone(unit), unit, model, { x: model.hull.pos.x + unit.move * OPEN, y: model.hull.pos.y }, index);
+    const after = applyModelMove(unit, model.id, first.at!, first.cost!);
+    const spent = findModel(after, model.id)!;
+    expect(remainingMove(after, spent)).toBeCloseTo(0, 1);
+    const second = modelMoveVerdict(alone(after), after, spent, { x: spent.hull.pos.x + 2 * OPEN, y: spent.hull.pos.y }, index);
+    expect(second.ok).toBe(false);
+    expect(second.problems).toContain("battle.problem.tooFar");
+  });
+
+  it("remembers where the move began, and can put it back", () => {
+    const unit = squad();
+    const model = unit.models[0]!;
+    const start = { ...model.hull.pos };
+    const verdict = modelMoveVerdict(alone(unit), unit, model, { x: start.x + 2 * OPEN, y: start.y - 1 }, index);
+    const after = applyModelMove(unit, model.id, verdict.at!, verdict.cost!);
+    expect(findModel(after, model.id)!.from).toEqual(start);
+    expect(hasMoved(after)).toBe(true);
+
+    const undone = resetMove(after);
+    expect(findModel(undone, model.id)!.hull.pos).toEqual(start);
+    expect(hasMoved(undone)).toBe(false);
+  });
+
+  it("locks a move in, so the next move starts the allowance again", () => {
+    const unit = squad();
+    const model = unit.models[0]!;
+    const verdict = modelMoveVerdict(alone(unit), unit, model, { x: model.hull.pos.x + 3 * OPEN, y: model.hull.pos.y }, index);
+    const after = endMove(applyModelMove(unit, model.id, verdict.at!, verdict.cost!));
+    expect(remainingMove(after, findModel(after, model.id)!)).toBe(unit.move);
+    expect(resetMove(after).models[0]!.hull.pos.x).toBeCloseTo(verdict.at!.x); // nothing left to undo
+  });
+
+  it("does not refuse a move for breaking coherency, because the rules check that at the end", () => {
+    const unit = squad();
+    const model = unit.models[0]!;
+    const away = modelMoveVerdict(alone(unit), unit, model, { x: model.hull.pos.x + 5 * OPEN, y: model.hull.pos.y - 2 }, index);
+    expect(away.ok).toBe(true);
+    const after = applyModelMove(unit, model.id, away.at!, away.cost!);
+    // …but it does report it, and names the model that has strayed.
+    expect(unitCoherency(after).ok).toBe(false);
+    expect(incoherentModels(after)).toContain(model.id);
+  });
+
+  it("will not put one model on top of another in its own unit", () => {
+    const unit = squad();
+    const model = unit.models[0]!;
+    const neighbour = unit.models[1]!;
+    const verdict = modelMoveVerdict(alone(unit), unit, model, { x: neighbour.hull.pos.x, y: neighbour.hull.pos.y }, index);
+    expect(verdict.ok).toBe(false);
+  });
+
+  it("gives each model its own reachable set", () => {
+    const unit = squad();
+    const first = modelReach(alone(unit), unit, unit.models[0]!, index);
+    const last = modelReach(alone(unit), unit, unit.models[unit.models.length - 1]!, index);
+    expect(first.length).toBeGreaterThan(0);
+    expect(last.length).toBeGreaterThan(0);
+    // Different starting points, so different shapes — not one set shared by the whole unit.
+    expect(first[0]!.at).not.toEqual(last[0]!.at);
+  });
+
+  it("lets a model carry its own Move characteristic", () => {
+    const unit = squad();
+    const slow: BattleUnit = { ...unit, models: unit.models.map((m, i) => (i === 0 ? { ...m, move: 2 } : m)) };
+    expect(remainingMove(slow, slow.models[0]!)).toBe(2);
+    expect(remainingMove(slow, slow.models[1]!)).toBe(unit.move);
   });
 });
 

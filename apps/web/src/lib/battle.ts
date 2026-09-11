@@ -2,12 +2,19 @@
  * The Battle page's state, kept as plain data and pure functions so the rules of the thing can be
  * tested without a browser, a canvas or a GPU.
  *
- * This is **planning mode**: units are dragged as a rigid block, legality is advisory, and nothing
- * is resolved. Model-by-model movement, phases and dice arrive with `packages/game`.
+ * This is **planning mode**: legality is advisory and nothing is resolved. Phases, dice and casualty
+ * allocation arrive with `packages/game`.
+ *
+ * Movement is per model, because in this game it is. A unit is not a token: it is a handful of
+ * models each with its own Move allowance, which spread to screen, string out to reach an objective
+ * and hug the edge of coherency to keep a charge off. Moving them as one block cannot express any of
+ * that. Each model here carries where it started and what it has spent, so a model can be nudged,
+ * nudged again, and still only ever travel its own Move in total — and coherency is reported rather
+ * than enforced, because the rules only ask for it once the whole unit has finished moving.
  */
 
-import type { ModelHull, Objective, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
-import { BATTLE_SIZES, LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coverFor, distance, edgeZones, heightForKeywords, inEngagementRange, onBoard, reachable, sight, unitDistance } from "@grimstat/board";
+import type { CoherencyReport, ModelHull, Objective, ReachNode, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
+import { BATTLE_SIZES, LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, distance, edgeZones, heightForKeywords, inEngagementRange, onBoard, reachable, sight, unitDistance } from "@grimstat/board";
 
 export type Side = "attacker" | "defender";
 export type BattleTool = "select" | "measure" | "sight";
@@ -15,6 +22,16 @@ export type BattleTool = "select" | "measure" | "sight";
 export interface BattleModel {
   readonly id: string;
   readonly hull: ModelHull;
+  /**
+   * Where this model stood when the current move began, and how far it has travelled since.
+   *
+   * Cumulative, not as-the-crow-flies: a model nudged out and back has spent the whole trip, which
+   * is what stops a series of small drags adding up to more than the model's Move.
+   */
+  readonly from?: Vec3;
+  readonly spent?: number;
+  /** Move characteristic, when this model differs from the rest of its unit. */
+  readonly move?: number;
 }
 
 export interface BattleUnit {
@@ -43,8 +60,44 @@ export const enemyHulls = (state: BattleState, side: Side): ModelHull[] => state
 export const otherHulls = (state: BattleState, unitId: string): ModelHull[] => state.units.filter((u) => u.id !== unitId).flatMap(unitHulls);
 export const findUnit = (state: BattleState, id: string | undefined): BattleUnit | undefined => state.units.find((u) => u.id === id);
 
-/** The model a drag is anchored to: the first, which is also the one the reach overlay is drawn for. */
+/** The model a whole-unit move is measured from: the first. */
 export const anchorOf = (unit: BattleUnit): ModelHull => unit.models[0]?.hull ?? { pos: { x: 0, y: 0, z: 0 }, facing: 0, foot: circleBase(32), height: 2 };
+
+export const findModel = (unit: BattleUnit, id: string | undefined): BattleModel | undefined => unit.models.find((m) => m.id === id);
+
+/** What this model may move, which is its unit's characteristic unless it says otherwise. */
+export const moveOf = (unit: BattleUnit, model: BattleModel): number => model.move ?? unit.move;
+
+/** What this model has left of its move. */
+export const remainingMove = (unit: BattleUnit, model: BattleModel): number => Math.max(0, moveOf(unit, model) - (model.spent ?? 0));
+
+/** Has any model of this unit moved since the move began? */
+export const hasMoved = (unit: BattleUnit): boolean => unit.models.some((m) => (m.spent ?? 0) > 0);
+
+/** Total spent across the unit, for the panel's summary. */
+export const unitSpent = (unit: BattleUnit): number => unit.models.reduce((a, m) => a + (m.spent ?? 0), 0);
+
+/** Coherency of the unit as it currently stands. Reported, never enforced mid-move. */
+export const unitCoherency = (unit: BattleUnit): CoherencyReport => coherency(unitHulls(unit));
+
+/** Ids of the models that are out of coherency, for the table to ring in red. */
+export function incoherentModels(unit: BattleUnit): string[] {
+  const report = unitCoherency(unit);
+  if (report.ok) return [];
+  const lonely = new Set(report.lonely);
+  // A split unit has no single model at fault, so the whole of the smaller group is the problem.
+  return unit.models.filter((_, i) => lonely.has(i) || report.split).map((m) => m.id);
+}
+
+/** Put every model back where this move started and give back what it spent. */
+export function resetMove(unit: BattleUnit): BattleUnit {
+  return { ...unit, models: unit.models.map((m) => (m.from ? { ...m, hull: { ...m.hull, pos: m.from }, from: undefined, spent: 0 } : m)) };
+}
+
+/** Lock the move in: this is where the models started from now. */
+export function endMove(unit: BattleUnit): BattleUnit {
+  return { ...unit, models: unit.models.map((m) => ({ ...m, from: undefined, spent: 0 })) };
+}
 
 export const indexOf = (state: BattleState): TerrainIndex => new TerrainIndex(state.layout.pieces);
 
@@ -94,19 +147,22 @@ export const replaceUnit = (state: BattleState, unit: BattleUnit): BattleState =
 
 /* ---- legality ---------------------------------------------------------------------------------- */
 
-export interface DragVerdict {
+export interface MoveVerdict {
   readonly ok: boolean;
   /**
-   * Where the unit would actually end up — the nearest position the movement search can reach,
-   * which is not quite where the pointer was. Move the unit here, not to the raw click, or the
-   * distance it travels stops matching the distance it was charged for.
+   * Where it would actually end up — the nearest position the movement search can reach, which is
+   * not quite where the pointer was. Move it here, not to the raw click, or the distance travelled
+   * stops matching the distance it was charged for.
    */
-  readonly at?: Vec2;
-  /** Inches the anchor model travels; `undefined` when no legal route reaches the spot. */
+  readonly at?: Vec3;
+  /** Inches travelled by this move alone. */
   readonly cost?: number;
   /** Why not, in the order a player would notice them. */
   readonly problems: readonly string[];
 }
+
+/** Retained for the whole-unit move, which still reports one verdict for the body of models. */
+export type DragVerdict = MoveVerdict;
 
 /**
  * How far a destination may be from the nearest cell of the movement search and still count as that
@@ -117,22 +173,71 @@ export interface DragVerdict {
  */
 const SNAP = (MOVE_RULES.resolution * Math.SQRT2) / 2 + 1e-6;
 
+/** Everything a move has to get past, whichever models are making it. */
+function obstacles(state: BattleState, unit: BattleUnit): { enemies: ModelHull[]; blockers: ModelHull[] } {
+  return { enemies: enemyHulls(state, unit.side), blockers: otherHulls(state, unit.id) };
+}
+
+/** Where one model of a unit can go with what it has left. */
+export function modelReach(state: BattleState, unit: BattleUnit, model: BattleModel, index = indexOf(state)): readonly ReachNode[] {
+  const { enemies, blockers } = obstacles(state, unit);
+  return reachable(model.hull, remainingMove(unit, model), index, { keywords: unit.keywords, enemies, blockers: [...blockers, ...unitHulls(unit).filter((h) => h !== model.hull)] }).nodes;
+}
+
 /**
- * Is this a legal place to put the unit, and what does getting there cost?
+ * Can this one model go here, and what does it cost?
  *
- * Advisory, and honest about being an approximation: the cost is the anchor model's route, while the
- * rules move each model on its own. It is right for a unit that keeps its shape, which is what a
- * rigid drag produces, and it never silently blocks — it reports.
+ * Coherency is deliberately **not** a problem. The rules ask for it once the unit has finished
+ * moving, and a unit that moves one model at a time is out of coherency for most of that — refusing
+ * the first model's move would make moving models individually impossible, which is the whole point.
+ * The panel reports coherency for the unit instead.
  */
-export function dragVerdict(state: BattleState, unit: BattleUnit, to: Vec2, index = indexOf(state)): DragVerdict {
-  const anchor = anchorOf(unit);
-  const blockers = otherHulls(state, unit.id);
-  const enemies = enemyHulls(state, unit.side);
+export function modelMoveVerdict(state: BattleState, unit: BattleUnit, model: BattleModel, to: Vec2, index = indexOf(state)): MoveVerdict {
+  const { enemies, blockers } = obstacles(state, unit);
+  const others = unitHulls(unit).filter((h) => h !== model.hull);
   const problems: string[] = [];
 
-  // Ask the search first: it decides both whether the unit can get there and exactly where "there"
-  // is. Everything after this judges that position, not the pointer's.
-  const reach = reachable(anchor, unit.move, index, {
+  const reach = reachable(model.hull, remainingMove(unit, model), index, {
+    keywords: unit.keywords,
+    enemies,
+    blockers: [...blockers, ...others],
+    until: (at) => Math.hypot(at.x - to.x, at.y - to.y) <= SNAP,
+  });
+  const landed = reach.stoppedAt === undefined ? undefined : reach.nodes[reach.stoppedAt];
+  if (!landed) problems.push("battle.problem.tooFar");
+
+  const at: Vec3 = landed ? landed.at : { x: to.x, y: to.y, z: model.hull.pos.z };
+  const moved: ModelHull = { ...model.hull, pos: at };
+  if (!onBoard(moved, state.layout.size)) problems.push("battle.problem.offTable");
+  if (!canStand(moved, at, index, { keywords: unit.keywords, blockers: [...blockers, ...others] })) problems.push("battle.problem.blocked");
+  if (enemies.some((e) => inEngagementRange(moved, e))) problems.push("battle.problem.engagement");
+
+  return { ok: problems.length === 0, at: landed ? at : undefined, cost: landed?.cost, problems };
+}
+
+/** Apply a model's move, remembering where it started and adding to what it has spent. */
+export function applyModelMove(unit: BattleUnit, modelId: string, to: Vec3, cost: number): BattleUnit {
+  return {
+    ...unit,
+    models: unit.models.map((m) => (m.id === modelId ? { ...m, hull: { ...m.hull, pos: to }, from: m.from ?? m.hull.pos, spent: (m.spent ?? 0) + cost } : m)),
+  };
+}
+
+/**
+ * Can the whole unit move here as a body?
+ *
+ * A convenience for putting a unit down, not a substitute for moving models: it keeps the formation
+ * and charges every model the lead model's route. Fine for deployment and for a unit crossing open
+ * ground; useless for screening, which is what the per-model move is for.
+ */
+export function dragVerdict(state: BattleState, unit: BattleUnit, to: Vec2, index = indexOf(state)): MoveVerdict {
+  const anchor = anchorOf(unit);
+  const lead = unit.models[0];
+  const { enemies, blockers } = obstacles(state, unit);
+  const problems: string[] = [];
+
+  const budget = lead ? remainingMove(unit, lead) : unit.move;
+  const reach = reachable(anchor, budget, index, {
     keywords: unit.keywords,
     enemies,
     blockers,
@@ -147,8 +252,22 @@ export function dragVerdict(state: BattleState, unit: BattleUnit, to: Vec2, inde
   if (moved.models.some((m) => !canStand(m.hull, m.hull.pos, index, { keywords: unit.keywords, blockers }))) problems.push("battle.problem.blocked");
   if (moved.models.some((m) => enemies.some((e) => inEngagementRange(m.hull, e)))) problems.push("battle.problem.engagement");
 
-  const ok = problems.length === 0;
-  return { ok, at: landed ? at : undefined, cost: landed?.cost, problems };
+  return { ok: problems.length === 0, at: landed ? landed.at : undefined, cost: landed?.cost, problems };
+}
+
+/** Apply a whole-unit move: every model travels the same offset and is charged the same distance. */
+export function applyUnitMove(unit: BattleUnit, to: Vec3, cost: number): BattleUnit {
+  const anchor = anchorOf(unit);
+  const by = { x: to.x - anchor.pos.x, y: to.y - anchor.pos.y };
+  return {
+    ...unit,
+    models: unit.models.map((m) => ({
+      ...m,
+      hull: { ...m.hull, pos: { x: m.hull.pos.x + by.x, y: m.hull.pos.y + by.y, z: to.z } },
+      from: m.from ?? m.hull.pos,
+      spent: (m.spent ?? 0) + cost,
+    })),
+  };
 }
 
 /* ---- the tools --------------------------------------------------------------------------------- */

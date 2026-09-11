@@ -5609,3 +5609,46 @@ button.val-row:hover {
     border-top: 1px solid var(--line);
   }
 }
+
+/* Whether the next move belongs to one model or the whole body of them. */
+.battle-scope {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font: 400 11px/1 var(--mono);
+}
+.battle-scope-btn {
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-input);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+button.battle-scope-btn:hover {
+  background: var(--hover);
+}
+.battle-scope-btn.is-on {
+  border-color: var(--line);
+  background: var(--hover);
+  color: var(--ink);
+}
+.battle-scope-sep {
+  color: var(--dim);
+}
+.battle-verdict {
+  margin-top: 8px;
+}
+.battle-verdict .battle-problems {
+  text-align: left;
+}
+.battle-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.battle-coherency {
+  margin-top: 8px;
+}

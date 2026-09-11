@@ -2,21 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { ReachNode, Vec2, Vec3 } from "@grimstat/board";
-import type { BattleState, BattleUnit } from "../../lib/battle";
-import { anchorOf, dragVerdict, findUnit, indexOf, translateUnit } from "../../lib/battle";
+import type { BattleState, BattleUnit, MoveVerdict } from "../../lib/battle";
+import { anchorOf, findModel, findUnit, indexOf, modelMoveVerdict, translateUnit, unitHulls } from "../../lib/battle";
 import { Cameras, type CameraMode } from "./Cameras";
 import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
-import { GhostUnit, UnitTokens } from "./UnitTokens";
+import { Ghost, UnitTokens } from "./UnitTokens";
 import { MeasureLine, PathLine, ReachOverlay, SightRays } from "./Overlays";
 
 export type { CameraMode };
 
 export interface DragState {
   readonly unitId: string;
+  /** The model being moved, or undefined when the whole unit is being repositioned. */
+  readonly modelId?: string;
   /** Where the pointer is. */
   readonly to: Vec2;
-  /** Where the unit would actually land — the position the cost was measured to. */
-  readonly at?: Vec2;
+  /** Where it would actually land — the position the cost was measured to, storey included. */
+  readonly at?: Vec3;
   readonly legal: boolean;
   readonly cost?: number;
   readonly problems: readonly string[];
@@ -26,6 +28,9 @@ export interface BattleCanvasProps {
   state: BattleState;
   cameraMode: CameraMode;
   selectedId?: string;
+  /** The model the reach overlay and the next table click belong to. */
+  activeModelId?: string;
+  incoherent?: ReadonlySet<string>;
   reach?: readonly ReachNode[];
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
@@ -34,8 +39,9 @@ export interface BattleCanvasProps {
   canDrag?: boolean;
   /** One child per unit, in the same order; the projector moves them to follow the table. */
   labelsRef?: RefObject<HTMLDivElement>;
-  onSelect(id: string | undefined): void;
-  onMove(unitId: string, to: Vec2): void;
+  onSelect(unitId: string | undefined, modelId?: string): void;
+  /** Commit a move. `modelId` moves one model; without it the whole unit travels as a body. */
+  onMove(unitId: string, to: Vec3, cost: number, modelId?: string): void;
   onDrag?(drag: DragState | undefined): void;
   /** A press on the table itself. What it means is the page's business, not the canvas's. */
   onTableDown?(at: Vec2): void;
@@ -72,30 +78,34 @@ export function BattleCanvas(props: BattleCanvasProps) {
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, canDrag = true, labelsRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, measure, canDrag = true, labelsRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
   const [drag, setDrag] = useState<DragState | undefined>();
   const index = useMemo(() => indexOf(state), [state]);
-  const grabbed = useRef<string | undefined>();
+  const grabbed = useRef<{ unitId: string; modelId: string } | undefined>();
   const dragRef = useRef<DragState | undefined>();
 
-  const ghost: BattleUnit | undefined = useMemo(() => {
+  const ghost = useMemo(() => {
     if (!drag) return undefined;
     const unit = findUnit(state, drag.unitId);
     if (!unit) return undefined;
-    const anchor = anchorOf(unit);
-    // The ghost stands where the unit would land. Only when the move is refused does it follow the
-    // pointer instead, so the player can see what they are pointing at and why it will not do.
+    // The ghost stands where it would land. Only when the move is refused does it follow the pointer
+    // instead, so the player can see what they are pointing at and why it will not do.
     const spot = drag.at ?? drag.to;
-    return translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y });
+    if (drag.modelId) {
+      const model = findModel(unit, drag.modelId);
+      return model ? [{ ...model.hull, pos: { x: spot.x, y: spot.y, z: drag.at?.z ?? model.hull.pos.z } }] : undefined;
+    }
+    const anchor = anchorOf(unit);
+    return unitHulls(translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y }));
   }, [drag, state]);
 
   const grab = useCallback(
-    (id: string) => {
+    (unitId: string, modelId: string) => {
       if (!canDrag) return;
-      grabbed.current = id;
+      grabbed.current = { unitId, modelId };
       if (controls) controls.enabled = false;
       document.body.style.cursor = "grabbing";
     },
@@ -105,7 +115,7 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, canD
   const drop = useCallback(() => {
     if (!grabbed.current) return;
     const pending = dragRef.current;
-    if (pending?.legal && pending.at) onMove(pending.unitId, pending.at);
+    if (pending?.legal && pending.at && pending.cost !== undefined) onMove(pending.unitId, pending.at, pending.cost, pending.modelId);
     grabbed.current = undefined;
     dragRef.current = undefined;
     if (controls) controls.enabled = true;
@@ -114,15 +124,16 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, canD
     onDrag?.(undefined);
   }, [controls, onMove, onDrag]);
 
-  /** Following the pointer while a unit is held: re-judge the move and move the ghost. */
+  /** Following the pointer while a model is held: re-judge the move and move the ghost. */
   const onHover = useCallback(
     (at: Vec2) => {
-      const unitId = grabbed.current;
-      if (!unitId) return;
-      const unit = findUnit(state, unitId);
-      if (!unit) return;
-      const verdict = dragVerdict(state, unit, at, index);
-      const next: DragState = { unitId, to: at, at: verdict.at, legal: verdict.ok, cost: verdict.cost, problems: verdict.problems };
+      const held = grabbed.current;
+      if (!held) return;
+      const unit = findUnit(state, held.unitId);
+      const model = unit && findModel(unit, held.modelId);
+      if (!unit || !model) return;
+      const verdict: MoveVerdict = modelMoveVerdict(state, unit, model, at, index);
+      const next: DragState = { unitId: held.unitId, modelId: held.modelId, to: at, at: verdict.at, legal: verdict.ok, cost: verdict.cost, problems: verdict.problems };
       dragRef.current = next;
       setDrag(next);
       onDrag?.(next);
@@ -149,13 +160,13 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, canD
 
     const onPointerMove = (e: PointerEvent) => {
       if (!grabbed.current) return;
-      const unit = findUnit(state, grabbed.current);
+      const unit = findUnit(state, grabbed.current.unitId);
       if (!unit) return;
       const rect = canvas.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
       ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
       ray.setFromCamera(ndc, camera);
-      plane.constant = -anchorOf(unit).pos.z;
+      plane.constant = -(findModel(unit, grabbed.current.modelId)?.hull.pos.z ?? 0);
       if (!ray.ray.intersectPlane(plane, hit)) return;
       onHover({ x: hit.x, y: -hit.z });
     };
@@ -184,8 +195,8 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, canD
       {rays?.length ? <SightRays rays={rays} /> : null}
       {path?.length ? <PathLine path={path} /> : null}
       {measure ? <MeasureLine from={measure[0]} to={measure[1]} /> : null}
-      <UnitTokens units={state.units} selectedId={selectedId} draggable={canDrag} onSelect={onSelect} onGrab={grab} />
-      {ghost && drag ? <GhostUnit unit={ghost} legal={drag.legal} /> : null}
+      <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grab} />
+      {ghost && drag ? <Ghost hulls={ghost} legal={drag.legal} /> : null}
       {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}
     </>
   );

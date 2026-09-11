@@ -6,16 +6,28 @@ import { Badge, Tabs } from "../components/ui";
 import {
   BATTLE_LAYOUTS,
   anchorOf,
+  applyModelMove,
+  applyUnitMove,
   chargeBetween,
   dragVerdict,
   enemyHulls,
+  endMove,
+  findModel,
   findUnit,
+  hasMoved,
+  incoherentModels,
   indexOf,
+  modelMoveVerdict,
+  modelReach,
+  moveOf,
   otherHulls,
+  remainingMove,
+  resetMove,
   sampleBattle,
   sightBetween,
-  translateUnit,
+  unitCoherency,
   unitsOf,
+  type BattleModel,
   type BattleState,
   type BattleTool,
   type BattleUnit,
@@ -61,6 +73,7 @@ const TOOLS: { id: BattleTool; label: I18nKey }[] = [
 export function BattlePage() {
   const [state, setState] = useState<BattleState>(() => sampleBattle());
   const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [activeModelId, setActiveModelId] = useState<string | undefined>();
   const [targetId, setTargetId] = useState<string | undefined>();
   const [tool, setTool] = useState<BattleTool>("select");
   const [view, setView] = useState<CameraMode>("orbit");
@@ -71,43 +84,50 @@ export function BattlePage() {
 
   const index = useMemo(() => indexOf(state), [state]);
   const selected = findUnit(state, selectedId);
+  const activeModel = selected && findModel(selected, activeModelId);
   const target = findUnit(state, targetId);
+  const incoherent = useMemo(() => new Set(selected ? incoherentModels(selected) : []), [selected]);
 
   // Changing tool or unit invalidates whatever the previous tool was showing — including a refusal,
   // which is about one attempted destination and reads as a live warning once it outlives it.
   useEffect(() => {
     setPicks([]);
     setDrag(undefined);
-  }, [tool, selectedId]);
+  }, [tool, selectedId, activeModelId]);
   useEffect(() => setTargetId(undefined), [selectedId]);
 
-  /** Where the selected unit can go. Recomputed when it moves, not while the pointer moves. */
+  /**
+   * Where the selection can go: one model's own reach when a model is active, otherwise the whole
+   * unit's, measured from the model that leads it. Recomputed when something moves, not while the
+   * pointer moves.
+   */
   const reach: readonly ReachNode[] = useMemo(() => {
     if (!selected || tool !== "select") return [];
+    if (activeModel) return modelReach(state, selected, activeModel, index);
     return reachable(anchorOf(selected), selected.move, index, {
       keywords: selected.keywords,
       enemies: enemyHulls(state, selected.side),
       blockers: otherHulls(state, selected.id),
     }).nodes;
-  }, [selected, tool, index, state]);
+  }, [selected, activeModel, tool, index, state]);
 
   const upperFloor = useMemo(() => reach.filter((n) => n.at.z > 0.5).length, [reach]);
 
   const shot: SightReadout | undefined = useMemo(() => (selected && target && tool === "sight" ? sightBetween(selected, target, index) : undefined), [selected, target, tool, index]);
   const charge: ChargeReadout | undefined = useMemo(() => (selected && target && tool === "sight" ? chargeBetween(selected, target, state, index) : undefined), [selected, target, tool, state, index]);
 
-  const onMove = useCallback(
-    (unitId: string, to: Vec2) => {
-      setState((prev) => {
-        const unit = findUnit(prev, unitId);
-        if (!unit) return prev;
-        const anchor = anchorOf(unit);
-        const moved = translateUnit(unit, { x: to.x - anchor.pos.x, y: to.y - anchor.pos.y });
-        return { ...prev, units: prev.units.map((u) => (u.id === unitId ? moved : u)) };
-      });
-    },
-    [],
-  );
+  const onMove = useCallback((unitId: string, to: Vec3, cost: number, modelId?: string) => {
+    setState((prev) => {
+      const unit = findUnit(prev, unitId);
+      if (!unit) return prev;
+      const moved = modelId ? applyModelMove(unit, modelId, to, cost) : applyUnitMove(unit, to, cost);
+      return { ...prev, units: prev.units.map((u) => (u.id === unitId ? moved : u)) };
+    });
+  }, []);
+
+  const editUnit = useCallback((unitId: string, change: (u: BattleUnit) => BattleUnit) => {
+    setState((prev) => ({ ...prev, units: prev.units.map((u) => (u.id === unitId ? change(u) : u)) }));
+  }, []);
 
   /**
    * One rule for clicking a unit, wherever it is clicked: under the sight tool an enemy of the
@@ -118,14 +138,19 @@ export function BattlePage() {
    * tool silently does nothing, because Move has nothing to show a target with.
    */
   const pickUnit = useCallback(
-    (id: string | undefined) => {
+    (id: string | undefined, modelId?: string) => {
       if (!id) {
         setSelectedId(undefined);
+        setActiveModelId(undefined);
         return;
       }
       const unit = findUnit(state, id);
-      if (tool === "sight" && selected && unit && unit.side !== selected.side) setTargetId(id);
-      else setSelectedId(id);
+      if (tool === "sight" && selected && unit && unit.side !== selected.side) {
+        setTargetId(id);
+        return;
+      }
+      setSelectedId(id);
+      setActiveModelId(modelId);
     },
     [state, selected, tool],
   );
@@ -147,11 +172,12 @@ export function BattlePage() {
         return;
       }
       if (tool !== "select" || !selected) return;
-      const verdict = dragVerdict(state, selected, at, index);
-      if (verdict.ok && verdict.at) onMove(selected.id, verdict.at);
-      setDrag(verdict.ok ? undefined : { unitId: selected.id, to: at, legal: false, problems: verdict.problems });
+      // A model is active: the click moves that model. Otherwise the whole unit travels as a body.
+      const verdict = activeModel ? modelMoveVerdict(state, selected, activeModel, at, index) : dragVerdict(state, selected, at, index);
+      if (verdict.ok && verdict.at && verdict.cost !== undefined) onMove(selected.id, verdict.at, verdict.cost, activeModel?.id);
+      setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel?.id, to: at, legal: false, problems: verdict.problems });
     },
-    [tool, selected, state, index, onMove],
+    [tool, selected, activeModel, state, index, onMove],
   );
 
   const measurePair = picks.length === 2 ? ([picks[0]!, picks[1]!] as const) : undefined;
@@ -206,6 +232,8 @@ export function BattlePage() {
                 state={state}
                 cameraMode={view}
                 selectedId={selectedId}
+                activeModelId={activeModelId}
+                incoherent={incoherent}
                 reach={tool === "select" ? reach : []}
                 rays={shot?.rays ?? []}
                 path={charge?.path ?? []}
@@ -231,16 +259,119 @@ export function BattlePage() {
         </div>
 
         <aside className="battle-panel">
-          <BattlePanel state={state} selected={selected} target={target} tool={tool} drag={drag} reach={reach} upperFloor={upperFloor} shot={shot} charge={charge} picks={picks} onPick={pickUnit} />
+          <BattlePanel state={state} selected={selected} activeModel={activeModel} target={target} tool={tool} drag={drag} reach={reach} upperFloor={upperFloor} shot={shot} charge={charge} picks={picks} onPick={pickUnit} onEdit={editUnit} />
         </aside>
       </div>
     </div>
   );
 }
 
+/**
+ * What the selection can do, and what state its move is in.
+ *
+ * Coherency gets its own line because the per-model move makes breaking it easy and momentary: the
+ * unit is out of coherency for most of the time it takes to move, and the player needs to see when
+ * it is back rather than be stopped from getting there.
+ */
+function MovePanel({
+  selected,
+  activeModel,
+  drag,
+  reach,
+  upperFloor,
+  onPick,
+  onEdit,
+}: {
+  selected?: BattleUnit;
+  activeModel?: BattleModel;
+  drag?: DragState;
+  reach: readonly ReachNode[];
+  upperFloor: number;
+  onPick: (id: string | undefined, modelId?: string) => void;
+  onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
+}) {
+  if (!selected) {
+    return (
+      <section className="battle-section">
+        <h2>{t("battle.selected")}</h2>
+        <p className="muted small">{t("battle.selectPrompt")}</p>
+      </section>
+    );
+  }
+
+  const report = unitCoherency(selected);
+  const index = activeModel ? selected.models.indexOf(activeModel) : -1;
+  const moved = hasMoved(selected);
+
+  return (
+    <section className="battle-section">
+      <h2>{t("battle.selected")}</h2>
+      <div className="battle-scope">
+        <button type="button" className={`battle-scope-btn ${activeModel ? "" : "is-on"}`.trim()} onClick={() => onPick(selected.id)}>
+          {t("battle.wholeUnit")}
+        </button>
+        <span className="battle-scope-sep">/</span>
+        <span className={`battle-scope-btn ${activeModel ? "is-on" : "muted"}`.trim()}>{activeModel ? t("battle.modelOf", { n: index + 1, total: selected.models.length }) : t("battle.model")}</span>
+      </div>
+
+      <dl className="battle-readout">
+        <dt>{t("battle.move")}</dt>
+        <dd>{activeModel ? moveOf(selected, activeModel) : selected.move}"</dd>
+        {activeModel ? (
+          <>
+            <dt>{t("battle.remaining")}</dt>
+            <dd>{remainingMove(selected, activeModel).toFixed(1)}"</dd>
+            <dt>{t("battle.spentSoFar")}</dt>
+            <dd>{(activeModel.spent ?? 0).toFixed(1)}"</dd>
+          </>
+        ) : null}
+        <dt>{t("battle.reach")}</dt>
+        <dd>{reach.length}</dd>
+        <dt>{t("battle.reachUpper")}</dt>
+        <dd>{upperFloor || "—"}</dd>
+      </dl>
+
+      {/* Its own row, not a value in the two-column list: the badge is wider than any number and
+          squeezes every label in the list onto three lines when it shares the grid with them. */}
+      <div className="battle-coherency">
+        {report.ok ? <Badge tone="ok">{t("battle.coherent")}</Badge> : <Badge tone="danger">{report.split ? t("battle.split") : t("battle.incoherentN", { n: report.lonely.length })}</Badge>}
+      </div>
+
+      {drag ? (
+        <div className="battle-verdict">
+          {drag.legal ? (
+            <Badge tone="ok">{t("battle.dragCost", { cost: (drag.cost ?? 0).toFixed(1), move: activeModel ? moveOf(selected, activeModel) : selected.move })}</Badge>
+          ) : (
+            <ul className="battle-problems">
+              {drag.problems.map((p) => (
+                <li key={p}>{t(p as I18nKey)}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
+      <p className="muted small">{activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
+      {activeModel ? null : <p className="muted small">{t("battle.pickModel")}</p>}
+
+      {moved ? (
+        <div className="battle-actions">
+          <button type="button" className="ghost sm" onClick={() => onEdit(selected.id, resetMove)}>
+            {t("battle.resetMove")}
+          </button>
+          <button type="button" className="ghost sm" onClick={() => onEdit(selected.id, endMove)}>
+            {t("battle.endMove")}
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function BattlePanel({
   state,
   selected,
+  activeModel,
   target,
   tool,
   drag,
@@ -250,9 +381,11 @@ function BattlePanel({
   charge,
   picks,
   onPick,
+  onEdit,
 }: {
   state: BattleState;
   selected?: BattleUnit;
+  activeModel?: BattleModel;
   target?: BattleUnit;
   tool: BattleTool;
   drag?: DragState;
@@ -261,7 +394,8 @@ function BattlePanel({
   shot?: SightReadout;
   charge?: ChargeReadout;
   picks: readonly Vec3[];
-  onPick: (id: string | undefined) => void;
+  onPick: (id: string | undefined, modelId?: string) => void;
+  onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
 }) {
   const gap = picks.length === 2 ? Math.hypot(picks[0]!.x - picks[1]!.x, picks[0]!.y - picks[1]!.y) : undefined;
 
@@ -291,39 +425,7 @@ function BattlePanel({
         <p className="muted small">{t("battle.samplePlaceholder")}</p>
       </section>
 
-      {tool === "select" ? (
-        <section className="battle-section">
-          <h2>{t("battle.selected")}</h2>
-          {!selected ? (
-            <p className="muted small">{t("battle.selectPrompt")}</p>
-          ) : (
-            <dl className="battle-readout">
-              <dt>{t("battle.move")}</dt>
-              <dd>{selected.move}"</dd>
-              <dt>{t("battle.reach")}</dt>
-              <dd>{reach.length}</dd>
-              <dt>{t("battle.reachUpper")}</dt>
-              <dd>{upperFloor || "—"}</dd>
-              {drag ? (
-                <>
-                  <dt>{drag.legal ? t("battle.dragCost", { cost: (drag.cost ?? 0).toFixed(1), move: selected.move }) : t("battle.dragIllegal")}</dt>
-                  <dd>
-                    {drag.problems.length ? (
-                      <ul className="battle-problems">
-                        {drag.problems.map((p) => (
-                          <li key={p}>{t(p as I18nKey)}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <Badge tone="ok">{t("battle.measureClear")}</Badge>
-                    )}
-                  </dd>
-                </>
-              ) : null}
-            </dl>
-          )}
-        </section>
-      ) : null}
+      {tool === "select" ? <MovePanel selected={selected} activeModel={activeModel} drag={drag} reach={reach} upperFloor={upperFloor} onPick={onPick} onEdit={onEdit} /> : null}
 
       {tool === "sight" ? (
         <section className="battle-section">

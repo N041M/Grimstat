@@ -9,11 +9,13 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@grimstat/board": "workspace:*",
     "@grimstat/resolver": "workspace:*",
     "@grimstat/schema": "workspace:*",
     "fast-xml-parser": "^5.11.1",
     "fflate": "^0.8.3",
-    "yaml": "^2.8.0"
+    "yaml": "^2.8.0",
+    "zod": "^3.24.4"
   },
   "devDependencies": {
     "@grimstat/snapshot": "workspace:*"

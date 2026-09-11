@@ -12,7 +12,7 @@ import { SCENE_COLOURS, SIDE_COLOURS } from "../../lib/battleScene";
  * so the player can see why a wall does or does not hide it. An oval base is a cylinder stretched
  * along its facing — close enough at this scale, and the kernel measures the real capsule regardless.
  */
-function ModelToken({ hull, colour, ghost, selected }: { hull: ModelHull; colour: string; ghost?: boolean; selected?: boolean }) {
+function ModelToken({ hull, colour, ghost, selected, warn }: { hull: ModelHull; colour: string; ghost?: boolean; selected?: boolean; warn?: boolean }) {
   const r = hull.foot.r;
   const stretch = footReach(hull.foot) / r;
   const bodyR = r * 0.62;
@@ -26,49 +26,62 @@ function ModelToken({ hull, colour, ghost, selected }: { hull: ModelHull; colour
         <cylinderGeometry args={[bodyR * 0.55, bodyR, hull.height, 14]} />
         <meshStandardMaterial color={colour} transparent opacity={ghost ? 0.3 : 0.82} roughness={0.6} />
       </mesh>
-      {selected ? (
+      {selected || warn ? (
         <mesh position={[0, 0.19, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[r + 0.06, r + 0.24, 28]} />
-          <meshBasicMaterial color={SCENE_COLOURS.selected} side={DoubleSide} />
+          <meshBasicMaterial color={warn ? SCENE_COLOURS.rayBlocked : SCENE_COLOURS.selected} side={DoubleSide} />
         </mesh>
       ) : null}
     </group>
   );
 }
 
+/**
+ * Every model is its own handle.
+ *
+ * Pressing one selects and picks up *that model*, not its unit: a unit is a handful of models that
+ * spread, screen and string out, and a token you can only move as a body cannot do any of it.
+ */
 export function UnitTokens({
   units,
   selectedId,
+  activeModelId,
+  incoherent,
   draggable = true,
   onSelect,
   onGrab,
 }: {
   units: readonly BattleUnit[];
   selectedId?: string;
-  /** Only the cursor: whether the press actually picks the unit up is the scene's decision. */
+  activeModelId?: string;
+  /** Ids of models out of coherency, ringed in red so the unit's shape is legible at a glance. */
+  incoherent?: ReadonlySet<string>;
+  /** Only the cursor: whether the press actually picks the model up is the scene's decision. */
   draggable?: boolean;
-  onSelect?: (id: string) => void;
-  onGrab?: (id: string) => void;
+  onSelect?: (unitId: string, modelId: string) => void;
+  onGrab?: (unitId: string, modelId: string) => void;
 }) {
   return (
     <group>
       {units.map((unit) => (
-        <group
-          key={unit.id}
-          onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-            e.stopPropagation();
-            onSelect?.(unit.id);
-            onGrab?.(unit.id);
-          }}
-          onPointerOver={() => {
-            document.body.style.cursor = draggable ? "grab" : "pointer";
-          }}
-          onPointerOut={() => {
-            document.body.style.cursor = "";
-          }}
-        >
+        <group key={unit.id}>
           {unit.models.map((m) => (
-            <ModelToken key={m.id} hull={m.hull} colour={SIDE_COLOURS[unit.side]} selected={unit.id === selectedId} />
+            <group
+              key={m.id}
+              onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                e.stopPropagation();
+                onSelect?.(unit.id, m.id);
+                onGrab?.(unit.id, m.id);
+              }}
+              onPointerOver={() => {
+                document.body.style.cursor = draggable ? "grab" : "pointer";
+              }}
+              onPointerOut={() => {
+                document.body.style.cursor = "";
+              }}
+            >
+              <ModelToken hull={m.hull} colour={SIDE_COLOURS[unit.side]} selected={m.id === activeModelId || (unit.id === selectedId && !activeModelId)} warn={incoherent?.has(m.id)} />
+            </group>
           ))}
         </group>
       ))}
@@ -77,11 +90,11 @@ export function UnitTokens({
 }
 
 /** The translucent copy that follows the pointer during a drag, tinted by whether the move is legal. */
-export function GhostUnit({ unit, legal }: { unit: BattleUnit; legal: boolean }) {
+export function Ghost({ hulls, legal }: { hulls: readonly ModelHull[]; legal: boolean }) {
   return (
     <group>
-      {unit.models.map((m) => (
-        <ModelToken key={m.id} hull={m.hull} colour={legal ? SCENE_COLOURS.rayClear : SCENE_COLOURS.rayBlocked} ghost />
+      {hulls.map((hull, i) => (
+        <ModelToken key={i} hull={hull} colour={legal ? SCENE_COLOURS.rayClear : SCENE_COLOURS.rayBlocked} ghost />
       ))}
     </group>
   );
