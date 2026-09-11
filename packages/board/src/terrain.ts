@@ -91,9 +91,13 @@ export const floorHeights = (p: TerrainPiece): number[] => p.floors.map((f) => p
  * An empty `climbableBy` means anyone who can physically get up there. A non-empty one is how a
  * layout keeps tanks off the first floor of a ruin — a rules question, so it lives in the data.
  */
-export function mayClimb(p: TerrainPiece, keywords: ReadonlySet<string>): boolean {
+export function mayClimb(p: TerrainPiece, keywords: Iterable<string>): boolean {
   if (p.climbableBy.length === 0) return true;
-  return p.climbableBy.some((k) => keywords.has(k.toUpperCase()));
+  // Both sides are normalised. Upper-casing only the piece's keyword would make the caller's set
+  // quietly case-sensitive, and a caller that passes "Infantry" would be refused for no visible reason.
+  const have = new Set<string>();
+  for (const k of keywords) have.add(k.toUpperCase());
+  return p.climbableBy.some((k) => have.has(k.toUpperCase()));
 }
 
 export const containsPoint = (p: TerrainPiece, at: Vec2): boolean => pointInPolygon(at, p.polygon);

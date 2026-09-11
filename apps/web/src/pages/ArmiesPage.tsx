@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Roster, type BattleSize, type Snapshot } from "@grimstat/schema";
-import { importRosterText } from "@grimstat/adapters";
+import { importRosterText, importRosz, importRosterXml } from "@grimstat/adapters";
 import { rosterSummary } from "@grimstat/resolver";
 import { db, deleteRoster, saveRosterWithVersion } from "../db";
 import { useApp } from "../state/AppContext";
 import { hrefFor, navigate } from "../router";
 import { BATTLE_SIZE_ORDER, cloneRoster, newRoster, pointsLimitFor, pointsTone } from "../lib/roster";
 import { newId } from "../lib/ids";
+import { looksLikeRosterXml, rosterFileKind } from "../lib/rosterFile";
 import { fmtDay, fmtInt } from "../lib/format";
 import { download } from "../lib/download";
 import { Dialog, Empty, Field, Icon, Popover } from "../components/ui";
@@ -60,6 +61,8 @@ export function ArmiesPage() {
   const [customLimit, setCustomLimit] = useState(2000);
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState<string | undefined>(undefined);
+  /** A BattleScribe/New Recruit file is a zip, not text; keep the bytes until the import runs. */
+  const [bytes, setBytes] = useState<Uint8Array | undefined>(undefined);
   const [over, setOver] = useState(false);
   const [imported, setImported] = useState<{ id: string; name: string; warnings: string[] } | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -164,10 +167,14 @@ export function ArmiesPage() {
 
   const importText = () =>
     run(async () => {
-      if (!snapshot || !text.trim()) return;
+      if (!snapshot || (!text.trim() && !bytes)) return;
       let result: ReturnType<typeof importRosterText>;
+      const opts = name.trim() ? { name: name.trim() } : {};
       try {
-        result = importRosterText(text, snapshot, name.trim() ? { name: name.trim() } : {});
+        // Three shapes arrive through one dialog: a zipped BattleScribe roster, the raw XML inside
+        // one, and a pasted list. The first two carry per-model wargear, leader links and sub-unit
+        // splits that no text export preserves, so they are always preferred when present.
+        result = bytes ? importRosz(bytes, snapshot, opts) : looksLikeRosterXml(text) ? importRosterXml(text, snapshot, opts) : importRosterText(text, snapshot, opts);
       } catch (e) {
         notify(t("armies.importFailed"), "error", [e instanceof Error ? e.message : String(e)]);
         return;
@@ -177,6 +184,7 @@ export function ArmiesPage() {
       setText("");
       setName("");
       setFileName(undefined);
+      setBytes(undefined);
       if (result.warnings.length) {
         // Keep the dialog open so the warnings can be read; "Open army" navigates.
         setImported({ id: r.id, name: r.name, warnings: result.warnings });
@@ -187,11 +195,25 @@ export function ArmiesPage() {
       navigate("armies", false, r.id);
     });
 
+  /**
+   * Read a dropped or chosen file.
+   *
+   * A `.rosz` is a zip and reading it as text produces mojibake, so the decision is made on the
+   * file's first two bytes rather than its name — plenty of exports arrive renamed, and the zip
+   * signature never lies.
+   */
   const readFile = async (file: File | undefined) => {
     if (!file) return;
     try {
-      setText(await file.text());
+      const buffer = new Uint8Array(await file.arrayBuffer());
       setFileName(file.name);
+      if (rosterFileKind(buffer) === "zip") {
+        setBytes(buffer);
+        setText("");
+        return;
+      }
+      setBytes(undefined);
+      setText(new TextDecoder().decode(buffer));
     } catch {
       notify(t("armies.fileReadFailed", { name: file.name }), "error");
     }
@@ -343,7 +365,7 @@ export function ArmiesPage() {
               <button type="button" className="link-btn" onClick={() => fileInput.current?.click()}>
                 {t("armies.chooseFile")}
               </button>
-              <input ref={fileInput} type="file" accept=".txt,text/plain" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(e) => void readFile(e.target.files?.[0])} />
+              <input ref={fileInput} type="file" accept=".txt,.rosz,.ros,.xml,text/plain,application/zip" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(e) => void readFile(e.target.files?.[0])} />
               {fileName ? <div className="small ok-text">{t("armies.fileLoaded", { name: fileName })}</div> : null}
             </div>
             <Field label={t("armies.importText")}>
@@ -355,6 +377,7 @@ export function ArmiesPage() {
             <div>
               <span className="small muted">{t("armies.importFormats")}</span>
               <ul className="format-list">
+                <li>{t("armies.format.rosz")}</li>
                 <li>{t("armies.format.gw")}</li>
                 <li>{t("armies.format.nr")}</li>
                 <li>{t("armies.format.grimstat")}</li>
@@ -364,7 +387,7 @@ export function ArmiesPage() {
               <button type="button" className="ghost" onClick={closeDialog}>
                 {t("common.cancel")}
               </button>
-              <button type="button" className="primary" disabled={!text.trim() || busy} onClick={() => void importText()}>
+              <button type="button" className="primary" disabled={(!text.trim() && !bytes) || busy} onClick={() => void importText()}>
                 {t("armies.import")}
               </button>
             </div>

@@ -463,7 +463,7 @@ export const en = {
   "armies.format.gw": "Official app text export",
   "armies.format.nr": "New Recruit tournament export",
   "armies.format.grimstat": "Grimstat text export",
-  "armies.dropHint": "Drop a .txt file here, paste below, or",
+  "armies.dropHint": "Drop a .rosz, .ros or .txt file here, paste below, or",
   "armies.chooseFile": "choose a file",
   "armies.fileLoaded": "Loaded “{name}”.",
   "armies.fileReadFailed": "Could not read “{name}”.",
@@ -802,6 +802,7 @@ export const en = {
   // analyses (Phase 5 army-level analytics)
   "nav.analyses": "Analyses",
   "nav.battle": "Battle",
+  "armies.format.rosz": "BattleScribe / New Recruit (.rosz, .ros) — keeps per-model wargear and attached leaders",
 
   /* ---- Battle table --------------------------------------------------------------------------- */
   "ctxcol.battle": "Battle",

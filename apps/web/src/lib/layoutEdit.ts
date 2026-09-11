@@ -1,0 +1,219 @@
+/**
+ * Editing a terrain layout.
+ *
+ * Pure functions over `TerrainLayout`, so the editor's behaviour can be tested without a canvas and
+ * so every change is a new layout rather than a mutation — which is what makes undo, comparison and
+ * "mirror this" cheap.
+ *
+ * The editor exists because shipping layouts is not an option this project has. Published and
+ * community layouts belong to the people who made them; what Grimstat can offer is the means to
+ * build your own and to import theirs onto your own machine.
+ */
+
+import type { BoardSize, Objective, TerrainLayout, TerrainPiece, TerrainTrait, Vec2 } from "@grimstat/board";
+import { CLIMBERS, bounds, layoutIssues, opposite, terrain } from "@grimstat/board";
+
+/** A new id that does not collide with anything already in the layout. */
+export function freeId(layout: TerrainLayout, stem: string): string {
+  const taken = new Set(layout.pieces.map((p) => p.id));
+  if (!taken.has(stem)) return stem;
+  for (let i = 2; ; i++) if (!taken.has(`${stem}-${i}`)) return `${stem}-${i}`;
+}
+
+const withPieces = (layout: TerrainLayout, pieces: readonly TerrainPiece[]): TerrainLayout => ({ ...layout, pieces });
+
+/* ---- pieces -------------------------------------------------------------------------------- */
+
+export const addPiece = (layout: TerrainLayout, piece: TerrainPiece): TerrainLayout => withPieces(layout, [...layout.pieces, piece]);
+
+export const removePiece = (layout: TerrainLayout, id: string): TerrainLayout => withPieces(layout, layout.pieces.filter((p) => p.id !== id));
+
+export function updatePiece(layout: TerrainLayout, id: string, change: (p: TerrainPiece) => TerrainPiece): TerrainLayout {
+  return withPieces(layout, layout.pieces.map((p) => (p.id === id ? terrain(change(p)) : p)));
+}
+
+export const movePiece = (layout: TerrainLayout, id: string, by: Vec2): TerrainLayout =>
+  updatePiece(layout, id, (p) => ({ ...p, polygon: p.polygon.map((q) => ({ x: q.x + by.x, y: q.y + by.y })) }));
+
+/** Put a piece's centre at a point, keeping its shape. */
+export function placePiece(layout: TerrainLayout, id: string, at: Vec2): TerrainLayout {
+  const piece = layout.pieces.find((p) => p.id === id);
+  if (!piece) return layout;
+  const c = centre(piece);
+  return movePiece(layout, id, { x: at.x - c.x, y: at.y - c.y });
+}
+
+export function centre(piece: TerrainPiece): Vec2 {
+  const box = bounds(piece.polygon);
+  return { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
+}
+
+export function extent(piece: TerrainPiece): { width: number; depth: number } {
+  const box = bounds(piece.polygon);
+  return { width: box.maxX - box.minX, depth: box.maxY - box.minY };
+}
+
+/**
+ * Scale a piece to a new footprint about its own centre.
+ *
+ * Works on the bounding box and maps every vertex proportionally, so a rectangle resizes exactly and
+ * an irregular footprint keeps its shape. A degenerate axis (a piece with no width) is left alone on
+ * that axis rather than dividing by zero.
+ */
+export function resizePiece(layout: TerrainLayout, id: string, width: number, depth: number): TerrainLayout {
+  return updatePiece(layout, id, (p) => {
+    const box = bounds(p.polygon);
+    const w = box.maxX - box.minX;
+    const d = box.maxY - box.minY;
+    const c = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
+    const sx = w > 1e-6 ? Math.max(0.5, width) / w : 1;
+    const sy = d > 1e-6 ? Math.max(0.5, depth) / d : 1;
+    return { ...p, polygon: p.polygon.map((q) => ({ x: c.x + (q.x - c.x) * sx, y: c.y + (q.y - c.y) * sy })) };
+  });
+}
+
+/** Rotate a piece about its own centre. */
+export function rotatePiece(layout: TerrainLayout, id: string, radians: number): TerrainLayout {
+  return updatePiece(layout, id, (p) => {
+    const c = centre(p);
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    return {
+      ...p,
+      polygon: p.polygon.map((q) => {
+        const dx = q.x - c.x;
+        const dy = q.y - c.y;
+        return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos };
+      }),
+    };
+  });
+}
+
+export function setTrait(layout: TerrainLayout, id: string, trait: TerrainTrait, on: boolean): TerrainLayout {
+  return updatePiece(layout, id, (p) => ({ ...p, traits: on ? [...new Set([...p.traits, trait])] : p.traits.filter((t) => t !== trait) }));
+}
+
+/**
+ * Set how many storeys a piece has, keeping four inches between them and a roof above the top one.
+ *
+ * One storey means a solid with a walkable top — a hill or a bunker. Two or more make it a ruin you
+ * can walk into, which is why the climbing keywords are attached at the same time: the moment a
+ * piece has an upstairs, the question of who may go up it has an answer.
+ */
+export function setStoreys(layout: TerrainLayout, id: string, storeys: number, storeyHeight = 4): TerrainLayout {
+  const n = Math.max(1, Math.round(storeys));
+  return updatePiece(layout, id, (p) => {
+    if (n === 1) return { ...p, floors: [p.height], climbableBy: [] };
+    return { ...p, height: Math.max(p.height, (n - 1) * storeyHeight + 1), floors: Array.from({ length: n }, (_, i) => i * storeyHeight), climbableBy: p.climbableBy.length ? p.climbableBy : [...CLIMBERS] };
+  });
+}
+
+/* ---- objectives ---------------------------------------------------------------------------- */
+
+export function addObjective(layout: TerrainLayout, at: Vec2): TerrainLayout {
+  const taken = new Set(layout.objectives.map((o) => o.id));
+  let n = layout.objectives.length + 1;
+  while (taken.has(`obj${n}`)) n++;
+  return { ...layout, objectives: [...layout.objectives, { id: `obj${n}`, at }] };
+}
+
+export const removeObjective = (layout: TerrainLayout, id: string): TerrainLayout => ({ ...layout, objectives: layout.objectives.filter((o) => o.id !== id) });
+
+export const moveObjective = (layout: TerrainLayout, id: string, at: Vec2): TerrainLayout => ({
+  ...layout,
+  objectives: layout.objectives.map((o) => (o.id === id ? { ...o, at } : o)),
+});
+
+/* ---- the whole board ------------------------------------------------------------------------ */
+
+export const rename = (layout: TerrainLayout, name: string): TerrainLayout => ({ ...layout, name });
+
+/** Change the table size, keeping everything where it is relative to the centre. */
+export function setSize(layout: TerrainLayout, size: BoardSize): TerrainLayout {
+  const dx = (size.width - layout.size.width) / 2;
+  const dy = (size.depth - layout.size.depth) / 2;
+  return {
+    ...layout,
+    size,
+    pieces: layout.pieces.map((p) => terrain({ ...p, polygon: p.polygon.map((q) => ({ x: q.x + dx, y: q.y + dy })) })),
+    objectives: layout.objectives.map((o) => ({ ...o, at: { x: o.at.x + dx, y: o.at.y + dy } })),
+  };
+}
+
+/**
+ * Make the layout fair: keep the half a player can see from their own edge, and give the opponent
+ * the same thing rotated 180° about the centre.
+ *
+ * A layout that is not symmetric hands one player better ground, which is why every tournament pack
+ * builds them this way. Pieces straddling the centre line are kept once, unmirrored — they already
+ * belong to both sides.
+ */
+export function mirror(layout: TerrainLayout, keep: "near" | "far" = "near"): TerrainLayout {
+  const mid = layout.size.depth / 2;
+  const onMyHalf = (p: TerrainPiece) => {
+    const c = centre(p);
+    return keep === "near" ? c.y < mid : c.y > mid;
+  };
+  const straddles = (p: TerrainPiece) => {
+    const box = bounds(p.polygon);
+    return box.minY < mid && box.maxY > mid && Math.abs((box.minY + box.maxY) / 2 - mid) < 0.5;
+  };
+
+  const pieces: TerrainPiece[] = [];
+  for (const piece of layout.pieces) {
+    if (straddles(piece)) {
+      pieces.push(piece);
+      continue;
+    }
+    if (!onMyHalf(piece)) continue;
+    pieces.push(piece);
+    pieces.push(terrain({ ...piece, id: `${piece.id}'`, polygon: piece.polygon.map((q) => opposite(q, layout.size)) }));
+  }
+
+  const objectives: Objective[] = [];
+  const seen = new Set<string>();
+  const key = (p: Vec2) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`;
+  for (const objective of layout.objectives) {
+    const mine = keep === "near" ? objective.at.y <= mid + 0.01 : objective.at.y >= mid - 0.01;
+    if (!mine) continue;
+    for (const at of [objective.at, opposite(objective.at, layout.size)]) {
+      if (seen.has(key(at))) continue;
+      seen.add(key(at));
+      objectives.push({ ...objective, id: `obj${objectives.length + 1}`, at });
+    }
+  }
+
+  return { ...layout, pieces: dedupeIds(pieces), objectives };
+}
+
+/** Two pieces may end up sharing an id after a mirror; the second gets a suffix rather than vanishing. */
+function dedupeIds(pieces: readonly TerrainPiece[]): TerrainPiece[] {
+  const seen = new Set<string>();
+  return pieces.map((p) => {
+    let id = p.id;
+    for (let i = 2; seen.has(id); i++) id = `${p.id}-${i}`;
+    seen.add(id);
+    return id === p.id ? p : { ...p, id };
+  });
+}
+
+/** Is this layout symmetric under a 180° turn? The question a player cares about is "is it fair". */
+export function isSymmetric(layout: TerrainLayout): boolean {
+  const key = (poly: readonly Vec2[]) =>
+    poly
+      .map((q) => `${q.x.toFixed(2)},${q.y.toFixed(2)}`)
+      .sort()
+      .join("|");
+  const here = new Set(layout.pieces.map((p) => key(p.polygon)));
+  const there = new Set(layout.pieces.map((p) => key(p.polygon.map((q) => opposite(q, layout.size)))));
+  if (here.size !== there.size) return false;
+  for (const k of there) if (!here.has(k)) return false;
+  return true;
+}
+
+/** A fresh, empty table to build on. */
+export function emptyLayout(id: string, name: string, size: BoardSize): TerrainLayout {
+  return { id, name, size, pieces: [], objectives: [], note: undefined };
+}
+
+export { layoutIssues };

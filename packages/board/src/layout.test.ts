@@ -12,6 +12,7 @@ import {
   edgeZones,
   inZone,
   layoutIssues,
+  mayClimb,
   mirrored,
   opposite,
   quincunx,
@@ -169,6 +170,31 @@ describe("deployment zones", () => {
   });
 });
 
+describe("who may climb", () => {
+  const tri = [{ x: 20, y: 20 }, { x: 26, y: 20 }, { x: 26, y: 26 }];
+
+  it("lets anyone up a piece that names nobody", () => {
+    expect(mayClimb(terrain({ id: "r", polygon: tri, height: 9, floors: [0, 4] }), new Set(["VEHICLE"]))).toBe(true);
+  });
+
+  it("matches keywords whichever case either side is written in", () => {
+    const ruin = terrain({ id: "r", polygon: tri, height: 9, floors: [0, 4], climbableBy: ["Infantry"] });
+    expect(mayClimb(ruin, new Set(["INFANTRY"]))).toBe(true);
+    expect(mayClimb(ruin, new Set(["infantry"]))).toBe(true);
+    expect(mayClimb(ruin, ["Infantry"])).toBe(true); // any iterable, not only a Set
+    expect(mayClimb(ruin, new Set(["VEHICLE"]))).toBe(false);
+  });
+
+  it("keeps a tank out of the ruins the layouts ship", () => {
+    const storeyed = RUINED_CITY.pieces.filter((p) => p.floors.length > 1);
+    expect(storeyed.length).toBeGreaterThan(0);
+    for (const piece of storeyed) {
+      expect(mayClimb(piece, ["INFANTRY"])).toBe(true);
+      expect(mayClimb(piece, ["VEHICLE"])).toBe(false);
+    }
+  });
+});
+
 describe("layout validation", () => {
   const size = BATTLE_SIZES.strikeForce;
   const bad = (pieces: TerrainLayout["pieces"], objectives: TerrainLayout["objectives"] = []): TerrainLayout => ({ id: "x", name: "X", size, pieces, objectives });
@@ -184,6 +210,15 @@ describe("layout validation", () => {
 
   it("catches two pieces sharing an id", () => {
     expect(layoutIssues(bad([box("same", { x: 20, y: 22 }, 4, 4, 3), box("same", { x: 40, y: 22 }, 4, 4, 3)]))).toEqual(["same: duplicate piece id"]);
+  });
+
+  it("catches a footprint that encloses nothing", () => {
+    const flat = terrain({ id: "sliver", polygon: [{ x: 20, y: 20 }, { x: 28, y: 20 }, { x: 24, y: 20 }], height: 6 });
+    expect(layoutIssues(bad([flat]))).toContain("sliver: footprint encloses no area");
+  });
+
+  it("catches two objectives sharing an id", () => {
+    expect(layoutIssues(bad([], [{ id: "o1", at: { x: 20, y: 20 } }, { id: "o1", at: { x: 40, y: 20 } }]))).toContain("o1: duplicate objective id");
   });
 
   it("catches an objective inside a bunker or off the table", () => {

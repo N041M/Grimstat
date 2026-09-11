@@ -14,7 +14,7 @@ import { BATTLE_SIZES, rectZone } from "./board";
 import type { TerrainPiece, TerrainTrait } from "./terrain";
 import { terrain, topOf } from "./terrain";
 import type { Vec2 } from "./vec";
-import { bounds, pointInPolygon } from "./vec";
+import { bounds, pointInPolygon, signedArea } from "./vec";
 
 export interface TerrainLayout {
   readonly id: string;
@@ -22,6 +22,12 @@ export interface TerrainLayout {
   readonly size: BoardSize;
   readonly pieces: readonly TerrainPiece[];
   readonly objectives: readonly Objective[];
+  /**
+   * Deployment zones, when the layout carries its own. Most do not: zones usually come from the
+   * mission rather than the terrain, and `edgeZones` supplies a generic pair. A layout that *does*
+   * define them — an imported tournament map, say — has nowhere else to put them.
+   */
+  readonly zones?: readonly Zone[];
   /** What the layout is for, and anything a player should know about how it was abstracted. */
   readonly note?: string;
 }
@@ -204,6 +210,13 @@ export function layoutIssues(layout: TerrainLayout): string[] {
 
   const ids = layout.pieces.map((p) => p.id);
   for (const id of new Set(ids)) if (ids.filter((x) => x === id).length > 1) issues.push(`${id}: duplicate piece id`);
+
+  // A ring whose points are collinear looks like a piece in the data and blocks nothing on the
+  // table, which is the worst way for terrain to be wrong: present in the list, absent in play.
+  for (const piece of layout.pieces) if (piece.polygon.length >= 3 && Math.abs(signedArea(piece.polygon)) < 1e-6) issues.push(`${piece.id}: footprint encloses no area`);
+
+  const objectiveIds = layout.objectives.map((o) => o.id);
+  for (const id of new Set(objectiveIds)) if (objectiveIds.filter((x) => x === id).length > 1) issues.push(`${id}: duplicate objective id`);
 
   for (const objective of layout.objectives) {
     const { x, y } = objective.at;

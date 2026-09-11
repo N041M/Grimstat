@@ -31,6 +31,24 @@ export interface RosterVersionRecord {
 /** Versions kept per roster; older ones are pruned on every save. */
 export const ROSTER_VERSION_CAP = 30;
 
+/**
+ * A terrain layout the user built or imported.
+ *
+ * Stored as JSON rather than a structured table because a layout is one document that is always read
+ * and written whole, and because the shape belongs to `@grimstat/board` — keeping it opaque here
+ * means the board package can grow a field without a database migration.
+ *
+ * `source` records where an imported layout came from. This project ships none of its own beyond a
+ * handful of generic ones, so knowing whose work a layout is matters.
+ */
+export interface TerrainLayoutRecord {
+  id: string;
+  name: string;
+  updatedAt: string;
+  json: string;
+  source?: string;
+}
+
 export type { OverrideRecord } from "./lib/overrides";
 export { overrideKey } from "./lib/overrides";
 
@@ -42,6 +60,7 @@ export class GrimstatDb extends Dexie {
   rosters!: Table<Roster, string>;
   rosterVersions!: Table<RosterVersionRecord, string>;
   overrides!: Table<OverrideRecord, string>;
+  terrainLayouts!: Table<TerrainLayoutRecord, string>;
 
   constructor(name = "grimstat") {
     super(name);
@@ -70,6 +89,17 @@ export class GrimstatDb extends Dexie {
       rosterVersions: "id, rosterId, updatedAt",
       overrides: "&key, entity, id, updatedAt",
     });
+    // v4: terrain layouts for the battle table, built in the editor or imported.
+    this.version(4).stores({
+      snapshots: "id, gameSystemId, updatedAt",
+      scenarios: "id, name, updatedAt, snapshotId",
+      layouts: "id",
+      settings: "key",
+      rosters: "id, name, factionId, snapshotId, updatedAt",
+      rosterVersions: "id, rosterId, updatedAt",
+      overrides: "&key, entity, id, updatedAt",
+      terrainLayouts: "id, name, updatedAt",
+    });
   }
 }
 
@@ -90,7 +120,7 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
  */
 export const STORE_CHANGED = "grimstat:store-changed";
 
-export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides";
+export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts";
 
 export function notifyStoreChanged(store: StoreName): void {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORE_CHANGED, { detail: store }));
