@@ -74,6 +74,11 @@ still reads correctly under the next.
 
 Scenarios built from a 10th-edition snapshot run under the 10th-edition rules model automatically (`scenario.gameSystemId`).
 
+The Battle table's layout library can fetch the published 11th-edition terrain layouts (every Force
+Disposition matchup, three cards each) from the community [40kdc-data](https://github.com/wn-mitch/40kdc-data)
+dataset (CC BY 4.0) onto your device, credited, in the same way the Data page fetches BSData. Nothing
+of it ships in this repository.
+
 ## Deployment
 
 `.github/workflows/pages.yml` builds `apps/web` with `VITE_BASE=/<repo>/` and publishes it to GitHub Pages on every push to `master`; `ci.yml` runs the lint, the typecheck and the test suite. The app uses a hash router, so deep links work under the sub-path.

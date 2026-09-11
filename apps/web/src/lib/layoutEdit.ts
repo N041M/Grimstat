@@ -11,7 +11,7 @@
  */
 
 import type { BoardSize, Objective, TerrainLayout, TerrainPiece, TerrainTrait, Vec2 } from "@grimstat/board";
-import { CLIMBERS, LAYOUTS, bounds, defaultBreachers, layoutIssues, opposite, terrain } from "@grimstat/board";
+import { CLIMBERS, LAYOUTS, bounds, defaultBreachers, isSymmetric, layoutIssues, opposite, terrain } from "@grimstat/board";
 import { newId } from "./ids";
 
 /** A new id that does not collide with anything already in the layout. */
@@ -302,20 +302,6 @@ function dedupeIds(pieces: readonly TerrainPiece[]): TerrainPiece[] {
   });
 }
 
-/** Is this layout symmetric under a 180° turn? The question a player cares about is "is it fair". */
-export function isSymmetric(layout: TerrainLayout): boolean {
-  const key = (poly: readonly Vec2[]) =>
-    poly
-      .map((q) => `${q.x.toFixed(2)},${q.y.toFixed(2)}`)
-      .sort()
-      .join("|");
-  const here = new Set(layout.pieces.map((p) => key(p.polygon)));
-  const there = new Set(layout.pieces.map((p) => key(p.polygon.map((q) => opposite(q, layout.size)))));
-  if (here.size !== there.size) return false;
-  for (const k of there) if (!here.has(k)) return false;
-  return true;
-}
-
 /** A fresh, empty table to build on. */
 export function emptyLayout(id: string, name: string, size: BoardSize): TerrainLayout {
   return { id, name, size, pieces: [], objectives: [], note: undefined };
@@ -334,4 +320,4 @@ export function copyLayout(layout: TerrainLayout, name = `${layout.name} copy`):
   return { ...layout, id: newId("layout"), name };
 }
 
-export { layoutIssues };
+export { isSymmetric, layoutIssues };

@@ -12,6 +12,7 @@ import {
   crater,
   defaultBreachers,
   edgeZones,
+  isSymmetric,
   inZone,
   layoutIssues,
   mayClimb,
@@ -49,6 +50,15 @@ describe("layout building blocks", () => {
     expect(piece.traits).toContain("breachable");
     expect(piece.passableBy).toEqual([...BREACHERS]);
     expect(BREACHERS).toContain("FLY");
+  });
+
+  it("calls a layout fair when every piece has a twin within a tape measure's tolerance", () => {
+    expect(LAYOUTS.every((l) => isSymmetric(l))).toBe(true);
+    const nudged = { ...RUINED_CITY, pieces: RUINED_CITY.pieces.map((p, i) => (i === 0 ? { ...p, polygon: p.polygon.map((q) => ({ x: q.x + 0.02, y: q.y })) } : p)) };
+    expect(isSymmetric(nudged)).toBe(true);
+    const lopsided = { ...RUINED_CITY, pieces: RUINED_CITY.pieces.slice(1) };
+    expect(isSymmetric(lopsided)).toBe(false);
+    expect(isSymmetric(nudged, 0.01)).toBe(false);
   });
 
   it("never ships a breachable piece that admits nobody", () => {

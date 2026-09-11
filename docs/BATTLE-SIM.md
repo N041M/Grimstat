@@ -258,15 +258,17 @@ the caching the AI section describes before they run inside a search.
    three sources it labels as Games Workshop copyright (MFM points, Wahapedia datasheet text, BSData
    structure). The rule is not "avoid GW content"; it is **do not redistribute it in the repository**,
    fetch at runtime onto the user's own machine, and record the licence and attribution.
-5. **Transcribing a published layout is typing, not scraping.** Games Workshop publishes 11th-edition
+5. **The published layouts are fetched, not shipped.** Games Workshop publishes 11th-edition
    terrain layouts free in its Event Companion PDFs, three per mission with objective positions, and
-   revises them in balance passes — so shipped copies would go stale anyway. They are laid out with a
-   fixed set of sixteen terrain areas in five sizes (11.5×7", 11.5×8" wedges in a mirrored pair,
-   6×4", 10×2.5", 6×2"), and specified as distances from two board edges. Those sizes are shipped as
-   editor presets and the panel takes edge measurements directly, which makes transcribing a layout a
-   matter of choosing a shape and typing two numbers. The measurements are the unprotectable part of
-   a published diagram; the diagram itself is not reproduced, and running computer vision over one to
-   recover numbers that are printed on it as text would be more machinery for a worse result.
+   revises them in balance passes — so shipped copies would go stale anyway. The community
+   [40kdc-data](https://github.com/wn-mitch/40kdc-data) project publishes their geometry as data under
+   CC BY 4.0 (placed by centroid on a y-down 60×44 frame, scenery composed from a template catalogue),
+   and the Battle table fetches that dataset from its repository onto the user's device — the same
+   pattern as BSData — converting it in `packages/adapters/src/layout/fortykdc.ts`, crediting the
+   source, and noting on every layout that heights are assumed where the data gives none. For anything
+   else, the editor ships the five standard footprints (11.5×7", 11.5×8" wedges in a mirrored pair,
+   6×4", 10×2.5", 6×2") and takes edge measurements directly, so transcribing a diagram is choosing a
+   shape and typing two numbers.
 6. **Where it lives**: a new "Battle" section of the same PWA, reusing the worker, storage and
    permalink infrastructure; the 3D dependency is code-split behind that route.
 7. **Model heights**: a keyword-derived default table shipped as data, overridable per datasheet and

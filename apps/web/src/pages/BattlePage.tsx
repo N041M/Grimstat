@@ -9,6 +9,7 @@ import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
+import { isPublished } from "../lib/layoutFetch";
 import { canRedo, canUndo, editorReducer, initialEditor } from "../lib/battleEditor";
 import { Badge, Tabs } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
@@ -384,7 +385,8 @@ export function BattlePage() {
   const measureFrom = tool === "measure" && picks.length === 1 ? picks[0] : undefined;
   const live = measureFrom && aim ? tapeDistance(measureFrom, aim) : undefined;
   const shipped = options.filter((o) => o.builtIn);
-  const mine = options.filter((o) => !o.builtIn);
+  const published = options.filter((o) => !o.builtIn && isPublished(o.layout.id));
+  const mine = options.filter((o) => !o.builtIn && !isPublished(o.layout.id));
 
   /**
    * What sits beside the pointer: a drag's verdict, or the tape's live reading. The canvas moves
@@ -415,6 +417,16 @@ export function BattlePage() {
                   </option>
                 ))}
               </optgroup>
+              {published.length ? (
+                <optgroup label={t("battle.library.published")}>
+                  {published.map((l) => (
+                    <option key={l.layout.id} value={l.layout.id}>
+                      {l.layout.name}
+                      {l.layout.id === layout.id && dirty ? ` · ${t("battle.library.unsavedShort")}` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
               {mine.length ? (
                 <optgroup label={t("battle.library.yours")}>
                   {mine.map((l) => (

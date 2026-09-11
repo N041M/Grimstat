@@ -1,4 +1,5 @@
 import { currentPlan } from "@grimstat/entitlements";
+import { FORTYKDC } from "@grimstat/adapters";
 import { UnitArt } from "../components/UnitArt";
 import { UNIT_ART_CREDITS, UNIT_ART_IDS, UNIT_ART_SOURCE, unitArtAuthors } from "../lib/unitArt";
 import { gameSystem, manifest } from "@grimstat/game-40k-11e";
@@ -45,6 +46,17 @@ export function AboutPage() {
           </h2>
           <p className="about-card-body prose">{t("about.data1")}</p>
           <p className="about-card-body prose">{t("about.data2")}</p>
+          <p className="about-card-body prose">
+            {t("about.data3")}{" "}
+            <a href={FORTYKDC.repo} target="_blank" rel="noreferrer">
+              {FORTYKDC.name}
+            </a>
+            {" ("}
+            <a href={FORTYKDC.licenceUrl} target="_blank" rel="noreferrer">
+              {FORTYKDC.licence}
+            </a>
+            {")."}
+          </p>
         </section>
 
         <section className="about-card" aria-labelledby="about-art-h">

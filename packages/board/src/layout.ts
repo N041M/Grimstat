@@ -257,6 +257,22 @@ export const REDOUBT: TerrainLayout = mirrored({
 
 export const LAYOUTS: readonly TerrainLayout[] = [OPEN_APPROACH, RUINED_CITY, CROSSFIRE, REDOUBT];
 
+/**
+ * Is this layout symmetric under a 180° turn — the question a player asks as "is it fair"?
+ *
+ * Within a tolerance, because a card fetched from a dataset carries the float noise of its
+ * conversion, and a piece 0.02" from its twin is fair by any tape measure. Each piece must have a
+ * twin whose vertices all sit within `tolerance` of its own, turned about the centre.
+ */
+export function isSymmetric(layout: TerrainLayout, tolerance = 0.05): boolean {
+  const twinOf = (piece: TerrainPiece): boolean =>
+    layout.pieces.some((other) => other.polygon.length === piece.polygon.length && piece.polygon.every((q) => {
+      const o = opposite(q, layout.size);
+      return other.polygon.some((w) => Math.abs(w.x - o.x) <= tolerance && Math.abs(w.y - o.y) <= tolerance);
+    }));
+  return layout.pieces.every(twinOf);
+}
+
 /* ---- validation -------------------------------------------------------------------------------- */
 
 /**
