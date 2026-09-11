@@ -5,6 +5,39 @@ the Phase 5 army-level analyses ("Analyses" section), the Phase 6 additions (rev
 snapshot comparison, rules overrides) and the Phase 7 in-browser data import for the GitHub Pages deployment.
 `pnpm typecheck` clean, `pnpm vitest run apps/web` green.
 
+## Codex — the datasheet viewer and the compare view — what is where
+
+- Route `#/codex` and `#/codex/<datasheetId>` (`src/pages/CodexPage.tsx`), rail glyph `X` between Armies and Analyses
+  (`RAIL_ENTRIES`), so the command palette's "Go to" group lists it. The context column is filled through
+  `<ContextSlot>` with `src/components/codex/CodexBrowser.tsx`: a faction select (`*` = every faction), a search on
+  name / role / keyword, and the faction's datasheets grouped by `pickerGroupOf` (Characters, Battleline, Dedicated
+  transports, Other, Legends) — each row the silhouette, the name, points at the smallest size, role · size; a ◆
+  marks a sheet in the compare set. `ContextColumn` keeps a placeholder `CodexBody` (eyebrow "Datasheets", count).
+- Two tabs. **Datasheets**: with no sheet open, `CodexLanding.tsx` (the same filter pair, cards by group with the
+  representative model's T / Sv / Inv / W / OC, points, and a `+` / `✓` compare mark — the browser on phones, where
+  the column lives in the sheet); with a sheet open, `DatasheetCard.tsx` laid out like a codex page: name band with
+  flags and points, the profile line per model (base size as a tag), ranged and melee tables (multi-profile weapons
+  folded under their name via `groupName` / `baseWeaponName`), abilities bucketed by scope (core and faction inline as
+  chips, datasheet / wargear / other listed with text, the damaged profile boxed), and an aside with composition,
+  loadout, wargear options, transport capacity, leader links both ways (`leaderTo` / `supportTo` and their converse),
+  every price rule as its own points table (rule label as caption) plus wargear prices; keywords at the foot. Header
+  actions: "Add to / Remove from compare" and "Open in calculator" (attacker / defender, the palette's route).
+  **Compare**: `CompareGrid.tsx`, one grid column per compared sheet (`--cmp-cols`, scrolls inside `.cmp-scroll`),
+  sections Profile / Unit / Weapons / Abilities / Keywords, the best of each numeric row marked in the accent
+  (`bestIndices`: higher M T W OC, lower Sv Inv Ld, cheaper points and points per wound; nobody when all agree, a
+  missing invulnerable save never wins). Profile rows judge a unit by its `representativeProfile` (the most numerous
+  model at minimum size, later profile on a tie — the army builder's rank-and-file convention) and print distinct
+  values joined ("3 / 2"). "Differences only" hides rows whose cells read the same; a search box in the last column
+  adds a sheet from any faction; × removes; the cap is `COMPARE_CAP` = 6.
+- Remembered in `settings`: `codex.compare` (ids, resolved against the active snapshot at render, missing ids simply
+  do not show), `codex.faction`, `codex.diffOnly`. The open sheet is the route param; the tab is not remembered.
+  Opening a sheet from another faction (a link, a compare column) pulls the column onto that faction once
+  (`followed` ref), so changing the filter while reading is left alone.
+- Pure model + tests: `src/lib/codex.ts` / `codex.test.ts` (factions with counts, grouping and search ranking,
+  points lines and min / max points, weapon folding, ability buckets and missing ids, unit wounds, representative
+  profile, characteristic text and rows, best-of, differs, compare-set toggle and parsing, `effectiveFaction`).
+  Verified in the browser against the synthetic fixture on 2026-09-11.
+
 ## Phase 7 — fetch from community sources in the browser (GitHub Pages) — what is where
 
 - **Data page → "Fetch from community sources"** (`src/components/data/FetchSources.tsx`): the two sources whose hosts
@@ -271,6 +304,15 @@ snapshot comparison, rules overrides) and the Phase 7 in-browser data import for
   CLI output as a single `Snapshot` object (not wrapped) so it round-trips.
 
 ## Local decisions worth knowing
+- Unit pictures (`src/lib/unitArt.ts`, drawn by `src/components/UnitArt.tsx`, credited on the About page) come in two
+  sets from game-icons.net (CC BY 3.0), vendored as path data by `scripts/unit-art.ts`: one per *class* (infantry,
+  character, vehicle, walker, monster, ...) and one per *faction* that fields infantry (an orc head, a scarab, an elf
+  helm, ...). The rule: plain infantry shows its faction's picture; characters and every other class show the class
+  picture, so a leader is still told from its squad and a tank is still a tank. Faction is read from the datasheet's
+  `factionKeywords` (most specific first: Death Guard before Heretic Astartes, Drukhari before Aeldari, any daemon
+  legion before the rest); Knight houses, Titan legions and the unaligned lists have no foot troops and fall through
+  to the class. The battle table's figures (`src/lib/silhouettes.ts`) follow the class rule only. `<UnitArt of={ds} />`
+  takes anything with `keywords` (and optionally `factionKeywords`); `<UnitArt id="orks" />` draws one picture.
 - Overrides are global (not keyed by snapshot): every stored snapshot gets the same override list; ones whose entity id
   is not in a snapshot are counted as "missing" for that snapshot and left untouched. The Data page keeps showing the
   *raw* snapshot's checksum.

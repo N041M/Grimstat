@@ -13,7 +13,7 @@ import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/lay
 import { canRedo, canUndo, editorReducer, initialEditor } from "../lib/battleEditor";
 import { Badge, Tabs } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
-import { unitArtFor, type UnitArtId } from "../lib/unitArt";
+import { silhouetteFor, type SilhouetteId } from "../lib/silhouettes";
 import {
   anchorOf,
   applyGroupMove,
@@ -338,20 +338,20 @@ export function BattlePage() {
     if (!plan || tool !== "select") return undefined;
     if (plan.moves) {
       const hulls: ModelHull[] = [];
-      const kinds: UnitArtId[] = [];
+      const kinds: SilhouetteId[] = [];
       for (const move of plan.moves) {
         const u = findUnit(state, move.unitId);
         const m = u && findModel(u, move.modelId);
         if (!u || !m) continue;
         hulls.push({ ...m.hull, pos: move.at });
-        kinds.push(unitArtFor(u.keywords));
+        kinds.push(silhouetteFor(u.keywords));
       }
       return { unitId: plan.unitId, modelId: plan.modelId, hulls, kind: kinds[0] ?? "infantry", kinds, moves: plan.moves, legal: true };
     }
     const unit = findUnit(state, plan.unitId);
     if (!unit) return undefined;
     // The picture's rule names the silhouette too; the canvas, loaded later, draws it.
-    const kind = unitArtFor(unit.keywords);
+    const kind = silhouetteFor(unit.keywords);
     if (plan.modelId) {
       const model = findModel(unit, plan.modelId);
       return model ? { unitId: plan.unitId, modelId: plan.modelId, hulls: [{ ...model.hull, pos: plan.at }], kind, legal: true } : undefined;
@@ -706,7 +706,7 @@ export function BattlePage() {
           <div className="battle-labels" ref={labelsRef} aria-hidden="true">
             {state.units.map((u) => (
               <div key={u.id} className={`battle-label ${u.side}`}>
-                <UnitArt keywords={u.keywords} />
+                <UnitArt of={u} />
                 {t(u.name as I18nKey)}
               </div>
             ))}
@@ -1023,7 +1023,7 @@ function BattlePanel({
                 {unitsOf(state, side).map((u) => (
                   <li key={u.id} className="battle-unit-row">
                     <button type="button" className={`battle-unit ${u.id === selected?.id ? "is-selected" : ""} ${u.reserve ? "is-reserve" : ""}`.trim()} onClick={() => onPick(u.id)}>
-                      <UnitArt keywords={u.keywords} className={`battle-swatch ${side}`} />
+                      <UnitArt of={u} className={`battle-swatch ${side}`} />
                       <span className="battle-unit-name">{t(u.name as I18nKey)}</span>
                       <span className="battle-unit-meta">{u.reserve ? t("battle.deploy.reserve") : t("battle.deploy.deployed")}</span>
                     </button>
@@ -1059,7 +1059,7 @@ function BattlePanel({
                     onClick={() => onPick(u.id)}
                     title={u.reserve ? t("battle.deploy.reserveHint") : undefined}
                   >
-                    <UnitArt keywords={u.keywords} className={`battle-swatch ${side}`} />
+                    <UnitArt of={u} className={`battle-swatch ${side}`} />
                     <span className="battle-unit-name">{t(u.name as I18nKey)}</span>
                     <span className="battle-unit-meta">{u.reserve ? t("battle.deploy.reserve") : `${u.models.length}× · M${u.move}"`}</span>
                   </button>

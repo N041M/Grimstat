@@ -242,6 +242,17 @@ function ArmiesBody({ param, inSheet }: BodyProps) {
   );
 }
 
+/** Placeholder: the Codex screen fills the slot with its faction filter and grouped datasheet list. */
+function CodexBody({ inSheet }: BodyProps) {
+  const { snapshot } = useApp();
+  const n = snapshot?.data.datasheets.length ?? 0;
+  return (
+    <ContextFrame eyebrow={t("ctxcol.datasheets")} meta={String(n)} inSheet={inSheet}>
+      <ContextEmpty>{t(snapshot ? "ctxcol.codexHint" : "ctxcol.noDatasheets")}</ContextEmpty>
+    </ContextFrame>
+  );
+}
+
 /** The Matrix attacker set is the analyses "unit set" the column mirrors. */
 const MATRIX_ATTACKERS = "analyses.matrix.attackers";
 
@@ -327,6 +338,8 @@ export function ContextColumn({ route, param, inSheet }: { route: Route; param?:
       return <ScenariosBody {...props} />;
     case "armies":
       return <ArmiesBody {...props} />;
+    case "codex":
+      return <CodexBody {...props} />;
     case "analyses":
       return <AnalysesBody {...props} />;
     case "battle":
@@ -347,6 +360,8 @@ export function contextEyebrow(route: Route): string {
       return t("ctxcol.scenarios");
     case "armies":
       return t("ctxcol.armies");
+    case "codex":
+      return t("ctxcol.datasheets");
     case "analyses":
       return t("ctxcol.unitSet");
     case "battle":

@@ -28,7 +28,7 @@ const entries: string[] = [];
 for (const id of UNIT_ART_IDS as readonly UnitArtId[]) {
   const credit = UNIT_ART_CREDITS[id];
   const d = await fetchPath(credit.slug);
-  entries.push(`  ${id}: ${JSON.stringify(d)},`);
+  entries.push(`  ${JSON.stringify(id)}: ${JSON.stringify(d)},`);
   console.log(`${id.padEnd(14)} ${credit.slug.padEnd(28)} ${d.length} chars`);
 }
 

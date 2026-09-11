@@ -141,7 +141,7 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
                 return (
                   <GridRow key={r.datasheetId} className={`meta-row is-${r.note}`}>
                     <GridCell className="meta-unit">
-                      <UnitArt keywords={ds?.keywords ?? []} className="ut-art" />
+                      <UnitArt of={ds} className="ut-art" />
                       {r.name}
                     </GridCell>
                     <GridCell align="end" mono tone={r.yours ? "ink" : "faint"}>
@@ -209,7 +209,7 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
                 {side.map((r) => (
                   <GridRow key={r.datasheetId} className={`meta-row ${r.yours && r.theirs ? "is-shared" : r.yours ? "is-yours" : "is-theirs"}`}>
                     <GridCell className="meta-unit">
-                      <UnitArt keywords={snapshot.data.datasheets.find((d) => d.id === r.datasheetId)?.keywords ?? []} className="ut-art" />
+                      <UnitArt of={snapshot.data.datasheets.find((d) => d.id === r.datasheetId)} className="ut-art" />
                       {r.name}
                     </GridCell>
                     <GridCell align="end" mono tone={r.yours ? "ink" : "faint"}>

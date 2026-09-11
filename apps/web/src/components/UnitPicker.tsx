@@ -168,7 +168,7 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
                 datasheets.map((d) => (
                   <button key={d.id} type="button" role="option" aria-selected={d.id === datasheetId} aria-pressed={d.id === datasheetId} onClick={() => pickDatasheet(d)}>
                     <span>
-                      <UnitArt keywords={d.keywords} />
+                      <UnitArt of={d} />
                       {d.name}
                     </span>
                     <span className="muted small">{d.role ?? ""}</span>

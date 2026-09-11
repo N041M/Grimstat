@@ -1,7 +1,7 @@
 import { currentPlan } from "@grimstat/entitlements";
 import { FORTYKDC } from "@grimstat/adapters";
 import { UnitArt } from "../components/UnitArt";
-import { UNIT_ART_CREDITS, UNIT_ART_IDS, UNIT_ART_SOURCE, unitArtAuthors } from "../lib/unitArt";
+import { UNIT_ART_CREDITS, UNIT_CLASS_IDS, UNIT_FACTION_IDS, UNIT_ART_SOURCE, unitArtAuthors } from "../lib/unitArt";
 import { gameSystem, manifest } from "@grimstat/game-40k-11e";
 import { host } from "../plugin";
 import { hrefFor } from "../router";
@@ -75,14 +75,24 @@ export function AboutPage() {
             </a>
             .
           </p>
-          <ul className="about-art-list" aria-label={t("about.artTitle")}>
-            {UNIT_ART_IDS.map((id) => (
-              <li key={id} title={`${UNIT_ART_CREDITS[id].icon} — ${UNIT_ART_CREDITS[id].author}`}>
-                <UnitArt keywords={[id]} title={UNIT_ART_CREDITS[id].icon} />
-                <span>{t(`unitArt.${id}` as I18nKey)}</span>
-              </li>
-            ))}
-          </ul>
+          {(
+            [
+              ["about.artClasses", UNIT_CLASS_IDS],
+              ["about.artFactions", UNIT_FACTION_IDS],
+            ] as const
+          ).map(([label, ids]) => (
+            <div key={label}>
+              <h3 className="about-art-group">{t(label)}</h3>
+              <ul className="about-art-list" aria-label={t(label)}>
+                {ids.map((id) => (
+                  <li key={id} title={`${UNIT_ART_CREDITS[id].icon} — ${UNIT_ART_CREDITS[id].author}`}>
+                    <UnitArt id={id} title={UNIT_ART_CREDITS[id].icon} />
+                    <span>{t(`unitArt.${id}` as I18nKey)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </section>
 
         <div className="about-stats">

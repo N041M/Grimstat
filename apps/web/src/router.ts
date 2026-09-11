@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
-export type Route = "calculator" | "scenarios" | "armies" | "analyses" | "battle" | "data" | "about";
-export const ROUTES: Route[] = ["calculator", "scenarios", "armies", "analyses", "battle", "data", "about"];
+export type Route = "calculator" | "scenarios" | "armies" | "codex" | "analyses" | "battle" | "data" | "about";
+export const ROUTES: Route[] = ["calculator", "scenarios", "armies", "codex", "analyses", "battle", "data", "about"];
 
 /** Parsed hash: `#/armies/<param>?a=b` → route "armies", param "<param>", query {a: "b"}. */
 export interface RouteInfo {

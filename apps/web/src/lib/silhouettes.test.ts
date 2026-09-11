@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { circleBase, ovalBase } from "@grimstat/board";
 import { SILHOUETTE_FIT, SILHOUETTE_IDS, SILHOUETTE_OVERHANG, figureScale, silhouetteFor, silhouetteGeometry } from "./silhouettes";
-import { UNIT_ART_IDS, unitArtFor } from "./unitArt";
+import { UNIT_CLASS_IDS, unitClassFor } from "./unitArt";
 
 describe("a figure for what a unit is", () => {
-  it("exists for every class that has a picture, and uses the picture's rule", () => {
-    expect(SILHOUETTE_IDS).toEqual(UNIT_ART_IDS);
+  it("exists for every class that has a picture, and uses the picture's class rule", () => {
+    expect(SILHOUETTE_IDS).toEqual(UNIT_CLASS_IDS);
     for (const keywords of [["INFANTRY"], ["VEHICLE", "TRANSPORT"], ["VEHICLE", "WALKER"], ["MONSTER"], ["FORTIFICATION"], []]) {
-      expect(silhouetteFor(keywords)).toBe(unitArtFor(keywords));
+      expect(silhouetteFor(keywords)).toBe(unitClassFor(keywords));
     }
   });
 

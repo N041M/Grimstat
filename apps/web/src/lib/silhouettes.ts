@@ -5,7 +5,8 @@
  * rips and fan works of them, so no model can look like *its* miniature. What every model has is a
  * class — trooper, tank, walker, monster, swarm — and one stylised figure per class is enough to
  * tell a table apart at a glance, with nothing to licence, credit, fetch or store. The class is the
- * same one that picks the unit's picture, so the picture and the model always agree.
+ * same one that picks the unit's picture (a faction picture stands in only for plain infantry, and
+ * only on the page), so the figure and the picture always agree on what a thing is.
  *
  * Every figure is designed in inches, in real proportions, for a *nominal* model of its class — a
  * trooper two inches tall on a 32 mm base, a tank on a 120 × 92 mm oval — with `x` forward along
@@ -25,14 +26,14 @@ import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeo
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { ModelHull } from "@grimstat/board";
 import { footReach, inches } from "@grimstat/board";
-import { UNIT_ART_IDS, unitArtFor, type UnitArtId } from "./unitArt";
+import { UNIT_CLASS_IDS, unitClassFor, type UnitClassId } from "./unitArt";
 
 /** The classes a figure exists for — the same classes the unit pictures use. */
-export type SilhouetteId = UnitArtId;
-export const SILHOUETTE_IDS: readonly SilhouetteId[] = UNIT_ART_IDS;
+export type SilhouetteId = UnitClassId;
+export const SILHOUETTE_IDS: readonly SilhouetteId[] = UNIT_CLASS_IDS;
 
-/** Which figure stands for a unit, from its keywords: the picture's rule, applied to the model. */
-export const silhouetteFor = (keywords: readonly string[]): SilhouetteId => unitArtFor(keywords);
+/** Which figure stands for a unit, from its keywords: the picture's class rule, applied to the model. */
+export const silhouetteFor = (keywords: readonly string[]): SilhouetteId => unitClassFor(keywords);
 
 /** How much of the base disc's radius a figure fills; the rest is the rim of the base. */
 export const SILHOUETTE_FIT = 0.92;

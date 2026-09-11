@@ -154,7 +154,7 @@ export function AddUnitPanel({ roster, snapshot, onAdd, onClose }: Props) {
                     <li key={row.ds.id} className={`ds-row ${i === hl ? "hl" : ""} ${row.blocked ? "blocked" : ""}`.trim()} data-i={i} onMouseEnter={() => setHl(i)}>
                       <button type="button" className="ds-main" disabled={!!row.blocked} onClick={() => add(row, false)} aria-label={`${t("roster.units.addOne")} ${row.ds.name}`} title={row.blocked}>
                         <span className="ds-name">
-                          <UnitArt keywords={row.ds.keywords} />
+                          <UnitArt of={row.ds} />
                           {row.ds.name}
                           {row.ds.isLegends ? <span className="badge">{t("roster.units.legendsTag")}</span> : null}
                           {row.copies ? <span className="badge">{t("roster.units.inList", { n: row.copies })}</span> : null}

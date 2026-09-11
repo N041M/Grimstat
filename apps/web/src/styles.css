@@ -5924,6 +5924,14 @@ button.battle-scope-btn:hover {
   padding: 0;
   list-style: none;
 }
+.about-art-group {
+  margin: 12px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
 .about-art-list li {
   display: flex;
   align-items: center;
@@ -6001,14 +6009,6 @@ button.battle-scope-btn:hover {
   align-items: center;
   gap: 8px;
 }
-
-/* ---------- The table picker ---------- */
-.battle-pick-current {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-}
 .published-feed-head {
   display: flex;
   align-items: center;
@@ -6040,6 +6040,14 @@ button.battle-scope-btn:hover {
   flex: 1;
   min-width: 200px;
   font: 400 12px/1.4 var(--mono);
+}
+
+/* ---------- The table picker ---------- */
+.battle-pick-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
 }
 .battle-pick-name {
   font-size: 13px;
@@ -6139,4 +6147,701 @@ button.battle-scope-btn:hover {
 .battle-plan-title {
   font: 500 11px/1 var(--mono);
   color: var(--ink-2);
+}
+
+/* ---------- Codex ----------
+   A datasheet laid out like a codex page, and several laid side by side. The sheet is full-bleed
+   under the header like the Statistics tab — sections parted by hairlines, tables on the 22px
+   gutters; the compare grid scrolls inside its own box. */
+.codex-body {
+  padding: 0 0 26px;
+}
+.codex-body > .empty {
+  margin: 18px 22px;
+}
+
+/* the filter pair: a full-width faction select over a search box */
+.codex-tools {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.codex-ctx-tools {
+  flex-direction: column;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.codex-faction {
+  flex: none;
+}
+.codex-ctx-tools .codex-faction,
+.codex-ctx-tools .codex-search {
+  width: 100%;
+}
+.codex-search input {
+  font: 400 12px/1.4 var(--font);
+  border-radius: var(--radius-input);
+  border-color: var(--line);
+  background: var(--panel);
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.codex-search input:hover,
+.codex-search input:focus {
+  border-color: var(--ink);
+}
+
+/* context column: grouped rows with a silhouette and a compare mark */
+.codex-group-label {
+  padding: 12px 16px 4px;
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--faint);
+}
+.codex-row-art {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--muted);
+}
+.codex-mark {
+  color: var(--accent);
+  font-size: 9px;
+  margin-right: 5px;
+  vertical-align: 1px;
+}
+
+/* landing: the lede, the filter pair, cards by group */
+.codex-landing {
+  padding: 16px 22px 26px;
+}
+.codex-lede {
+  margin: 0 0 14px;
+  max-width: 78ch;
+  font: 400 13px/1.6 var(--font);
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.codex-landing-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.codex-landing-tools .codex-tools {
+  flex: 1;
+  min-width: 260px;
+}
+.codex-landing-tools .codex-faction {
+  width: 240px;
+}
+.codex-landing-tools .codex-search {
+  flex: 1;
+  min-width: 160px;
+}
+.codex-landing-count {
+  white-space: nowrap;
+}
+.codex-group-title {
+  margin: 22px 0 8px;
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+}
+.codex-group-title span {
+  color: var(--faint);
+  margin-left: 4px;
+}
+.codex-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
+  gap: 10px;
+}
+.codex-card {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  min-width: 0;
+}
+.codex-card:hover {
+  border-color: var(--ink);
+}
+.codex-card.in-compare {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.codex-card-link {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 40px 12px 14px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+/* the whole card opens the sheet; the compare button sits above the stretched link */
+.codex-card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.codex-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.codex-card-head .unit-art {
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+.codex-card-name {
+  flex: 1;
+  min-width: 0;
+  font: 600 13px/1.3 var(--font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.codex-card-meta {
+  font: 400 10px/1.4 var(--mono);
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.codex-card-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font: 400 11px/1.4 var(--mono);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.codex-card-stats b {
+  font-weight: 500;
+  color: var(--faint);
+  margin-right: 2px;
+}
+.codex-card-points {
+  font: 500 11px/1.3 var(--mono);
+  color: var(--ink);
+}
+.codex-card-cmp {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+  font: 500 13px/1 var(--mono);
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--muted);
+}
+.codex-card-cmp:hover:not(:disabled) {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.codex-card-cmp[aria-pressed="true"] {
+  background: var(--btn-bg);
+  border-color: var(--btn-bg);
+  color: var(--btn-fg);
+}
+
+/* the sheet */
+.codex-sheet {
+  min-width: 0;
+}
+.codex-band {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 22px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.codex-band-art {
+  width: 46px;
+  height: 46px;
+  color: var(--ink);
+  opacity: 1;
+}
+.codex-band-title {
+  flex: 1;
+  min-width: 0;
+}
+.codex-band-title h2 {
+  margin: 3px 0 0;
+  font: 600 24px/1.15 var(--font);
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.codex-band-flags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.codex-band-points {
+  flex: none;
+  text-align: right;
+}
+.codex-band-points .t-metric {
+  display: block;
+  color: var(--ink);
+}
+.codex-band-points .t-meta {
+  display: block;
+  margin-top: 5px;
+}
+.codex-section {
+  padding: 16px 0 8px;
+  border-bottom: 1px solid var(--line-soft);
+  min-width: 0;
+}
+.codex-section > .panel-head-row {
+  padding: 0 22px 10px;
+}
+.codex-section .stat-note {
+  margin-top: 0;
+}
+.codex-section .gtable-row {
+  cursor: default;
+}
+.codex-section .gtable-row:hover {
+  background: transparent;
+}
+.codex-table {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.codex-strong {
+  font-weight: 500;
+}
+.codex-tag {
+  margin-left: 8px;
+  font: 400 10px/1 var(--mono);
+  color: var(--faint);
+}
+.codex-wrap {
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.4;
+}
+.codex-weapon-group + .gtable-row .gtable-cell,
+.codex-weapon-profile {
+  color: var(--ink-2);
+}
+.codex-weapon-profile {
+  padding-left: 14px;
+}
+.codex-weapon-profile::before {
+  content: "↳ ";
+  color: var(--faint);
+}
+.codex-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+}
+.codex-columns > .codex-side {
+  border-left: 1px solid var(--line-soft);
+  padding-top: 20px;
+}
+.codex-h3 {
+  margin: 0 0 6px;
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+}
+.codex-abil {
+  padding: 0 22px 10px;
+}
+.codex-abil-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 0 0 8px;
+}
+.codex-abil-line .t-eyebrow {
+  flex: none;
+  width: 60px;
+}
+.codex-abil-line .chips {
+  gap: 4px;
+}
+.codex-abil > div + div {
+  margin-top: 12px;
+}
+.codex-abil-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.codex-abil-list li {
+  padding: 9px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.codex-abil-list li:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+.codex-abil-name {
+  font: 600 12.5px/1.35 var(--font);
+  color: var(--ink);
+}
+.codex-abil-text {
+  margin: 3px 0 0;
+  max-width: 70ch;
+  font: 400 12px/1.55 var(--font);
+  color: var(--ink-2);
+  white-space: pre-line;
+  text-wrap: pretty;
+}
+.codex-damaged {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  font: 400 12px/1.55 var(--font);
+  color: var(--ink-2);
+}
+.codex-damaged strong {
+  color: var(--ink);
+}
+.codex-note {
+  margin-left: 0;
+  margin-right: 0;
+}
+.codex-aside {
+  padding: 0 22px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.codex-aside p,
+.codex-aside li {
+  margin: 0;
+  font: 400 12px/1.55 var(--font);
+  color: var(--ink-2);
+  white-space: pre-line;
+}
+.codex-aside p + p {
+  margin-top: 4px;
+}
+.codex-aside ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.codex-aside a {
+  color: var(--ink);
+}
+.codex-k {
+  color: var(--muted);
+}
+.codex-points {
+  width: 100%;
+  border-collapse: collapse;
+  font: 400 12px/1.4 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.codex-points + .codex-points {
+  margin-top: 10px;
+}
+.codex-points caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0 0 3px;
+  font: 400 10px/1.4 var(--mono);
+  color: var(--faint);
+}
+.codex-points td {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.codex-points td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+.codex-keywords {
+  padding: 16px 22px 4px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.codex-keywords .chips {
+  gap: 4px;
+}
+
+/* compare: a grid of columns, one per sheet, a row per thing the sheet says */
+.cmp-wrap {
+  padding: 16px 22px 26px;
+}
+.cmp-wrap > .empty {
+  margin-bottom: 14px;
+}
+.cmp-add-alone {
+  max-width: 360px;
+}
+.cmp-add-alone .cmp-add {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--rail);
+}
+.cmp-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.cmp {
+  display: grid;
+  grid-template-columns: var(--cmp-cols);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--panel);
+  width: 100%;
+  min-width: min-content;
+}
+.cmp-corner,
+.cmp-colhead,
+.cmp-add {
+  background: var(--rail);
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.cmp-colhead {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 34px 12px 12px;
+  border-left: 1px solid var(--line-soft);
+}
+.cmp-colhead .unit-art {
+  width: 22px;
+  height: 22px;
+  color: var(--ink);
+}
+.cmp-colhead-name {
+  font: 600 13px/1.3 var(--font);
+  color: var(--ink);
+  text-decoration: none;
+  text-wrap: balance;
+}
+.cmp-colhead-name:hover {
+  text-decoration: underline;
+}
+.cmp-colhead-meta {
+  font: 400 10px/1.4 var(--mono);
+  color: var(--faint);
+}
+.cmp-colhead-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  color: var(--muted);
+}
+.cmp-add {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-left: 1px solid var(--line-soft);
+}
+.cmp-add .search-wrap input {
+  font: 400 12px/1.4 var(--font);
+  border-radius: var(--radius-input);
+  border-color: var(--line);
+  background: var(--panel);
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.cmp-add .dock-empty {
+  margin: 0;
+}
+.cmp-add-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cmp-add-list button {
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: var(--radius-input);
+  border-color: var(--line);
+  background: var(--panel);
+  text-align: left;
+}
+.cmp-add-list button:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+.cmp-add-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmp-add-meta {
+  flex: none;
+  font: 400 10px/1 var(--mono);
+  color: var(--faint);
+}
+.cmp-add-cell {
+  border-left: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg);
+}
+.cmp-sec {
+  grid-column: 1 / -1;
+  padding: 8px 12px 6px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+}
+.cmp-rowhead {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  font: 400 12px/1.45 var(--font);
+  color: var(--ink-2);
+}
+.cmp-cell {
+  padding: 9px 12px;
+  border-left: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  font: 400 12px/1.45 var(--font);
+  color: var(--ink);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cmp-cell.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-cell.best {
+  color: var(--accent-hover);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+:root[data-theme="dark"] .cmp-cell.best {
+  color: var(--accent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cmp-cell.best {
+    color: var(--accent);
+  }
+}
+.cmp-weapon + .cmp-weapon {
+  margin-top: 7px;
+}
+.cmp-weapon-name {
+  display: block;
+  font-weight: 500;
+}
+.cmp-weapon-line {
+  display: block;
+  font: 400 11px/1.45 var(--mono);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-weapon-line em {
+  font-style: normal;
+  color: var(--faint);
+}
+.cmp-weapon-kw {
+  display: block;
+  font: 400 10.5px/1.45 var(--font);
+  color: var(--faint);
+}
+.cmp-abil + .cmp-abil {
+  margin-top: 7px;
+}
+.cmp-abil-name {
+  display: block;
+  font-weight: 600;
+}
+.cmp-abil-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font: 400 11.5px/1.5 var(--font);
+  color: var(--ink-2);
+  white-space: pre-line;
+}
+.cmp-line + .cmp-line {
+  margin-top: 3px;
+}
+.cmp-chips {
+  gap: 4px;
+}
+.cmp-foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.cmp-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 10px/1 var(--mono);
+  color: var(--muted);
+}
+.cmp-legend-sw {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.cmp-note {
+  margin: 10px 0 0;
+}
+
+@media (max-width: 899px) {
+  .codex-columns {
+    grid-template-columns: 1fr;
+  }
+  .codex-columns > .codex-side {
+    border-left: 0;
+    padding-top: 16px;
+  }
+  .codex-keywords {
+    grid-template-columns: 1fr;
+  }
+  .codex-band {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .codex-band-points {
+    text-align: left;
+    width: 100%;
+  }
+  .codex-landing-tools .codex-faction {
+    width: 100%;
+  }
+  .codex-landing-tools .codex-tools {
+    flex-direction: column;
+  }
 }

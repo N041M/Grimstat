@@ -248,7 +248,7 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                             ↳
                           </span>
                         ) : null}
-                        <UnitArt keywords={ds?.keywords ?? []} className="ut-art" />
+                        <UnitArt of={ds} className="ut-art" />
                         <span className="ut-name-text">{name}</span>
                         {badges}
                       </span>
