@@ -263,3 +263,59 @@ describe("text import edge cases", () => {
     expect(parseWargearList("Vortex cannon, 2x Twin hail gun")).toEqual(["Vortex cannon", "Twin hail gun", "Twin hail gun"]);
   });
 });
+
+/**
+ * The shape the official app exports, and therefore the shape most pasted lists arrive in — it is
+ * also what Goonhammer's tournament write-ups paste verbatim, so it is the format any importer of
+ * published winning lists has to eat.
+ */
+describe("the GW app's attached-unit blocks", () => {
+  const text = readFixture("rosters/gw-app-attached.txt");
+
+  it("finds the detachment behind the Detachment Points the app prints after it", () => {
+    // "Ember Vanguard (3 Detachment Points)" — the app spells it out where New Recruit writes
+    // "[3 DP]". The count itself is not kept: a detachment's DP is a property of the game data, so
+    // the snapshot already knows it. What matters is that the line is recognised at all.
+    const { roster: r, warnings } = importRosterText(text, snapshot);
+    expect(r.detachments[0]?.detachmentId).toBe("det:ashen-wardens:ember-vanguard");
+    expect(warnings.join(" ")).not.toMatch(/Ember Vanguard/);
+  });
+
+  it("takes the force disposition from the bare line the app puts it on", () => {
+    // The app writes the disposition on its own line under the detachment, with nothing marking it
+    // as one. It is recognised by asking the detachment which dispositions it allows — so the five
+    // real ones never appear in the parser, and the synthetic fixture has its own.
+    const { roster: r, warnings } = importRosterText(text, snapshot);
+    expect(r.detachments[0]?.forceDisposition).toBe("HOLD THE RIDGE");
+    expect(warnings.join(" ")).not.toMatch(/HOLD THE RIDGE/);
+  });
+
+  it("attaches the leader to the bodyguard standing beside it", () => {
+    // The app names no host: attachment is structural, by which units share an "Attached Unit N"
+    // heading. The leader is listed first, so the host is only known once the block ends.
+    const { roster: r } = importRosterText(text, snapshot);
+    const captain = r.units.find((u) => u.datasheetId.includes("captain"));
+    const squad = r.units.find((u) => u.datasheetId.includes("squad"));
+    expect(captain?.attachedTo).toEqual({ unitId: squad!.id, role: "leader" });
+  });
+
+  it("does not leave the attachment line in the unit's wargear", () => {
+    const { roster: r, warnings } = importRosterText(text, snapshot);
+    const captain = r.units.find((u) => u.datasheetId.includes("captain"))!;
+    const gear = captain.models.flatMap((g) => g.wargear ?? []);
+    expect(gear.join(" ")).not.toMatch(/Attached as/i);
+    expect(warnings.join(" ")).not.toMatch(/Attached as/i);
+  });
+
+  it("leaves a unit outside any block unattached", () => {
+    const { roster: r } = importRosterText(text, snapshot);
+    const crusher = r.units.find((u) => u.datasheetId.includes("crusher"));
+    expect(crusher?.attachedTo).toBeUndefined();
+  });
+
+  it("does not treat the block headings as units", () => {
+    const { roster: r, warnings } = importRosterText(text, snapshot);
+    expect(r.units).toHaveLength(3);
+    expect(warnings.join(" ")).not.toMatch(/Attached Unit/i);
+  });
+});

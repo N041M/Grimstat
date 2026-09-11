@@ -1,4 +1,5 @@
-import type { Roster, Snapshot } from "@grimstat/schema";
+import type { Roster, RosterDetachment, Snapshot } from "@grimstat/schema";
+import type { AttachRole } from "./import-common";
 import { normaliseName } from "@grimstat/snapshot";
 import {
   POINTS_BY_SIZE,
@@ -58,8 +59,17 @@ const BULLET = /^[•◦▪\-*]\s*/;
  */
 const UNIT_HEADER = /^(?:([A-Za-z]+\d+):\s*)?(?:(\d+)\s*[x×]\s+)?(.+?)\s*(?:[([]|[-–—]\s*)(\d[\d,]*)\s*(?:points?|pts?)\s*[)\]]?\s*(?::\s*(.*))?$/i;
 const COUNT_ITEM = /^(\d+)\s*[x×]\s+(.+)$/i;
-/** `Ember Vanguard`, `Ember Vanguard [2 DP] (TAKE AND HOLD)`, `Ember Vanguard (2 DP, TAKE AND HOLD)`. */
-const DET_SPEC = /^(.+?)\s*(?:[[(]\s*(\d+)\s*DP\s*(?:,\s*([^)\]]+?))?\s*[\])]?)?\s*(?:\(\s*([^)]*?)\s*\))?\s*$/i;
+/**
+ * `Ember Vanguard`, `Ember Vanguard [2 DP] (TAKE AND HOLD)`, `Ember Vanguard (2 DP, TAKE AND HOLD)`,
+ * `Ember Vanguard (3 Detachment Points)`.
+ *
+ * The last form is the official app's, and therefore the one most pasted lists use; only New Recruit
+ * abbreviates to DP.
+ */
+const DET_SPEC = /^(.+?)\s*(?:[[(]\s*(\d+)\s*(?:DP|Detachment\s+Points?)\s*(?:,\s*([^)\]]+?))?\s*[\])]?)?\s*(?:\(\s*([^)]*?)\s*\))?\s*$/i;
+
+/** `Attached Unit 1` opens a block; `Attached Units` is the section heading above the blocks. */
+const ATTACH_BLOCK = /^attached\s+units?(?:\s+(\d+))?$/i;
 
 export function splitList(text: string): string[] {
   return text
@@ -116,6 +126,19 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
   let warlordRef: string | undefined;
   const units: TextUnit[] = [];
   const st: { cur: TextUnit | null } = { cur: null };
+
+  /**
+   * The official app names no host unit. Attachment is structural: the units under one
+   * "Attached Unit N" heading form a block, and the one marked Bodyguard hosts the Leaders and
+   * Supports beside it. The leader is usually listed first, so the host is only known once the block
+   * ends — which is why these are collected and resolved on close rather than as they are read.
+   */
+  let block: { host?: TextUnit; riders: { t: TextUnit; role: AttachRole }[] } | undefined;
+  const closeAttachBlock = () => {
+    const host = block?.host;
+    if (host) for (const r of block!.riders) r.t.u.attachHost = { unitId: host.u.id, role: r.role };
+    block = undefined;
+  };
   let headerSeen = false;
 
   const setFaction = (label: string): boolean => {
@@ -130,13 +153,26 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     return false;
   };
 
+  /**
+   * The detachment most recently added, and the dispositions its datasheet allows.
+   *
+   * The official app writes the force disposition on the line *after* the detachment, with nothing to
+   * mark it as one — so it can only be recognised by asking the game data whether this detachment
+   * permits it. That keeps the five dispositions out of the parser: they are rules text, and rules
+   * text lives in the snapshot.
+   */
+  let lastDetachment: { entry: RosterDetachment; allowed: readonly string[] } | undefined;
+
   /** One entry of a `Detachment:` line or header value, with its optional DP count and force disposition. */
   const addDetachmentSpec = (spec: string) => {
     const m = DET_SPEC.exec(spec.trim().replace(/\s*\+*$/, ""));
     if (!m) return;
     // a trailing "(…)" is a disposition only next to a DP count; otherwise it is a variant label the snapshot ignores
     const disposition = m[3]?.trim() || (m[2] ? m[4]?.trim() : undefined) || forceDisposition;
-    ctx.addDetachment(m[1]!.trim(), disposition);
+    const label = m[1]!.trim();
+    const entry = ctx.addDetachment(label, disposition);
+    const det = ctx.findDetachment(label);
+    lastDetachment = entry && det ? { entry, allowed: det.forceDispositions } : undefined;
   };
 
   const applyFlag = (t: TextUnit, f: string): boolean => {
@@ -153,6 +189,15 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     m = /^(leads|leader of|attached to|supports|support of):\s*(.+)$/i.exec(f);
     if (m) {
       t.u.attach = { hostName: m[2]!.trim(), role: /^support/i.test(m[1]!) ? "support" : "leader" };
+      return true;
+    }
+    // "Attached as: Leader (Character)" — a declaration, not wargear, so it is consumed whether or
+    // not a block is open; left unconsumed it lands in the unit's weapons.
+    m = /^attached\s+as:\s*(leader|bodyguard|support)\b/i.exec(f);
+    if (m) {
+      const kind = m[1]!.toLowerCase();
+      if (block && kind === "bodyguard") block.host = t;
+      else if (block) block.riders.push({ t, role: kind === "support" ? "support" : "leader" });
       return true;
     }
     return false;
@@ -288,14 +333,34 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       headerSeen = true;
       continue;
     }
-    if (!isBullet && SECTION_NAMES.has(normaliseName(line))) {
+    if (!isBullet && ATTACH_BLOCK.test(line)) {
+      closeAttachBlock();
+      // "Attached Unit 1" opens a block; the bare "Attached Units" heading only introduces them.
+      if (/\d/.test(line)) block = { riders: [] };
       st.cur = null;
       continue;
     }
-    // a bare detachment name, wherever it appears: GW-app exports put it under the faction, others after the units
-    if (!isBullet && ctx.findDetachment(line)) {
-      addDetachmentSpec(line);
+    // A bare force disposition on the line after its detachment — the app's layout. Recognised by
+    // asking that detachment which dispositions it allows, never by a list of names in here.
+    if (!isBullet && lastDetachment?.allowed.some((d) => normaliseName(d) === normaliseName(line))) {
+      lastDetachment.entry.forceDisposition = line;
       continue;
+    }
+    if (!isBullet && SECTION_NAMES.has(normaliseName(line))) {
+      closeAttachBlock();
+      st.cur = null;
+      continue;
+    }
+    // A bare detachment name, wherever it appears: GW-app exports put it under the faction, others
+    // after the units. The app suffixes it with its Detachment Points, so the lookup has to be by the
+    // name alone — a suffix that is a points cost belongs to a unit, so only a DP count counts here.
+    if (!isBullet) {
+      const spec = DET_SPEC.exec(line);
+      const detName = spec?.[1]?.trim();
+      if (detName && (spec![2] || detName === line) && ctx.findDetachment(detName)) {
+        addDetachmentSpec(line);
+        continue;
+      }
     }
 
     // ---- unit header
@@ -349,6 +414,8 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     warnings.push(`${st.cur.u.name}: ignored line "${line}"`);
   }
 
+  // The last block has no heading after it to close it.
+  closeAttachBlock();
   for (const t of units) finishUnit(t, warnings);
   if (warlordRef) {
     const refMatch = /^([A-Za-z]+\d+):\s*(.*)$/.exec(warlordRef);
