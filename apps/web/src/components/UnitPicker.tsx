@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { UnitArt } from "./UnitArt";
 import type { Datasheet, ScenarioUnit, Snapshot } from "@grimstat/schema";
 import { gameApi, host } from "../plugin";
 import { cloneUnit, modelCount } from "../lib/scenario";
@@ -166,7 +167,10 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
               {datasheets.length ? (
                 datasheets.map((d) => (
                   <button key={d.id} type="button" role="option" aria-selected={d.id === datasheetId} aria-pressed={d.id === datasheetId} onClick={() => pickDatasheet(d)}>
-                    <span>{d.name}</span>
+                    <span>
+                      <UnitArt keywords={d.keywords} />
+                      {d.name}
+                    </span>
                     <span className="muted small">{d.role ?? ""}</span>
                   </button>
                 ))

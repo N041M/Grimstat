@@ -11,6 +11,7 @@ import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece,
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
 import { canRedo, canUndo, editorReducer, initialEditor } from "../lib/battleEditor";
 import { Badge, Tabs } from "../components/ui";
+import { UnitArt } from "../components/UnitArt";
 import {
   anchorOf,
   applyModelMove,
@@ -476,6 +477,7 @@ export function BattlePage() {
           <div className="battle-labels" ref={labelsRef} aria-hidden="true">
             {state.units.map((u) => (
               <div key={u.id} className={`battle-label ${u.side}`}>
+                <UnitArt keywords={u.keywords} />
                 {t(u.name as I18nKey)}
               </div>
             ))}
@@ -671,7 +673,7 @@ function BattlePanel({
                   className={`battle-unit ${u.id === selected?.id ? "is-selected" : ""} ${u.id === target?.id ? "is-target" : ""}`.trim()}
                   onClick={() => onPick(u.id)}
                 >
-                  <span className={`battle-swatch ${side}`} aria-hidden="true" />
+                  <UnitArt keywords={u.keywords} className={`battle-swatch ${side}`} />
                   <span className="battle-unit-name">{t(u.name as I18nKey)}</span>
                   <span className="battle-unit-meta">
                     {u.models.length}× · M{u.move}"

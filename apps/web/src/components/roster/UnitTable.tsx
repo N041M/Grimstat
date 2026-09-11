@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { UnitArt } from "../UnitArt";
 import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import type { UnitCost } from "@grimstat/resolver";
 import { diagnosticsForUnit, modelCountOf, sectionOf, unitDisplayName, wargearSummary, type UnitSection } from "../../lib/roster";
@@ -247,6 +248,7 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                             ↳
                           </span>
                         ) : null}
+                        <UnitArt keywords={ds?.keywords ?? []} className="ut-art" />
                         <span className="ut-name-text">{name}</span>
                         {badges}
                       </span>

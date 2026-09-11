@@ -1,4 +1,6 @@
 import { currentPlan } from "@grimstat/entitlements";
+import { UnitArt } from "../components/UnitArt";
+import { UNIT_ART_CREDITS, UNIT_ART_IDS, UNIT_ART_SOURCE, unitArtAuthors } from "../lib/unitArt";
 import { gameSystem, manifest } from "@grimstat/game-40k-11e";
 import { host } from "../plugin";
 import { hrefFor } from "../router";
@@ -43,6 +45,32 @@ export function AboutPage() {
           </h2>
           <p className="about-card-body prose">{t("about.data1")}</p>
           <p className="about-card-body prose">{t("about.data2")}</p>
+        </section>
+
+        <section className="about-card" aria-labelledby="about-art-h">
+          <h2 className="t-eyebrow" id="about-art-h">
+            {t("about.artTitle")}
+          </h2>
+          <p className="about-card-body prose">{t("about.art1")}</p>
+          <p className="about-card-body prose">
+            {t("about.art2", { authors: unitArtAuthors().join(", ") })}{" "}
+            <a href={UNIT_ART_SOURCE.url} target="_blank" rel="noreferrer">
+              {UNIT_ART_SOURCE.name}
+            </a>
+            {", "}
+            <a href={UNIT_ART_SOURCE.licenceUrl} target="_blank" rel="noreferrer">
+              {UNIT_ART_SOURCE.licence}
+            </a>
+            .
+          </p>
+          <ul className="about-art-list" aria-label={t("about.artTitle")}>
+            {UNIT_ART_IDS.map((id) => (
+              <li key={id} title={`${UNIT_ART_CREDITS[id].icon} — ${UNIT_ART_CREDITS[id].author}`}>
+                <UnitArt keywords={[id]} title={UNIT_ART_CREDITS[id].icon} />
+                <span>{t(`unitArt.${id}` as I18nKey)}</span>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <div className="about-stats">
