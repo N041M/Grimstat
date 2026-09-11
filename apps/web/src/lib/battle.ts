@@ -14,7 +14,7 @@
  */
 
 import type { CoherencyReport, ModelHull, ReachNode, TerrainLayout, Vec2, Vec3, Zone } from "@grimstat/board";
-import { LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, edgeZones, heightForKeywords, inEngagementRange, inZone, onBoard, pointInPolygon, reachable, sight, unitDistance } from "@grimstat/board";
+import { LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, edgeZones, heightForKeywords, horizontalGap, inEngagementRange, inZone, onBoard, pointInPolygon, reachable, sight, unitDistance } from "@grimstat/board";
 
 export type Side = "attacker" | "defender";
 export type BattleTool = "deploy" | "select" | "measure" | "sight" | "terrain";
@@ -281,6 +281,66 @@ export function applyUnitMove(unit: BattleUnit, to: Vec3, cost: number, path?: r
   };
 }
 
+/* ---- groups ------------------------------------------------------------------------------------ */
+
+/** One model of a selection that may span units. */
+export interface GroupMember {
+  readonly unitId: string;
+  readonly modelId: string;
+}
+
+/** A member's share of a group move: where it lands, what it pays, the way it goes. */
+export interface GroupMove extends GroupMember {
+  readonly at: Vec3;
+  readonly cost: number;
+  readonly path?: readonly Vec3[];
+}
+
+/**
+ * Move several models by one offset, each judged on its own from where it stands.
+ *
+ * The companions are taken off the table while a member's route is searched, since they are moving
+ * too and would otherwise block each other's starting and finishing spots, and the members are then
+ * checked against each other where they land. The group goes only if every model can; the problems
+ * are the union of theirs.
+ */
+export function groupMoveVerdict(state: BattleState, members: readonly GroupMember[], by: Vec2, index = indexOf(state)): { ok: boolean; moves: GroupMove[]; problems: string[] } {
+  const ids = new Set(members.map((m) => m.modelId));
+  const without = (except: string): BattleState => ({
+    ...state,
+    units: state.units.map((u) => ({ ...u, models: u.models.filter((m) => !ids.has(m.id) || m.id === except) })),
+  });
+  const moves: GroupMove[] = [];
+  const landed: ModelHull[] = [];
+  const problems: string[] = [];
+  const note = (p: string) => {
+    if (!problems.includes(p)) problems.push(p);
+  };
+  for (const member of members) {
+    const world = without(member.modelId);
+    const unit = findUnit(world, member.unitId);
+    const model = unit && findModel(unit, member.modelId);
+    if (!unit || !model) continue;
+    const verdict = modelMoveVerdict(world, unit, model, { x: model.hull.pos.x + by.x, y: model.hull.pos.y + by.y }, index);
+    if (verdict.ok && verdict.at && verdict.cost !== undefined) {
+      moves.push({ ...member, at: verdict.at, cost: verdict.cost, path: verdict.path });
+      landed.push({ ...model.hull, pos: verdict.at });
+    }
+    verdict.problems.forEach(note);
+  }
+  for (let i = 0; i < landed.length; i++) {
+    for (let j = i + 1; j < landed.length; j++) {
+      if (Math.abs(landed[i]!.pos.z - landed[j]!.pos.z) < 0.5 && horizontalGap(landed[i]!, landed[j]!) <= 0) note("battle.problem.blocked");
+    }
+  }
+  return { ok: problems.length === 0 && moves.length === members.length, moves, problems };
+}
+
+/** Make a group move: every member travels its own route and pays for it. */
+export function applyGroupMove(state: BattleState, moves: readonly GroupMove[]): BattleState {
+  return { ...state, units: state.units.map((u) => moves.filter((m) => m.unitId === u.id).reduce((unit, m) => applyModelMove(unit, m.modelId, m.at, m.cost, m.path), u)) };
+}
+
 /* ---- deployment -------------------------------------------------------------------------------- */
 
 /** The zone a side deploys into. */
@@ -316,9 +376,12 @@ export const withdrawUnit = (unit: BattleUnit): BattleUnit => ({ ...unit, reserv
 /** An angle brought back into (−π, π]. */
 const wrapAngle = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
 
-/** Turn one model, or every model of the unit, by `by` radians about its own base, in place. */
-export function rotateUnit(unit: BattleUnit, by: number, modelId?: string): BattleUnit {
-  return { ...unit, models: unit.models.map((m) => (modelId && m.id !== modelId ? m : { ...m, hull: { ...m.hull, facing: wrapAngle(m.hull.facing + by) } })) };
+/** Whether a model is among `only`: one id, a set of ids, or every model when nothing is given. */
+const among = (id: string, only?: string | ReadonlySet<string>): boolean => only === undefined || (typeof only === "string" ? id === only : only.has(id));
+
+/** Turn one model, several, or every model of the unit, by `by` radians about its own base, in place. */
+export function rotateUnit(unit: BattleUnit, by: number, only?: string | ReadonlySet<string>): BattleUnit {
+  return { ...unit, models: unit.models.map((m) => (among(m.id, only) ? { ...m, hull: { ...m.hull, facing: wrapAngle(m.hull.facing + by) } } : m)) };
 }
 
 /**
@@ -327,8 +390,8 @@ export function rotateUnit(unit: BattleUnit, by: number, modelId?: string): Batt
  * A round base turns freely. An oval one sweeps a different footprint, and can swing off the table,
  * into a wall or another base, or into an enemy's engagement range — the same refusals as a move.
  */
-export function rotateVerdict(state: BattleState, unit: BattleUnit, by: number, modelId?: string, index = indexOf(state)): { ok: boolean; unit: BattleUnit; problems: string[] } {
-  const turned = rotateUnit(unit, by, modelId);
+export function rotateVerdict(state: BattleState, unit: BattleUnit, by: number, only?: string | ReadonlySet<string>, index = indexOf(state)): { ok: boolean; unit: BattleUnit; problems: string[] } {
+  const turned = rotateUnit(unit, by, only);
   const { enemies, blockers } = obstacles(state, unit);
   const problems: string[] = [];
   if (turned.models.some((m) => !onBoard(m.hull, state.layout.size))) problems.push("battle.problem.offTable");

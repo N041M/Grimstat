@@ -194,6 +194,7 @@ export const UnitTokens = memo(function UnitTokens({
   selectedId,
   activeModelId,
   incoherent,
+  groupIds,
   draggable = true,
   onSelect,
   onGrab,
@@ -201,11 +202,13 @@ export const UnitTokens = memo(function UnitTokens({
   units: readonly BattleUnit[];
   selectedId?: string;
   activeModelId?: string;
+  /** Ids of models selected together, each ringed like the active one. */
+  groupIds?: ReadonlySet<string>;
   /** Ids of models out of coherency, ringed in red so the unit's shape is legible at a glance. */
   incoherent?: ReadonlySet<string>;
   /** Only the cursor: whether the press actually picks the model up is the scene's decision. */
   draggable?: boolean;
-  onSelect?: (unitId: string, modelId: string) => void;
+  onSelect?: (unitId: string, modelId: string, additive?: boolean) => void;
   onGrab?: (unitId: string, modelId: string, at: Vec2) => void;
 }) {
   return (
@@ -220,8 +223,10 @@ export const UnitTokens = memo(function UnitTokens({
                   onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                     e.stopPropagation();
                     const p = fromScene(e.point.x, e.point.y, e.point.z);
-                    onSelect?.(unit.id, m.id);
-                    onGrab?.(unit.id, m.id, { x: p.x, y: p.y });
+                    // A press with Shift, Ctrl or ⌘ adds to the selection rather than picking the model up.
+                    const additive = e.nativeEvent.shiftKey || e.nativeEvent.ctrlKey || e.nativeEvent.metaKey;
+                    onSelect?.(unit.id, m.id, additive);
+                    if (!additive) onGrab?.(unit.id, m.id, { x: p.x, y: p.y });
                   }}
                   onPointerOver={(e: ThreeEvent<PointerEvent>) => {
                     e.stopPropagation();
@@ -231,7 +236,7 @@ export const UnitTokens = memo(function UnitTokens({
                     document.body.style.cursor = "";
                   }}
                 >
-                  <TokenBody hull={m.hull} kind={kindOf(unit, i, all)} colour={SIDE_COLOURS[unit.side]} selected={m.id === activeModelId || (unit.id === selectedId && !activeModelId)} warn={incoherent?.has(m.id)} />
+                  <TokenBody hull={m.hull} kind={kindOf(unit, i, all)} colour={SIDE_COLOURS[unit.side]} selected={m.id === activeModelId || (unit.id === selectedId && !activeModelId) || !!groupIds?.has(m.id)} warn={incoherent?.has(m.id)} />
                 </group>
               </LiveToken>
             ))}
@@ -242,12 +247,12 @@ export const UnitTokens = memo(function UnitTokens({
 });
 
 /** The translucent copy that follows the pointer during a drag, tinted by whether the move is legal. */
-export function Ghost({ hulls, kind = "infantry", legal }: { hulls: readonly ModelHull[]; kind?: SilhouetteId; legal: boolean }) {
+export function Ghost({ hulls, kind = "infantry", kinds, legal }: { hulls: readonly ModelHull[]; kind?: SilhouetteId; kinds?: readonly SilhouetteId[]; legal: boolean }) {
   return (
     <group>
       {hulls.map((hull, i) => (
         <group key={i} position={toScene(hull.pos)}>
-          <TokenBody hull={hull} kind={kind} colour={legal ? SCENE_COLOURS.rayClear : SCENE_COLOURS.rayBlocked} ghost />
+          <TokenBody hull={hull} kind={kinds?.[i] ?? kind} colour={legal ? SCENE_COLOURS.rayClear : SCENE_COLOURS.rayBlocked} ghost />
         </group>
       ))}
     </group>

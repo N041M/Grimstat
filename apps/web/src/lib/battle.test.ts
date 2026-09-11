@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, coherency, inZone, ovalBase } from "@grimstat/board";
 import {
   anchorOf,
+  applyGroupMove,
   applyModelMove,
   applyUnitMove,
   autoDeploy,
@@ -16,6 +17,7 @@ import {
   modelMoveVerdict,
   modelReach,
   remainingMove,
+  groupMoveVerdict,
   resetMove,
   rotateUnit,
   rotateVerdict,
@@ -498,5 +500,46 @@ describe("turning in place", () => {
     const swung = rotateVerdict(state, tank, -Math.PI / 2); // long axis across the edge: off it
     expect(swung.ok).toBe(false);
     expect(swung.problems).toContain("battle.problem.offTable");
+  });
+});
+
+describe("moving a selection together", () => {
+  const clear = { ...state, layout: { ...state.layout, pieces: [] } };
+
+  it("moves every member by the offset, each charged its own route, and leaves the rest alone", () => {
+    const unit = attacker(0);
+    const members = unit.models.map((m) => ({ unitId: unit.id, modelId: m.id }));
+    const verdict = groupMoveVerdict(clear, members, { x: 0, y: 2 });
+    expect(verdict.problems).toEqual([]);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.moves).toHaveLength(unit.models.length);
+    for (const move of verdict.moves) {
+      const from = unit.models.find((m) => m.id === move.modelId)!.hull.pos;
+      expect(Math.hypot(move.at.x - from.x, move.at.y - (from.y + 2))).toBeLessThan(0.6);
+      expect(move.cost).toBeGreaterThan(1.4);
+      expect(move.cost).toBeLessThan(3);
+    }
+    const after = applyGroupMove(clear, verdict.moves.slice(0, 2));
+    const moved = after.units.find((u) => u.id === unit.id)!;
+    expect(moved.models[0]!.spent).toBeCloseTo(verdict.moves[0]!.cost);
+    expect(moved.models[2]!.spent ?? 0).toBe(0);
+    expect(moved.models[2]!.hull.pos).toEqual(unit.models[2]!.hull.pos);
+  });
+
+  it("refuses the whole group when any member cannot make it", () => {
+    const unit = attacker(0);
+    const members = unit.models.slice(0, 3).map((m) => ({ unitId: unit.id, modelId: m.id }));
+    const verdict = groupMoveVerdict(clear, members, { x: 0, y: 20 });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.problems).toContain("battle.problem.tooFar");
+  });
+
+  it("turns only the members named when given a set", () => {
+    const unit = attacker(0);
+    const ids = new Set(unit.models.slice(0, 2).map((m) => m.id));
+    const turned = rotateUnit(unit, Math.PI / 12, ids);
+    expect(turned.models[0]!.hull.facing).toBeCloseTo(Math.PI / 12);
+    expect(turned.models[1]!.hull.facing).toBeCloseTo(Math.PI / 12);
+    expect(turned.models[2]!.hull.facing).toBe(unit.models[2]!.hull.facing);
   });
 });

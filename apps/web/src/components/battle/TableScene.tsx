@@ -52,7 +52,7 @@ const cursorOn = (cursor: string) => ({
  * Only presses are reported. A measuring tape takes deliberate picks, and a drag does not go through
  * here at all — it casts against a plane from window events, which has no gaps.
  */
-export const Table = memo(function Table({ size, onDown }: { size: BoardSize; onDown?: (at: Vec2) => void }) {
+export const Table = memo(function Table({ size, onDown }: { size: BoardSize; onDown?: (at: Vec2, event: PointerEvent) => void }) {
   const edge = useDisposable(() => {
     const flat = new ShapeGeometry(shapeOf([{ x: 0, y: 0 }, { x: size.width, y: 0 }, { x: size.width, y: size.depth }, { x: 0, y: size.depth }]));
     const edges = new EdgesGeometry(flat);
@@ -61,7 +61,7 @@ export const Table = memo(function Table({ size, onDown }: { size: BoardSize; on
   }, [size.width, size.depth]);
   return (
     <group>
-      <mesh rotation={FLAT} position={[size.width / 2, -0.02, -size.depth / 2]} onPointerDown={onDown ? (e) => onDown(boardPoint(e)) : undefined}>
+      <mesh rotation={FLAT} position={[size.width / 2, -0.02, -size.depth / 2]} onPointerDown={onDown ? (e) => onDown(boardPoint(e), e.nativeEvent) : undefined}>
         <planeGeometry args={[size.width, size.depth]} />
         <meshStandardMaterial color={SCENE_COLOURS.table} roughness={0.95} />
       </mesh>

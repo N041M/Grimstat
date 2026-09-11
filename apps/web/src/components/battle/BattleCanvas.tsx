@@ -3,8 +3,8 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { ModelHull, ReachNode, Vec2, Vec3 } from "@grimstat/board";
 import type { BattleState, BattleUnit, Tape } from "../../lib/battle";
-import { anchorOf, deployVerdict, dragVerdict, findModel, findUnit, indexOf, modelMoveVerdict, placeUnit, translateUnit, unitHulls, type Side } from "../../lib/battle";
-import { fromScene } from "../../lib/battleScene";
+import { anchorOf, deployVerdict, dragVerdict, findModel, findUnit, groupMoveVerdict, indexOf, modelMoveVerdict, placeUnit, translateUnit, unitHulls, type GroupMember, type GroupMove, type Side } from "../../lib/battle";
+import { fromScene, toScene } from "../../lib/battleScene";
 import { centre } from "../../lib/layoutEdit";
 import { Cameras, type CameraMode } from "./Cameras";
 import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
@@ -27,6 +27,10 @@ export interface DragState {
   /** The route the search found, when the move is legal. */
   readonly path?: readonly Vec3[];
   readonly problems: readonly string[];
+  /** The models being moved together, when the drag is a group's; `modelId` is the one in hand. */
+  readonly members?: readonly GroupMember[];
+  /** Each member's move, when the whole group can go. */
+  readonly group?: readonly GroupMove[];
 }
 
 /**
@@ -59,7 +63,15 @@ export interface BattleCanvasProps {
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
   /** A planned move not yet approved: the unit's ghost standing where it would go. */
-  planned?: { readonly unitId: string; readonly modelId?: string; readonly hulls: readonly ModelHull[]; readonly kind: SilhouetteId; readonly legal: boolean };
+  planned?: { readonly unitId: string; readonly modelId?: string; readonly hulls: readonly ModelHull[]; readonly kind: SilhouetteId; readonly kinds?: readonly SilhouetteId[]; readonly moves?: readonly GroupMove[]; readonly legal: boolean };
+  /** Models selected together. A drag on any of them moves them all. */
+  groupIds?: ReadonlySet<string>;
+  /** A Shift-drag on the table has boxed these models; `additive` when ⌘ or Ctrl was held too. */
+  onBoxSelect?(ids: string[], additive: boolean): void;
+  /** A group drag was released somewhere every member can reach. */
+  onMoveGroup?(moves: readonly GroupMove[]): void;
+  /** The selection box, drawn over the table by the page and placed by the canvas. */
+  marqueeRef?: RefObject<HTMLDivElement>;
   /** Tapes left on the table. Each stays until its line is double-clicked. */
   tapes?: readonly Tape[];
   onTapeRemove?(id: string): void;
@@ -83,7 +95,7 @@ export interface BattleCanvasProps {
   labelsRef?: RefObject<HTMLDivElement>;
   /** An element the canvas keeps beside the pointer during a drag; the page decides what it says. */
   readoutRef?: RefObject<HTMLDivElement>;
-  onSelect(unitId: string | undefined, modelId?: string): void;
+  onSelect(unitId: string | undefined, modelId?: string, additive?: boolean): void;
   /** A legal drag was released. `modelId` names one model; without it the whole unit travels as a body. */
   onMove(unitId: string, to: Vec3, cost: number, modelId?: string, path?: readonly Vec3[]): void;
   onDrag?(drag: DragState | undefined): void;
@@ -113,10 +125,28 @@ export function BattleCanvas(props: BattleCanvasProps) {
   );
 }
 
+/** The models of a selection, in table order, skipping any in reserve. */
+function membersOf(state: BattleState, ids: ReadonlySet<string>): GroupMember[] {
+  return state.units.flatMap((u) => (u.reserve ? [] : u.models.filter((m) => ids.has(m.id)).map((m) => ({ unitId: u.id, modelId: m.id }))));
+}
+
+/** A model and its unit, by the model's id. */
+function modelIn(state: BattleState, modelId: string): { unit: BattleUnit; model: BattleUnit["models"][number] } | undefined {
+  for (const unit of state.units) {
+    const model = unit.models.find((m) => m.id === modelId);
+    if (model) return { unit, model };
+  }
+  return undefined;
+}
+
 /** Whatever the pointer is holding (a model, a terrain piece or an objective) and where on it. */
 type Held =
   /** A model by id, or the whole unit by its leading model when `modelId` is absent. */
   | { readonly kind: "model"; readonly unitId: string; readonly modelId?: string; readonly offset: Vec2 }
+  /** Several models at once, `lead` in hand; the offset is from the press to the lead. */
+  | { readonly kind: "group"; readonly lead: string; readonly members: readonly GroupMember[]; readonly offset: Vec2 }
+  /** A selection box being drawn, from where the press was in window pixels. */
+  | { readonly kind: "box"; readonly start: { readonly x: number; readonly y: number }; readonly additive: boolean }
   | { readonly kind: "piece"; readonly id: string; readonly offset: Vec2 }
   | { readonly kind: "objective"; readonly id: string; readonly offset: Vec2 };
 
@@ -129,7 +159,7 @@ type Held =
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, groupIds, onBoxSelect, onMoveGroup, marqueeRef, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
@@ -145,8 +175,8 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
 
   // The window listeners are registered once and read the latest of everything through this ref,
   // rather than being torn down and re-added on every render — which, during a drag, is every frame.
-  const latest = useRef({ state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy });
-  latest.current = { state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy };
+  const latest = useRef({ state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, groupIds, onBoxSelect, onMoveGroup });
+  latest.current = { state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, groupIds, onBoxSelect, onMoveGroup };
 
   // A tape with no first mark has no free end.
   useEffect(() => {
@@ -184,6 +214,12 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         hold({ kind: "model", unitId, modelId, offset: { x: cx - at.x, y: cy - at.y } });
         return;
       }
+      // A model selected with others takes them all along.
+      const ids = latest.current.groupIds;
+      if (ids && ids.size >= 2 && ids.has(modelId)) {
+        hold({ kind: "group", lead: modelId, members: membersOf(latest.current.state, ids), offset: { x: model.hull.pos.x - at.x, y: model.hull.pos.y - at.y } });
+        return;
+      }
       hold({ kind: "model", unitId, modelId, offset: { x: model.hull.pos.x - at.x, y: model.hull.pos.y - at.y } });
     },
     [canDrag, hold],
@@ -199,6 +235,23 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
   const grabGhost = useCallback(
     (at: Vec2) => {
       if (!planned || !canDrag || dragMode !== "move") return;
+      if (planned.moves && planned.moves.length >= 2) {
+        // The ghost nearest the press leads; the rest follow by their offsets.
+        let best = 0;
+        let nearest = Infinity;
+        planned.hulls.forEach((h, i) => {
+          const d = Math.hypot(h.pos.x - at.x, h.pos.y - at.y);
+          if (d < nearest) {
+            nearest = d;
+            best = i;
+          }
+        });
+        const lead = planned.moves[best];
+        const ghostPos = planned.hulls[best]?.pos;
+        if (!lead || !ghostPos) return;
+        hold({ kind: "group", lead: lead.modelId, members: planned.moves.map(({ unitId, modelId }) => ({ unitId, modelId })), offset: { x: ghostPos.x - at.x, y: ghostPos.y - at.y } });
+        return;
+      }
       const anchor = planned.hulls[0];
       if (!anchor) return;
       hold({ kind: "model", unitId: planned.unitId, ...(planned.modelId ? { modelId: planned.modelId } : {}), offset: { x: anchor.pos.x - at.x, y: anchor.pos.y - at.y } });
@@ -236,6 +289,22 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
     // from cell to cell; only its storey comes from the search. What the drop settles into is the
     // search's answer — the nearest cell it would actually land in — which is where it snaps.
     const spot = drag.to;
+    if (drag.members && drag.modelId) {
+      const lead = findModel(unit, drag.modelId);
+      if (!lead) return undefined;
+      const by = { x: spot.x - lead.hull.pos.x, y: spot.y - lead.hull.pos.y };
+      const hulls: ModelHull[] = [];
+      const kinds: SilhouetteId[] = [];
+      for (const member of drag.members) {
+        const u = findUnit(state, member.unitId);
+        const m = u && findModel(u, member.modelId);
+        if (!u || !m) continue;
+        const landed = drag.group?.find((g) => g.modelId === member.modelId);
+        hulls.push({ ...m.hull, pos: { x: m.hull.pos.x + by.x, y: m.hull.pos.y + by.y, z: landed?.at.z ?? m.hull.pos.z } });
+        kinds.push(silhouetteFor(u.keywords));
+      }
+      return { hulls, kind, kinds };
+    }
     if (dragMode === "deploy") return { hulls: unitHulls(placeUnit(unit, spot)), kind };
     if (drag.modelId) {
       const model = findModel(unit, drag.modelId);
@@ -294,6 +363,30 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       if (at) place(e);
     };
 
+    /** Where a model's base centre is on the screen, in window pixels, or nothing if it is behind the camera. */
+    const onScreen = (pos: Vec3): { x: number; y: number } | undefined => {
+      const rect = canvas.getBoundingClientRect();
+      const v = new Vector3(...toScene(pos)).project(camera);
+      if (v.z > 1) return undefined;
+      return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
+    };
+
+    /** Draw the selection box between two window points, or hide it. */
+    const drawBox = (a?: { x: number; y: number }, b?: { x: number; y: number }) => {
+      const el = marqueeRef?.current;
+      if (!el) return;
+      if (!a || !b) {
+        el.style.display = "none";
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      el.style.display = "block";
+      el.style.left = `${Math.min(a.x, b.x) - rect.left}px`;
+      el.style.top = `${Math.min(a.y, b.y) - rect.top}px`;
+      el.style.width = `${Math.abs(a.x - b.x)}px`;
+      el.style.height = `${Math.abs(a.y - b.y)}px`;
+    };
+
     const follow = (e: PointerEvent) => {
       const what = held.current;
       if (!what) {
@@ -301,6 +394,28 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         return;
       }
       const { state: now, index: idx, editing: edit, onDrag: report } = latest.current;
+
+      if (what.kind === "box") {
+        drawBox(what.start, { x: e.clientX, y: e.clientY });
+        return;
+      }
+
+      if (what.kind === "group") {
+        const lead = modelIn(now, what.lead);
+        if (!lead) return;
+        const at = pointAt(e, lead.model.hull.pos.z);
+        if (!at) return;
+        const to = { x: at.x + what.offset.x, y: at.y + what.offset.y };
+        const by = { x: to.x - lead.model.hull.pos.x, y: to.y - lead.model.hull.pos.y };
+        const verdict = groupMoveVerdict(now, what.members, by, idx);
+        const leadMove = verdict.moves.find((m) => m.modelId === what.lead);
+        const next: DragState = { unitId: lead.unit.id, modelId: what.lead, to, at: leadMove?.at, legal: verdict.ok, cost: leadMove?.cost, path: leadMove?.path, problems: verdict.problems, members: what.members, group: verdict.ok ? verdict.moves : undefined };
+        pending.current = next;
+        setDrag(next);
+        report?.(next);
+        place(e);
+        return;
+      }
 
       if (what.kind !== "model") {
         const at = pointAt(e, 0);
@@ -348,18 +463,41 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       }
       // Land where the pointer let go rather than where the last drawn frame had it.
       if (last) follow(last);
+      const release = last;
       held.current = undefined;
       last = undefined;
       if (controls) controls.enabled = true;
       document.body.style.cursor = "";
 
-      if (what.kind !== "model") {
+      if (what.kind === "box") {
+        drawBox();
+        const end = release ? { x: release.clientX, y: release.clientY } : what.start;
+        // A box too small to have been meant as one is a plain Shift-click on the table: nothing.
+        if (Math.abs(end.x - what.start.x) >= 4 && Math.abs(end.y - what.start.y) >= 4) {
+          const x0 = Math.min(what.start.x, end.x);
+          const x1 = Math.max(what.start.x, end.x);
+          const y0 = Math.min(what.start.y, end.y);
+          const y1 = Math.max(what.start.y, end.y);
+          const ids: string[] = [];
+          for (const unit of latest.current.state.units) {
+            if (unit.reserve) continue;
+            for (const m of unit.models) {
+              const p = onScreen(m.hull.pos);
+              if (p && p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1) ids.push(m.id);
+            }
+          }
+          latest.current.onBoxSelect?.(ids, what.additive);
+        }
+        return;
+      }
+      if (what.kind !== "model" && what.kind !== "group") {
         latest.current.editing?.onDrop();
         return;
       }
       const result = pending.current;
       if (result?.legal && result.at) {
         if (latest.current.dragMode === "deploy") latest.current.onDeploy?.(result.unitId, { x: result.at.x, y: result.at.y });
+        else if (result.group) latest.current.onMoveGroup?.(result.group);
         else if (result.cost !== undefined) latest.current.onMove(result.unitId, result.at, result.cost, result.modelId, result.path);
       }
       pending.current = undefined;
@@ -376,9 +514,25 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       window.removeEventListener("pointerup", drop);
       window.removeEventListener("pointercancel", drop);
     };
-  }, [camera, canvas, controls, readoutRef]);
+  }, [camera, canvas, controls, readoutRef, marqueeRef]);
 
-  const onDown = useCallback((at: Vec2) => (held.current ? undefined : onTableDown?.(at)), [onTableDown]);
+  /**
+   * A press on the table plans a move, unless Shift is down, when it starts a selection box: the
+   * camera has the plain drag, so the box takes the modified one. ⌘ or Ctrl as well adds to the
+   * selection instead of replacing it.
+   */
+  const onDown = useCallback(
+    (at: Vec2, e: PointerEvent) => {
+      if (held.current) return;
+      if (e.shiftKey && canDrag && dragMode === "move" && onBoxSelect) {
+        hold({ kind: "box", start: { x: e.clientX, y: e.clientY }, additive: e.metaKey || e.ctrlKey });
+        document.body.style.cursor = "crosshair";
+        return;
+      }
+      onTableDown?.(at);
+    },
+    [onTableDown, canDrag, dragMode, onBoxSelect, hold],
+  );
 
   return (
     <>
@@ -402,9 +556,9 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
           {aim ? <MeasureLine from={measureFrom} to={{ x: aim.x, y: aim.y, z: measureFrom.z }} /> : null}
         </>
       ) : null}
-      <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grabModel} />
+      <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} groupIds={groupIds} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grabModel} />
       {ghost && drag ? (
-        <Ghost hulls={ghost.hulls} kind={ghost.kind} legal={drag.legal} />
+        <Ghost hulls={ghost.hulls} kind={ghost.kind} kinds={ghost.kinds} legal={drag.legal} />
       ) : planned ? (
         <group
           onPointerDown={(e: ThreeEvent<PointerEvent>) => {
@@ -420,7 +574,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
             if (!held.current) document.body.style.cursor = "";
           }}
         >
-          <Ghost hulls={planned.hulls} kind={planned.kind} legal={planned.legal} />
+          <Ghost hulls={planned.hulls} kind={planned.kind} kinds={planned.kinds} legal={planned.legal} />
         </group>
       ) : null}
       {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}

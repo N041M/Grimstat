@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { ReachNode, TerrainLayout, Vec2, Vec3 } from "@grimstat/board";
+import type { ModelHull, ReachNode, TerrainLayout, Vec2, Vec3 } from "@grimstat/board";
 import { reachable } from "@grimstat/board";
 import { PageHeader } from "../components/shell";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -13,9 +13,10 @@ import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/lay
 import { canRedo, canUndo, editorReducer, initialEditor } from "../lib/battleEditor";
 import { Badge, Tabs } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
-import { unitArtFor } from "../lib/unitArt";
+import { unitArtFor, type UnitArtId } from "../lib/unitArt";
 import {
   anchorOf,
+  applyGroupMove,
   applyModelMove,
   applyUnitMove,
   autoDeploy,
@@ -35,6 +36,9 @@ import {
   modelReach,
   moveOf,
   otherHulls,
+  groupMoveVerdict,
+  type GroupMember,
+  type GroupMove,
   remainingMove,
   replaceUnit,
   resetMove,
@@ -100,7 +104,12 @@ interface Plan {
   readonly at: Vec3;
   readonly cost: number;
   readonly path?: readonly Vec3[];
+  /** Every member's move, when the plan is a group's; `unitId`, `modelId` and `at` are then the lead's. */
+  readonly moves?: readonly GroupMove[];
 }
+
+/** A turn of the selection per press: fifteen degrees. */
+const ROTATE_STEP = Math.PI / 12;
 
 /** Keys typed into a field belong to the field. */
 const inField = (target: EventTarget | null): boolean => {
@@ -128,6 +137,8 @@ export function BattlePage() {
   const [dragging, setDragging] = useState(false);
   /** The move being planned for the selection, shown as a ghost until approved. */
   const [plan, setPlan] = useState<Plan | undefined>();
+  /** Models selected together, by id: Shift-clicked one by one or boxed on the table. */
+  const [groupIds, setGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   /**
    * The tapes on the table and the mark of one being laid. One state, because a mark either starts
    * a tape or finishes one, and the two halves have to change together — and never inside another
@@ -146,6 +157,7 @@ export function BattlePage() {
   const labelsRef = useRef<HTMLDivElement>(null);
   const tapesRef = useRef<HTMLDivElement>(null);
   const readoutRef = useRef<HTMLDivElement>(null);
+  const marqueeRef = useRef<HTMLDivElement>(null);
   const [webgl] = useState(webglAvailable);
   const layoutsVersion = useStoreVersion("terrainLayouts");
 
@@ -155,6 +167,9 @@ export function BattlePage() {
   const selected = findUnit(state, selectedId);
   const activeModel = selected && findModel(selected, activeModelId);
   const target = findUnit(state, targetId);
+  /** The models selected together, in table order, skipping any that have left the table. */
+  const group: GroupMember[] = useMemo(() => state.units.flatMap((u) => (u.reserve ? [] : u.models.filter((m) => groupIds.has(m.id)).map((m) => ({ unitId: u.id, modelId: m.id })))), [state, groupIds]);
+  const grouped = group.length >= 2;
   const incoherent = useMemo(() => new Set(selected ? incoherentModels(selected) : []), [selected]);
 
   /**
@@ -262,9 +277,20 @@ export function BattlePage() {
    * player does with a tape and a finger before committing; the unit itself moves on approval.
    */
   const proposeMove = useCallback((unitId: string, to: Vec3, cost: number, modelId?: string, path?: readonly Vec3[]) => setPlan({ unitId, modelId, at: to, cost, path }), []);
+  /** Plan a group's move; the model in hand leads, and the cost shown is the dearest member's. */
+  const proposeGroupMove = useCallback(
+    (moves: readonly GroupMove[]) => {
+      const lead = moves.find((m) => m.modelId === activeModelId) ?? moves[0];
+      if (!lead) return;
+      setPlan({ unitId: lead.unitId, modelId: lead.modelId, at: lead.at, cost: Math.max(...moves.map((m) => m.cost)), path: lead.path, moves });
+    },
+    [activeModelId],
+  );
   const approvePlan = useCallback(() => {
     if (!plan) return;
-    applyMove(plan.unitId, plan.at, plan.cost, plan.modelId, plan.path);
+    const moves = plan.moves;
+    if (moves) dispatch({ type: "units", change: (b) => applyGroupMove(b, moves) });
+    else applyMove(plan.unitId, plan.at, plan.cost, plan.modelId, plan.path);
     setPlan(undefined);
   }, [plan, applyMove]);
   const onDeploy = useCallback((unitId: string, at: Vec2) => editUnit(unitId, (unit) => deployUnit(unit, at)), [editUnit]);
@@ -272,18 +298,48 @@ export function BattlePage() {
   /** Turn the active model, or the whole unit, in place; a turn the table refuses is reported, not applied. */
   const rotateSelection = useCallback(
     (by: number) => {
+      if (grouped) {
+        // Every unit with a member turns its members; one refusal stops the lot, so the group stays consistent.
+        const byUnit = new Map<string, Set<string>>();
+        for (const m of group) (byUnit.get(m.unitId) ?? byUnit.set(m.unitId, new Set()).get(m.unitId)!).add(m.modelId);
+        const turned = new Map<string, BattleUnit>();
+        for (const [unitId, ids] of byUnit) {
+          const unit = findUnit(state, unitId);
+          if (!unit) continue;
+          const verdict = rotateVerdict(state, unit, by, ids, index);
+          if (!verdict.ok) {
+            notify(t(verdict.problems[0] as I18nKey), "error");
+            return;
+          }
+          turned.set(unitId, verdict.unit);
+        }
+        dispatch({ type: "units", change: (b) => ({ ...b, units: b.units.map((u) => turned.get(u.id) ?? u) }) });
+        return;
+      }
       if (!selected || selected.reserve) return;
       const verdict = rotateVerdict(state, selected, by, activeModel?.id, index);
       if (verdict.ok) editUnit(selected.id, () => verdict.unit);
       else notify(t(verdict.problems[0] as I18nKey), "error");
     },
-    [selected, activeModel, state, index, editUnit, notify],
+    [selected, activeModel, state, index, editUnit, notify, grouped, group],
   );
   const deployAll = useCallback(() => dispatch({ type: "units", change: (b) => autoDeploy(autoDeploy(b, "attacker"), "defender") }), []);
 
   /** The planned move's ghost: the model, or the whole formation, standing where it would land. */
   const planned = useMemo(() => {
     if (!plan || tool !== "select") return undefined;
+    if (plan.moves) {
+      const hulls: ModelHull[] = [];
+      const kinds: UnitArtId[] = [];
+      for (const move of plan.moves) {
+        const u = findUnit(state, move.unitId);
+        const m = u && findModel(u, move.modelId);
+        if (!u || !m) continue;
+        hulls.push({ ...m.hull, pos: move.at });
+        kinds.push(unitArtFor(u.keywords));
+      }
+      return { unitId: plan.unitId, modelId: plan.modelId, hulls, kind: kinds[0] ?? "infantry", kinds, moves: plan.moves, legal: true };
+    }
     const unit = findUnit(state, plan.unitId);
     if (!unit) return undefined;
     // The picture's rule names the silhouette too; the canvas, loaded later, draws it.
@@ -316,7 +372,7 @@ export function BattlePage() {
   const removeTape = useCallback((id: string) => setMeasuring((m) => ({ ...m, tapes: m.tapes.filter((tape) => tape.id !== id) })), []);
 
   const pickUnit = useCallback(
-    (id: string | undefined, modelId?: string) => {
+    (id: string | undefined, modelId?: string, additive?: boolean) => {
       if (tool === "terrain") return;
       // Under the tape a model is something to measure to rather than something to select. The mark goes
       // on its base, which is where a player would hold the end of a real one.
@@ -327,6 +383,7 @@ export function BattlePage() {
         return;
       }
       if (!id) {
+        setGroupIds(new Set());
         setSelectedId(undefined);
         setActiveModelId(undefined);
         return;
@@ -344,10 +401,48 @@ export function BattlePage() {
         setTargetId(id);
         return;
       }
+      if (additive && modelId && tool === "select") {
+        // A Shift-press toggles the model in the selection, which starts from the model already active.
+        const next = new Set(groupIds);
+        if (activeModelId && !next.size) next.add(activeModelId);
+        if (next.has(modelId)) next.delete(modelId);
+        else next.add(modelId);
+        setGroupIds(next);
+        if (next.has(modelId)) {
+          setSelectedId(id);
+          setActiveModelId(modelId);
+        } else if (activeModelId === modelId) {
+          const lead = [...next].pop();
+          setActiveModelId(lead);
+          setSelectedId(lead ? state.units.find((u) => u.models.some((m) => m.id === lead))?.id : id);
+        }
+        return;
+      }
+      setGroupIds(new Set());
       setSelectedId(id);
       setActiveModelId(modelId);
     },
-    [state, selected, tool, mark],
+    [state, selected, tool, mark, groupIds, activeModelId],
+  );
+
+  /** A box drawn on the table: the models inside become the selection, or join it, the last boxed leading. */
+  const onBoxSelect = useCallback(
+    (ids: string[], additive: boolean) => {
+      if (tool !== "select") return;
+      const next = new Set(additive ? [...groupIds, ...(activeModelId ? [activeModelId] : []), ...ids] : ids);
+      setGroupIds(next);
+      const lead = ids[ids.length - 1] ?? (activeModelId && next.has(activeModelId) ? activeModelId : [...next][0]);
+      if (!lead) {
+        if (!additive) {
+          setSelectedId(undefined);
+          setActiveModelId(undefined);
+        }
+        return;
+      }
+      setSelectedId(state.units.find((u) => u.models.some((m) => m.id === lead))?.id);
+      setActiveModelId(lead);
+    },
+    [tool, groupIds, activeModelId, state],
   );
 
   /**
@@ -443,6 +538,7 @@ export function BattlePage() {
           setObjectiveId(undefined);
         } else if (tool === "measure") setPendingMark(undefined);
         else if (plan) setPlan(undefined);
+        else if (grouped) setGroupIds(new Set());
         else pickUnit(undefined);
         return;
       }
@@ -487,6 +583,17 @@ export function BattlePage() {
         return;
       }
 
+      // Arrows nudge a group's ghosts together, judged from each model's real spot.
+      if (tool === "select" && arrow && grouped && selected && activeModel) {
+        e.preventDefault();
+        const leadNow = plan?.moves?.find((m) => m.modelId === activeModel.id)?.at ?? activeModel.hull.pos;
+        const by = { x: leadNow.x - activeModel.hull.pos.x + arrow.x * EDIT_STEP, y: leadNow.y - activeModel.hull.pos.y + arrow.y * EDIT_STEP };
+        const verdict = groupMoveVerdict(state, group, by, index);
+        if (verdict.ok) proposeGroupMove(verdict.moves);
+        setDragging(false);
+        setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel.id, to: { x: activeModel.hull.pos.x + by.x, y: activeModel.hull.pos.y + by.y }, legal: false, problems: verdict.problems });
+        return;
+      }
       // Arrows nudge the ghost, from wherever it stands; the move is judged from the model's real spot.
       if (tool === "select" && arrow && selected && activeModel) {
         e.preventDefault();
@@ -500,7 +607,7 @@ export function BattlePage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, proposeMove, approvePlan, rotateSelection, plan, editUnit, pickUnit, setPendingMark]);
+  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, proposeMove, proposeGroupMove, approvePlan, rotateSelection, plan, editUnit, pickUnit, setPendingMark, grouped, group]);
 
   const measureFrom = tool === "measure" ? pendingMark : undefined;
   const live = measureFrom && aim ? tapeDistance(measureFrom, aim) : undefined;
@@ -569,6 +676,10 @@ export function BattlePage() {
                   labelsRef={labelsRef}
                   readoutRef={readoutRef}
                   onSelect={pickUnit}
+                  groupIds={groupIds}
+                  onBoxSelect={onBoxSelect}
+                  onMoveGroup={proposeGroupMove}
+                  marqueeRef={marqueeRef}
                   onMove={proposeMove}
                   onDrag={onDrag}
                   onTableDown={onTableDown}
@@ -593,6 +704,7 @@ export function BattlePage() {
               </div>
             ))}
           </div>
+          <div ref={marqueeRef} aria-hidden="true" style={{ position: "absolute", display: "none", border: "1px dashed #f2f4f7", background: "rgba(77, 143, 224, 0.18)", pointerEvents: "none", zIndex: 3 }} />
           <div ref={readoutRef} className={`battle-drag-readout ${readout ? "is-on" : ""} ${readout?.bad ? "bad" : ""}`.trim()} aria-hidden="true">
             {readout?.text}
           </div>
@@ -643,6 +755,8 @@ export function BattlePage() {
               onEdit={editUnit}
               onApprove={approvePlan}
               onRotate={rotateSelection}
+              group={group}
+              onClearGroup={() => setGroupIds(new Set())}
               onDiscard={() => setPlan(undefined)}
               onDeployAll={deployAll}
               onAutoDeploy={(side) => dispatch({ type: "units", change: (b) => autoDeploy(b, side) })}
@@ -664,9 +778,6 @@ export function BattlePage() {
  * unit is out of coherency for most of the time it takes to move, and the player needs to see when
  * it is back rather than be stopped from getting there.
  */
-/** A turn of the selection per press: fifteen degrees. */
-const ROTATE_STEP = Math.PI / 12;
-
 /** A model's facing as a compass-style bearing, 0–359°, counter-clockwise from the table's +x. */
 const facingDegrees = (model: BattleModel | undefined): number => ((Math.round(((model?.hull.facing ?? 0) * 180) / Math.PI) % 360) + 360) % 360;
 
@@ -682,6 +793,8 @@ function MovePanel({
   onApprove,
   onDiscard,
   onRotate,
+  group,
+  onClearGroup,
 }: {
   selected?: BattleUnit;
   activeModel?: BattleModel;
@@ -694,6 +807,8 @@ function MovePanel({
   onApprove: () => void;
   onDiscard: () => void;
   onRotate: (by: number) => void;
+  group: readonly GroupMember[];
+  onClearGroup: () => void;
 }) {
   if (!selected) {
     return (
@@ -718,6 +833,14 @@ function MovePanel({
         <span className="battle-scope-sep">/</span>
         <span className={`battle-scope-btn ${activeModel ? "is-on" : "muted"}`.trim()}>{activeModel ? t("battle.modelOf", { n: index + 1, total: selected.models.length }) : t("battle.model")}</span>
       </div>
+      {group.length >= 2 ? (
+        <div className="battle-actions">
+          <span className="muted small">{t("battle.group.count", { n: group.length, units: new Set(group.map((m) => m.unitId)).size })}</span>
+          <button type="button" className="ghost sm" onClick={onClearGroup}>
+            {t("battle.group.clear")}
+          </button>
+        </div>
+      ) : null}
 
       <dl className="battle-readout">
         <dt>{t("battle.move")}</dt>
@@ -786,6 +909,7 @@ function MovePanel({
             </button>
           </div>
           <p className="muted small">{t("battle.rotate.hint")}</p>
+          <p className="muted small">{t("battle.group.hint")}</p>
         </>
       )}
 
@@ -822,6 +946,8 @@ function BattlePanel({
   onApprove,
   onDiscard,
   onRotate,
+  group,
+  onClearGroup,
   onDeployAll,
   onAutoDeploy,
   onClearDeployment,
@@ -847,6 +973,8 @@ function BattlePanel({
   onApprove: () => void;
   onDiscard: () => void;
   onRotate: (by: number) => void;
+  group: readonly GroupMember[];
+  onClearGroup: () => void;
   onDeployAll: () => void;
   onAutoDeploy: (side: Side) => void;
   onClearDeployment: () => void;
@@ -929,7 +1057,7 @@ function BattlePanel({
         </section>
       )}
 
-      {tool === "select" ? <MovePanel selected={selected} activeModel={activeModel} drag={drag} plan={plan} reach={reach} upperFloor={upperFloor} onPick={onPick} onEdit={onEdit} onApprove={onApprove} onDiscard={onDiscard} onRotate={onRotate} /> : null}
+      {tool === "select" ? <MovePanel selected={selected} activeModel={activeModel} drag={drag} plan={plan} reach={reach} upperFloor={upperFloor} onPick={onPick} onEdit={onEdit} onApprove={onApprove} onDiscard={onDiscard} onRotate={onRotate} group={group} onClearGroup={onClearGroup} /> : null}
 
       {tool === "sight" ? (
         <section className="battle-section">
