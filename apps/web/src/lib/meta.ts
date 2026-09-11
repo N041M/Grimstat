@@ -57,6 +57,55 @@ export function resolvePublished(record: PublishedListRecord, snapshot: Snapshot
   }
 }
 
+/* ---- resolving a whole corpus ---------------------------------------------------------------- */
+
+/**
+ * Resolved lists, kept by record so a tab reopened or a filter changed costs nothing. One snapshot's
+ * results are kept at a time; switching snapshots starts over.
+ */
+const cache = { snapshotId: "", peers: new Map<string, PeerList | null>() };
+
+export function resolvePublishedCached(record: PublishedListRecord, snapshot: Snapshot): PeerList | undefined {
+  if (cache.snapshotId !== snapshot.id) {
+    cache.snapshotId = snapshot.id;
+    cache.peers.clear();
+  }
+  const hit = cache.peers.get(record.id);
+  if (hit !== undefined) return hit ?? undefined;
+  const peer = resolvePublished(record, snapshot);
+  cache.peers.set(record.id, peer ?? null);
+  return peer;
+}
+
+export interface ResolveFieldOptions {
+  readonly onProgress?: (done: number, total: number) => void;
+  readonly signal?: AbortSignal;
+  /** How long to work before handing control back to the page, in milliseconds. */
+  readonly sliceMs?: number;
+}
+
+/**
+ * Every record the snapshot can read, resolved in slices with the page given control between them,
+ * so a corpus of hundreds of lists does not freeze the tab. Records resolved before cost nothing.
+ */
+export async function resolveField(records: readonly PublishedListRecord[], snapshot: Snapshot, opts: ResolveFieldOptions = {}): Promise<PeerList[]> {
+  const budget = opts.sliceMs ?? 25;
+  const out: PeerList[] = [];
+  let i = 0;
+  while (i < records.length) {
+    const start = performance.now();
+    do {
+      const peer = resolvePublishedCached(records[i]!, snapshot);
+      if (peer) out.push(peer);
+      i++;
+    } while (i < records.length && performance.now() - start < budget);
+    opts.onProgress?.(i, records.length);
+    if (opts.signal?.aborted) throw new DOMException("Resolving cancelled", "AbortError");
+    if (i < records.length) await new Promise<void>((r) => setTimeout(r, 0));
+  }
+  return out;
+}
+
 export type PlacingFilter = "all" | "top3" | "winners";
 export type DetachmentFilter = "any" | "same";
 

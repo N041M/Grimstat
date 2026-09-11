@@ -44,6 +44,39 @@ export function isWeaponOf(ds: Datasheet, key: string): boolean {
   return ds.weapons.some((w) => normaliseName(w.name) === key || (w.groupName !== undefined && normaliseName(w.groupName) === key));
 }
 
+const tokenKey = (s: string): string => [...new Set(tokens(s))].sort().join(" ");
+
+/** A snapshot's name lookups, built once and shared by every import against that snapshot. */
+export interface NameIndex {
+  readonly factionByKey: ReadonlyMap<string, Faction>;
+  readonly dsByKey: ReadonlyMap<string, readonly Datasheet[]>;
+  /** Every datasheet with its normalised name and token key, for the looser matches. */
+  readonly names: readonly { ds: Datasheet; key: string; tokenKey: string }[];
+}
+
+const INDEXES = new WeakMap<Snapshot, NameIndex>();
+
+/**
+ * The index for a snapshot. Building it means normalising every datasheet name, which was most of
+ * the cost of an import, so it is kept on the snapshot object and reused: a corpus of hundreds of
+ * lists resolved against one snapshot pays for it once.
+ */
+export function nameIndexOf(snapshot: Snapshot): NameIndex {
+  const cached = INDEXES.get(snapshot);
+  if (cached) return cached;
+  const factionByKey = new Map(snapshot.data.factions.map((f) => [normaliseName(f.name), f] as const));
+  const dsByKey = new Map<string, Datasheet[]>();
+  const names: { ds: Datasheet; key: string; tokenKey: string }[] = [];
+  for (const ds of snapshot.data.datasheets) {
+    const key = normaliseName(ds.name);
+    dsByKey.set(key, [...(dsByKey.get(key) ?? []), ds]);
+    names.push({ ds, key, tokenKey: tokenKey(ds.name) });
+  }
+  const index: NameIndex = { factionByKey, dsByKey, names };
+  INDEXES.set(snapshot, index);
+  return index;
+}
+
 /**
  * State and name lookups shared by the roster importers (plain-text lists and BattleScribe / New Recruit XML).
  * Names are matched with `normaliseName`; the first datasheet or detachment that resolves fixes the faction, which
@@ -54,24 +87,19 @@ export class RosterImportContext {
   readonly units: PendingUnit[] = [];
   readonly detachments: RosterDetachment[] = [];
   factionId: string | undefined;
-  private readonly factionByKey: Map<string, Faction>;
-  private readonly dsByKey = new Map<string, Datasheet[]>();
+  private readonly index: NameIndex;
 
   constructor(readonly snapshot: Snapshot) {
-    this.factionByKey = new Map(snapshot.data.factions.map((f) => [normaliseName(f.name), f] as const));
-    for (const d of snapshot.data.datasheets) {
-      const k = normaliseName(d.name);
-      this.dsByKey.set(k, [...(this.dsByKey.get(k) ?? []), d]);
-    }
+    this.index = nameIndexOf(snapshot);
   }
 
   findFaction(label: string): Faction | undefined {
-    return this.factionByKey.get(normaliseName(label));
+    return this.index.factionByKey.get(normaliseName(label));
   }
 
   /** Datasheet by exact name; when several factions share the name, the roster's faction wins. */
   findDatasheet(label: string): Datasheet | undefined {
-    return this.pick(this.dsByKey.get(normaliseName(label)) ?? []);
+    return this.pick(this.index.dsByKey.get(normaliseName(label)) ?? []);
   }
 
   /**
@@ -84,21 +112,18 @@ export class RosterImportContext {
     const exact = this.findDatasheet(label);
     if (exact) return exact;
     const key = normaliseName(label);
-    const want = [...new Set(tokens(label))].sort().join(" ");
+    const want = tokenKey(label);
     if (!want) return undefined;
-    const tokenHits = this.snapshot.data.datasheets.filter((d) => [...new Set(tokens(d.name))].sort().join(" ") === want);
+    const tokenHits = this.index.names.filter((n) => n.tokenKey === want).map((n) => n.ds);
     if (tokenHits.length) return this.pick(tokenHits);
     // the longest datasheet name contained in the label, or the label contained in a datasheet name
-    const contained = this.snapshot.data.datasheets.filter((d) => {
-      const dk = normaliseName(d.name);
-      return dk.length >= 5 && (key.includes(dk) || dk.includes(key));
-    });
+    const contained = this.index.names.filter((n) => n.key.length >= 5 && (key.includes(n.key) || n.key.includes(key))).map((n) => n.ds);
     if (!contained.length) return undefined;
     const inFaction = contained.filter((d) => d.factionId === this.factionId);
     return (inFaction.length ? inFaction : contained).sort((a, b) => b.name.length - a.name.length)[0];
   }
 
-  private pick(cands: Datasheet[]): Datasheet | undefined {
+  private pick(cands: readonly Datasheet[]): Datasheet | undefined {
     return cands.find((d) => d.factionId === this.factionId) ?? cands[0];
   }
 

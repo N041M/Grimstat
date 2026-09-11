@@ -6,6 +6,7 @@ import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import { SYNTHETIC_DIR } from "../test-utils";
 import { exportRosterText, importRosterText, exportRosterPrintHtml } from "./index";
 import { parseWargearItems, parseWargearList, splitList } from "./import";
+import { RosterImportContext, nameIndexOf } from "./import-common";
 
 const snapshot = loadSyntheticSnapshot();
 const readFixture = (rel: string) => readFileSync(join(SYNTHETIC_DIR, rel), "utf8");
@@ -337,3 +338,23 @@ describe("a bare count line that names a weapon", () => {
   });
 });
 
+describe("the snapshot's name index", () => {
+  const text = ["Ashen Wardens - Mine (1000 points)", "Ashen Wardens", "Ember Vanguard", "Incursion (1000 points)", "", "Warden Captain (95 points)", "", "Warden Squad (180 points)", "• 1x Warden Sergeant", "• 4x Warden"].join("\n");
+
+  it("is built once per snapshot and shared by every import against it", () => {
+    const index = nameIndexOf(snapshot);
+    expect(nameIndexOf(snapshot)).toBe(index);
+    expect(index.names).toHaveLength(snapshot.data.datasheets.length);
+    const a = importRosterText(text, snapshot).roster;
+    const b = importRosterText(text, snapshot).roster;
+    expect(a.units.map((u) => u.datasheetId)).toEqual(b.units.map((u) => u.datasheetId));
+    expect(nameIndexOf(snapshot)).toBe(index);
+  });
+
+  it("still matches names loosely through the index: by token set, then by containment", () => {
+    const ctx = new RosterImportContext(snapshot);
+    expect(ctx.matchDatasheet("Squad Warden")?.id).toBe("ds:ashen-wardens:warden-squad");
+    expect(ctx.matchDatasheet("The Ashen Crusher of Doom")?.id).toBe("ds:ashen-wardens:ashen-crusher");
+    expect(ctx.matchDatasheet("Nothing of the sort")).toBeUndefined();
+  });
+});

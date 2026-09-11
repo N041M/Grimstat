@@ -5,7 +5,7 @@ import { importRosterText, parseArticle } from "@grimstat/adapters";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import type { PublishedListRecord } from "../db";
 import { publishedListId } from "./publishedLists";
-import { closest, detachmentField, dispositionField, fieldRows, overlap, peersFor, resolvePublished, sideBySide, tallyOf, type PeerList } from "./meta";
+import { closest, detachmentField, dispositionField, fieldRows, overlap, peersFor, resolveField, resolvePublished, resolvePublishedCached, sideBySide, tallyOf, type PeerList } from "./meta";
 
 const snapshot = loadSyntheticSnapshot();
 const html = readFileSync(join(process.cwd(), "fixtures/synthetic/competitive/write-up.html"), "utf8");
@@ -98,5 +98,30 @@ describe("a list against the field", () => {
   it("tallies the field's detachments and dispositions", () => {
     expect(detachmentField(peers, snapshot)).toEqual([{ name: "Ember Vanguard", lists: 2, share: 1 }]);
     expect(dispositionField(peers)).toEqual([{ name: "HOLD THE RIDGE", lists: 1, share: 0.5 }]);
+  });
+});
+
+describe("resolving a corpus in slices", () => {
+  it("gives the same peers as resolving one by one, reports progress up to the total, and yields between slices", async () => {
+    const records = corpus();
+    const seen: number[] = [];
+    const peers = await resolveField(records, snapshot, { sliceMs: 0, onProgress: (done) => seen.push(done) });
+    expect(peers.map((p) => p.record.id)).toEqual(records.map((r) => resolvePublished(r, snapshot)).filter((p): p is PeerList => p !== undefined).map((p) => p.record.id));
+    expect(seen[seen.length - 1]).toBe(records.length);
+    expect(seen.length).toBeGreaterThan(1);
+  });
+
+  it("remembers what it resolved, so a second pass returns the same objects", async () => {
+    const records = corpus();
+    const first = await resolveField(records, snapshot, { sliceMs: 0 });
+    const second = await resolveField(records, snapshot, { sliceMs: 0 });
+    expect(second).toEqual(first);
+    expect(resolvePublishedCached(records[0]!, snapshot)).toBe(first[0]);
+  });
+
+  it("stops when asked", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(resolveField(corpus(), snapshot, { sliceMs: 0, signal: controller.signal })).rejects.toThrow(/cancelled/);
   });
 });

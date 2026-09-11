@@ -3,7 +3,7 @@ import type { Roster, Snapshot } from "@grimstat/schema";
 import type { PublishedListRecord } from "../../db";
 import { useStoreVersion } from "../../hooks/useStoreVersion";
 import { listPublishedLists } from "../../lib/publishedLists";
-import { closest, detachmentField, dispositionField, fieldRows, peersFor, resolvePublished, sideBySide, tallyOf, type DetachmentFilter, type FieldCount, type FieldNote, type PeerList, type PlacingFilter } from "../../lib/meta";
+import { closest, detachmentField, dispositionField, fieldRows, peersFor, resolveField, sideBySide, tallyOf, type DetachmentFilter, type FieldCount, type FieldNote, type PeerList, type PlacingFilter } from "../../lib/meta";
 import { fmt, fmtInt } from "../../lib/format";
 import { hrefFor } from "../../router";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead, ProportionBar, SelectBox } from "../kit";
@@ -68,11 +68,25 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
     };
   }, [version]);
 
-  // Resolving is the expensive half — a parse per list — so it happens once per corpus and snapshot,
-  // not once per filter change.
-  const resolved = useMemo(() => (records ?? []).map((r) => resolvePublished(r, snapshot)).filter((p): p is PeerList => p !== undefined), [records, snapshot]);
+  // Resolving is the expensive half, a parse per list, so it runs in slices off the render path and
+  // its results are cached per snapshot; a filter change then costs nothing.
+  const [resolved, setResolved] = useState<PeerList[] | undefined>();
+  const [progress, setProgress] = useState<{ done: number; total: number } | undefined>();
+  useEffect(() => {
+    if (!records) return;
+    const controller = new AbortController();
+    setResolved(undefined);
+    setProgress({ done: 0, total: records.length });
+    resolveField(records, snapshot, { signal: controller.signal, onProgress: (done, total) => setProgress({ done, total }) })
+      .then((peers) => {
+        setResolved(peers);
+        setProgress(undefined);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [records, snapshot]);
   const faction = snapshot.data.factions.find((f) => f.id === roster.factionId);
-  const peers = useMemo(() => peersFor(resolved, roster, { placing, detachment }), [resolved, roster, placing, detachment]);
+  const peers = useMemo(() => peersFor(resolved ?? [], roster, { placing, detachment }), [resolved, roster, placing, detachment]);
   const mine = useMemo(() => tallyOf(roster, snapshot), [roster, snapshot]);
   const rows = useMemo(() => fieldRows(mine.tally, peers, snapshot), [mine, peers, snapshot]);
   const near = useMemo(() => closest(mine.tally, mine.points, peers, 5), [mine, peers]);
@@ -85,7 +99,7 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
   // they are silently absent from every number below.
   const unreadable = useMemo(() => {
     const name = faction?.name.toLowerCase();
-    const readable = new Set(resolved.map((p) => p.record.id));
+    const readable = new Set((resolved ?? []).map((p) => p.record.id));
     return (records ?? []).filter((r) => !readable.has(r.id) && name !== undefined && r.faction?.toLowerCase() === name).length;
   }, [records, resolved, faction]);
   const writeUps = useMemo(() => new Set(peers.map((p) => p.record.source.url ?? p.record.source.title ?? p.record.id)).size, [peers]);
@@ -99,6 +113,15 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
           <a href={hrefFor("data")}>{t("roster.meta.emptyLink")}</a>
         </p>
       </Empty>
+    );
+  }
+
+  if (resolved === undefined) {
+    return (
+      <div className="meta-tab">
+        <PanelHead title={t("roster.meta.title", { faction: faction?.name ?? roster.factionId })} />
+        <p className="data-note">{t("roster.meta.resolving", { done: fmtInt(progress?.done ?? 0), total: fmtInt(progress?.total ?? records.length) })}</p>
+      </div>
     );
   }
 
