@@ -1,39 +1,65 @@
-import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
+import type { Roster, Snapshot } from "@grimstat/schema";
 import { normaliseName } from "@grimstat/snapshot";
+import {
+  POINTS_BY_SIZE,
+  RosterImportContext,
+  SIZE_BY_LABEL,
+  isWeaponOf,
+  mergeGroup,
+  profileGroups,
+  wargearGroups,
+  zipModelGroups,
+  type PendingUnit,
+  type WargearItem,
+} from "./import-common";
 
 /**
  * Tolerant army-list text importer. Understands:
  * - Grimstat's own GW-app-style and NR-tournament-style exports (see text.ts)
  * - New Recruit "tournament" exports (`+ FACTION KEYWORD: …` header block, `Char1: 2x Unit (415 pts): …`,
  *   bullet model lines `• 9x Battle Sister: 9 with Bolt pistol, …`, `Enhancement: X (+15 pts)`)
+ * - the WTC-compact one-line-per-unit form (`5x Warden Squad (90 pts): 1 with Flux carbine, 4 with Shock maul`)
  * - 10th-edition-style GW app text (`Unit (80 points)` + `• 1x Wargear` lines)
+ *
+ * Everything is best-effort: a line that cannot be understood becomes a warning, never an exception. Name lookups,
+ * detachments, enhancements and leader attachment live in `RosterImportContext`, shared with the `.rosz` importer.
  */
 
-const SIZE_BY_LABEL: Record<string, Roster["battleSize"]> = { "combat patrol": "combat-patrol", incursion: "incursion", "strike force": "strike-force", onslaught: "onslaught" };
 const SECTION_NAMES = new Set(["characters", "battleline", "dedicated transports", "other datasheets", "allied units", "epic heroes", "infantry", "mounted", "vehicles", "monsters", "fortifications", "swarms", "beasts", "aircraft"]);
+const SIZES = "Combat Patrol|Incursion|Strike Force|Onslaught";
+/** Points as `(2,000 points)`, `[2000pts]` or nothing at all. */
+const LIMIT = String.raw`(?:[([]\s*(\d[\d,]*)\s*(?:points?|pts?)\s*[)\]]?)?`;
+/** `Ashen Wardens — Strike Force [2000pts]`, the faction/size line of the NR-tournament dialect. */
+const FACTION_SIZE_LINE = new RegExp(String.raw`^(.+?)\s+[—–-]\s+(${SIZES})\s*${LIMIT}$`, "i");
+/** `Strike Force (2,000 points)`, the GW app's battle-size line. */
+const SIZE_LINE = new RegExp(String.raw`^(${SIZES})\s*${LIMIT}$`, "i");
 
-interface Group {
-  modelProfileId: string;
+/** A group of models as a list line describes it, before profiles and wargear are partitioned (see `finishUnit`). */
+interface RawGroup {
+  /** The profile the line named, when it named one; a unit-header group has none and gets `profileGroups`. */
+  modelProfileId?: string;
   count: number;
-  wargear: string[];
+  items: WargearItem[];
 }
 
-interface PendingUnit {
-  id: string;
-  ref?: string; // "Char1"
-  ds: Datasheet;
-  name: string;
+interface TextUnit {
+  u: PendingUnit;
+  /** New Recruit's `Char1:` prefix, used by the `+ WARLORD:` header line. */
+  ref?: string;
   headerCount?: number;
-  groups: Group[];
-  warlord: boolean;
-  enhancementName?: string;
-  attach?: { hostName: string; role: "leader" | "support" };
+  groups: RawGroup[];
 }
 
 const BULLET = /^[•◦▪\-*]\s*/;
-/** `Char1: 2x Canis Rex (415 pts): Warlord` / `10x Squad (110 pts)` / `Unit (80 points)` / `Unit [80pts]: …` */
-const UNIT_HEADER = /^(?:([A-Za-z]+\d+):\s*)?(?:(\d+)\s*[x×]\s+)?(.+?)\s*(?:\((\d+)\s*(?:points|pts)\)|\[(\d+)\s*pts\])\s*(?::\s*(.*))?$/i;
+/**
+ * `Char1: 2x Canis Rex (415 pts): Warlord` / `10x Squad (110 pts)` / `Unit [80pts]: …` / `Unit - 80 pts`.
+ * Points are written by the dialects in parentheses, in brackets or after a dash, with or without thousands
+ * separators and with any of pt/pts/point/points, so all of that has to be one pattern.
+ */
+const UNIT_HEADER = /^(?:([A-Za-z]+\d+):\s*)?(?:(\d+)\s*[x×]\s+)?(.+?)\s*(?:[([]|[-–—]\s*)(\d[\d,]*)\s*(?:points?|pts?)\s*[)\]]?\s*(?::\s*(.*))?$/i;
 const COUNT_ITEM = /^(\d+)\s*[x×]\s+(.+)$/i;
+/** `Ember Vanguard`, `Ember Vanguard [2 DP] (TAKE AND HOLD)`, `Ember Vanguard (2 DP, TAKE AND HOLD)`. */
+const DET_SPEC = /^(.+?)\s*(?:[[(]\s*(\d+)\s*DP\s*(?:,\s*([^)\]]+?))?\s*[\])]?)?\s*(?:\(\s*([^)]*?)\s*\))?\s*$/i;
 
 export function splitList(text: string): string[] {
   return text
@@ -42,151 +68,150 @@ export function splitList(text: string): string[] {
     .filter(Boolean);
 }
 
-/** "9 with Bolt pistol, Boltgun" → items; "2x Twin meltagun" → the item twice (multiplicity matters for shooting). */
-export function parseWargearList(text: string): string[] {
-  const out: string[] = [];
-  const segments = text.trim().split(/,\s*(?=\d+\s+with\s)/i);
-  for (const seg of segments) {
-    const body = seg.trim().replace(/^\d+\s+with\s+/i, "");
-    for (const item of splitList(body)) {
-      const m = /^(\d+)\s*[x×]\s+(.+)$/.exec(item);
-      if (m) for (let i = 0; i < Math.max(1, Math.min(20, Number(m[1]))); i++) out.push(m[2]!.trim());
-      else out.push(item);
+/** Splits on commas that are not inside brackets, so `Foo (2 DP, X), Bar` is two parts. */
+function splitOutsideParens(text: string): string[] {
+  return text
+    .split(/,\s*(?![^()[\]]*[)\]])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * "9 with Bolt pistol, Boltgun" → both items on 9 models; "2x Twin meltagun" → one item, two copies.
+ * The `N with …` prefix is how the WTC-compact and New Recruit dialects say that only part of a unit carries
+ * something, so the count has to survive parsing — `wargearGroups` turns it into real sub-groups.
+ */
+export function parseWargearItems(text: string): WargearItem[] {
+  const out: WargearItem[] = [];
+  for (const seg of text.trim().split(/,\s*(?=\d+\s+with\s)/i)) {
+    const withCount = /^(\d+)\s+with\s+/i.exec(seg.trim());
+    const n = withCount ? Number(withCount[1]) : 0;
+    for (const item of splitList(seg.trim().replace(/^\d+\s+with\s+/i, ""))) {
+      const m = COUNT_ITEM.exec(item);
+      if (m) out.push({ name: m[2]!.trim(), n, copies: Math.max(1, Math.min(20, Number(m[1]))) });
+      else out.push({ name: item, n, copies: 1 });
     }
   }
   return out;
 }
 
-function tokens(s: string): string[] {
-  return normaliseName(s).split(" ").filter((t) => t && t !== "of" && t !== "the");
+/** Flat wargear list, one entry per copy; loses the `N with` counts, so parsers want `parseWargearItems`. */
+export function parseWargearList(text: string): string[] {
+  return parseWargearItems(text).flatMap((i) => Array.from({ length: i.copies ?? 1 }, () => i.name));
+}
+
+/** Points as written with thousands separators: "1,000 points". */
+function points(s: string | undefined): number {
+  return Number((s ?? "").replace(/,/g, ""));
 }
 
 export function importRosterText(text: string, snapshot: Snapshot, opts: { name?: string } = {}): { roster: Roster; warnings: string[] } {
-  const warnings: string[] = [];
-  const now = new Date().toISOString();
-  const factions = snapshot.data.factions;
-  const factionByKey = new Map(factions.map((f) => [normaliseName(f.name), f] as const));
-  const dsByKey = new Map<string, Datasheet[]>();
-  for (const d of snapshot.data.datasheets) {
-    const k = normaliseName(d.name);
-    dsByKey.set(k, [...(dsByKey.get(k) ?? []), d]);
-  }
+  const ctx = new RosterImportContext(snapshot);
+  const { warnings } = ctx;
   let name = opts.name ?? "";
-  let factionId: string | undefined;
   let battleSize: Roster["battleSize"] | undefined;
   let pointsLimit: number | undefined;
   let totalPoints: number | undefined;
   let forceDisposition: string | undefined;
   let warlordRef: string | undefined;
-  const detachments: Roster["detachments"] = [];
-  const units: PendingUnit[] = [];
-  const st: { cur: PendingUnit | null } = { cur: null };
+  const units: TextUnit[] = [];
+  const st: { cur: TextUnit | null } = { cur: null };
   let headerSeen = false;
 
   const setFaction = (label: string): boolean => {
-    const candidates = [label, ...label.split(/\s+[-–—]\s+/).reverse()];
-    for (const c of candidates) {
-      const f = factionByKey.get(normaliseName(c));
+    // "Imperium - Ashen Wardens": the most specific keyword is the last one
+    for (const c of [label, ...label.split(/\s+[-–—]\s+/).reverse()]) {
+      const f = ctx.findFaction(c);
       if (f) {
-        factionId = f.id;
+        ctx.factionId = f.id;
         return true;
       }
     }
     return false;
   };
 
-  const findDatasheet = (label: string): Datasheet | undefined => {
-    const key = normaliseName(label);
-    const pick = (cands: Datasheet[]) => cands.find((d) => d.factionId === factionId) ?? cands[0];
-    const exact = dsByKey.get(key);
-    if (exact?.length) return pick(exact);
-    // token-set equality ("Sisters of Battle Squad" ~ "Battle Sisters Squad")
-    const want = [...new Set(tokens(label))].sort().join(" ");
-    const tokenHits = snapshot.data.datasheets.filter((d) => [...new Set(tokens(d.name))].sort().join(" ") === want);
-    if (tokenHits.length) return pick(tokenHits);
-    // containment: the longest datasheet name contained in the label, or the label contained in a datasheet name
-    const contained = snapshot.data.datasheets.filter((d) => {
-      const dk = normaliseName(d.name);
-      return dk.length >= 5 && (key.includes(dk) || dk.includes(key));
-    });
-    if (contained.length) {
-      const inFaction = contained.filter((d) => d.factionId === factionId);
-      const pool = inFaction.length ? inFaction : contained;
-      return pool.sort((a, b) => b.name.length - a.name.length)[0];
-    }
-    return undefined;
+  /** One entry of a `Detachment:` line or header value, with its optional DP count and force disposition. */
+  const addDetachmentSpec = (spec: string) => {
+    const m = DET_SPEC.exec(spec.trim().replace(/\s*\+*$/, ""));
+    if (!m) return;
+    // a trailing "(…)" is a disposition only next to a DP count; otherwise it is a variant label the snapshot ignores
+    const disposition = m[3]?.trim() || (m[2] ? m[4]?.trim() : undefined) || forceDisposition;
+    ctx.addDetachment(m[1]!.trim(), disposition);
   };
 
-  const addDetachment = (label: string) => {
-    const clean = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
-    const key = normaliseName(clean);
-    const det = snapshot.data.detachments.find((d) => normaliseName(d.name) === key && (!factionId || d.factionId === factionId)) ?? snapshot.data.detachments.find((d) => normaliseName(d.name) === key);
-    if (!det) {
-      warnings.push(`Unknown detachment "${clean}".`);
-      return;
-    }
-    if (!factionId) factionId = det.factionId;
-    if (detachments.some((d) => d.detachmentId === det.id)) return;
-    const entry: Roster["detachments"][number] = { id: `d${detachments.length + 1}`, detachmentId: det.id };
-    if (forceDisposition) entry.forceDisposition = forceDisposition;
-    detachments.push(entry);
-  };
-
-  const profileFor = (ds: Datasheet, label: string) => {
-    const key = normaliseName(label);
-    return ds.models.find((m) => normaliseName(m.name) === key) ?? ds.models.find((m) => tokens(m.name).sort().join() === tokens(label).sort().join());
-  };
-
-  const applyFlag = (u: PendingUnit, f: string): boolean => {
+  const applyFlag = (t: TextUnit, f: string): boolean => {
     if (/^warlord$/i.test(f.trim())) {
-      u.warlord = true;
+      t.u.warlord = true;
       return true;
     }
-    let m = /^enhancements?:\s*(.+?)(?:\s*\(\+?\d+\s*pts?\))?$/i.exec(f);
+    // the GW app writes "(+15 Points)", New Recruit "(+15 pts)"
+    let m = /^enhancements?:\s*(.+?)(?:\s*\(\+?\d+\s*(?:points?|pts?)\))?$/i.exec(f);
     if (m) {
-      u.enhancementName = m[1]!.trim();
+      t.u.enhancementName = m[1]!.trim();
       return true;
     }
     m = /^(leads|leader of|attached to|supports|support of):\s*(.+)$/i.exec(f);
     if (m) {
-      u.attach = { hostName: m[2]!.trim(), role: /^support/i.test(m[1]!) ? "support" : "leader" };
+      t.u.attach = { hostName: m[2]!.trim(), role: /^support/i.test(m[1]!) ? "support" : "leader" };
       return true;
     }
     return false;
   };
 
+  /** The group a bare wargear line belongs to: the last one the unit declared, else an implicit unit-sized group. */
+  const wargearTarget = (t: TextUnit): RawGroup => {
+    const last = t.groups.at(-1);
+    if (last) return last;
+    const g: RawGroup = { count: Math.max(1, t.headerCount ?? 1), items: [] };
+    t.groups.push(g);
+    return g;
+  };
+
+  /**
+   * A wargear line under a model group states how many *models* carry the item ("• 5x Warden" / "2x Shock maul"
+   * = two of the five). Only when the count exceeds the group does it mean copies per model, which is how a
+   * single-model unit writes "2x Twin hail gun".
+   */
+  const addWargear = (g: RawGroup, itemName: string, count: number) => {
+    g.items.push({ name: itemName, n: count >= g.count ? 0 : count, copies: Math.max(1, Math.floor(count / Math.max(1, g.count))) });
+  };
+
   const startUnit = (ref: string | undefined, count: number | undefined, label: string, rest: string | undefined) => {
-    const ds = findDatasheet(label);
+    const ds = ctx.matchDatasheet(label);
     if (!ds) {
       warnings.push(`Unknown unit "${label}" — skipped.`);
       st.cur = null;
       return;
     }
-    if (!factionId) factionId = ds.factionId;
-    const u: PendingUnit = { id: `u${units.length + 1}`, ds, name: ds.name, groups: [], warlord: false };
-    if (ref) u.ref = ref;
-    if (count) u.headerCount = count;
-    units.push(u);
-    st.cur = u;
-    if (rest) {
-      // NR "Unit [80pts]: 2x Model (a, b), 1x Other (c) — Warlord; Enhancement: X" or "Unit (415 pts): Warlord" or inline wargear
-      const [groupsPart, ...flagParts] = rest.split(/\s+[—–]\s+/);
-      const groupRe = /^(\d+)\s*[x×]\s+([^()]+?)\s*(?:\((.*)\))?$/;
-      const chunks = (groupsPart ?? "").split(/,\s*(?=\d+\s*[x×]\s+[^(),]+(?:\(|,|$))/);
-      const asGroups = chunks.length && chunks.every((c) => groupRe.test(c.trim()) && (c.includes("(") || profileFor(ds, groupRe.exec(c.trim())![2]!)));
-      if (asGroups) {
-        for (const part of chunks) {
-          const m = groupRe.exec(part.trim())!;
-          const prof = profileFor(ds, m[2]!);
-          u.groups.push({ modelProfileId: prof?.id ?? ds.models[0]!.id, count: Number(m[1]), wargear: m[3] ? parseWargearList(m[3]) : [] });
-        }
-      } else if (!applyFlag(u, groupsPart ?? "")) {
-        // inline wargear for a single-group unit
-        const items = parseWargearList(groupsPart ?? "");
-        if (items.length) u.groups.push({ modelProfileId: ds.models[0]!.id, count: Math.max(1, count ?? 1), wargear: items });
+    const t: TextUnit = { u: ctx.newUnit(ds), groups: [] };
+    if (ref) t.ref = ref;
+    if (count) t.headerCount = count;
+    units.push(t);
+    st.cur = t;
+    if (!rest) return;
+    // NR "Unit [80pts]: 2x Model (a, b), 1x Other (c) — Warlord; Enhancement: X", or inline wargear
+    const [groupsPart = "", ...flagParts] = rest.split(/\s+[—–]\s+/);
+    const groupRe = /^(\d+)\s*[x×]\s+([^()]+?)\s*(?:\((.*)\))?$/;
+    const chunks = groupsPart.split(/,\s*(?=\d+\s*[x×]\s+[^(),]+(?:\(|,|$))/);
+    const asGroups = chunks.length > 0 && chunks.every((c) => groupRe.test(c.trim()) && (c.includes("(") || ctx.profileFor(ds, groupRe.exec(c.trim())![2]!)));
+    if (asGroups) {
+      for (const part of chunks) {
+        const m = groupRe.exec(part.trim())!;
+        const prof = ctx.profileFor(ds, m[2]!);
+        const g: RawGroup = { count: Number(m[1]), items: m[3] ? parseWargearItems(m[3]) : [] };
+        if (prof) g.modelProfileId = prof.id;
+        t.groups.push(g);
       }
-      for (const f of flagParts.join(" ").split(/;\s*/)) applyFlag(u, f.trim());
+    } else {
+      // WTC-compact: wargear and flags share one comma-separated list ("Flux pistol, Enhancement: Ember Blade")
+      const gear = splitOutsideParens(groupsPart).filter((seg) => !applyFlag(t, seg));
+      const items = parseWargearItems(gear.join(", "));
+      if (items.length) {
+        const partial = items.filter((i) => i.n > 0).reduce((s, i) => s + i.n, 0);
+        t.groups.push({ count: Math.max(1, count ?? partial), items });
+      }
     }
+    for (const f of flagParts.join(" ").split(/;\s*/)) applyFlag(t, f.trim());
   };
 
   const rawLines = text.split(/\r?\n/);
@@ -209,14 +234,14 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
           break;
         case "DETACHMENT":
         case "DETACHMENTS":
-          for (const part of val.split(/,\s*(?![^()]*\))/)) if (part.trim()) addDetachment(part.trim());
+          for (const part of splitOutsideParens(val)) addDetachmentSpec(part);
           break;
         case "FORCE DISPOSITION":
           forceDisposition = val;
-          for (const d of detachments) d.forceDisposition = val;
+          for (const d of ctx.detachments) d.forceDisposition = val;
           break;
         case "TOTAL ARMY POINTS":
-          totalPoints = Number(/(\d+)/.exec(val)?.[1] ?? 0) || undefined;
+          totalPoints = points(/(\d[\d,]*)/.exec(val)?.[1]) || undefined;
           break;
         case "WARLORD":
           warlordRef = val;
@@ -236,40 +261,29 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     const line = trimmed.replace(BULLET, "").replace(/^\+{1,3}\s*|\s*\+{1,3}$/g, "").trim();
     if (!line) continue;
 
-    // ---- Grimstat NR-style header lines
-    let m = /^(.+?)\s+[—–-]\s+(Combat Patrol|Incursion|Strike Force|Onslaught)\s*\[(\d+)\s*pts\]$/i.exec(line);
+    // ---- header lines: faction, battle size, detachments
+    let m = FACTION_SIZE_LINE.exec(line);
     if (m) {
       setFaction(m[1]!);
-      battleSize = SIZE_BY_LABEL[m[2]!.toLowerCase()] ?? battleSize;
-      pointsLimit = Number(m[3]);
+      battleSize = SIZE_BY_LABEL[m[2]!.toLowerCase().replace(/\s+/g, " ")] ?? battleSize;
+      if (m[3]) pointsLimit = points(m[3]);
       headerSeen = true;
       continue;
     }
-    m = /^Detachment:\s*(.+?)\s*\[(\d+)\s*DP\]\s*(?:\((.+)\))?$/i.exec(line);
+    m = SIZE_LINE.exec(line);
     if (m) {
-      addDetachment(m[1]!);
-      if (m[3]) detachments.at(-1)!.forceDisposition = m[3];
-      continue;
-    }
-    m = /^(Combat Patrol|Incursion|Strike Force|Onslaught)\s*\((\d+)\s*points\)$/i.exec(line);
-    if (m) {
-      battleSize = SIZE_BY_LABEL[m[1]!.toLowerCase()] ?? battleSize;
-      pointsLimit = Number(m[2]);
+      battleSize = SIZE_BY_LABEL[m[1]!.toLowerCase().replace(/\s+/g, " ")] ?? battleSize;
+      if (m[2]) pointsLimit = points(m[2]);
       headerSeen = true;
       continue;
     }
-    m = /^Detachments:\s*(.+)$/i.exec(line);
+    // "Detachment: X", "Detachment: X [2 DP] (TAKE AND HOLD)", "Detachments: X (2 DP), Y" — the DP suffix is optional
+    m = /^Detachments?:\s*(.+)$/i.exec(line);
     if (m) {
-      for (const part of m[1]!.split(/\),\s*/)) {
-        const dm = /^(.+?)\s*\((\d+)\s*DP(?:,\s*(.+?))?\)?$/.exec(part.trim());
-        if (dm) {
-          addDetachment(dm[1]!);
-          if (dm[3]) detachments.at(-1)!.forceDisposition = dm[3];
-        } else addDetachment(part.replace(/\)$/, "").trim());
-      }
+      for (const part of splitOutsideParens(m[1]!)) addDetachmentSpec(part);
       continue;
     }
-    if (!isBullet && !st.cur && factionByKey.has(normaliseName(line))) {
+    if (!isBullet && ctx.findFaction(line)) {
       setFaction(line);
       headerSeen = true;
       continue;
@@ -278,19 +292,17 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       st.cur = null;
       continue;
     }
-    if (!isBullet && !st.cur && !units.length) {
-      const det = snapshot.data.detachments.find((d) => normaliseName(d.name) === normaliseName(line) && (!factionId || d.factionId === factionId));
-      if (det) {
-        addDetachment(det.name);
-        continue;
-      }
+    // a bare detachment name, wherever it appears: GW-app exports put it under the faction, others after the units
+    if (!isBullet && ctx.findDetachment(line)) {
+      addDetachmentSpec(line);
+      continue;
     }
 
     // ---- unit header
     m = isBullet ? null : UNIT_HEADER.exec(line);
     if (m) {
-      const [, ref, countStr, label, pts1, pts2, rest] = m;
-      const looksLikeUnit = !!ref || !!countStr || !!findDatasheet(label!);
+      const [, ref, countStr, label, , rest] = m;
+      const looksLikeUnit = !!ref || !!countStr || !!ctx.matchDatasheet(label!);
       if (!headerSeen && !looksLikeUnit && !units.length) {
         // "My list (2000 points)" — the roster name line
         name = name || label!.trim();
@@ -298,8 +310,6 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
         continue;
       }
       headerSeen = true;
-      void pts1;
-      void pts2;
       startUnit(ref, countStr ? Number(countStr) : undefined, label!.trim(), rest);
       continue;
     }
@@ -313,118 +323,67 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     }
     if (applyFlag(st.cur, line)) continue;
 
-    // ---- lines under a unit: "1x Sir Hekhtur: Close combat weapon, …" | "9x Battle Sister: 9 with …" | "1x Power fist" | "Warlord"
+    // ---- lines under a unit: "1x Sir Hekhtur: Close combat weapon, …" | "9x Battle Sister: 9 with …" | "1x Power fist"
     m = COUNT_ITEM.exec(line);
     if (m) {
       const count = Number(m[1]);
       const body = m[2]!.trim();
       const colon = body.indexOf(":");
       if (colon > 0) {
-        const profileLabel = body.slice(0, colon).trim();
-        const wargear = parseWargearList(body.slice(colon + 1));
-        const prof = profileFor(st.cur.ds, profileLabel);
-        st.cur.groups.push({ modelProfileId: prof?.id ?? st.cur.ds.models[0]!.id, count, wargear });
+        const prof = ctx.profileFor(st.cur.u.ds, body.slice(0, colon).trim());
+        const g: RawGroup = { count, items: parseWargearItems(body.slice(colon + 1)) };
+        if (prof) g.modelProfileId = prof.id;
+        st.cur.groups.push(g);
         continue;
       }
-      const prof = profileFor(st.cur.ds, body);
-      if (prof) st.cur.groups.push({ modelProfileId: prof.id, count, wargear: [] });
-      else {
-        const g = st.cur.groups.at(-1);
-        if (g) g.wargear.push(body);
-        else st.cur.groups.push({ modelProfileId: st.cur.ds.models[0]!.id, count: Math.max(1, st.cur.headerCount ?? 1), wargear: [body] });
-      }
+      const prof = ctx.profileFor(st.cur.u.ds, body);
+      if (prof) st.cur.groups.push({ modelProfileId: prof.id, count, items: [] });
+      else addWargear(wargearTarget(st.cur), body, count);
       continue;
     }
     if (isBullet) {
       // "• Bolt pistol" style single wargear line
-      const g = st.cur.groups.at(-1);
-      if (g) g.wargear.push(line);
-      else st.cur.groups.push({ modelProfileId: st.cur.ds.models[0]!.id, count: Math.max(1, st.cur.headerCount ?? 1), wargear: [line] });
+      addWargear(wargearTarget(st.cur), line, 0);
       continue;
     }
-    warnings.push(`${st.cur.name}: ignored line "${line}"`);
+    warnings.push(`${st.cur.u.name}: ignored line "${line}"`);
   }
 
-  if (!factionId) factionId = units[0]?.ds.factionId ?? factions[0]?.id ?? "unknown";
+  for (const t of units) finishUnit(t, warnings);
+  if (warlordRef) {
+    const refMatch = /^([A-Za-z]+\d+):\s*(.*)$/.exec(warlordRef);
+    const byRef = refMatch ? units.find((t) => t.ref?.toLowerCase() === refMatch[1]!.toLowerCase()) : undefined;
+    const key = normaliseName(refMatch?.[2] ?? warlordRef);
+    const found = byRef ?? units.find((t) => normaliseName(t.u.name) === key);
+    if (found) found.u.warlord = true;
+  }
+
   // battle size: explicit, else inferred from the declared total
   if (!battleSize) {
     const pts = totalPoints ?? 0;
-    battleSize = pts > 0 && pts <= 1000 ? "incursion" : pts > 2000 ? "onslaught" : "strike-force";
+    battleSize = pts <= 0 ? "strike-force" : pts <= 500 ? "combat-patrol" : pts <= 1000 ? "incursion" : pts <= 2000 ? "strike-force" : "onslaught";
   }
-  pointsLimit ??= battleSize === "incursion" ? 1000 : battleSize === "onslaught" ? 3000 : battleSize === "combat-patrol" ? 500 : 2000;
-
-  const rosterUnits: RosterUnit[] = units.map((u) => {
-    let groups: Group[] = u.groups.length ? u.groups : defaultGroups(u.ds);
-    if (u.headerCount && !u.groups.length) groups = scaleGroups(groups, u.headerCount);
-    // merge groups that ended up on the same profile with identical wargear
-    groups = mergeGroups(groups);
-    const out: RosterUnit = { id: u.id, datasheetId: u.ds.id, models: groups, isWarlord: u.warlord };
-    if (u.enhancementName) {
-      const key = normaliseName(u.enhancementName);
-      const enh = snapshot.data.enhancements.find((e) => normaliseName(e.name) === key && detachments.some((d) => d.detachmentId === e.detachmentId)) ?? snapshot.data.enhancements.find((e) => normaliseName(e.name) === key);
-      if (enh) out.enhancementId = enh.id;
-      else warnings.push(`${u.name}: unknown enhancement "${u.enhancementName}".`);
-    }
-    return out;
-  });
-  if (warlordRef) {
-    const refMatch = /^([A-Za-z]+\d+):\s*(.*)$/.exec(warlordRef);
-    const byRef = refMatch ? units.findIndex((u) => u.ref?.toLowerCase() === refMatch[1]!.toLowerCase()) : -1;
-    const byName = units.findIndex((u) => normaliseName(u.name) === normaliseName(refMatch?.[2] ?? warlordRef!));
-    const i = byRef >= 0 ? byRef : byName;
-    if (i >= 0) rosterUnits[i]!.isWarlord = true;
-  }
-  units.forEach((u, i) => {
-    if (!u.attach) return;
-    const key = normaliseName(u.attach.hostName);
-    const host = units.find((h) => h !== u && normaliseName(h.name) === key);
-    if (host) rosterUnits[i]!.attachedTo = { unitId: host.id, role: u.attach.role };
-    else warnings.push(`${u.name}: host unit "${u.attach.hostName}" not found.`);
-  });
-  const roster: Roster = {
-    id: `roster_${Math.random().toString(36).slice(2, 10)}`,
-    ownerId: "local",
-    createdAt: now,
-    updatedAt: now,
-    revision: 0,
-    name: name || "Imported army",
-    gameSystemId: snapshot.gameSystemId,
-    snapshotId: snapshot.id,
-    factionId,
-    battleSize,
-    pointsLimit,
-    detachments,
-    units: rosterUnits,
-  };
-  return { roster, warnings };
+  pointsLimit ??= POINTS_BY_SIZE[battleSize];
+  return ctx.build({ name: name || "Imported army", battleSize, pointsLimit });
 }
 
-function scaleGroups(groups: Group[], total: number): Group[] {
-  const current = groups.reduce((s, g) => s + g.count, 0);
-  if (current === total || groups.length === 0) return groups;
-  const last = groups[groups.length - 1]!;
-  return [...groups.slice(0, -1), { ...last, count: Math.max(1, last.count + (total - current)) }];
-}
-
-function mergeGroups(groups: Group[]): Group[] {
-  const out: Group[] = [];
+/**
+ * Turns the raw groups of one unit into model groups: each group is partitioned by profile (explicit, or spread
+ * over the datasheet's profiles when only the unit size was given) and by wargear, and the two partitions are
+ * overlaid. Wargear that names no weapon of the datasheet is kept but reported — silently dropping it downstream
+ * would leave the unit simulating with its default loadout and nothing to show for the mis-parsed line.
+ */
+function finishUnit(t: TextUnit, warnings: string[]): void {
+  const ds = t.u.ds;
+  // no groups and no unit size: leave it to `defaultGroups` in the context's build step
+  const groups: RawGroup[] = t.groups.length ? t.groups : t.headerCount ? [{ count: t.headerCount, items: [] }] : [];
+  const out: PendingUnit["groups"] = [];
   for (const g of groups) {
-    const same = out.find((o) => o.modelProfileId === g.modelProfileId && o.wargear.join("|") === g.wargear.join("|"));
-    if (same) same.count += g.count;
-    else out.push({ ...g, wargear: [...g.wargear] });
+    const count = Math.max(1, g.count);
+    const profiles = g.modelProfileId ? [{ modelProfileId: g.modelProfileId, count, wargear: [] }] : profileGroups(ds, count);
+    for (const sub of zipModelGroups(profiles, wargearGroups(count, g.items))) mergeGroup(out, sub);
   }
-  return out;
-}
-
-export function defaultGroups(ds: Datasheet): RosterUnit["models"] {
-  const mins = ds.composition.map((c) => c.min).filter((m): m is number => typeof m === "number" && m > 0);
-  const total = mins.length ? mins.reduce((s, m) => s + m, 0) : 1;
-  if (ds.models.length === 1) return [{ modelProfileId: ds.models[0]!.id, count: Math.max(1, total), wargear: [] }];
-  let remaining = total;
-  return ds.models.map((m, i) => {
-    const last = i === ds.models.length - 1;
-    const count = last ? Math.max(1, remaining) : 1;
-    remaining -= count;
-    return { modelProfileId: m.id, count, wargear: [] };
-  });
+  t.u.groups = out;
+  const unknown = [...new Set(out.flatMap((g) => g.wargear))].filter((w) => !isWeaponOf(ds, normaliseName(w)));
+  for (const w of unknown) warnings.push(`${t.u.name}: unknown wargear "${w}".`);
 }

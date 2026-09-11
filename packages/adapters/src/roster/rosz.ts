@@ -12,7 +12,7 @@ import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { Datasheet, ModelProfile, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import { normaliseName } from "@grimstat/snapshot";
 import { catalogueFactionName } from "../bsdata-json/index";
-import { defaultGroups, POINTS_BY_SIZE, RosterImportContext, SIZE_BY_LABEL, type AttachRole, type PendingUnit } from "./import-common";
+import { cleanLabel, defaultGroups, isWeaponOf, mergeGroup, POINTS_BY_SIZE, RosterImportContext, SIZE_BY_LABEL, splitByWargear, type AttachRole, type PendingUnit, type WargearItem } from "./import-common";
 
 export interface RoszImportOptions {
   /** Roster name; defaults to the `name` attribute of the roster element, then "Imported army". */
@@ -81,15 +81,6 @@ function num(v: string | undefined, dflt: number): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : dflt;
 }
 
-/** Strips list-export decorations that sometimes leak into selection names: "4x Warden", "Warden [10 pts]", "Warden (10 points)". */
-function cleanLabel(name: string): string {
-  return name
-    .replace(/^\s*\d+\s*[x×]\s+/i, "")
-    .replace(/\s*\[[^\]]*\]\s*$/, "")
-    .replace(/\s*\(\s*\d+\s*(?:pts?|points?)\s*\)\s*$/i, "")
-    .trim();
-}
-
 function flattenForces(node: { forces?: unknown }): XmlForce[] {
   const out: XmlForce[] = [];
   for (const f of list<XmlForce>(node.forces, "force")) out.push(f, ...flattenForces(f));
@@ -147,16 +138,11 @@ function isUnitSelection(s: XmlSelection, ctx: RosterImportContext): boolean {
 
 // ---- units --------------------------------------------------------------------------------------------------
 
-interface Item {
-  name: string;
-  /** Number of models carrying the item; 0 = every model in the group. */
-  n: number;
-}
 interface RawGroup {
   label: string;
   profile: ModelProfile | undefined;
   count: number;
-  items: Item[];
+  items: WargearItem[];
 }
 /** A leader/host relation found in the XML, resolved once every unit is known. */
 interface Link {
@@ -170,26 +156,6 @@ interface Link {
 const LEADER_SIDE_RE = /^(?:attached(?:\s+to)?|leads|leader\s+of|joins|joined\s+to)\b\s*[:\-–—]?\s*(.*)$/i;
 const HOST_SIDE_RE = /^(?:led\s+by|leader)\b\s*[:\-–—]?\s*(.*)$/i;
 
-/** Model profile for a BattleScribe model selection name: exact, singular/plural, "Warden w/ …" prefix, or "Sergeant" suffix. */
-function matchProfile(ds: Datasheet, label: string): ModelProfile | undefined {
-  const key = normaliseName(label);
-  if (!key) return undefined;
-  const exact = ds.models.find((m) => normaliseName(m.name) === key);
-  if (exact) return exact;
-  const loose = ds.models.find((m) => normaliseName(m.name).replace(/s$/, "") === key.replace(/s$/, ""));
-  if (loose) return loose;
-  if (ds.models.length === 1 && normaliseName(ds.name) === key) return ds.models[0];
-  const scored = ds.models
-    .map((m) => ({ m, k: normaliseName(m.name) }))
-    .filter((x) => key.startsWith(`${x.k} `) || x.k.endsWith(` ${key}`))
-    .sort((a, b) => b.k.length - a.k.length);
-  return scored[0]?.m;
-}
-
-function isWeaponOf(ds: Datasheet, key: string): boolean {
-  return ds.weapons.some((w) => normaliseName(w.name) === key || (w.groupName !== undefined && normaliseName(w.groupName) === key));
-}
-
 /** True when `name` is an enhancement of the roster's faction (or of a detachment already added) and not a weapon of `ds`. */
 function isEnhancementOf(ctx: RosterImportContext, ds: Datasheet, name: string): boolean {
   const key = normaliseName(name);
@@ -199,46 +165,11 @@ function isEnhancementOf(ctx: RosterImportContext, ds: Datasheet, name: string):
   return !!det && (det.factionId === ctx.factionId || ctx.detachments.some((d) => d.detachmentId === det.id));
 }
 
-/**
- * Splits a model group by the items only some of its models carry (an upgrade with number < model count):
- * items carried by every model go to all sub-groups, partial items peel off their own sub-group.
- */
-function splitByWargear(count: number, items: Item[]): { count: number; wargear: string[] }[] {
-  const subs: { count: number; wargear: string[] }[] = [{ count, wargear: [] }];
-  const add = (w: string[], name: string) => {
-    if (!w.includes(name)) w.push(name);
-  };
-  for (const it of items) if (it.n === 0 || it.n >= count) add(subs[0]!.wargear, it.name);
-  for (const it of items) {
-    if (it.n === 0 || it.n >= count) continue;
-    let remaining = it.n;
-    for (const sub of [...subs]) {
-      if (remaining <= 0) break;
-      if (sub.wargear.includes(it.name)) continue;
-      if (sub.count <= remaining) {
-        add(sub.wargear, it.name);
-        remaining -= sub.count;
-      } else {
-        sub.count -= remaining;
-        subs.push({ count: remaining, wargear: [...sub.wargear, it.name] });
-        remaining = 0;
-      }
-    }
-  }
-  return subs;
-}
-
-function mergeGroup(out: RosterUnit["models"], g: RosterUnit["models"][number]): void {
-  const sameGear = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
-  const existing = out.find((o) => o.modelProfileId === g.modelProfileId && sameGear(o.wargear, g.wargear));
-  if (existing) existing.count += g.count;
-  else out.push(g);
-}
-
 function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Map<string, PendingUnit>, links: Link[]): void {
   const { warnings } = ctx;
   const label = cleanLabel(s.name ?? "");
-  const ds = ctx.findDatasheet(label);
+  // the selection is already known to be a unit, so the tolerant matcher is safe here (see `isUnitSelection`)
+  const ds = ctx.matchDatasheet(label);
   if (!ds) {
     warnings.push(`Unknown unit "${label}" — skipped.`);
     return;
@@ -249,7 +180,7 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
   if (hasCategory(s, "warlord")) u.warlord = true;
 
   const groups: RawGroup[] = [];
-  const unitItems: Item[] = [];
+  const unitItems: WargearItem[] = [];
   const setEnhancement = (name: string) => {
     if (!name) return;
     if (!u.enhancementName) u.enhancementName = name;
@@ -273,7 +204,7 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
       const key = normaliseName(name);
       if (hasCategory(c, "warlord")) u.warlord = true;
       if (selType(c) === "model") {
-        const g: RawGroup = { label: name, profile: matchProfile(ds, name), count: num(c.number, 1), items: [] };
+        const g: RawGroup = { label: name, profile: ctx.profileFor(ds, name), count: num(c.number, 1), items: [] };
         groups.push(g);
         walk(c, g);
         continue;
@@ -314,7 +245,7 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
   walk(s, null);
 
   if (!groups.length) {
-    if (selType(s) === "model") groups.push({ label, profile: matchProfile(ds, label) ?? ds.models[0], count: num(s.number, 1), items: unitItems.splice(0) });
+    if (selType(s) === "model") groups.push({ label, profile: ctx.profileFor(ds, label) ?? ds.models[0], count: num(s.number, 1), items: unitItems.splice(0) });
     else for (const g of defaultGroups(ds)) groups.push({ label: "", profile: ds.models.find((m) => m.id === g.modelProfileId), count: g.count, items: [] });
   }
   // unit-level upgrades: every model when the number covers the unit, otherwise the first group
@@ -341,15 +272,9 @@ function roleFor(leader: Datasheet, host: Datasheet): AttachRole {
   return "leader";
 }
 
-function findUnitByName(ctx: RosterImportContext, name: string, exclude: PendingUnit): PendingUnit | undefined {
-  const key = normaliseName(cleanLabel(name));
-  const cands = ctx.units.filter((h) => h !== exclude && (normaliseName(h.name) === key || (h.customName !== undefined && normaliseName(h.customName) === key)));
-  return cands.find((h) => !ctx.units.some((o) => o.attachHost?.unitId === h.id)) ?? cands[0];
-}
-
 function resolveLinks(links: Link[], ctx: RosterImportContext, bySelectionId: Map<string, PendingUnit>): void {
   for (const l of links) {
-    const to = (l.toId ? bySelectionId.get(l.toId) : undefined) ?? (l.toName ? findUnitByName(ctx, l.toName, l.from) : undefined);
+    const to = (l.toId ? bySelectionId.get(l.toId) : undefined) ?? (l.toName ? ctx.findUnitByName(l.toName, l.from) : undefined);
     if (!to || to === l.from) {
       ctx.warnings.push(`${l.from.name}: host unit "${l.toName ?? l.source}" not found.`);
       continue;

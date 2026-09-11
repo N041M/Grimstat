@@ -1,0 +1,34 @@
+Ember Strike (975 points)
+
+Ashen Wardens
+Incursion (1,000 Points)
+Ember Vanguard
+
+CHARACTERS
+
+Warden Captain (95 Points)
+  • Warlord
+  • Leads: Warden Squad
+  • Enhancement: Ember Blade (+15 Points)
+  • 1x Flux pistol
+  • 1x Relic blade
+
+BATTLELINE
+
+Warden Squad (180 Points)
+  • 1x Warden Sergeant
+     1x Flux carbine
+     1x Power fist
+  • 9x Warden
+     9x Flux carbine
+     2x Shock maul
+
+OTHER DATASHEETS
+
+Ashen Crusher (150 Points)
+  • 1x Ashen Crusher
+     1x Vortex cannon
+     2x Twin hail gun
+     1x Crusher fists
+
+Exported with Grimstat

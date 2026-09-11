@@ -1,0 +1,23 @@
++++++++++++++++++++++++++++++++++++++++++++++++
++ FACTION KEYWORD: Imperium - Ashen Wardens
++ DETACHMENT: Ember Vanguard
++ FORCE DISPOSITION: Priority Assets
++ TOTAL ARMY POINTS: 975pts
++
++ WARLORD: Char1: Warden Captain
++ ENHANCEMENT: Ember Blade (on Char1: Warden Captain)
+& Warden's Aegis (on Char2: Warden Captain)
++ NUMBER OF UNITS: 4
++ SECONDARY: - Bring It Down: (1x2)
++++++++++++++++++++++++++++++++++++++++++++++++
+
+Char1: 1x Warden Captain (95 pts): Flux pistol, Relic blade, Enhancement: Ember Blade — Leads: Warden Squad
+Char2: 1x Warden Captain (105 pts): Flux pistol, Relic blade, Enhancement: Warden's Aegis — Leads: Warden Squad
+5x Warden Squad (90 pts)
+• 1x Warden Sergeant: Flux carbine, Power fist
+• 4x Warden: 4 with Flux carbine, Shock maul
+5x Warden Squad (90 pts)
+• 1x Warden Sergeant: Flux carbine, Power fist
+• 4x Warden: 4 with Flux carbine, Shock maul
+
+Created with newrecruit.eu v35.80

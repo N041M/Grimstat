@@ -1,0 +1,20 @@
+Ember Strike - 1,000 pts
+
+Ashen Wardens
+
+Warden Captain - 95 pts
+  • Flux pistol
+  • Relic blade
+  • Enhancement: Ember Blade (+15 pts)
+  • Warlord
+  • Leads: Warden Squad
+
+Warden Squad - 180 pts
+  • 10x Warden Squad: 1 with Flux carbine, Power fist, 9 with Flux carbine, Shock maul
+
+Ashen Crusher - 150 pts
+  • Vortex cannon
+  • 2x Twin hail gun
+  • Crusher fists
+
+Detachment: Ember Vanguard

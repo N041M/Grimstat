@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<roster id="rost-1" name="Ember Strike" battleScribeVersion="2.03" gameSystemId="gs-synth" gameSystemName="Synthetic Wargame" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+  <costs>
+    <cost name="pts" typeId="points" value="1000"/>
+  </costs>
+  <forces>
+    <force id="f-1" name="Ember Vanguard" catalogueId="cat-aw" catalogueName="Imperium - Ashen Wardens">
+      <selections>
+        <selection id="s-size" name="Battle Size" type="upgrade">
+          <selections>
+            <selection id="s-size-2" name="2. Incursion (1000 Point limit)" type="upgrade"/>
+          </selections>
+        </selection>
+        <selection id="s-det" name="Detachment" type="upgrade">
+          <selections>
+            <selection id="s-det-1" name="Ember Vanguard" type="upgrade"/>
+          </selections>
+        </selection>
+        <selection id="s-cap-1" name="Warden Captain" customName="Kestrel Vane" type="model" number="1">
+          <categories>
+            <category id="c-1" name="Warlord" primary="false"/>
+            <category id="c-2" name="Character" primary="true"/>
+          </categories>
+          <associations>
+            <association id="as-1" name="Attached to" targetId="s-squad-a"/>
+          </associations>
+          <selections>
+            <selection id="s-cap-1-w1" name="Flux pistol" type="upgrade" number="1"/>
+            <selection id="s-cap-1-w2" name="Relic blade" type="upgrade" number="1"/>
+            <selection id="s-cap-1-e" name="Ember Blade" type="upgrade" number="1">
+              <categories>
+                <category id="c-3" name="Enhancement" primary="false"/>
+              </categories>
+            </selection>
+          </selections>
+        </selection>
+        <selection id="s-cap-2" name="Warden Captain" type="model" number="1">
+          <selections>
+            <selection id="s-cap-2-a" name="Attached to: Warden Squad" type="upgrade"/>
+            <selection id="s-cap-2-w1" name="Flux pistol" type="upgrade" number="1"/>
+          </selections>
+        </selection>
+        <selection id="s-squad-a" name="Warden Squad" type="unit" number="1">
+          <selections>
+            <selection id="s-squad-a-m1" name="Warden Sergeant" type="model" number="1">
+              <selections>
+                <selection id="s-squad-a-m1-w1" name="Flux carbine" type="upgrade" number="1"/>
+                <selection id="s-squad-a-m1-w2" name="Power fist" type="upgrade" number="1"/>
+              </selections>
+            </selection>
+            <selection id="s-squad-a-m2" name="Wardens" type="model" number="4">
+              <selections>
+                <selection id="s-squad-a-m2-wg" name="Wargear" type="upgrade">
+                  <selections>
+                    <selection id="s-squad-a-m2-w1" name="Flux carbine" type="upgrade" number="4"/>
+                    <selection id="s-squad-a-m2-w2" name="Shock maul" type="upgrade" number="1"/>
+                  </selections>
+                </selection>
+              </selections>
+            </selection>
+          </selections>
+        </selection>
+        <selection id="s-squad-b" name="4x Warden Squad" type="unit" number="1">
+          <selections>
+            <selection id="s-squad-b-m1" name="Warden Sergeant" type="model" number="1"/>
+            <selection id="s-squad-b-m2" name="Wardens" type="model" number="3"/>
+          </selections>
+        </selection>
+      </selections>
+      <forces>
+        <force id="f-2" name="Thorn Tide" catalogueId="cat-vs" catalogueName="Xenos - Verdant Swarm">
+          <selections>
+            <selection id="s-drake" name="Spine Drake" type="model" number="1">
+              <selections>
+                <selection id="s-drake-w1" name="Spine volley" type="upgrade" number="1"/>
+                <selection id="s-drake-w2" name="Rending talons" type="upgrade" number="1"/>
+              </selections>
+            </selection>
+          </selections>
+        </force>
+      </forces>
+    </force>
+  </forces>
+</roster>

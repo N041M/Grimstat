@@ -1,0 +1,8 @@
+Ashen Wardens
+Incursion (1000 points)
+Detachment: Ember Vanguard
+
+Char1: 1x Warden Captain (95 pts): Warlord, Flux pistol, Relic blade, Enhancement: Ember Blade
+10x Warden Squad (180 pts): 1 with Flux carbine, Power fist, 9 with Flux carbine, Shock maul
+5x Warden Squad (90 pts): 1 with Flux carbine, 4 with Shock maul
+1x Ashen Crusher (150 pts): Vortex cannon, 2x Twin hail gun, Crusher fists

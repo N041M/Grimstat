@@ -1,10 +1,14 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { Roster } from "@grimstat/schema";
+import type { Roster, RosterUnit } from "@grimstat/schema";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
+import { SYNTHETIC_DIR } from "../test-utils";
 import { exportRosterText, importRosterText, exportRosterPrintHtml } from "./index";
-import { parseWargearList, splitList } from "./import";
+import { parseWargearItems, parseWargearList, splitList } from "./import";
 
 const snapshot = loadSyntheticSnapshot();
+const readFixture = (rel: string) => readFileSync(join(SYNTHETIC_DIR, rel), "utf8");
 const now = new Date().toISOString();
 const roster: Roster = {
   id: "r1",
@@ -133,5 +137,129 @@ describe("New Recruit tournament export", () => {
     const { roster: r, warnings } = importRosterText("1x Squad Warden (90 pts)\n1x Wardens of Ashen Crusher (150 pts)\n", snapshot);
     expect(warnings).toEqual([]);
     expect(r.units.map((u) => u.datasheetId)).toEqual(["ds:ashen-wardens:warden-squad", "ds:ashen-wardens:ashen-crusher"]);
+  });
+});
+
+/**
+ * One file per dialect in `fixtures/synthetic/rosters/`, each one written the way that exporter writes it.
+ * They are the regression net for the parsing rules the dialects disagree on: how points are punctuated, how a
+ * detachment line is decorated, and whether a count in front of a weapon means models or copies.
+ */
+describe("army-list dialects", () => {
+  const dialect = (file: string) => importRosterText(readFixture(join("rosters", file)), snapshot);
+  const shape = (u: RosterUnit | undefined) => (u?.models ?? []).map((g) => [g.modelProfileId.split(":").pop(), g.count, g.wargear.join("+")]);
+  const unitsOf = (r: Roster, id: string) => r.units.filter((u) => u.datasheetId === `ds:ashen-wardens:${id}`);
+
+  it("reads the GW app dialect: capital Points, a thousands separator and a bare detachment name", () => {
+    const { roster: r, warnings } = dialect("gw-app.txt");
+    expect(warnings).toEqual([]);
+    expect(r.name).toBe("Ember Strike");
+    expect(r.battleSize).toBe("incursion");
+    expect(r.pointsLimit).toBe(1000);
+    expect(r.detachments.map((d) => d.detachmentId)).toEqual(["det:ashen-wardens:ember-vanguard"]);
+    const cap = unitsOf(r, "warden-captain")[0]!;
+    expect(cap.isWarlord).toBe(true);
+    expect(cap.enhancementId).toBe("enh:ashen-wardens:ember-blade");
+    expect(cap.attachedTo).toEqual({ unitId: unitsOf(r, "warden-squad")[0]!.id, role: "leader" });
+  });
+
+  it("keeps the copies of a weapon a single model carries twice, and splits the models that carry one only some took", () => {
+    const { roster: r } = dialect("gw-app.txt");
+    expect(shape(unitsOf(r, "ashen-crusher")[0])).toEqual([["ashen-crusher", 1, "Vortex cannon+Twin hail gun+Twin hail gun+Crusher fists"]]);
+    expect(shape(unitsOf(r, "warden-squad")[0])).toEqual([
+      ["warden-sergeant", 1, "Flux carbine+Power fist"],
+      ["warden", 2, "Flux carbine+Shock maul"],
+      ["warden", 7, "Flux carbine"],
+    ]);
+  });
+
+  it("reads the WTC-compact dialect: `N with` loadouts become model groups on their own profiles", () => {
+    const { roster: r, warnings } = dialect("wtc-compact.txt");
+    expect(warnings).toEqual([]);
+    expect(r.detachments.map((d) => d.detachmentId)).toEqual(["det:ashen-wardens:ember-vanguard"]);
+    expect(shape(unitsOf(r, "warden-squad")[0])).toEqual([
+      ["warden-sergeant", 1, "Flux carbine+Power fist"],
+      ["warden", 9, "Flux carbine+Shock maul"],
+    ]);
+    expect(shape(unitsOf(r, "warden-squad")[1])).toEqual([
+      ["warden-sergeant", 1, "Flux carbine"],
+      ["warden", 4, "Shock maul"],
+    ]);
+  });
+
+  it("takes an enhancement out of a WTC-compact unit's inline wargear list", () => {
+    const { roster: r } = dialect("wtc-compact.txt");
+    const cap = unitsOf(r, "warden-captain")[0]!;
+    expect(cap.enhancementId).toBe("enh:ashen-wardens:ember-blade");
+    expect(cap.isWarlord).toBe(true);
+    expect(cap.models[0]!.wargear).toEqual(["Flux pistol", "Relic blade"]);
+  });
+
+  it("reads the New Recruit header block and gives two characters one squad each", () => {
+    const { roster: r, warnings } = dialect("new-recruit.txt");
+    expect(warnings).toEqual([]);
+    expect(r.battleSize).toBe("incursion");
+    expect(r.detachments).toEqual([{ id: "d1", detachmentId: "det:ashen-wardens:ember-vanguard", forceDisposition: "Priority Assets" }]);
+    const [c1, c2] = unitsOf(r, "warden-captain");
+    const [s1, s2] = unitsOf(r, "warden-squad");
+    expect(c1!.isWarlord).toBe(true);
+    expect(c2!.isWarlord).toBe(false);
+    expect(c1!.enhancementId).toBe("enh:ashen-wardens:ember-blade");
+    expect(c2!.enhancementId).toBe("enh:ashen-wardens:wardens-aegis");
+    expect([c1!.attachedTo?.unitId, c2!.attachedTo?.unitId]).toEqual([s1!.id, s2!.id]);
+  });
+
+  it("reads a ListBot-style list: dash-separated points and a detachment line after the units", () => {
+    const { roster: r, warnings } = dialect("listbot.txt");
+    expect(warnings).toEqual([]);
+    expect(r.name).toBe("Ember Strike");
+    expect(r.units.length).toBe(3);
+    expect(r.detachments.map((d) => d.detachmentId)).toEqual(["det:ashen-wardens:ember-vanguard"]);
+    expect(shape(unitsOf(r, "warden-squad")[0])).toEqual([
+      ["warden-sergeant", 1, "Flux carbine+Power fist"],
+      ["warden", 9, "Flux carbine+Shock maul"],
+    ]);
+    expect(unitsOf(r, "warden-captain")[0]!.attachedTo?.unitId).toBe(unitsOf(r, "warden-squad")[0]!.id);
+  });
+});
+
+describe("text import edge cases", () => {
+  const importLines = (...lines: string[]) => importRosterText(lines.join("\n"), snapshot);
+
+  it("reports wargear that matches no weapon on the datasheet instead of simulating a default loadout", () => {
+    const { roster: r, warnings } = importLines("Ashen Wardens", "Ember Vanguard", "1x Warden Captain (80 pts): Fluxx pistol");
+    expect(r.units[0]!.models[0]!.wargear).toEqual(["Fluxx pistol"]);
+    expect(warnings).toEqual([`Warden Captain: unknown wargear "Fluxx pistol".`]);
+  });
+
+  it("accepts a detachment named after the first unit, with or without its DP count", () => {
+    const { roster: r, warnings } = importLines("Ashen Wardens", "1x Warden Captain (80 pts): Flux pistol", "Detachment: Ember Vanguard");
+    expect(warnings).toEqual([]);
+    expect(r.detachments.map((d) => d.detachmentId)).toEqual(["det:ashen-wardens:ember-vanguard"]);
+  });
+
+  it("mentions a detachment only once when the header and the body both name it", () => {
+    const { roster: r } = importLines("+ FACTION KEYWORD: Ashen Wardens", "+ DETACHMENT: Ember Vanguard", "", "Detachment: Ember Vanguard [2 DP] (TAKE AND HOLD)", "1x Warden Captain (80 pts): Flux pistol");
+    expect(r.detachments).toEqual([{ id: "d1", detachmentId: "det:ashen-wardens:ember-vanguard", forceDisposition: "TAKE AND HOLD" }]);
+  });
+
+  it("infers Combat Patrol from a 500 point total instead of rounding it up to Incursion", () => {
+    const { roster: r } = importLines("+ FACTION KEYWORD: Ashen Wardens", "+ DETACHMENT: Ember Vanguard", "+ TOTAL ARMY POINTS: 500pts", "", "1x Warden Captain (80 pts): Flux pistol");
+    expect(r.battleSize).toBe("combat-patrol");
+    expect(r.pointsLimit).toBe(500);
+  });
+
+  it("keeps the `N with` counts when the unit size is not declared", () => {
+    const { roster: r } = importLines("Ashen Wardens", "Ember Vanguard", "Warden Squad (90 pts): 1 with Power fist, 4 with Shock maul");
+    expect(r.units[0]!.models.map((g) => [g.count, g.wargear.join("+")])).toEqual([[1, "Power fist"], [4, "Shock maul"]]);
+  });
+
+  it("parses wargear with per-model counts and per-model copies", () => {
+    expect(parseWargearItems("1 with Flux carbine, Power fist, 9 with Flux carbine")).toEqual([
+      { name: "Flux carbine", n: 1, copies: 1 },
+      { name: "Power fist", n: 1, copies: 1 },
+      { name: "Flux carbine", n: 9, copies: 1 },
+    ]);
+    expect(parseWargearList("Vortex cannon, 2x Twin hail gun")).toEqual(["Vortex cannon", "Twin hail gun", "Twin hail gun"]);
   });
 });
