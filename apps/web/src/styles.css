@@ -6061,3 +6061,11 @@ button.battle-scope-btn:hover {
 .battle-pick-list {
   max-height: 220px;
 }
+/* A tape's reading sits over its middle, in the tape's own colour. */
+.battle-tape-label {
+  border-color: rgba(242, 244, 247, 0.7);
+  font-weight: 600;
+}
+.battle-tape-list {
+  margin-top: 8px;
+}

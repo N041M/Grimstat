@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { ReachNode, Vec2, Vec3 } from "@grimstat/board";
-import type { BattleState, BattleUnit } from "../../lib/battle";
+import type { BattleState, BattleUnit, Tape } from "../../lib/battle";
 import { anchorOf, findModel, findUnit, indexOf, modelMoveVerdict, translateUnit, unitHulls } from "../../lib/battle";
 import { centre } from "../../lib/layoutEdit";
 import { Cameras, type CameraMode } from "./Cameras";
 import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
 import { Ghost, UnitTokens } from "./UnitTokens";
-import { MeasureLine, MeasureMarker, PathLine, Protractor, ReachOverlay, SightRays } from "./Overlays";
+import { MeasureLine, MeasureMarker, PathLine, Protractor, ReachOverlay, SightRays, TapeObject } from "./Overlays";
 
 export type { CameraMode };
 
@@ -52,8 +52,11 @@ export interface BattleCanvasProps {
   reach?: readonly ReachNode[];
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
-  /** A finished measurement: both marks set. */
-  measure?: readonly [Vec3, Vec3];
+  /** Tapes left on the table. Each stays until its line is double-clicked. */
+  tapes?: readonly Tape[];
+  onTapeRemove?(id: string): void;
+  /** One child per tape, in the same order; the projector keeps each over its tape's middle. */
+  tapesRef?: RefObject<HTMLDivElement>;
   /** A measurement in progress: the first mark is set and the tape runs to the pointer. */
   measureFrom?: Vec3;
   /** Where the tape's free end is, as the pointer moves over the table; undefined when it leaves. */
@@ -111,10 +114,15 @@ type Held =
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, measure, measureFrom, onMeasureHover, canDrag = true, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
+  const raycaster = useThree((s) => s.raycaster);
+  // A tape is a line; a line is a pixel wide. Give the picker half an inch of slack either side.
+  useEffect(() => {
+    raycaster.params.Line = { threshold: 0.5 };
+  }, [raycaster]);
   const [drag, setDrag] = useState<DragState | undefined>();
   /** The tape's free end while a measurement is in progress. */
   const [aim, setAim] = useState<Vec2 | undefined>();
@@ -334,14 +342,10 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       {reach?.length ? <ReachOverlay nodes={reach} /> : null}
       {rays?.length ? <SightRays rays={rays} /> : null}
       {path?.length ? <PathLine path={path} /> : null}
-      {measure ? (
-        <>
-          <MeasureLine from={measure[0]} to={measure[1]} />
-          <MeasureMarker at={measure[0]} />
-          <MeasureMarker at={measure[1]} />
-          <Protractor at={measure[0]} />
-        </>
-      ) : measureFrom ? (
+      {tapes?.map((tape) => (
+        <TapeObject key={tape.id} from={tape.from} to={tape.to} onRemove={() => onTapeRemove?.(tape.id)} />
+      ))}
+      {measureFrom ? (
         <>
           <MeasureMarker at={measureFrom} />
           <Protractor at={measureFrom} />
@@ -351,8 +355,30 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grabModel} />
       {ghost && drag ? <Ghost hulls={ghost} legal={drag.legal} /> : null}
       {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}
+      {tapesRef && tapes?.length ? <TapeLabelProjector tapesRef={tapesRef} tapes={tapes} /> : null}
     </>
   );
+}
+
+/** Each tape's reading as HTML over its middle, projected every frame like the unit names. */
+function TapeLabelProjector({ tapesRef, tapes }: { tapesRef: RefObject<HTMLDivElement>; tapes: readonly Tape[] }) {
+  const { camera, size } = useThree();
+  const scratch = useMemo(() => new Vector3(), []);
+  useFrame(() => {
+    const host = tapesRef.current;
+    if (!host) return;
+    const children = host.children;
+    for (let i = 0; i < tapes.length && i < children.length; i++) {
+      const tape = tapes[i]!;
+      scratch.set((tape.from.x + tape.to.x) / 2, (tape.from.z + tape.to.z) / 2 + 0.6, -(tape.from.y + tape.to.y) / 2).project(camera);
+      const el = children[i] as HTMLElement;
+      const behind = scratch.z > 1;
+      el.style.visibility = behind ? "hidden" : "visible";
+      if (behind) continue;
+      el.style.transform = `translate(-50%, -50%) translate(${((scratch.x + 1) / 2) * size.width}px, ${((1 - scratch.y) / 2) * size.height}px)`;
+    }
+  });
+  return null;
 }
 
 /**

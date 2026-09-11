@@ -34,6 +34,7 @@ import {
   replaceUnit,
   resetMove,
   sampleBattle,
+  dropMark,
   sightBetween,
   tapeDistance,
   unitCoherency,
@@ -44,9 +45,11 @@ import {
   type BattleUnit,
   type ChargeReadout,
   type SightReadout,
+  type Tape,
 } from "../lib/battle";
 import type { CameraMode, DragState, TerrainEditing } from "../components/battle/BattleCanvas";
 import { t, type I18nKey } from "../i18n";
+import { newId } from "../lib/ids";
 
 /** three.js and the whole scene live behind this boundary: nobody who never opens Battle downloads it. */
 const BattleCanvas = lazy(() => import("../components/battle/BattleCanvas").then((m) => ({ default: m.BattleCanvas })));
@@ -103,7 +106,15 @@ export function BattlePage() {
   const [drag, setDrag] = useState<DragState | undefined>();
   /** Whether `drag` is a live gesture (the readout follows the pointer) or a refused click. */
   const [dragging, setDragging] = useState(false);
-  const [picks, setPicks] = useState<Vec3[]>([]);
+  /**
+   * The tapes on the table and the mark of one being laid. One state, because a mark either starts
+   * a tape or finishes one, and the two halves have to change together — and never inside another
+   * update's function, which StrictMode runs twice.
+   */
+  const [measuring, setMeasuring] = useState<{ pending?: Vec3; tapes: Tape[] }>({ tapes: [] });
+  const { pending: pendingMark, tapes } = measuring;
+  const setPendingMark = useCallback((pending: Vec3 | undefined) => setMeasuring((m) => ({ ...m, pending })), []);
+  const setTapes = useCallback((tapes: Tape[]) => setMeasuring((m) => ({ ...m, tapes })), []);
   /** The tape's free end while one mark is set, from the canvas. */
   const [aim, setAim] = useState<Vec2 | undefined>();
   const [terrainId, setTerrainId] = useState<string | undefined>();
@@ -111,6 +122,7 @@ export function BattlePage() {
   const [snapOn, setSnapOn] = useState(true);
   const [library, setLibrary] = useState<StoredLayout[]>(() => [...BUILT_IN]);
   const labelsRef = useRef<HTMLDivElement>(null);
+  const tapesRef = useRef<HTMLDivElement>(null);
   const readoutRef = useRef<HTMLDivElement>(null);
   const [webgl] = useState(webglAvailable);
   const layoutsVersion = useStoreVersion("terrainLayouts");
@@ -138,10 +150,10 @@ export function BattlePage() {
   // Changing tool or unit invalidates whatever the previous tool was showing — including a refusal,
   // which is about one attempted destination and reads as a live warning once it outlives it.
   useEffect(() => {
-    setPicks([]);
+    setPendingMark(undefined);
     setDrag(undefined);
     setDragging(false);
-  }, [tool, selectedId, activeModelId]);
+  }, [tool, selectedId, activeModelId, setPendingMark]);
   useEffect(() => setTargetId(undefined), [selectedId]);
   const refreshLibrary = useCallback(async () => setLibrary(await listLayouts()), []);
   useEffect(() => {
@@ -159,14 +171,16 @@ export function BattlePage() {
     });
   }, []);
 
-  /** Put another layout on the table with a fresh deployment. */
+  /** Put another layout on the table with a fresh deployment. Tapes measured the old table. */
   const loadBattle = useCallback((next: TerrainLayout) => {
     dispatch({ type: "replace", battle: sampleBattle(next) });
     setSelectedId(undefined);
     setActiveModelId(undefined);
     setTerrainId(undefined);
     setObjectiveId(undefined);
-  }, []);
+    setTapes([]);
+    setPendingMark(undefined);
+  }, [setTapes, setPendingMark]);
 
   /** Run something that would discard unsaved terrain edits, after asking. */
   const guard = useCallback(
@@ -226,8 +240,15 @@ export function BattlePage() {
    * own side, which nobody is asking about; without the tool check, clicking an enemy under the Move
    * tool silently does nothing, because Move has nothing to show a target with.
    */
-  /** The tape takes two marks; a third starts a new measurement. */
-  const mark = useCallback((at: Vec2) => setPicks((prev) => (prev.length >= 2 ? [{ x: at.x, y: at.y, z: 0 }] : [...prev, { x: at.x, y: at.y, z: 0 }])), []);
+  /** A mark starts a tape or finishes the one in progress; a finished tape stays on the table. */
+  const mark = useCallback((at: Vec2) => {
+    const point = { x: at.x, y: at.y, z: 0 };
+    setMeasuring((m) => {
+      const next = dropMark(m.pending, point, newId("tape"));
+      return next.tape ? { tapes: [...m.tapes, next.tape] } : { ...m, pending: next.pending };
+    });
+  }, []);
+  const removeTape = useCallback((id: string) => setMeasuring((m) => ({ ...m, tapes: m.tapes.filter((tape) => tape.id !== id) })), []);
 
   const pickUnit = useCallback(
     (id: string | undefined, modelId?: string) => {
@@ -339,7 +360,7 @@ export function BattlePage() {
         if (tool === "terrain") {
           setTerrainId(undefined);
           setObjectiveId(undefined);
-        } else if (tool === "measure") setPicks([]);
+        } else if (tool === "measure") setPendingMark(undefined);
         else pickUnit(undefined);
         return;
       }
@@ -379,10 +400,9 @@ export function BattlePage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, onMove, pickUnit]);
+  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, onMove, pickUnit, setPendingMark]);
 
-  const measurePair = picks.length === 2 ? ([picks[0]!, picks[1]!] as const) : undefined;
-  const measureFrom = tool === "measure" && picks.length === 1 ? picks[0] : undefined;
+  const measureFrom = tool === "measure" ? pendingMark : undefined;
   const live = measureFrom && aim ? tapeDistance(measureFrom, aim) : undefined;
 
   /**
@@ -429,7 +449,9 @@ export function BattlePage() {
                   reach={tool === "select" ? reach : []}
                   rays={shot?.rays ?? []}
                   path={charge?.path ?? []}
-                  measure={measurePair}
+                  tapes={tapes}
+                  onTapeRemove={removeTape}
+                  tapesRef={tapesRef}
                   measureFrom={measureFrom}
                   onMeasureHover={setAim}
                   canDrag={tool === "select"}
@@ -451,6 +473,13 @@ export function BattlePage() {
               <div key={u.id} className={`battle-label ${u.side}`}>
                 <UnitArt keywords={u.keywords} />
                 {t(u.name as I18nKey)}
+              </div>
+            ))}
+          </div>
+          <div className="battle-labels" ref={tapesRef} aria-hidden="true">
+            {tapes.map((tape) => (
+              <div key={tape.id} className="battle-label battle-tape-label">
+                {t("battle.measureLive", { d: tapeDistance(tape.from, tape.to).toFixed(1) })}
               </div>
             ))}
           </div>
@@ -486,7 +515,7 @@ export function BattlePage() {
               />
             </>
           ) : (
-            <BattlePanel state={state} selected={selected} activeModel={activeModel} target={target} tool={tool} drag={drag} reach={reach} upperFloor={upperFloor} shot={shot} charge={charge} picks={picks} live={live} onPick={pickUnit} onEdit={editUnit} onClearMeasure={() => setPicks([])} />
+            <BattlePanel state={state} selected={selected} activeModel={activeModel} target={target} tool={tool} drag={drag} reach={reach} upperFloor={upperFloor} shot={shot} charge={charge} tapes={tapes} live={live} onPick={pickUnit} onEdit={editUnit} onRemoveTape={removeTape} onClearTapes={() => setTapes([])} />
           )}
         </aside>
       </div>
@@ -607,11 +636,12 @@ function BattlePanel({
   upperFloor,
   shot,
   charge,
-  picks,
+  tapes,
   live,
   onPick,
   onEdit,
-  onClearMeasure,
+  onRemoveTape,
+  onClearTapes,
 }: {
   state: BattleState;
   selected?: BattleUnit;
@@ -623,15 +653,14 @@ function BattlePanel({
   upperFloor: number;
   shot?: SightReadout;
   charge?: ChargeReadout;
-  picks: readonly Vec3[];
+  tapes: readonly Tape[];
   /** The tape's reading to the pointer while its second mark is not yet set. */
   live?: number;
   onPick: (id: string | undefined, modelId?: string) => void;
   onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
-  onClearMeasure: () => void;
+  onRemoveTape: (id: string) => void;
+  onClearTapes: () => void;
 }) {
-  const fixed = picks.length === 2 ? tapeDistance(picks[0]!, picks[1]!) : undefined;
-  const reading = fixed ?? live;
 
   return (
     <>
@@ -686,10 +715,22 @@ function BattlePanel({
         <section className="battle-section">
           <h2>{t("battle.tool.measure")}</h2>
           <p className="muted small">{t("battle.measureHint")}</p>
-          {reading === undefined ? null : <p className={`battle-measure ${fixed === undefined ? "is-live" : ""}`.trim()}>{t("battle.measureResult", { d: reading.toFixed(1) })}</p>}
-          {picks.length ? (
+          {live === undefined ? null : <p className="battle-measure is-live">{t("battle.measureResult", { d: live.toFixed(1) })}</p>}
+          {tapes.length ? (
+            <ul className="battle-piece-list battle-tape-list" aria-label={t("battle.measureTapes")}>
+              {tapes.map((tape, i) => (
+                <li key={tape.id}>
+                  <button type="button" className="battle-piece-row" title={t("battle.measureRemove")} onClick={() => onRemoveTape(tape.id)}>
+                    <span className="id">{t("battle.measureTape", { n: i + 1 })}</span>
+                    <span className="meta">{t("battle.measureLive", { d: tapeDistance(tape.from, tape.to).toFixed(1) })} ×</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {tapes.length > 1 ? (
             <div className="battle-actions">
-              <button type="button" className="ghost sm" onClick={onClearMeasure}>
+              <button type="button" className="ghost sm" onClick={onClearTapes}>
                 {t("battle.measureClear")}
               </button>
             </div>

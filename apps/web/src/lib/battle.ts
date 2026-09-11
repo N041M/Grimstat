@@ -322,6 +322,24 @@ export function chargeBetween(from: BattleUnit, to: BattleUnit, state: BattleSta
 /** What the tape reads between two marks: inches across the table, with no regard for terrain. */
 export const tapeDistance = (a: Vec2, b: Vec2): number => Math.hypot(b.x - a.x, b.y - a.y);
 
+/** A tape left on the table: two marks, and the line between them. */
+export interface Tape {
+  readonly id: string;
+  readonly from: Vec3;
+  readonly to: Vec3;
+}
+
+/**
+ * What a mark does: with no tape in progress it starts one; with one in progress it finishes it.
+ * A finished tape stays on the table — tapes are removed one at a time, by hand, never by the next
+ * measurement — so the caller gets either a new pending mark or a new tape, not both.
+ */
+export function dropMark(pending: Vec3 | undefined, at: Vec3, id: string): { pending?: Vec3; tape?: Tape } {
+  if (!pending) return { pending: at };
+  if (tapeDistance(pending, at) < 1e-6) return { pending };
+  return { tape: { id, from: pending, to: at } };
+}
+
 /* ---- a force to look at ------------------------------------------------------------------------ */
 
 /**

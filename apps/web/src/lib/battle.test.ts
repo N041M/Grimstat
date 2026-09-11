@@ -15,6 +15,7 @@ import {
   chargeBetween,
   chargeOdds,
   dragVerdict,
+  dropMark,
   findUnit,
   formation,
   indexOf,
@@ -375,6 +376,14 @@ describe("the tape", () => {
   it("reads straight across the table between two marks", () => {
     expect(tapeDistance({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(5);
     expect(tapeDistance({ x: 1, y: 1 }, { x: 1, y: 1 })).toBe(0);
+  });
+
+  it("starts a tape with one mark and finishes it with the next, ignoring a mark on the same spot", () => {
+    const a = { x: 1, y: 2, z: 0 };
+    const b = { x: 4, y: 6, z: 0 };
+    expect(dropMark(undefined, a, "t1")).toEqual({ pending: a });
+    expect(dropMark(a, a, "t1")).toEqual({ pending: a });
+    expect(dropMark(a, b, "t1")).toEqual({ tape: { id: "t1", from: a, to: b } });
   });
 });
 

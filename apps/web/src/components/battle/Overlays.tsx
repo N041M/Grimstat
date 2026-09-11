@@ -147,6 +147,43 @@ export function MeasureLine({ from, to }: { from: Vec3; to: Vec3 }) {
   return <PathLine path={[from, to]} colour={SCENE_COLOURS.selected} onTop />;
 }
 
+/**
+ * A tape left on the table: the line, a mark at each end, and a wide invisible sleeve along it so a
+ * double-click lands without needing to hit a one-pixel line. A press on it is swallowed so that
+ * taking hold of a tape never also drops a mark on the table beneath it.
+ */
+export function TapeObject({ from, to, onRemove }: { from: Vec3; to: Vec3; onRemove: () => void }) {
+  const length = Math.hypot(to.x - from.x, to.y - from.y);
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2, z: (from.z + to.z) / 2 + 0.2 };
+  return (
+    <group
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onRemove();
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => {
+        document.body.style.cursor = "";
+      }}
+    >
+      <MeasureLine from={from} to={to} />
+      <MeasureMarker at={from} />
+      <MeasureMarker at={to} />
+      {/* Board angles turn counter-clockwise about +z; the scene's y is up and its z is -board y,
+          so the same turn about the scene's y axis is the same angle. */}
+      <mesh position={toScene(mid)} rotation={[-Math.PI / 2, 0, angle]}>
+        <planeGeometry args={[Math.max(length, 0.5), 0.9]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} />
+      </mesh>
+    </group>
+  );
+}
+
 /** A mark set by the tape: a small ring on the table, drawn through whatever stands on it. */
 export function MeasureMarker({ at }: { at: Vec3 }) {
   return (
