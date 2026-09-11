@@ -401,7 +401,9 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
         st.cur.groups.push(g);
         continue;
       }
-      const prof = ctx.profileFor(st.cur.u.ds, body);
+      // A weapon first. `profileFor` matches by prefix, so "10x Hormagaunt talons" would otherwise
+      // read as ten more Hormagaunts — a second model group, the weapon gone, and no warning.
+      const prof = isWeaponOf(st.cur.u.ds, normaliseName(body)) ? undefined : ctx.profileFor(st.cur.u.ds, body);
       if (prof) st.cur.groups.push({ modelProfileId: prof.id, count, items: [] });
       else addWargear(wargearTarget(st.cur), body, count);
       continue;

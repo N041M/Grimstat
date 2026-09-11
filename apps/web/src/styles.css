@@ -5763,3 +5763,136 @@ button.battle-scope-btn:hover {
   font: 400 10px/1 var(--mono);
   color: var(--faint);
 }
+
+/* ---------- Terrain editor: lists, history, the drag readout ---------- */
+/* A section heading with something on its right: undo/redo, or the layout's badges. */
+.battle-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.battle-section-head h2 {
+  margin: 0;
+}
+.battle-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.battle-hist {
+  display: flex;
+  gap: 2px;
+}
+.battle-hist button {
+  padding: 0 7px;
+  font: 500 14px/1.5 var(--mono);
+}
+.battle-toolrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+.battle-toolrow select {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+.battle-toolrow label {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  font: 400 11px/1 var(--mono);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+/* Every piece and objective on the table, so one can be picked without hunting for it in 3D. */
+.battle-piece-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 176px;
+  overflow-y: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-input);
+}
+.battle-piece-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  font: 400 11px/1.4 var(--mono);
+  cursor: pointer;
+}
+.battle-piece-row:hover {
+  background: var(--hover);
+}
+.battle-piece-row.is-selected {
+  background: var(--hover);
+  border-left-color: var(--accent);
+}
+.battle-piece-row .id {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.battle-piece-row .meta {
+  flex: none;
+  color: var(--faint);
+}
+.battle-piece-editor {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+}
+.battle-keys {
+  margin: 10px 0 0;
+  font: 400 10px/1.5 var(--mono);
+  color: var(--faint);
+}
+/* The verdict beside the pointer during a drag. The canvas positions it; it never takes the pointer. */
+.battle-drag-readout {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 4px 7px;
+  border-radius: 4px;
+  font: 600 11px/1 var(--mono);
+  color: #e6e8ec;
+  background: rgba(21, 22, 26, 0.88);
+  border: 1px solid rgba(78, 201, 160, 0.9);
+}
+.battle-drag-readout.is-on {
+  visibility: visible;
+}
+.battle-drag-readout.bad {
+  border-color: rgba(201, 70, 75, 0.9);
+  color: #f0b2b4;
+}
+/* A layout's name is the user's to make long; the header is not the place to find that out. */
+.battle-layout-pick {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The tape's reading: the live one is lighter until the second mark fixes it. */
+.battle-measure.is-live {
+  color: var(--muted);
+}

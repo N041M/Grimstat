@@ -22,6 +22,7 @@ import {
   replaceUnit,
   sampleBattle,
   sightBetween,
+  tapeDistance,
   translateUnit,
   unitHulls,
   type BattleState,
@@ -357,3 +358,23 @@ describe("the charge tool", () => {
     expect(chargeOdds(Infinity)).toBe(0);
   });
 });
+
+describe("ruin walls on the table", () => {
+  it("refuses a vehicle a spot inside a ruin and lets infantry take it", () => {
+    const state = sampleBattle(RUINED_CITY);
+    const index = indexOf(state);
+    const inside = { x: 11, y: 11 }; // the middle of a3', a two-storey ruin
+    const transport = state.units.find((u) => u.keywords.includes("VEHICLE"))!;
+    const infantry = state.units.find((u) => u.keywords.includes("INFANTRY") && u.side === transport.side)!;
+    expect(dragVerdict(state, transport, inside, index).problems).toContain("battle.problem.blocked");
+    expect(dragVerdict(state, infantry, inside, index).problems).not.toContain("battle.problem.blocked");
+  });
+});
+
+describe("the tape", () => {
+  it("reads straight across the table between two marks", () => {
+    expect(tapeDistance({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(5);
+    expect(tapeDistance({ x: 1, y: 1 }, { x: 1, y: 1 })).toBe(0);
+  });
+});
+

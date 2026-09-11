@@ -69,6 +69,6 @@ Scenarios built from a 10th-edition snapshot run under the 10th-edition rules mo
 
 ## Deployment
 
-`.github/workflows/pages.yml` builds `apps/web` with `VITE_BASE=/<repo>/` and publishes it to GitHub Pages on every push to `master`; `ci.yml` runs the typecheck and the test suite. The app uses a hash router, so deep links work under the sub-path.
+`.github/workflows/pages.yml` builds `apps/web` with `VITE_BASE=/<repo>/` and publishes it to GitHub Pages on every push to `master`; `ci.yml` runs the lint, the typecheck and the test suite. The app uses a hash router, so deep links work under the sub-path.
 
 See `docs/DESIGN.md` for the research findings, architecture and roadmap, `docs/MODELLING-NOTES.md` for what the maths assumes, `docs/BATTLE-SIM.md` for the 3D battle simulator plan, and `docs/PLUGINS.md` for extension points.

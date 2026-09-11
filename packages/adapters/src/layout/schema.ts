@@ -147,5 +147,8 @@ export const LayoutFile = LayoutProvenance.extend({
 });
 export type LayoutFile = z.infer<typeof LayoutFile>;
 
-/** Millimetres per inch — the only conversion the format needs, and it is exact by definition. */
-export const MM_PER_INCH = 25.4;
+/**
+ * Millimetres per inch — the only conversion the format needs, and it is exact by definition. The
+ * board package already owns the number, so it is re-exported rather than written down a second time.
+ */
+export { MM_PER_INCH } from "@grimstat/board";

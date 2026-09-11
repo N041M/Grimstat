@@ -79,13 +79,23 @@ function bundleSizePlugin(): Plugin {
     name: "grimstat-bundle-size",
     apply: "build",
     generateBundle(_options, bundle) {
+      // What a visitor downloads is every chunk reachable from the entry by *static* imports. Walking
+      // the graph rather than testing each chunk's own flag matters: a chunk shared by two lazy routes
+      // is not itself a dynamic entry, and would otherwise be counted against everybody.
+      const chunks = new Map<string, { code: string; imports: readonly string[]; isEntry: boolean }>();
+      for (const file of Object.values(bundle)) if (file.type === "chunk") chunks.set(file.fileName, file);
+      const loaded = new Set<string>();
+      const queue = [...chunks].filter(([, c]) => c.isEntry).map(([name]) => name);
+      while (queue.length) {
+        const name = queue.pop()!;
+        if (loaded.has(name)) continue;
+        loaded.add(name);
+        queue.push(...(chunks.get(name)?.imports ?? []));
+      }
       let bytes = 0;
+      for (const name of loaded) bytes += gzipSync(Buffer.from(chunks.get(name)!.code, "utf8")).byteLength;
       for (const file of Object.values(bundle)) {
-        if (file.type === "chunk") {
-          if (file.isDynamicEntry) continue;
-          bytes += gzipSync(Buffer.from(file.code, "utf8")).byteLength;
-        }
-        else if (file.fileName.endsWith(".css")) bytes += gzipSync(typeof file.source === "string" ? Buffer.from(file.source, "utf8") : Buffer.from(file.source)).byteLength;
+        if (file.type === "asset" && file.fileName.endsWith(".css")) bytes += gzipSync(typeof file.source === "string" ? Buffer.from(file.source, "utf8") : Buffer.from(file.source)).byteLength;
       }
       const label = `${Math.round(bytes / 1024)} kB`;
       for (const file of Object.values(bundle)) {

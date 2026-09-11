@@ -6,7 +6,7 @@
  * every component, they meet here: `toScene` and nothing else.
  */
 
-import type { TerrainPiece, Vec2, Vec3 } from "@grimstat/board";
+import type { TerrainPiece, Vec3 } from "@grimstat/board";
 import { hasTrait, topOf } from "@grimstat/board";
 
 /** A three.js position tuple. */
@@ -15,8 +15,13 @@ export type Scene3 = [number, number, number];
 /** Board `(x, y, z)` → scene `(x, z, −y)`. The negation keeps the table right-handed. */
 export const toScene = (p: Vec3): Scene3 => [p.x, p.z, -p.y];
 
-/** A point on the table at a given height. */
-export const toSceneFlat = (p: Vec2, z = 0): Scene3 => [p.x, z, -p.y];
+/** Write a board point into a flat scene-coordinate buffer at `at`; returns the next offset. */
+export function writeScene(out: Float32Array, at: number, p: Vec3): number {
+  out[at] = p.x;
+  out[at + 1] = p.z;
+  out[at + 2] = -p.y;
+  return at + 3;
+}
 
 /** Scene `(x, y, z)` → board `(x, y, z)`, for turning a pointer hit back into a board position. */
 export const fromScene = (x: number, y: number, z: number): Vec3 => ({ x, y: -z, z: y });

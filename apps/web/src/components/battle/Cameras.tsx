@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { OrthographicCamera, PerspectiveCamera, Vector3 } from "three";
+import { MOUSE, OrthographicCamera, PerspectiveCamera, Vector3 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BoardSize } from "@grimstat/board";
 
@@ -104,7 +104,8 @@ export function Cameras({ mode, size }: { mode: CameraMode; size: BoardSize }) {
     // Never let the camera go under the table: from below, nothing on it can be read.
     next.maxPolarAngle = Math.PI / 2 - 0.02;
     next.enableRotate = mode === "orbit";
-    next.mouseButtons.LEFT = mode === "orbit" ? next.mouseButtons.LEFT : 2; // pan, so left-drag still moves the view
+    // Straight down there is nothing to orbit, so the left button pans and a drag still moves the view.
+    next.mouseButtons.LEFT = mode === "orbit" ? MOUSE.ROTATE : MOUSE.PAN;
     const onChange = () => invalidate();
     next.addEventListener("change", onChange);
     next.update();

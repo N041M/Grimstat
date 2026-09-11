@@ -23,7 +23,10 @@ export type TerrainTrait =
   | "impassable"
   /** Costs extra to move through. */
   | "difficult"
-  /** Walls may be moved through by INFANTRY and the like (ruins). */
+  /**
+   * The footprint is walls: only the keywords in `passableBy` may cross them or be inside (ruins).
+   * Everyone else goes round — but, unlike `impassable`, those who may pass may also stand inside.
+   */
   | "breachable"
   /** May be climbed to reach a floor. */
   | "scalable"
@@ -43,7 +46,7 @@ export interface TerrainPiece {
   readonly traits: readonly TerrainTrait[];
   /** Walkable surface heights **relative to `base`**, ascending. `[0]` is the ground inside it. */
   readonly floors: readonly number[];
-  /** Keywords allowed through walls regardless of `impassable`. Empty means nobody. */
+  /** Keywords allowed through the walls of an `impassable` or `breachable` piece. Empty means nobody. */
   readonly passableBy: readonly string[];
   /**
    * Keywords allowed onto this piece's upper floors. Empty means anyone who can reach them.

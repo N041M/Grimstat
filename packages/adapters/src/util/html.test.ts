@@ -33,3 +33,15 @@ describe("entities that carry meaning in a list", () => {
     expect(stripHtml("<p>&notanentity; &amp;</p>")).toBe("&notanentity; &");
   });
 });
+
+describe("numeric entities", () => {
+  it("decodes what is a character and leaves what is not", () => {
+    expect(stripHtml("<p>&#8226; &#x2022; &#169;</p>")).toBe("• • ©");
+    // Beyond Unicode, or a lone surrogate: `String.fromCodePoint` would throw or corrupt the string.
+    expect(stripHtml("<p>&#99999999; &#xD800; x</p>")).toBe("&#99999999; &#xD800; x");
+  });
+  it("knows the spacing and typographic entities sources lay text out with", () => {
+    expect(stripHtml("<p>Twin&thinsp;hail&ensp;gun &frac12;&Prime; &rarr; 2&prime;</p>")).toBe("Twin hail gun ½″ → 2′");
+  });
+});
+

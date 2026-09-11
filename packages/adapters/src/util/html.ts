@@ -20,15 +20,35 @@ const ENTITIES: Record<string, string> = {
   times: "×",
   minus: "−",
   plusmn: "±",
+  // Spacing and typographic entities that sources use for layout; a lone `&thinsp;` left encoded
+  // splits a weapon name in two.
+  ensp: " ",
+  emsp: " ",
+  thinsp: " ",
+  shy: "",
+  prime: "′",
+  Prime: "″",
+  rarr: "→",
+  larr: "←",
+  frac12: "½",
+  frac14: "¼",
+  frac34: "¾",
+  copy: "©",
+  reg: "®",
+  trade: "™",
 };
 
+/** Is this a code point `String.fromCodePoint` will accept and a reader can display? */
+const validCodePoint = (code: number): boolean => Number.isFinite(code) && code >= 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff);
+
 export function decodeEntities(text: string): string {
-  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, body: string) => {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);/gi, (m, body: string) => {
     if (body[0] === "#") {
       const code = body[1] === "x" || body[1] === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+      // Out of range would throw, and a lone surrogate would corrupt the string: leave either as written.
+      return validCodePoint(code) ? String.fromCodePoint(code) : m;
     }
-    return ENTITIES[body.toLowerCase()] ?? m;
+    return ENTITIES[body] ?? ENTITIES[body.toLowerCase()] ?? m;
   });
 }
 

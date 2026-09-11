@@ -251,7 +251,8 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
   // unit-level upgrades: every model when the number covers the unit, otherwise the first group
   const total = groups.reduce((sum, g) => sum + g.count, 0);
   for (const it of unitItems) {
-    if (it.n === 0 || it.n >= total) for (const g of groups) g.items.push({ name: it.name, n: 0 });
+    // Spread across every group, keeping the per-model multiplicity: "8" on a unit of four is two each.
+    if (it.n === 0 || it.n >= total) for (const g of groups) g.items.push({ name: it.name, n: total > 0 && it.n > total ? Math.floor(it.n / total) * g.count : 0 });
     else groups[0]!.items.push(it);
   }
   const out: RosterUnit["models"] = [];
@@ -261,7 +262,16 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
       profile = ds.models[0]!;
       if (ds.models.length > 1) warnings.push(`${u.name}: model "${g.label}" not found; used the first profile.`);
     }
-    for (const sub of splitByWargear(g.count, g.items)) mergeGroup(out, { modelProfileId: profile.id, count: sub.count, wargear: sub.wargear });
+    // BattleScribe writes a weapon's `number` as its total across the group, so "2" on one vehicle
+    // is two guns and "8" on four models is two each. The resolver counts occurrences, so the copies
+    // have to be written out — the way `wargearGroups` does for the text dialects.
+    const copies = new Map<string, number>();
+    const items = g.items.map((it) => {
+      const per = g.count > 0 && it.n > g.count ? Math.floor(it.n / g.count) : 1;
+      if (per > 1) copies.set(it.name, Math.max(copies.get(it.name) ?? 1, per));
+      return per > 1 ? { name: it.name, n: 0 } : it;
+    });
+    for (const sub of splitByWargear(g.count, items)) mergeGroup(out, { modelProfileId: profile.id, count: sub.count, wargear: sub.wargear.flatMap((w) => Array.from({ length: copies.get(w) ?? 1 }, () => w)) });
   }
   u.groups = out;
 }

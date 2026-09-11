@@ -319,3 +319,21 @@ describe("the GW app's attached-unit blocks", () => {
     expect(warnings.join(" ")).not.toMatch(/Attached Unit/i);
   });
 });
+
+describe("a bare count line that names a weapon", () => {
+  it("is wargear even when the weapon's name begins with a model profile's", () => {
+    // "10x Hormagaunt" then "10x Hormagaunt talons": the second line is the squad's weapon, not ten
+    // more of the squad. Modelled here by lending the Warden a weapon that starts with its name.
+    const lent = structuredClone(snapshot);
+    const squad = lent.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;
+    const carbine = squad.weapons.find((w) => w.name === "Flux carbine")!;
+    squad.weapons.push({ ...carbine, id: `${carbine.id}-talons`, name: "Warden talons" });
+    const text = ["Ashen Wardens", "Ember Vanguard", "", "5x Warden Squad (90 pts)", "• 1x Warden Sergeant", "• 4x Warden", "• 4x Warden talons", ""].join("\n");
+    const { roster: r, warnings } = importRosterText(text, lent);
+    expect(warnings).toEqual([]);
+    const unit = r.units[0]!;
+    expect(unit.models.reduce((n, g) => n + g.count, 0)).toBe(5);
+    expect(unit.models.find((g) => g.modelProfileId.endsWith(":warden"))!.wargear).toContain("Warden talons");
+  });
+});
+

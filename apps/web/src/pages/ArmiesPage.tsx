@@ -139,6 +139,7 @@ export function ArmiesPage() {
     setDialog(undefined);
     setImported(undefined);
     setFileName(undefined);
+    setBytes(undefined);
     setOver(false);
   };
 
@@ -369,7 +370,19 @@ export function ArmiesPage() {
               {fileName ? <div className="small ok-text">{t("armies.fileLoaded", { name: fileName })}</div> : null}
             </div>
             <Field label={t("armies.importText")}>
-              <textarea rows={12} className="mono" value={text} placeholder={t("armies.importPlaceholder")} autoFocus onChange={(e) => setText(e.target.value)} />
+              <textarea
+                rows={12}
+                className="mono"
+                value={text}
+                placeholder={t("armies.importPlaceholder")}
+                autoFocus
+                onChange={(e) => {
+                  // Typing means the text is what to import: a zip loaded earlier would otherwise win silently.
+                  setBytes(undefined);
+                  setFileName(undefined);
+                  setText(e.target.value);
+                }}
+              />
             </Field>
             <Field label={t("armies.nameOptional")}>
               <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={{ maxWidth: 320 }} />

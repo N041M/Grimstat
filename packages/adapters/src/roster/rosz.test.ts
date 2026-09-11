@@ -107,3 +107,28 @@ describe("rosz archive handling", () => {
     expect(warnings).toEqual([`Unknown detachment "Nonesuch Host".`, `Unknown unit "Mystery Unit" — skipped.`, "No units found in the roster."]);
   });
 });
+
+describe("weapon multiplicities in a .ros", () => {
+  const xml = (inner: string) => `<roster name="Multi"><forces><force name="Ember Vanguard" catalogueName="Ashen Wardens"><selections>${inner}</selections></force></forces></roster>`;
+
+  it("writes out a weapon taken more than once by a single model", () => {
+    const { roster, warnings } = importRosterXml(
+      xml(`<selection name="Ashen Crusher" type="model" number="1"><selections><selection name="Twin hail gun" number="2" type="upgrade"/><selection name="Crusher fists" number="1" type="upgrade"/></selections></selection>`),
+      snapshot,
+    );
+    expect(warnings).toEqual([]);
+    expect(roster.units[0]!.models[0]!.wargear).toEqual(["Twin hail gun", "Twin hail gun", "Crusher fists"]);
+  });
+
+  it("turns a unit-level total back into copies per model", () => {
+    const { roster } = importRosterXml(
+      xml(`<selection name="Warden Squad" type="unit"><selections><selection name="Warden Sergeant" type="model" number="1"/><selection name="Warden" type="model" number="4"/><selection name="Flux carbine" number="10" type="upgrade"/></selections></selection>`),
+      snapshot,
+    );
+    expect(shape(roster.units[0]!)).toEqual([
+      ["warden-sergeant", 1, "Flux carbine+Flux carbine"],
+      ["warden", 4, "Flux carbine+Flux carbine"],
+    ]);
+  });
+});
+

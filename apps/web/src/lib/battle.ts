@@ -13,8 +13,8 @@
  * than enforced, because the rules only ask for it once the whole unit has finished moving.
  */
 
-import type { CoherencyReport, ModelHull, Objective, ReachNode, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
-import { BATTLE_SIZES, LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, distance, edgeZones, heightForKeywords, inEngagementRange, onBoard, reachable, sight, unitDistance } from "@grimstat/board";
+import type { CoherencyReport, ModelHull, ReachNode, TerrainLayout, Vec2, Vec3, Zone } from "@grimstat/board";
+import { LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, edgeZones, heightForKeywords, inEngagementRange, onBoard, reachable, sight, unitDistance } from "@grimstat/board";
 
 export type Side = "attacker" | "defender";
 export type BattleTool = "select" | "measure" | "sight" | "terrain";
@@ -73,9 +73,6 @@ export const remainingMove = (unit: BattleUnit, model: BattleModel): number => M
 
 /** Has any model of this unit moved since the move began? */
 export const hasMoved = (unit: BattleUnit): boolean => unit.models.some((m) => (m.spent ?? 0) > 0);
-
-/** Total spent across the unit, for the panel's summary. */
-export const unitSpent = (unit: BattleUnit): number => unit.models.reduce((a, m) => a + (m.spent ?? 0), 0);
 
 /** Coherency of the unit as it currently stands. Reported, never enforced mid-move. */
 export const unitCoherency = (unit: BattleUnit): CoherencyReport => coherency(unitHulls(unit));
@@ -160,9 +157,6 @@ export interface MoveVerdict {
   /** Why not, in the order a player would notice them. */
   readonly problems: readonly string[];
 }
-
-/** Retained for the whole-unit move, which still reports one verdict for the body of models. */
-export type DragVerdict = MoveVerdict;
 
 /**
  * How far a destination may be from the nearest cell of the movement search and still count as that
@@ -325,7 +319,8 @@ export function chargeBetween(from: BattleUnit, to: BattleUnit, state: BattleSta
   return { distance: result.distance, minimumRoll: result.minimumRoll, probability: chargeOdds(result.minimumRoll), path: result.path };
 }
 
-export const measure = (a: ModelHull, b: ModelHull): number => distance(a, b);
+/** What the tape reads between two marks: inches across the table, with no regard for terrain. */
+export const tapeDistance = (a: Vec2, b: Vec2): number => Math.hypot(b.x - a.x, b.y - a.y);
 
 /* ---- a force to look at ------------------------------------------------------------------------ */
 
@@ -374,7 +369,3 @@ export function sampleBattle(layout: TerrainLayout = LAYOUTS[1] ?? LAYOUTS[0]!):
 export function withLayout(state: BattleState, layout: TerrainLayout): BattleState {
   return { ...state, layout, zones: (layout.zones?.length === 2 ? (layout.zones as [Zone, Zone]) : undefined) ?? edgeZones(layout.size) };
 }
-
-export const BATTLE_LAYOUTS = LAYOUTS;
-export const BATTLE_SIZE_LIST = BATTLE_SIZES;
-export type { TerrainLayout, TerrainPiece, Objective, Zone };

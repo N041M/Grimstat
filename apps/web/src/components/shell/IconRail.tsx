@@ -12,7 +12,7 @@ export interface RailEntry {
   labelKey: I18nKey;
 }
 
-/** `C S A N D ?` — the rail's whole vocabulary. Reused by the command palette's "Go to" group. */
+/** `C S A N B D ?` — the rail's whole vocabulary. Reused by the command palette's "Go to" group. */
 export const RAIL_ENTRIES: readonly RailEntry[] = [
   { route: "calculator", glyph: "C", labelKey: "nav.calculator" },
   { route: "scenarios", glyph: "S", labelKey: "nav.scenarios" },
@@ -65,7 +65,7 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
 
 /**
  * The 56px icon rail: brand mark (opens the command palette, carries the solve-state dot),
- * six single-letter route items, theme control pinned to the bottom. Below 900px the same
+ * seven single-letter route items, theme control pinned to the bottom. Below 900px the same
  * markup lays itself out as a bottom bar (see `.shell.narrow .rail` in styles.css).
  */
 export function IconRail({ route, theme }: { route: Route; theme: ReturnType<typeof useTheme> }) {

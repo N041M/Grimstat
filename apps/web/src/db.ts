@@ -207,28 +207,33 @@ export interface ExportBundle {
     rosters?: Roster[];
     /** Added with db v3; absent in older bundles. */
     overrides?: OverrideRecord[];
+    /** Added with db v4; absent in older bundles. */
+    terrainLayouts?: TerrainLayoutRecord[];
   };
 }
 
 export async function exportAll(): Promise<ExportBundle> {
-  const [snapshots, scenarios, layouts, settings, rosters, overrides] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray()]);
-  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides } };
+  const [snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray(), db.terrainLayouts.toArray()]);
+  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts } };
 }
 
-export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number }> {
+export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number; terrainLayouts: number }> {
   const s = bundle.stores;
   const rosters = s.rosters ?? [];
   const overrides = s.overrides ?? [];
-  await db.transaction("rw", [db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, db.overrides], async () => {
+  const terrainLayouts = s.terrainLayouts ?? [];
+  await db.transaction("rw", [db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, db.overrides, db.terrainLayouts], async () => {
     if (s.snapshots.length) await db.snapshots.bulkPut(s.snapshots);
     if (s.scenarios.length) await db.scenarios.bulkPut(s.scenarios);
     if (s.layouts.length) await db.layouts.bulkPut(s.layouts);
     if (s.settings.length) await db.settings.bulkPut(s.settings);
     if (rosters.length) await db.rosters.bulkPut(rosters);
     if (overrides.length) await db.overrides.bulkPut(overrides);
+    if (terrainLayouts.length) await db.terrainLayouts.bulkPut(terrainLayouts);
   });
   notifyStoreChanged("rosters");
-  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length };
+  if (terrainLayouts.length) notifyStoreChanged("terrainLayouts");
+  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length, terrainLayouts: terrainLayouts.length };
 }
 
 /** Every stored override, oldest first. */

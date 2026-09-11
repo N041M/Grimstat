@@ -7,9 +7,8 @@
  */
 
 import type { TerrainLayout } from "@grimstat/board";
-import { LAYOUTS } from "@grimstat/board";
+import { LAYOUTS, defaultBreachers } from "@grimstat/board";
 import { db, notifyStoreChanged, type TerrainLayoutRecord } from "../db";
-import { newId } from "./ids";
 
 export interface StoredLayout {
   readonly layout: TerrainLayout;
@@ -23,7 +22,9 @@ export const BUILT_IN: readonly StoredLayout[] = LAYOUTS.map((layout) => ({ layo
 
 function decode(record: TerrainLayoutRecord): StoredLayout | undefined {
   try {
-    return { layout: JSON.parse(record.json) as TerrainLayout, builtIn: false, updatedAt: record.updatedAt, source: record.source };
+    const layout = JSON.parse(record.json) as TerrainLayout;
+    // Layouts saved before breachable walls kept anyone out: their ruins name nobody who may pass.
+    return { layout: { ...layout, pieces: layout.pieces.map(defaultBreachers) }, builtIn: false, updatedAt: record.updatedAt, source: record.source };
   } catch {
     // A record that will not parse is worse than one that is missing: skip it rather than taking the
     // whole list down with it.
@@ -52,14 +53,4 @@ export async function saveLayouts(layouts: readonly TerrainLayout[], source?: st
 export async function deleteLayout(id: string): Promise<void> {
   await db.terrainLayouts.delete(id);
   notifyStoreChanged("terrainLayouts");
-}
-
-export const isBuiltIn = (id: string): boolean => LAYOUTS.some((l) => l.id === id);
-
-/**
- * A copy under a new id, so editing a shipped layout — or forking one of your own — never destroys
- * what it came from.
- */
-export function copyLayout(layout: TerrainLayout, name?: string): TerrainLayout {
-  return { ...layout, id: newId("layout"), name: name ?? `${layout.name} copy` };
 }

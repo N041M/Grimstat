@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BATTLE_SIZES,
+  BREACHERS,
   CROSSFIRE,
   LAYOUTS,
   RUINED_CITY,
@@ -9,6 +10,7 @@ import {
   circleBase,
   control,
   crater,
+  defaultBreachers,
   edgeZones,
   inZone,
   layoutIssues,
@@ -45,6 +47,21 @@ describe("layout building blocks", () => {
     expect(piece.height).toBeGreaterThan(8);
     expect(piece.traits).toContain("obscuring");
     expect(piece.traits).toContain("breachable");
+    expect(piece.passableBy).toEqual([...BREACHERS]);
+    expect(BREACHERS).toContain("FLY");
+  });
+
+  it("never ships a breachable piece that admits nobody", () => {
+    for (const layout of LAYOUTS) for (const piece of layout.pieces) if (piece.traits.includes("breachable")) expect(piece.passableBy.length).toBeGreaterThan(0);
+  });
+
+  it("gives an old breachable piece the default list rather than sealing it", () => {
+    const sealed = box("old", { x: 10, y: 10 }, 8, 6, 9, ["breachable"], [0, 4]);
+    expect(defaultBreachers(sealed).passableBy).toEqual([...BREACHERS]);
+    const named = box("mine", { x: 10, y: 10 }, 8, 6, 9, ["breachable"], [0, 4], [], ["MONSTER"]);
+    expect(defaultBreachers(named)).toBe(named);
+    const plain = box("wall", { x: 10, y: 10 }, 8, 6, 9);
+    expect(defaultBreachers(plain)).toBe(plain);
   });
 
   it("keeps a crater out of the way of sight lines", () => {
@@ -163,7 +180,8 @@ describe("the shipped layouts", () => {
   it("lets a unit walk from its deployment edge to the middle of a dense layout", () => {
     const index = new TerrainIndex(RUINED_CITY.pieces);
     const start = model(30, 4);
-    const reach = reachable(start, 12, index);
+    // Infantry: the direct route is through a ruin, and only they may breach its walls.
+    const reach = reachable(start, 12, index, { keywords: ["INFANTRY"] });
     const centre = RUINED_CITY.objectives[0]!;
     expect(reach.nodes.some((n) => Math.hypot(n.at.x - centre.at.x, n.at.y - centre.at.y) < 8)).toBe(true);
   });

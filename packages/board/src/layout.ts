@@ -33,7 +33,7 @@ export interface TerrainLayout {
 }
 
 /** An axis-aligned rectangular piece, given by its centre and extents. */
-export function box(id: string, centre: Vec2, width: number, depth: number, height: number, traits: readonly TerrainTrait[] = [], floors?: readonly number[], climbableBy?: readonly string[]): TerrainPiece {
+export function box(id: string, centre: Vec2, width: number, depth: number, height: number, traits: readonly TerrainTrait[] = [], floors?: readonly number[], climbableBy?: readonly string[], passableBy?: readonly string[]): TerrainPiece {
   const w = width / 2;
   const d = depth / 2;
   return terrain({
@@ -48,16 +48,34 @@ export function box(id: string, centre: Vec2, width: number, depth: number, heig
     traits,
     floors: floors ?? [0],
     climbableBy: climbableBy ?? [],
+    passableBy: passableBy ?? [],
   });
 }
 
 /** Who can get up a ruin: models on their own feet, not a tank. An edition may say otherwise. */
 export const CLIMBERS = ["INFANTRY", "CHARACTER", "BEAST", "SWARM"] as const;
 
-/** A ruin: obscuring, gives heavy cover, hollow at ground level with storeys every 4". */
+/**
+ * Who can move through a ruin's walls: whoever can go upstairs, and anything that flies over them.
+ * A tank meets the walls and goes round — which is what makes a ruin worth standing behind.
+ */
+export const BREACHERS = [...CLIMBERS, "FLY"] as const;
+
+/**
+ * A ruin: obscuring, gives heavy cover, hollow at ground level with storeys every 4", and walls that
+ * only `BREACHERS` may pass. The footprint *is* the walls: a tank cannot be inside a ruin at all.
+ */
 export function ruin(id: string, centre: Vec2, width: number, depth: number, storeys = 2): TerrainPiece {
   const floors = Array.from({ length: storeys }, (_, i) => i * 4);
-  return box(id, centre, width, depth, storeys * 4 + 1, ["obscuring", "heavy-cover", "scalable", "breachable"], floors, CLIMBERS);
+  return box(id, centre, width, depth, storeys * 4 + 1, ["obscuring", "heavy-cover", "scalable", "breachable"], floors, CLIMBERS, BREACHERS);
+}
+
+/**
+ * A breachable piece that names nobody who may pass is a ruin from before the walls meant anything:
+ * give it the default list rather than seal it against everyone, which is what an empty list says.
+ */
+export function defaultBreachers(piece: TerrainPiece): TerrainPiece {
+  return piece.traits.includes("breachable") && piece.passableBy.length === 0 ? terrain({ ...piece, passableBy: [...BREACHERS] }) : piece;
 }
 
 /**
@@ -66,7 +84,7 @@ export function ruin(id: string, centre: Vec2, width: number, depth: number, sto
  * `flip` mirrors it across the x axis, because the shape is used in mirrored pairs — a layout built
  * from one handedness only cannot be made symmetric.
  */
-export function wedge(id: string, centre: Vec2, width: number, depth: number, height: number, traits: readonly TerrainTrait[] = [], floors?: readonly number[], climbableBy?: readonly string[], flip = false): TerrainPiece {
+export function wedge(id: string, centre: Vec2, width: number, depth: number, height: number, traits: readonly TerrainTrait[] = [], floors?: readonly number[], climbableBy?: readonly string[], flip = false, passableBy?: readonly string[]): TerrainPiece {
   const w = width / 2;
   const d = depth / 2;
   const y = (dy: number) => (flip ? -dy : dy);
@@ -81,6 +99,7 @@ export function wedge(id: string, centre: Vec2, width: number, depth: number, he
     traits,
     floors: floors ?? [0],
     climbableBy: climbableBy ?? [],
+    passableBy: passableBy ?? [],
   });
 }
 
@@ -218,7 +237,7 @@ export const CROSSFIRE: TerrainLayout = mirrored({
   size: SF,
   note: "One three-storey centrepiece and four flanking ruins. Whoever holds the middle sees everything.",
   objectives: quincunx(SF),
-  half: ({ ruin, box }) => [box("core", { x: 30, y: 22 }, 12, 10, 13, ["obscuring", "heavy-cover", "scalable", "breachable"], [0, 4, 8], CLIMBERS), ruin("f1", { x: 13, y: 32 }, 8, 6, 2), ruin("f2", { x: 47, y: 32 }, 8, 6, 2)],
+  half: ({ ruin, box }) => [box("core", { x: 30, y: 22 }, 12, 10, 13, ["obscuring", "heavy-cover", "scalable", "breachable"], [0, 4, 8], CLIMBERS, BREACHERS), ruin("f1", { x: 13, y: 32 }, 8, 6, 2), ruin("f2", { x: 47, y: 32 }, 8, 6, 2)],
 });
 
 /** Hard cover that cannot be walked through, plus low craters: a layout about angles, not floors. */

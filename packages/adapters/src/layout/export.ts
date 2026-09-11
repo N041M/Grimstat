@@ -24,8 +24,9 @@ export type LayoutFileMeta = LayoutProvenance;
 /**
  * Serialise layouts to the interchange format.
  *
- * Accepts plain `TerrainLayout`s — a layout built in the app has no zones or provenance and does not
- * need any — and carries both through when given an `ImportedLayout`.
+ * Accepts plain `TerrainLayout`s — a layout built in the app has no provenance and does not need any
+ * — and carries it through when given an `ImportedLayout`. Deployment zones are part of
+ * `TerrainLayout` itself and are written whenever the layout has them.
  */
 export function toLayoutFile(layouts: readonly TerrainLayout[], meta: LayoutFileMeta = {}): LayoutFile {
   return {
@@ -42,16 +43,17 @@ export function stringifyLayoutFile(layouts: readonly TerrainLayout[], meta: Lay
 }
 
 function toEntry(layout: TerrainLayout): LayoutEntry {
-  const extra = layout as ImportedLayout;
+  // Provenance is the one field `TerrainLayout` lacks; a plain layout simply has none.
+  const { provenance: origin } = layout as ImportedLayout;
   return {
     id: layout.id,
     name: layout.name,
     size: { width: layout.size.width, depth: layout.size.depth },
     ...(layout.note === undefined ? {} : { note: layout.note }),
-    ...provenance(extra.provenance ?? {}),
+    ...provenance(origin ?? {}),
     pieces: layout.pieces.map(toPiece),
     objectives: layout.objectives.map(toObjective),
-    ...(extra.zones === undefined ? {} : { zones: extra.zones.map(toZone) }),
+    ...(layout.zones === undefined ? {} : { zones: layout.zones.map(toZone) }),
   };
 }
 

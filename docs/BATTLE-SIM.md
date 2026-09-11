@@ -1,7 +1,7 @@
 # Battle Simulator — design plan
 
-> Status: proposal (10 Sep 2026), rescoped to 3D (11 Sep 2026). Builds on the existing engine, rules
-> plugin, resolver and army builder.
+> Status: plan (10 Sep 2026), rescoped to 3D (11 Sep 2026); B1–B2a are built. Builds on the existing
+> engine, rules plugin, resolver and army builder.
 
 ## Goal
 
@@ -85,8 +85,9 @@ apps/web
   height, trait flags (`obscuring`, `light-cover`, `heavy-cover`, `impassable`, `difficult`,
   `breachable`, `scalable`, `defensible`), a keyword allow-list for passage (INFANTRY through ruin
   walls), and zero or more *floors* — horizontal surfaces at given heights that models can stand on.
-  A ruin is one prism with floors and `breachable` walls; a crater is a prism 0.5" tall with
-  `light-cover`; a bastion is `impassable` with a floor on top.
+  A ruin is one prism with floors and `breachable` walls that only the listed keywords — infantry,
+  beasts, swarms, flyers — may cross or stand inside, so a tank goes round it; a crater is a prism
+  0.5" tall with `light-cover`; a bastion is `impassable` with a floor on top.
 - **Everything pure**: no WebGL, no DOM, no randomness except an injected RNG. Unit-tested against
   synthetic layouts, property-tested for the invariants (distance symmetry, triangle inequality on
   free space, visibility symmetry).
@@ -114,7 +115,7 @@ apps/web
   the cost live.
 - `chargeGeometry(unit, target, terrain)` — minimum roll needed for the closest model to reach
   engagement range along a legal path, fed through the engine's 2D6 PMF for the probability.
-- `hidden(unit, enemies, terrain)` — the 15" HIDDEN rule and Lone Operative, both LoS-dependent.
+- `hiddenFrom(unit, enemies, index, range)` — the 15" HIDDEN rule and Lone Operative, both LoS-dependent.
 
 ### `game` — state machine and rules hooks
 
@@ -169,7 +170,7 @@ apps/web
 
 ### Web app — the 3D table
 
-- **Renderer**: `three` + `@react-three/fiber` (+ `drei` for controls/helpers), lazily loaded so the
+- **Renderer**: `three` + `@react-three/fiber` with three's own `OrbitControls`, lazily loaded so the
   calculator's bundle is untouched by anyone who never opens the Battle page.
 - **Look**: abstract, legally clean, readable from above — a matt table, terrain as extruded solids
   with faces tinted by trait, models as base discs with a simple extruded silhouette (a proxy volume,
@@ -187,11 +188,11 @@ apps/web
   cylinders, deployment zones as tinted floor regions.
 - **Performance budget**: instanced meshes for models and terrain, one draw call per material class,
   60 fps for 200 models on integrated graphics; overlays recomputed off the main thread.
-- **Accessibility and fallback**: the top-down camera plus a full keyboard/list interface (select
-  unit → pick action from a list with the same numbers) means the game is playable without a mouse
-  and, if WebGL is unavailable, the page degrades to a top-down canvas render of the same scene
-  graph. Everything the 3D view shows is also available as text (distances, visibility verdicts,
-  expected damage).
+- **Accessibility and fallback**: the top-down camera plus a keyboard/list interface (select a unit
+  or a terrain piece from the panel, nudge it with the arrow keys) means the table is usable without
+  a mouse. Everything the 3D view shows is also available as text (distances, visibility verdicts,
+  reach). Without WebGL the page says so and draws nothing; a 2D canvas fallback is planned, not
+  built.
 
 ## Phases
 
@@ -216,6 +217,9 @@ genuinely counter-intuitive:
   the first floor costs nothing extra; the second floor is what forces a climb.
 - Climbing is paid for out of the Move characteristic, so a unit's threat range is not a circle. It
   is a shape that terrain carves, and `reachable` returns that shape rather than a radius.
+- A ruin's walls are its footprint. Infantry, beasts, swarms and flyers pass through and stand
+  inside; a vehicle or monster cannot be inside a ruin at all and drives round it, which is what
+  makes the movement search refuse a tank the short cut through the middle of the table.
 
 Two performance notes for B4, where the AI will call all of this in a loop: a 6" move for a
 ten-model unit costs about 60 ms at half-inch resolution, and a 10-versus-10 charge about 30 ms once
@@ -233,6 +237,10 @@ the caching the AI section describes before they run inside a search.
 - **Orbiting and dragging are the same gesture**, and the orbit controls listen below R3F's object
   picking, so grabbing a unit has to switch the camera off in the same tick — which is why the drag
   lives inside the canvas rather than around it.
+- **Terrain edits are a document; moves are a game.** The layout has an undo history (one drag is
+  one step), every drag snaps a piece's *sides* to the half-inch grid the published layouts are
+  written on, and a shipped layout forks itself on the first edit rather than being changed in place.
+  Model moves have no history: `resetMove` is their undo, and the rules already say when a move ends.
 - **three.js is lazily loaded and excluded from the reported bundle size.** It is 232 kB gzipped,
   bigger than the rest of the app together, and nobody who never opens the Battle page downloads any
   of it. Counting it in the About screen's figure would print a number no visitor experiences.
@@ -275,8 +283,8 @@ the caching the AI section describes before they run inside a search.
 - **Ray-cast cost**: LoS between two 10-model units is 100 model pairs × sample rays. Mitigated by
   hull-level early-outs (bounding cylinders, terrain broad-phase grid), caching per (unit, unit,
   positions-version), and running batches in the worker.
-- **Bundle size and device support**: three.js is lazily loaded on the Battle route only; the
-  top-down fallback keeps the page usable without WebGL.
+- **Bundle size and device support**: three.js is lazily loaded on the Battle route only; without
+  WebGL the page explains itself rather than drawing, until the 2D fallback exists.
 - **Geometry edge cases** (ovals, hulls, ruins with breachable walls, models part-way up a ladder):
   start with circles, capsules and prisms with floors; add authored hull footprints per datasheet
   later.

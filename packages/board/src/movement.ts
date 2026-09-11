@@ -90,13 +90,24 @@ export function reachable(model: ModelHull, budget: number, index: TerrainIndex,
   const origin: Vec2 = { x: model.pos.x, y: model.pos.y };
 
   const surfaces = new SurfaceMap(model, index, rules, keywords);
-  const legal = (at: Vec3): boolean => surfaces.standable(at) && !obstructed(at, model, opts);
+  // The search never leaves `budget + step` of the origin, so a model further away than that plus
+  // both reaches can never be touched — and a charge search across a full table would otherwise
+  // measure every enemy on it at every step.
+  const horizon = budget + step + footReach(model.foot) + ENGAGEMENT_HORIZONTAL + EPS;
+  const nearby = (hulls: readonly ModelHull[] | undefined) => hulls?.filter((h) => dist2(h.pos, origin) <= horizon + footReach(h.foot));
+  const near: ReachOptions = { ...opts, enemies: nearby(opts.enemies), blockers: nearby(opts.blockers) };
+  const legal = (at: Vec3): boolean => surfaces.standable(at) && !obstructed(at, model, near);
 
   const nodes: ReachNode[] = [{ at: model.pos, cost: 0, from: -1 }];
   const byKey = new Map<string, number>([[key(model.pos, step, rules.floorTolerance), 0]]);
   const settled = new Set<number>();
   const heap = new MinHeap();
   heap.push(0, 0);
+
+  // A cell is reached from up to eight neighbours, and whether the model may stand there does not
+  // depend on which. Both answers are remembered per cell, which is most of the search's work saved.
+  const heightsByCell = new Map<string, number[]>();
+  const legalByKey = new Map<string, boolean>();
 
   let stoppedAt: number | undefined;
 
@@ -115,14 +126,25 @@ export function reachable(model: ModelHull, budget: number, index: TerrainIndex,
     }
 
     for (const next of neighbours(here.at, origin, budget, step)) {
-      for (const z of surfaces.at(next)) {
+      const cell = `${Math.round(next.x / step)}:${Math.round(next.y / step)}`;
+      let heights = heightsByCell.get(cell);
+      if (!heights) {
+        heights = surfaces.at(next);
+        heightsByCell.set(cell, heights);
+      }
+      for (const z of heights) {
         const to: Vec3 = { x: next.x, y: next.y, z };
         const cost = here.cost + stepCost(here.at, to, index, rules);
         if (cost > budget + EPS) continue;
         const k = key(to, step, rules.floorTolerance);
         const seen = byKey.get(k);
         if (seen !== undefined && nodes[seen]!.cost <= cost + EPS) continue;
-        if (!legal(to) || !passable(here.at, to, model, index, rules, keywords, opts)) continue;
+        let ok = legalByKey.get(k);
+        if (ok === undefined) {
+          ok = legal(to);
+          legalByKey.set(k, ok);
+        }
+        if (!ok || !passable(here.at, to, model, index, rules, keywords, near)) continue;
         if (seen === undefined) {
           byKey.set(k, nodes.length);
           nodes.push({ at: to, cost, from: current });
@@ -286,7 +308,8 @@ function advance(at: Vec3, target: ModelHull, by: number): Vec3 {
  *
  * A piece with floors is *hollow*: its interior is open at each floor level, which is what makes a
  * ruin something to walk into rather than around. A piece without floors is a solid block — a model
- * stands on nothing but the ground beside it.
+ * stands on nothing but the ground beside it. Hollow or not, a `breachable` piece's footprint is its
+ * walls, and only the keywords it names may be inside them.
  */
 class SurfaceMap {
   constructor(
@@ -326,6 +349,9 @@ class SurfaceMap {
     if (at.z + this.model.height <= piece.base + EPS) return false; // the model is under it
     if (at.z >= topOf(piece) - EPS) return false; // the model is on top of it
     if (hasTrait(piece, "impassable")) return true;
+    // Whoever may pass a ruin's walls was let through in `standable` before this was asked; anyone
+    // still asking cannot be inside them, on any storey.
+    if (hasTrait(piece, "breachable")) return true;
     // Inside a hollow piece the model must be on one of its storeys, not embedded in it.
     return !floorHeights(piece).some((z) => Math.abs(z - at.z) <= this.rules.floorTolerance);
   }
@@ -361,7 +387,7 @@ function passable(from: Vec3, to: Vec3, model: ModelHull, index: TerrainIndex, r
   }
   // Guard against slipping diagonally through a thin wall between two legal cells.
   const mid: Vec3 = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2, z: Math.max(from.z, to.z) };
-  for (const piece of index.at({ x: mid.x, y: mid.y }, (p) => hasTrait(p, "impassable"))) {
+  for (const piece of index.at({ x: mid.x, y: mid.y }, (p) => hasTrait(p, "impassable") || hasTrait(p, "breachable"))) {
     if (piece.passableBy.some((k) => keywords.has(k.toUpperCase()))) continue;
     if (mid.z < topOf(piece) - EPS && mid.z + model.height > piece.base + EPS) return false;
   }

@@ -11,7 +11,8 @@
  */
 
 import type { BoardSize, Objective, TerrainLayout, TerrainPiece, TerrainTrait, Vec2 } from "@grimstat/board";
-import { CLIMBERS, bounds, layoutIssues, opposite, terrain } from "@grimstat/board";
+import { CLIMBERS, LAYOUTS, bounds, defaultBreachers, layoutIssues, opposite, terrain } from "@grimstat/board";
+import { newId } from "./ids";
 
 /** A new id that does not collide with anything already in the layout. */
 export function freeId(layout: TerrainLayout, stem: string): string {
@@ -53,6 +54,55 @@ export function extent(piece: TerrainPiece): { width: number; depth: number } {
   return { width: box.maxX - box.minX, depth: box.maxY - box.minY };
 }
 
+/** The grid published layouts are written on: half an inch. */
+export const EDIT_STEP = 0.5;
+
+/** Round a length onto the editing grid, with the float noise a division leaves behind removed. */
+export const snap = (v: number, step = EDIT_STEP): number => Math.round(Math.round(v / step) * step * 1e4) / 1e4;
+
+export const snapPoint = (p: Vec2, step = EDIT_STEP): Vec2 => ({ x: snap(p.x, step), y: snap(p.y, step) });
+
+/**
+ * Put a piece's centre at `at`, then settle it so its left and bottom sides land on the grid.
+ *
+ * The sides, not the centre. A published layout gives edge distances in half inches, and an 11.5"
+ * piece whose *centre* sits on the grid has both its sides a quarter inch off it — so a dragged piece
+ * would never read back the round numbers the diagram was written in.
+ */
+export function placePieceSnapped(layout: TerrainLayout, id: string, at: Vec2, step = EDIT_STEP): TerrainLayout {
+  const placed = placePiece(layout, id, at);
+  const piece = placed.pieces.find((p) => p.id === id);
+  if (!piece) return placed;
+  const box = bounds(piece.polygon);
+  const dx = snap(box.minX, step) - box.minX;
+  const dy = snap(box.minY, step) - box.minY;
+  const settled = updatePiece(placed, id, (p) => ({ ...p, polygon: p.polygon.map((q) => ({ x: tidy(q.x + dx), y: tidy(q.y + dy) })) }));
+  // A drag that ends on the cell it started in is not an edit, and must not read as one.
+  const before = layout.pieces.find((p) => p.id === id);
+  const after = settled.pieces.find((p) => p.id === id);
+  return before && after && samePolygon(before.polygon, after.polygon) ? layout : settled;
+}
+
+const samePolygon = (a: readonly Vec2[], b: readonly Vec2[]): boolean => a.length === b.length && a.every((p, i) => Math.abs(p.x - b[i]!.x) < 1e-9 && Math.abs(p.y - b[i]!.y) < 1e-9);
+
+/** Drop the sub-micron noise that a chain of moves leaves on a coordinate, so 17 reads as 17. */
+const tidy = (v: number): number => Math.round(v * 1e4) / 1e4;
+
+/**
+ * A copy of a piece beside the original, under a free id.
+ *
+ * Building a table is mostly placing the same footprint sixteen times, and copying the last one keeps
+ * its size, height, storeys and traits — everything but where it stands.
+ */
+export function duplicatePiece(layout: TerrainLayout, id: string, by: Vec2 = { x: 2, y: -2 }): { layout: TerrainLayout; id: string } | undefined {
+  const piece = layout.pieces.find((p) => p.id === id);
+  if (!piece) return undefined;
+  const stem = piece.id.replace(/-\d+$/, "");
+  const nextId = freeId(layout, stem);
+  const twin = terrain({ ...piece, id: nextId, polygon: piece.polygon.map((q) => ({ x: q.x + by.x, y: q.y + by.y })) });
+  return { layout: addPiece(layout, twin), id: nextId };
+}
+
 /**
  * Scale a piece to a new footprint about its own centre.
  *
@@ -89,8 +139,9 @@ export function rotatePiece(layout: TerrainLayout, id: string, radians: number):
   });
 }
 
+/** Toggle a trait. Making a piece breachable names who may pass its walls, or it would admit nobody. */
 export function setTrait(layout: TerrainLayout, id: string, trait: TerrainTrait, on: boolean): TerrainLayout {
-  return updatePiece(layout, id, (p) => ({ ...p, traits: on ? [...new Set([...p.traits, trait])] : p.traits.filter((t) => t !== trait) }));
+  return updatePiece(layout, id, (p) => defaultBreachers({ ...p, traits: on ? [...new Set([...p.traits, trait])] : p.traits.filter((t) => t !== trait) }));
 }
 
 /**
@@ -172,10 +223,11 @@ export function addObjective(layout: TerrainLayout, at: Vec2): TerrainLayout {
 
 export const removeObjective = (layout: TerrainLayout, id: string): TerrainLayout => ({ ...layout, objectives: layout.objectives.filter((o) => o.id !== id) });
 
-export const moveObjective = (layout: TerrainLayout, id: string, at: Vec2): TerrainLayout => ({
-  ...layout,
-  objectives: layout.objectives.map((o) => (o.id === id ? { ...o, at } : o)),
-});
+export function moveObjective(layout: TerrainLayout, id: string, at: Vec2): TerrainLayout {
+  const objective = layout.objectives.find((o) => o.id === id);
+  if (!objective || (Math.abs(objective.at.x - at.x) < 1e-9 && Math.abs(objective.at.y - at.y) < 1e-9)) return layout;
+  return { ...layout, objectives: layout.objectives.map((o) => (o.id === id ? { ...o, at } : o)) };
+}
 
 /* ---- the whole board ------------------------------------------------------------------------ */
 
@@ -267,6 +319,19 @@ export function isSymmetric(layout: TerrainLayout): boolean {
 /** A fresh, empty table to build on. */
 export function emptyLayout(id: string, name: string, size: BoardSize): TerrainLayout {
   return { id, name, size, pieces: [], objectives: [], note: undefined };
+}
+
+/* ---- shipped versus yours ------------------------------------------------------------------ */
+
+/** Shipped layouts come with the app and are never edited in place. */
+export const isBuiltIn = (id: string): boolean => LAYOUTS.some((l) => l.id === id);
+
+/**
+ * A copy under a new id, so editing a shipped layout — or forking one of your own — never destroys
+ * what it came from.
+ */
+export function copyLayout(layout: TerrainLayout, name = `${layout.name} copy`): TerrainLayout {
+  return { ...layout, id: newId("layout"), name };
 }
 
 export { layoutIssues };

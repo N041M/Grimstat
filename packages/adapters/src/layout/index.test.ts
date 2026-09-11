@@ -1,4 +1,4 @@
-import { BATTLE_SIZES, CROSSFIRE, LAYOUTS, OPEN_APPROACH, REDOUBT, RUINED_CITY, edgeZones, signedArea, type TerrainLayout } from "@grimstat/board";
+import { BREACHERS, BATTLE_SIZES, CROSSFIRE, LAYOUTS, OPEN_APPROACH, REDOUBT, RUINED_CITY, edgeZones, signedArea, type TerrainLayout } from "@grimstat/board";
 import { describe, expect, it } from "vitest";
 import { toLayoutFile } from "./export";
 import { LayoutImportError, parseLayoutFile, type ImportedLayout } from "./import";
@@ -94,6 +94,22 @@ describe("round-tripping", () => {
     const back = only(toLayoutFile([source]));
     expect(back.zones).toEqual(zones);
     expect(back.provenance).toEqual(source.provenance);
+  });
+
+  it("writes the zones of a plain TerrainLayout too — they are the board's own field, not the importer's", () => {
+    const zones = edgeZones(SF);
+    const plain: TerrainLayout = { ...CROSSFIRE, zones };
+    expect(only(toLayoutFile([plain]))).toEqual(plain);
+  });
+
+  it("treats an empty provenance field on a layout as unsaid, so the envelope's value still applies", () => {
+    // Export writes nothing for "", and import has to read "" the same way: a hand-edited file with
+    // `"author": ""` on one layout must not strip that layout of the bundle's author.
+    const f = toLayoutFile([OPEN_APPROACH], { source: "Club night", author: "K. Grant" });
+    const first = f.layouts[0];
+    if (!first) throw new Error("expected one layout");
+    first.author = "";
+    expect(parseLayoutFile(f).layouts[0]?.provenance).toEqual({ source: "Club night", author: "K. Grant" });
   });
 
   it("lets a layout inherit the envelope's provenance and override one field of it", () => {
@@ -324,3 +340,18 @@ describe("toLayoutFile", () => {
     expect(back.provenance).toBeUndefined();
   });
 });
+
+describe("breachable walls in older files", () => {
+  it("assumes the default breachers when a breachable piece names nobody, and says so", () => {
+    const { layouts, warnings } = parseLayoutFile(withPiece({ traits: ["obscuring", "breachable"], floors: [0, 4] }));
+    expect(layouts[0]!.pieces[0]!.passableBy).toEqual([...BREACHERS]);
+    expect(warnings).toEqual([expect.stringMatching(/breachable walls name nobody/)]);
+  });
+
+  it("leaves a breachable piece that names its own list alone", () => {
+    const { layouts, warnings } = parseLayoutFile(withPiece({ traits: ["breachable"], passableBy: ["monster"] }));
+    expect(layouts[0]!.pieces[0]!.passableBy).toEqual(["MONSTER"]);
+    expect(warnings).toEqual([]);
+  });
+});
+

@@ -17,7 +17,7 @@
  */
 
 import type { BoardSize, Objective, TerrainLayout, TerrainPiece, TerrainTrait, Vec2, Zone } from "@grimstat/board";
-import { EPS, layoutIssues, signedArea, terrain } from "@grimstat/board";
+import { BREACHERS, EPS, layoutIssues, signedArea, terrain } from "@grimstat/board";
 import type { z } from "zod";
 import type { LayoutEntry, LayoutFile, LayoutPiece, LayoutPoint, LayoutProvenance, LayoutUnits, LayoutZone } from "./schema";
 import { LayoutFile as LayoutFileSchema, MM_PER_INCH, isTerrainTrait } from "./schema";
@@ -25,13 +25,13 @@ import { LayoutFile as LayoutFileSchema, MM_PER_INCH, isTerrainTrait } from "./s
 /**
  * A layout as it comes out of a file.
  *
- * `TerrainLayout` carries no deployment zones and no provenance — the board package models the table,
- * not where the table's description came from — so the importer widens it. The result is still a
- * plain `TerrainLayout` to every geometry query, and the two extra fields survive an export.
+ * `TerrainLayout` has room for deployment zones but none for provenance — the board package models
+ * the table, not where the table's description came from — so the importer widens it by that one
+ * field. The result is still a plain `TerrainLayout` to every geometry query, and provenance
+ * survives an export.
  */
 export interface ImportedLayout extends TerrainLayout {
-  readonly zones?: readonly Zone[];
-  /** Empty-but-present when the file said nothing; absent fields are absent, never invented. */
+  /** Absent when neither the layout nor the envelope said anything; fields nobody set are absent, never invented. */
   readonly provenance?: LayoutProvenance;
 }
 
@@ -207,6 +207,14 @@ function readPiece(raw: LayoutPiece, where: string, toInches: ToInches, warnings
 
   const floors = readFloors(raw.floors, at, toInches, warnings);
 
+  // A file written before breachable walls kept anyone out has ruins that name nobody. Read
+  // literally that seals them against everyone, so the default list is assumed and said so.
+  let passableBy = keywords(raw.passableBy);
+  if (traits.includes("breachable") && passableBy.length === 0) {
+    passableBy = [...BREACHERS];
+    warnings.push(`${at}: breachable walls name nobody who may pass; assumed ${BREACHERS.join(", ")}.`);
+  }
+
   return terrain({
     id: raw.id,
     polygon,
@@ -214,7 +222,7 @@ function readPiece(raw: LayoutPiece, where: string, toInches: ToInches, warnings
     height: toInches(raw.height),
     traits,
     floors,
-    passableBy: keywords(raw.passableBy),
+    passableBy,
     climbableBy: keywords(raw.climbableBy),
   });
 }
@@ -258,12 +266,17 @@ function readZones(raw: readonly LayoutZone[] | undefined, where: string, toInch
   return zones;
 }
 
-/** A layout inherits anything the envelope says and it does not; an empty result stays absent. */
+/**
+ * A layout inherits anything the envelope says and it does not; an empty result stays absent.
+ *
+ * An empty string counts as "not said", the same as on export — so a layout whose `author` is `""`
+ * still takes the envelope's author rather than ending up with none.
+ */
 function readProvenance(entry: LayoutProvenance, file: LayoutProvenance): LayoutProvenance | undefined {
   const merged: Record<string, string> = {};
   for (const field of ["source", "author", "licence", "importedFrom"] as const) {
-    const value = entry[field] ?? file[field];
-    if (value !== undefined && value !== "") merged[field] = value;
+    const value = entry[field] || file[field];
+    if (value) merged[field] = value;
   }
   return Object.keys(merged).length > 0 ? merged : undefined;
 }

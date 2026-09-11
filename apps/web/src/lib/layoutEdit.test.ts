@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { BATTLE_SIZES, CROSSFIRE, OPEN_APPROACH, RUINED_CITY, box, crater, ruin } from "@grimstat/board";
+import { BATTLE_SIZES, BREACHERS, CROSSFIRE, OPEN_APPROACH, RUINED_CITY, box, crater, ruin } from "@grimstat/board";
 import {
   addObjective,
   addPiece,
   centre,
+  copyLayout,
+  duplicatePiece,
+  isBuiltIn,
+  placePieceSnapped,
+  snap,
+  snapPoint,
   edgeOffsetsOf,
   emptyLayout,
   extent,
@@ -75,6 +81,15 @@ describe("moving and shaping pieces", () => {
     // terrain() rewinds counter-clockwise; a rotation must not leave a mirrored ring behind.
     const layout = rotatePiece(withRuin(), "r1", Math.PI);
     expect(layoutIssues(layout)).toEqual([]);
+  });
+
+  it("names who may pass the walls the moment a piece becomes breachable", () => {
+    const plain = addPiece(blank(), box("w", { x: 20, y: 14 }, 8, 6, 9));
+    const walls = setTrait(plain, "w", "breachable", true);
+    expect(walls.pieces[0]!.passableBy).toEqual([...BREACHERS]);
+    // A list the user chose is theirs.
+    const custom = updatePiece(walls, "w", (p) => ({ ...p, passableBy: ["MONSTER"] }));
+    expect(setTrait(setTrait(custom, "w", "breachable", false), "w", "breachable", true).pieces[0]!.passableBy).toEqual(["MONSTER"]);
   });
 
   it("toggles a trait on and off without disturbing the others", () => {
@@ -267,5 +282,71 @@ describe("validation while editing", () => {
     expect(layoutIssues(layout)).toEqual([]);
     expect(isSymmetric(layout)).toBe(true);
     expect(layout.pieces.length).toBe(4);
+  });
+});
+
+describe("snapping", () => {
+  it("rounds onto the half-inch grid and leaves no float noise behind", () => {
+    expect(snap(17.26)).toBe(17.5);
+    expect(snap(17.24)).toBe(17);
+    expect(snap(0.1 + 0.2, 0.1)).toBe(0.3);
+    expect(snapPoint({ x: 1.3, y: 2.8 })).toEqual({ x: 1.5, y: 3 });
+  });
+
+  it("settles a dragged piece so its sides, not its centre, read in half inches", () => {
+    // An 11.5" piece: a centre on the grid would put both sides a quarter inch off it.
+    const l = addPiece(blank(), box("big", { x: 20, y: 14 }, 11.5, 7, 9));
+    const moved = placePieceSnapped(l, "big", { x: 30.17, y: 22.41 });
+    const big = moved.pieces[0]!;
+    const off = edgeOffsetsOf(moved, big);
+    expect(off.fromLeft % 0.5).toBe(0);
+    expect(off.fromBottom % 0.5).toBe(0);
+    expect(extent(big)).toEqual({ width: 11.5, depth: 7 });
+    // Never more than half a step from where the pointer asked for.
+    expect(Math.abs(centre(big).x - 30.17)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(centre(big).y - 22.41)).toBeLessThanOrEqual(0.5);
+  });
+
+  it("does nothing for a piece that is not there", () => {
+    const l = blank();
+    expect(placePieceSnapped(l, "ghost", { x: 1, y: 1 })).toEqual(l);
+  });
+
+  it("returns the very same layout when the snapped position is where the piece already is", () => {
+    const l = addPiece(blank(), box("b", { x: 20, y: 14 }, 8, 6, 3));
+    expect(placePieceSnapped(l, "b", { x: 20.1, y: 13.9 })).toBe(l);
+    const marked = addObjective(l, { x: 30, y: 22 });
+    expect(moveObjective(marked, "obj1", { x: 30, y: 22 })).toBe(marked);
+    expect(moveObjective(marked, "nope", { x: 1, y: 1 })).toBe(marked);
+  });
+});
+
+describe("duplicating a piece", () => {
+  it("copies everything but the position and finds a free id from the same stem", () => {
+    const l = addPiece(withRuin(), box("wall-2", { x: 30, y: 30 }, 6, 2, 3, ["light-cover"]));
+    const out = duplicatePiece(l, "wall-2")!;
+    expect(out.id).toBe("wall");
+    const twin = out.layout.pieces.find((p) => p.id === out.id)!;
+    const original = l.pieces.find((p) => p.id === "wall-2")!;
+    expect(extent(twin)).toEqual(extent(original));
+    expect(twin.height).toBe(original.height);
+    expect(twin.traits).toEqual(original.traits);
+    expect(centre(twin)).toEqual({ x: 32, y: 28 });
+    expect(duplicatePiece(l, "nope")).toBeUndefined();
+  });
+});
+
+describe("shipped versus yours", () => {
+  it("knows which layouts came with the app", () => {
+    expect(isBuiltIn(RUINED_CITY.id)).toBe(true);
+    expect(isBuiltIn("mine")).toBe(false);
+  });
+
+  it("copies under a fresh id, keeping the name asked for", () => {
+    const copy = copyLayout(RUINED_CITY, "Mine now");
+    expect(copy.id).not.toBe(RUINED_CITY.id);
+    expect(copy.name).toBe("Mine now");
+    expect(copy.pieces).toBe(RUINED_CITY.pieces);
+    expect(copyLayout(RUINED_CITY).name).toBe(`${RUINED_CITY.name} copy`);
   });
 });

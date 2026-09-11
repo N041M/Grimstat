@@ -1,9 +1,10 @@
+import { memo } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
 import { DoubleSide } from "three";
-import type { ModelHull } from "@grimstat/board";
+import type { ModelHull, Vec2 } from "@grimstat/board";
 import { footReach } from "@grimstat/board";
 import type { BattleUnit } from "../../lib/battle";
-import { SCENE_COLOURS, SIDE_COLOURS } from "../../lib/battleScene";
+import { SCENE_COLOURS, SIDE_COLOURS, fromScene, toScene } from "../../lib/battleScene";
 
 /**
  * A model is a base disc with a plain tapered proxy standing on it.
@@ -17,7 +18,7 @@ function ModelToken({ hull, colour, ghost, selected, warn }: { hull: ModelHull; 
   const stretch = footReach(hull.foot) / r;
   const bodyR = r * 0.62;
   return (
-    <group position={[hull.pos.x, hull.pos.z, -hull.pos.y]} rotation={[0, -hull.facing, 0]} scale={[stretch, 1, 1]}>
+    <group position={toScene(hull.pos)} rotation={[0, -hull.facing, 0]} scale={[stretch, 1, 1]}>
       <mesh position={[0, 0.08, 0]}>
         <cylinderGeometry args={[r, r, 0.16, 22]} />
         <meshStandardMaterial color={colour} transparent={ghost} opacity={ghost ? 0.45 : 1} roughness={0.7} />
@@ -40,9 +41,11 @@ function ModelToken({ hull, colour, ghost, selected, warn }: { hull: ModelHull; 
  * Every model is its own handle.
  *
  * Pressing one selects and picks up *that model*, not its unit: a unit is a handful of models that
- * spread, screen and string out, and a token you can only move as a body cannot do any of it.
+ * spread, screen and string out, and a token you can only move as a body cannot do any of it. The
+ * press reports where on the table it landed, so a drag can keep the model under the finger that
+ * took it rather than snapping its centre to the pointer.
  */
-export function UnitTokens({
+export const UnitTokens = memo(function UnitTokens({
   units,
   selectedId,
   activeModelId,
@@ -59,7 +62,7 @@ export function UnitTokens({
   /** Only the cursor: whether the press actually picks the model up is the scene's decision. */
   draggable?: boolean;
   onSelect?: (unitId: string, modelId: string) => void;
-  onGrab?: (unitId: string, modelId: string) => void;
+  onGrab?: (unitId: string, modelId: string, at: Vec2) => void;
 }) {
   return (
     <group>
@@ -70,10 +73,12 @@ export function UnitTokens({
               key={m.id}
               onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                 e.stopPropagation();
+                const p = fromScene(e.point.x, e.point.y, e.point.z);
                 onSelect?.(unit.id, m.id);
-                onGrab?.(unit.id, m.id);
+                onGrab?.(unit.id, m.id, { x: p.x, y: p.y });
               }}
-              onPointerOver={() => {
+              onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+                e.stopPropagation();
                 document.body.style.cursor = draggable ? "grab" : "pointer";
               }}
               onPointerOut={() => {
@@ -87,7 +92,7 @@ export function UnitTokens({
       ))}
     </group>
   );
-}
+});
 
 /** The translucent copy that follows the pointer during a drag, tinted by whether the move is legal. */
 export function Ghost({ hulls, legal }: { hulls: readonly ModelHull[]; legal: boolean }) {

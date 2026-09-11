@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  BREACHERS,
   MAX_CHARGE,
   TerrainIndex,
+  canStand,
   chargeGeometry,
   circleBase,
   reachable,
+  ruin,
+  segPolygonDistance,
   terrain,
   type ModelHull,
   type Vec2,
@@ -89,8 +93,32 @@ describe("reachability with terrain", () => {
     const ruin = index(terrain({ id: "ruin", polygon: rect(2, -4, 8, 4), height: 9, traits: ["scalable"], floors: [0, 4.5], climbableBy: ["INFANTRY"] }));
     expect(costTo(reachable(model(0, 0), 12, ruin, { keywords: ["INFANTRY"] }), 5, 0, 4.5)).toBeDefined();
     expect(costTo(reachable(model(0, 0), 12, ruin, { keywords: ["VEHICLE"] }), 5, 0, 4.5)).toBeUndefined();
-    // The ground floor of a ruin is still a place a tank can drive through.
+    // Without breachable walls the ground floor is open to anyone, tank included.
     expect(costTo(reachable(model(0, 0), 12, ruin, { keywords: ["VEHICLE"] }), 5, 0, 0)).toBeCloseTo(5, 1);
+  });
+
+  it("keeps a tank out of a ruin's walls and lets those who may breach them through", () => {
+    // A real ruin: the footprint is the walls, and only the listed keywords pass them.
+    const walls = ruin("r", { x: 6, y: 0 }, 8, 8, 2);
+    const idx = index(walls);
+    const tank = model(0, 0, 0, 3.5, 100);
+    const trooper = model(0, 0);
+    expect(walls.passableBy).toEqual([...BREACHERS]);
+
+    const tankReach = reachable(tank, 12, idx, { keywords: ["VEHICLE"] });
+    expect(costTo(tankReach, 6, 0, 0)).toBeUndefined();
+    // Not inside, and not overlapping the wall either: the base stays clear of the footprint.
+    for (const n of tankReach.nodes) expect(segPolygonDistance({ a: n.at, b: n.at }, walls.polygon)).toBeGreaterThanOrEqual(tank.foot.r - 1e-6);
+    expect(canStand(tank, { x: 6, y: 0, z: 0 }, idx, { keywords: ["VEHICLE"] })).toBe(false);
+    // A flyer crosses the walls; so does infantry, who may also go upstairs.
+    expect(costTo(reachable(model(0, 0, 0, 3.5, 100), 12, idx, { keywords: ["VEHICLE", "FLY"] }), 6, 0, 0)).toBeCloseTo(6, 1);
+    expect(costTo(reachable(trooper, 12, idx, { keywords: ["INFANTRY"] }), 6, 0, 0)).toBeCloseTo(6, 1);
+    expect(costTo(reachable(trooper, 12, idx, { keywords: ["INFANTRY"] }), 6, 0, 4)).toBeDefined();
+    // The tank gets round: the far side is reachable, just not through the middle, and it costs
+    // the detour rather than the fourteen inches a straight line would.
+    const detour = costTo(reachable(tank, 26, idx, { keywords: ["VEHICLE"] }), 14, 0, 0);
+    expect(detour).toBeDefined();
+    expect(detour!).toBeGreaterThan(16);
   });
 
   it("lets anyone climb when the terrain names nobody", () => {

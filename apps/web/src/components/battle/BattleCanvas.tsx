@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { ReachNode, Vec2, Vec3 } from "@grimstat/board";
-import type { BattleState, BattleUnit, MoveVerdict } from "../../lib/battle";
+import type { BattleState, BattleUnit } from "../../lib/battle";
 import { anchorOf, findModel, findUnit, indexOf, modelMoveVerdict, translateUnit, unitHulls } from "../../lib/battle";
+import { centre } from "../../lib/layoutEdit";
 import { Cameras, type CameraMode } from "./Cameras";
 import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
 import { Ghost, UnitTokens } from "./UnitTokens";
-import { MeasureLine, PathLine, ReachOverlay, SightRays } from "./Overlays";
+import { MeasureLine, MeasureMarker, PathLine, Protractor, ReachOverlay, SightRays } from "./Overlays";
 
 export type { CameraMode };
 
@@ -24,6 +25,23 @@ export interface DragState {
   readonly problems: readonly string[];
 }
 
+/**
+ * What the terrain tool needs from the table: which things are selected, and where they were taken.
+ *
+ * Moves arrive with the piece's new *centre* (or the objective's new position), already corrected for
+ * where on the piece it was grabbed. Snapping is the page's decision, not the canvas's.
+ */
+export interface TerrainEditing {
+  readonly pieceId?: string;
+  readonly objectiveId?: string;
+  onPickPiece(id: string): void;
+  onPickObjective(id: string): void;
+  onMovePiece(id: string, centre: Vec2): void;
+  onMoveObjective(id: string, at: Vec2): void;
+  /** The pointer was released after moving something. */
+  onDrop(): void;
+}
+
 export interface BattleCanvasProps {
   state: BattleState;
   cameraMode: CameraMode;
@@ -34,15 +52,20 @@ export interface BattleCanvasProps {
   reach?: readonly ReachNode[];
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
+  /** A finished measurement: both marks set. */
   measure?: readonly [Vec3, Vec3];
+  /** A measurement in progress: the first mark is set and the tape runs to the pointer. */
+  measureFrom?: Vec3;
+  /** Where the tape's free end is, as the pointer moves over the table; undefined when it leaves. */
+  onMeasureHover?(at: Vec2 | undefined): void;
   /** Whether pressing a unit picks it up. Off under the tools where moving is not the point. */
   canDrag?: boolean;
-  /** Terrain editing: which piece is selected, and what to do when one is picked or dragged. */
-  terrainId?: string;
-  onTerrainSelect?(id: string): void;
-  onTerrainMove?(id: string, to: Vec2): void;
+  /** Present while the terrain tool is active; absent, terrain and objectives are scenery. */
+  editing?: TerrainEditing;
   /** One child per unit, in the same order; the projector moves them to follow the table. */
   labelsRef?: RefObject<HTMLDivElement>;
+  /** An element the canvas keeps beside the pointer during a drag; the page decides what it says. */
+  readoutRef?: RefObject<HTMLDivElement>;
   onSelect(unitId: string | undefined, modelId?: string): void;
   /** Commit a move. `modelId` moves one model; without it the whole unit travels as a body. */
   onMove(unitId: string, to: Vec3, cost: number, modelId?: string): void;
@@ -73,6 +96,12 @@ export function BattleCanvas(props: BattleCanvasProps) {
   );
 }
 
+/** Whatever the pointer is holding: a model, a terrain piece or an objective, and where on it. */
+type Held =
+  | { readonly kind: "model"; readonly unitId: string; readonly modelId: string; readonly offset: Vec2 }
+  | { readonly kind: "piece"; readonly id: string; readonly offset: Vec2 }
+  | { readonly kind: "objective"; readonly id: string; readonly offset: Vec2 };
+
 /**
  * Everything inside the canvas, including the drag.
  *
@@ -82,15 +111,73 @@ export function BattleCanvas(props: BattleCanvasProps) {
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, measure, canDrag = true, terrainId, onTerrainSelect, onTerrainMove, labelsRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, measure, measureFrom, onMeasureHover, canDrag = true, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
   const [drag, setDrag] = useState<DragState | undefined>();
+  /** The tape's free end while a measurement is in progress. */
+  const [aim, setAim] = useState<Vec2 | undefined>();
   const index = useMemo(() => indexOf(state), [state]);
-  const grabbed = useRef<{ unitId: string; modelId: string } | undefined>();
-  const heldPiece = useRef<string | undefined>();
-  const dragRef = useRef<DragState | undefined>();
+
+  // The window listeners are registered once and read the latest of everything through this ref,
+  // rather than being torn down and re-added on every render — which, during a drag, is every frame.
+  const latest = useRef({ state, index, editing, measureFrom, onMeasureHover, onMove, onDrag });
+  latest.current = { state, index, editing, measureFrom, onMeasureHover, onMove, onDrag };
+
+  // A tape with no first mark has no free end.
+  useEffect(() => {
+    if (!measureFrom) setAim(undefined);
+  }, [measureFrom]);
+
+  const held = useRef<Held | undefined>();
+  const pending = useRef<DragState | undefined>();
+
+  const hold = useCallback(
+    (what: Held) => {
+      held.current = what;
+      if (controls) controls.enabled = false;
+      document.body.style.cursor = "grabbing";
+    },
+    [controls],
+  );
+
+  /**
+   * Pick a model up where it was pressed. The offset between the press and the model's centre is kept
+   * for the whole drag, so a tank grabbed by its corner stays under the pointer by its corner instead
+   * of jumping two inches to centre itself.
+   */
+  const grabModel = useCallback(
+    (unitId: string, modelId: string, at: Vec2) => {
+      if (!canDrag) return;
+      const unit = findUnit(latest.current.state, unitId);
+      const model = unit && findModel(unit, modelId);
+      if (!model) return;
+      hold({ kind: "model", unitId, modelId, offset: { x: model.hull.pos.x - at.x, y: model.hull.pos.y - at.y } });
+    },
+    [canDrag, hold],
+  );
+
+  const pickPiece = useCallback(
+    (id: string, at: Vec2) => {
+      const piece = latest.current.state.layout.pieces.find((p) => p.id === id);
+      if (!piece || !editing) return;
+      editing.onPickPiece(id);
+      const c = centre(piece);
+      hold({ kind: "piece", id, offset: { x: c.x - at.x, y: c.y - at.y } });
+    },
+    [editing, hold],
+  );
+
+  const pickObjective = useCallback(
+    (id: string, at: Vec2) => {
+      const objective = latest.current.state.layout.objectives.find((o) => o.id === id);
+      if (!objective || !editing) return;
+      editing.onPickObjective(id);
+      hold({ kind: "objective", id, offset: { x: objective.at.x - at.x, y: objective.at.y - at.y } });
+    },
+    [editing, hold],
+  );
 
   const ghost = useMemo(() => {
     if (!drag) return undefined;
@@ -107,61 +194,6 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
     return unitHulls(translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y }));
   }, [drag, state]);
 
-  const grab = useCallback(
-    (unitId: string, modelId: string) => {
-      if (!canDrag) return;
-      grabbed.current = { unitId, modelId };
-      if (controls) controls.enabled = false;
-      document.body.style.cursor = "grabbing";
-    },
-    [controls, canDrag],
-  );
-
-  const grabPiece = useCallback(
-    (id: string) => {
-      if (!onTerrainMove) return;
-      heldPiece.current = id;
-      if (controls) controls.enabled = false;
-      document.body.style.cursor = "grabbing";
-    },
-    [controls, onTerrainMove],
-  );
-
-  const drop = useCallback(() => {
-    if (heldPiece.current) {
-      heldPiece.current = undefined;
-      if (controls) controls.enabled = true;
-      document.body.style.cursor = "";
-      return;
-    }
-    if (!grabbed.current) return;
-    const pending = dragRef.current;
-    if (pending?.legal && pending.at && pending.cost !== undefined) onMove(pending.unitId, pending.at, pending.cost, pending.modelId);
-    grabbed.current = undefined;
-    dragRef.current = undefined;
-    if (controls) controls.enabled = true;
-    document.body.style.cursor = "";
-    setDrag(undefined);
-    onDrag?.(undefined);
-  }, [controls, onMove, onDrag]);
-
-  /** Following the pointer while a model is held: re-judge the move and move the ghost. */
-  const onHover = useCallback(
-    (at: Vec2) => {
-      const held = grabbed.current;
-      if (!held) return;
-      const unit = findUnit(state, held.unitId);
-      const model = unit && findModel(unit, held.modelId);
-      if (!unit || !model) return;
-      const verdict: MoveVerdict = modelMoveVerdict(state, unit, model, at, index);
-      const next: DragState = { unitId: held.unitId, modelId: held.modelId, to: at, at: verdict.at, legal: verdict.ok, cost: verdict.cost, problems: verdict.problems };
-      dragRef.current = next;
-      setDrag(next);
-      onDrag?.(next);
-    },
-    [state, index, onDrag],
-  );
-
   /**
    * A drag follows the window, not the table mesh.
    *
@@ -172,12 +204,17 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
    * right plane anyway: a unit being dragged along a gantry should track the gantry, not the floor.
    *
    * The same reasoning applies to the release. It happens over the side panel as often as not.
+   *
+   * One verdict per animation frame, not per event: a pointer reports far faster than the movement
+   * search finishes, and every event judged is a frame not drawn.
    */
   useEffect(() => {
     const ray = new Raycaster();
     const ndc = new Vector2();
     const hit = new Vector3();
     const plane = new Plane(new Vector3(0, 1, 0), 0);
+    let frame = 0;
+    let last: PointerEvent | undefined;
 
     const pointAt = (e: PointerEvent, height: number): Vec2 | undefined => {
       const rect = canvas.getBoundingClientRect();
@@ -188,30 +225,103 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       return ray.ray.intersectPlane(plane, hit) ? { x: hit.x, y: -hit.z } : undefined;
     };
 
-    const onPointerMove = (e: PointerEvent) => {
-      if (heldPiece.current) {
-        const at = pointAt(e, 0);
-        if (at) onTerrainMove?.(heldPiece.current, at);
+    const place = (e: PointerEvent) => {
+      const readout = readoutRef?.current;
+      if (!readout) return;
+      const rect = canvas.getBoundingClientRect();
+      readout.style.transform = `translate(${e.clientX - rect.left + 14}px, ${e.clientY - rect.top + 18}px)`;
+    };
+
+    /** The tape's free end: only while the pointer is over the table, and only once a mark is set. */
+    const aimAt = (e: PointerEvent) => {
+      const { measureFrom: mark, onMeasureHover: report } = latest.current;
+      if (!mark) return;
+      const over = e.target instanceof Node && canvas.contains(e.target);
+      const at = over ? pointAt(e, mark.z) : undefined;
+      setAim(at);
+      report?.(at);
+      if (at) place(e);
+    };
+
+    const follow = (e: PointerEvent) => {
+      const what = held.current;
+      if (!what) {
+        aimAt(e);
         return;
       }
-      if (!grabbed.current) return;
-      const unit = findUnit(state, grabbed.current.unitId);
-      if (!unit) return;
-      const at = pointAt(e, findModel(unit, grabbed.current.modelId)?.hull.pos.z ?? 0);
-      if (at) onHover(at);
+      const { state: now, index: idx, editing: edit, onDrag: report } = latest.current;
+
+      if (what.kind !== "model") {
+        const at = pointAt(e, 0);
+        if (!at) return;
+        const to = { x: at.x + what.offset.x, y: at.y + what.offset.y };
+        if (what.kind === "piece") edit?.onMovePiece(what.id, to);
+        else edit?.onMoveObjective(what.id, to);
+        return;
+      }
+
+      const unit = findUnit(now, what.unitId);
+      const model = unit && findModel(unit, what.modelId);
+      if (!unit || !model) return;
+      const at = pointAt(e, model.hull.pos.z);
+      if (!at) return;
+      const to = { x: at.x + what.offset.x, y: at.y + what.offset.y };
+      const verdict = modelMoveVerdict(now, unit, model, to, idx);
+      const next: DragState = { unitId: what.unitId, modelId: what.modelId, to, at: verdict.at, legal: verdict.ok, cost: verdict.cost, problems: verdict.problems };
+      pending.current = next;
+      setDrag(next);
+      report?.(next);
+      place(e);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!held.current && !latest.current.measureFrom) return;
+      last = e;
+      if (!frame) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          if (last) follow(last);
+        });
+      }
+    };
+
+    const drop = () => {
+      const what = held.current;
+      if (!what) return;
+      if (frame) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+      }
+      // Land where the pointer let go, not where the last drawn frame had it.
+      if (last) follow(last);
+      held.current = undefined;
+      last = undefined;
+      if (controls) controls.enabled = true;
+      document.body.style.cursor = "";
+
+      if (what.kind !== "model") {
+        latest.current.editing?.onDrop();
+        return;
+      }
+      const result = pending.current;
+      if (result?.legal && result.at && result.cost !== undefined) latest.current.onMove(result.unitId, result.at, result.cost, result.modelId);
+      pending.current = undefined;
+      setDrag(undefined);
+      latest.current.onDrag?.(undefined);
     };
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", drop);
     window.addEventListener("pointercancel", drop);
     return () => {
+      if (frame) cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", drop);
       window.removeEventListener("pointercancel", drop);
     };
-  }, [drop, onHover, onTerrainMove, state, camera, canvas]);
+  }, [camera, canvas, controls, readoutRef]);
 
-  const onDown = useCallback((at: Vec2) => (grabbed.current ? undefined : onTableDown?.(at)), [onTableDown]);
+  const onDown = useCallback((at: Vec2) => (held.current ? undefined : onTableDown?.(at)), [onTableDown]);
 
   return (
     <>
@@ -219,13 +329,26 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       <Lighting size={state.layout.size} />
       <Table size={state.layout.size} onDown={onDown} />
       <Zones zones={state.zones} />
-      <Terrain pieces={state.layout.pieces} selectedId={terrainId} {...(onTerrainSelect ? { onSelect: onTerrainSelect, onGrab: grabPiece } : {})} />
-      <Objectives objectives={state.layout.objectives} />
+      <Terrain pieces={state.layout.pieces} selectedId={editing?.pieceId} onPick={editing ? pickPiece : undefined} />
+      <Objectives objectives={state.layout.objectives} selectedId={editing?.objectiveId} onPick={editing ? pickObjective : undefined} />
       {reach?.length ? <ReachOverlay nodes={reach} /> : null}
       {rays?.length ? <SightRays rays={rays} /> : null}
       {path?.length ? <PathLine path={path} /> : null}
-      {measure ? <MeasureLine from={measure[0]} to={measure[1]} /> : null}
-      <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grab} />
+      {measure ? (
+        <>
+          <MeasureLine from={measure[0]} to={measure[1]} />
+          <MeasureMarker at={measure[0]} />
+          <MeasureMarker at={measure[1]} />
+          <Protractor at={measure[0]} />
+        </>
+      ) : measureFrom ? (
+        <>
+          <MeasureMarker at={measureFrom} />
+          <Protractor at={measureFrom} />
+          {aim ? <MeasureLine from={measureFrom} to={{ x: aim.x, y: aim.y, z: measureFrom.z }} /> : null}
+        </>
+      ) : null}
+      <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grabModel} />
       {ghost && drag ? <Ghost hulls={ghost} legal={drag.legal} /> : null}
       {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}
     </>

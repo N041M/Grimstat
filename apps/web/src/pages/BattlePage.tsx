@@ -1,12 +1,15 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { ReachNode, TerrainLayout, Vec2, Vec3 } from "@grimstat/board";
 import { reachable } from "@grimstat/board";
 import { PageHeader } from "../components/shell";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { TerrainPanel } from "../components/battle/TerrainPanel";
 import { LayoutLibrary } from "../components/battle/LayoutLibrary";
 import { useApp } from "../state/AppContext";
-import { placePiece } from "../lib/layoutEdit";
-import { BUILT_IN, copyLayout, isBuiltIn, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
+import { useStoreVersion } from "../hooks/useStoreVersion";
+import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
+import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
+import { canRedo, canUndo, editorReducer, initialEditor } from "../lib/battleEditor";
 import { Badge, Tabs } from "../components/ui";
 import {
   anchorOf,
@@ -26,12 +29,13 @@ import {
   moveOf,
   otherHulls,
   remainingMove,
+  replaceUnit,
   resetMove,
   sampleBattle,
   sightBetween,
+  tapeDistance,
   unitCoherency,
   unitsOf,
-  withLayout,
   type BattleModel,
   type BattleState,
   type BattleTool,
@@ -39,7 +43,7 @@ import {
   type ChargeReadout,
   type SightReadout,
 } from "../lib/battle";
-import type { CameraMode, DragState } from "../components/battle/BattleCanvas";
+import type { CameraMode, DragState, TerrainEditing } from "../components/battle/BattleCanvas";
 import { t, type I18nKey } from "../i18n";
 
 /** three.js and the whole scene live behind this boundary: nobody who never opens Battle downloads it. */
@@ -70,6 +74,15 @@ const TOOLS: { id: BattleTool; label: I18nKey }[] = [
   { id: "terrain", label: "battle.tool.terrain" },
 ];
 
+/** Arrow keys as board directions: +y is the far edge, which is up on the screen in both views. */
+const ARROWS: Record<string, Vec2> = { ArrowUp: { x: 0, y: 1 }, ArrowDown: { x: 0, y: -1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } };
+
+/** Keys typed into a field belong to the field. */
+const inField = (target: EventTarget | null): boolean => {
+  const el = target as HTMLElement | null;
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+};
+
 /**
  * The battle table: plan a matchup on a real-sized board in three dimensions.
  *
@@ -78,21 +91,36 @@ const TOOLS: { id: BattleTool; label: I18nKey }[] = [
  */
 export function BattlePage() {
   const { notify } = useApp();
-  const [state, setState] = useState<BattleState>(() => sampleBattle());
+  const [editor, dispatch] = useReducer(editorReducer, undefined, () => initialEditor(sampleBattle()));
+  const state = editor.battle;
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [activeModelId, setActiveModelId] = useState<string | undefined>();
   const [targetId, setTargetId] = useState<string | undefined>();
   const [tool, setTool] = useState<BattleTool>("select");
   const [view, setView] = useState<CameraMode>("orbit");
   const [drag, setDrag] = useState<DragState | undefined>();
+  /** Whether `drag` is a live gesture (the readout follows the pointer) or a refused click. */
+  const [dragging, setDragging] = useState(false);
   const [picks, setPicks] = useState<Vec3[]>([]);
+  /** The tape's free end while one mark is set, from the canvas. */
+  const [aim, setAim] = useState<Vec2 | undefined>();
   const [terrainId, setTerrainId] = useState<string | undefined>();
+  const [objectiveId, setObjectiveId] = useState<string | undefined>();
+  const [snapOn, setSnapOn] = useState(true);
   const [library, setLibrary] = useState<StoredLayout[]>(() => [...BUILT_IN]);
   const labelsRef = useRef<HTMLDivElement>(null);
+  const readoutRef = useRef<HTMLDivElement>(null);
   const [webgl] = useState(webglAvailable);
+  const layoutsVersion = useStoreVersion("terrainLayouts");
 
+  const { layout } = state;
   const index = useMemo(() => indexOf(state), [state]);
-  const editable = !isBuiltIn(state.layout.id);
+  const editable = !isBuiltIn(layout.id);
+  const selected = findUnit(state, selectedId);
+  const activeModel = selected && findModel(selected, activeModelId);
+  const target = findUnit(state, targetId);
+  const incoherent = useMemo(() => new Set(selected ? incoherentModels(selected) : []), [selected]);
+
   /**
    * The picker's options.
    *
@@ -100,50 +128,66 @@ export function BattlePage() {
    * without this the picker would show some other layout's name while you were standing on the one
    * you just made.
    */
-  const options = useMemo(
-    () => (library.some((l) => l.layout.id === state.layout.id) ? library : [...library, { layout: state.layout, builtIn: false }]),
-    [library, state.layout],
-  );
-  const selected = findUnit(state, selectedId);
-  const activeModel = selected && findModel(selected, activeModelId);
-  const target = findUnit(state, targetId);
-  const incoherent = useMemo(() => new Set(selected ? incoherentModels(selected) : []), [selected]);
+  const options = useMemo(() => (library.some((l) => l.layout.id === layout.id) ? library : [...library, { layout, builtIn: false }]), [library, layout]);
+  const stored = useMemo(() => library.find((l) => l.layout.id === layout.id), [library, layout.id]);
+  /** Does the table differ from what the library holds under this id? A shipped layout is never dirty: touching it forks it. */
+  const dirty = useMemo(() => editable && (!stored || JSON.stringify(stored.layout) !== JSON.stringify(layout)), [editable, stored, layout]);
 
   // Changing tool or unit invalidates whatever the previous tool was showing — including a refusal,
   // which is about one attempted destination and reads as a live warning once it outlives it.
   useEffect(() => {
     setPicks([]);
     setDrag(undefined);
+    setDragging(false);
   }, [tool, selectedId, activeModelId]);
   useEffect(() => setTargetId(undefined), [selectedId]);
+  const refreshLibrary = useCallback(async () => setLibrary(await listLayouts()), []);
   useEffect(() => {
-    void listLayouts().then(setLibrary);
+    void refreshLibrary();
+  }, [refreshLibrary, layoutsVersion]);
+
+  const editLayout = useCallback((change: (layout: TerrainLayout) => TerrainLayout, record = true) => dispatch({ type: "layout", change, record }), []);
+  const editUnit = useCallback((unitId: string, change: (u: BattleUnit) => BattleUnit) => {
+    dispatch({
+      type: "units",
+      change: (b) => {
+        const unit = findUnit(b, unitId);
+        return unit ? replaceUnit(b, change(unit)) : b;
+      },
+    });
   }, []);
 
-  /**
-   * Apply an edit to the terrain.
-   *
-   * A shipped layout is never edited in place — the first change forks it into one of the user's,
-   * so the four that come with the app stay as a place to start from rather than something you can
-   * quietly destroy.
-   */
-  const editLayout = useCallback(
-    (next: TerrainLayout) => {
-      setState((prev) => withLayout(prev, isBuiltIn(prev.layout.id) ? copyLayout(next, `${next.name} (edited)`) : next));
+  /** Put another layout on the table with a fresh deployment. */
+  const loadBattle = useCallback((next: TerrainLayout) => {
+    dispatch({ type: "replace", battle: sampleBattle(next) });
+    setSelectedId(undefined);
+    setActiveModelId(undefined);
+    setTerrainId(undefined);
+    setObjectiveId(undefined);
+  }, []);
+
+  /** Run something that would discard unsaved terrain edits, after asking. */
+  const guard = useCallback(
+    (run: () => void) => {
+      if (dirty && !window.confirm(t("battle.library.discard", { name: layout.name }))) return;
+      run();
     },
-    [],
+    [dirty, layout.name],
   );
 
   const storeLayout = useCallback(
-    (layout: TerrainLayout, asNew = false) => {
-      const record = asNew ? copyLayout(layout) : layout;
-      void saveLayout(record).then(async () => {
-        setLibrary(await listLayouts());
-        if (asNew) setState((prev) => withLayout(prev, record));
-        notify(t("battle.library.saved", { name: record.name }), "success");
-      });
+    (next: TerrainLayout, asNew = false) => {
+      const record = asNew ? copyLayout(next, next.name) : next;
+      void saveLayout(record)
+        .then(async () => {
+          await refreshLibrary();
+          // The saved record is now the table, so the next save goes to it rather than to another copy.
+          dispatch({ type: "adopt", layout: record });
+          notify(t("battle.library.saved", { name: record.name }), "success");
+        })
+        .catch((e: unknown) => notify(t("battle.library.saveFailed"), "error", [e instanceof Error ? e.message : String(e)]));
     },
-    [notify],
+    [notify, refreshLibrary],
   );
 
   /**
@@ -166,29 +210,34 @@ export function BattlePage() {
   const shot: SightReadout | undefined = useMemo(() => (selected && target && tool === "sight" ? sightBetween(selected, target, index) : undefined), [selected, target, tool, index]);
   const charge: ChargeReadout | undefined = useMemo(() => (selected && target && tool === "sight" ? chargeBetween(selected, target, state, index) : undefined), [selected, target, tool, state, index]);
 
-  const onMove = useCallback((unitId: string, to: Vec3, cost: number, modelId?: string) => {
-    setState((prev) => {
-      const unit = findUnit(prev, unitId);
-      if (!unit) return prev;
-      const moved = modelId ? applyModelMove(unit, modelId, to, cost) : applyUnitMove(unit, to, cost);
-      return { ...prev, units: prev.units.map((u) => (u.id === unitId ? moved : u)) };
-    });
-  }, []);
-
-  const editUnit = useCallback((unitId: string, change: (u: BattleUnit) => BattleUnit) => {
-    setState((prev) => ({ ...prev, units: prev.units.map((u) => (u.id === unitId ? change(u) : u)) }));
-  }, []);
+  const onMove = useCallback(
+    (unitId: string, to: Vec3, cost: number, modelId?: string) => editUnit(unitId, (unit) => (modelId ? applyModelMove(unit, modelId, to, cost) : applyUnitMove(unit, to, cost))),
+    [editUnit],
+  );
 
   /**
    * One rule for clicking a unit, wherever it is clicked: under the sight tool an enemy of the
-   * selected unit becomes the target; everything else becomes the selection.
+   * selected unit becomes the target; everything else becomes the selection. Under the terrain tool
+   * units are scenery.
    *
    * Both halves matter. Without the side check the sight tool measures a unit's line of sight to its
    * own side, which nobody is asking about; without the tool check, clicking an enemy under the Move
    * tool silently does nothing, because Move has nothing to show a target with.
    */
+  /** The tape takes two marks; a third starts a new measurement. */
+  const mark = useCallback((at: Vec2) => setPicks((prev) => (prev.length >= 2 ? [{ x: at.x, y: at.y, z: 0 }] : [...prev, { x: at.x, y: at.y, z: 0 }])), []);
+
   const pickUnit = useCallback(
     (id: string | undefined, modelId?: string) => {
+      if (tool === "terrain") return;
+      // Under the tape a model is something to measure to, not something to select: the mark goes
+      // on its base, which is where a player would hold the end of a real one.
+      if (tool === "measure") {
+        const unit = findUnit(state, id);
+        const model = unit && findModel(unit, modelId);
+        if (model) mark({ x: model.hull.pos.x, y: model.hull.pos.y });
+        return;
+      }
       if (!id) {
         setSelectedId(undefined);
         setActiveModelId(undefined);
@@ -202,7 +251,7 @@ export function BattlePage() {
       setSelectedId(id);
       setActiveModelId(modelId);
     },
-    [state, selected, tool],
+    [state, selected, tool, mark],
   );
 
   /**
@@ -218,20 +267,129 @@ export function BattlePage() {
   const onTableDown = useCallback(
     (at: Vec2) => {
       if (tool === "measure") {
-        setPicks((prev) => (prev.length >= 2 ? [{ x: at.x, y: at.y, z: 0 }] : [...prev, { x: at.x, y: at.y, z: 0 }]));
+        mark(at);
         return;
       }
       if (tool !== "select" || !selected) return;
       // A model is active: the click moves that model. Otherwise the whole unit travels as a body.
       const verdict = activeModel ? modelMoveVerdict(state, selected, activeModel, at, index) : dragVerdict(state, selected, at, index);
       if (verdict.ok && verdict.at && verdict.cost !== undefined) onMove(selected.id, verdict.at, verdict.cost, activeModel?.id);
+      setDragging(false);
       setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel?.id, to: at, legal: false, problems: verdict.problems });
     },
-    [tool, selected, activeModel, state, index, onMove],
+    [tool, selected, activeModel, state, index, onMove, mark],
   );
 
+  const onDrag = useCallback((next: DragState | undefined) => {
+    setDrag(next);
+    setDragging(next !== undefined);
+  }, []);
+
+  /**
+   * The terrain tool's half of the canvas. A drag records its first move as the undoable step and
+   * the rest as refinements of it, so one gesture is one step back.
+   */
+  const dragRecorded = useRef(false);
+  const editing: TerrainEditing | undefined = useMemo(() => {
+    if (tool !== "terrain") return undefined;
+    const record = () => {
+      const first = !dragRecorded.current;
+      dragRecorded.current = true;
+      return first;
+    };
+    return {
+      pieceId: terrainId,
+      objectiveId,
+      onPickPiece: (id) => {
+        setTerrainId(id);
+        setObjectiveId(undefined);
+      },
+      onPickObjective: (id) => {
+        setObjectiveId(id);
+        setTerrainId(undefined);
+      },
+      onMovePiece: (id, at) => editLayout((l) => (snapOn ? placePieceSnapped(l, id, at) : placePiece(l, id, at)), record()),
+      onMoveObjective: (id, at) => editLayout((l) => moveObjective(l, id, snapOn ? snapPoint(at) : at), record()),
+      onDrop: () => {
+        dragRecorded.current = false;
+      },
+    };
+  }, [tool, terrainId, objectiveId, snapOn, editLayout]);
+
+  /**
+   * Keys. Arrows nudge whatever is selected — a terrain piece or objective by half an inch (two with
+   * Shift), the active model by half an inch along a route the movement search approves. Delete
+   * removes, R rotates, Escape clears, and undo is the platform's own chord. Nothing fires while a
+   * field has focus: those keys belong to the field.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (inField(e.target)) return;
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+
+      if ((e.metaKey || e.ctrlKey) && key === "z") {
+        if (tool !== "terrain") return;
+        e.preventDefault();
+        dispatch({ type: e.shiftKey ? "redo" : "undo" });
+        return;
+      }
+      if (key === "Escape") {
+        if (tool === "terrain") {
+          setTerrainId(undefined);
+          setObjectiveId(undefined);
+        } else if (tool === "measure") setPicks([]);
+        else pickUnit(undefined);
+        return;
+      }
+
+      const arrow = ARROWS[key];
+      if (tool === "terrain") {
+        const step = e.shiftKey ? 4 * EDIT_STEP : EDIT_STEP;
+        if (arrow && terrainId) {
+          e.preventDefault();
+          editLayout((l) => movePiece(l, terrainId, { x: arrow.x * step, y: arrow.y * step }));
+        } else if (arrow && objectiveId) {
+          e.preventDefault();
+          editLayout((l) => {
+            const o = l.objectives.find((x) => x.id === objectiveId);
+            return o ? moveObjective(l, objectiveId, { x: o.at.x + arrow.x * step, y: o.at.y + arrow.y * step }) : l;
+          });
+        } else if ((key === "Delete" || key === "Backspace") && (terrainId || objectiveId)) {
+          e.preventDefault();
+          if (terrainId) editLayout((l) => removePiece(l, terrainId));
+          if (objectiveId) editLayout((l) => removeObjective(l, objectiveId));
+          setTerrainId(undefined);
+          setObjectiveId(undefined);
+        } else if (key === "r" && terrainId) {
+          editLayout((l) => rotatePiece(l, terrainId, Math.PI / 2));
+        }
+        return;
+      }
+
+      if (tool === "select" && arrow && selected && activeModel) {
+        e.preventDefault();
+        const to = { x: activeModel.hull.pos.x + arrow.x * EDIT_STEP, y: activeModel.hull.pos.y + arrow.y * EDIT_STEP };
+        const verdict = modelMoveVerdict(state, selected, activeModel, to, index);
+        if (verdict.ok && verdict.at && verdict.cost !== undefined) onMove(selected.id, verdict.at, verdict.cost, activeModel.id);
+        setDragging(false);
+        setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel.id, to, legal: false, problems: verdict.problems });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, onMove, pickUnit]);
+
   const measurePair = picks.length === 2 ? ([picks[0]!, picks[1]!] as const) : undefined;
-  const { layout } = state;
+  const measureFrom = tool === "measure" && picks.length === 1 ? picks[0] : undefined;
+  const live = measureFrom && aim ? tapeDistance(measureFrom, aim) : undefined;
+  const shipped = options.filter((o) => o.builtIn);
+  const mine = options.filter((o) => !o.builtIn);
+
+  /**
+   * What sits beside the pointer: a drag's verdict, or the tape's live reading. The canvas moves
+   * the element; the page says what it says.
+   */
+  const readout = dragging && drag && selected ? { bad: !drag.legal, text: drag.legal ? t("battle.dragCost", { cost: (drag.cost ?? 0).toFixed(1), move: activeModel ? moveOf(selected, activeModel) : selected.move }) : t((drag.problems[0] ?? "battle.problem.tooFar") as I18nKey) } : live !== undefined ? { bad: false, text: t("battle.measureLive", { d: live.toFixed(1) }) } : undefined;
 
   return (
     <div className="battle-page">
@@ -241,23 +399,31 @@ export function BattlePage() {
         actions={
           <>
             <select
-              className="sm"
+              className="sm battle-layout-pick"
               aria-label={t("battle.layout")}
               value={layout.id}
               onChange={(e) => {
                 const next = options.find((l) => l.layout.id === e.target.value);
-                if (!next) return;
-                setState(sampleBattle(next.layout));
-                setSelectedId(undefined);
-                setTerrainId(undefined);
+                if (next) guard(() => loadBattle(next.layout));
               }}
             >
-              {options.map((l) => (
-                <option key={l.layout.id} value={l.layout.id}>
-                  {l.layout.name}
-                  {l.builtIn ? "" : " ·"}
-                </option>
-              ))}
+              <optgroup label={t("battle.library.shipped")}>
+                {shipped.map((l) => (
+                  <option key={l.layout.id} value={l.layout.id}>
+                    {l.layout.name}
+                  </option>
+                ))}
+              </optgroup>
+              {mine.length ? (
+                <optgroup label={t("battle.library.yours")}>
+                  {mine.map((l) => (
+                    <option key={l.layout.id} value={l.layout.id}>
+                      {l.layout.name}
+                      {l.layout.id === layout.id && dirty ? ` · ${t("battle.library.unsavedShort")}` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
             <Tabs tabs={TOOLS.map((x) => ({ id: x.id, label: t(x.label) }))} value={tool} onChange={setTool} label={t("battle.tool")} />
             <Tabs
@@ -269,7 +435,7 @@ export function BattlePage() {
               onChange={setView}
               label={t("battle.view")}
             />
-            <button type="button" className="ghost sm" onClick={() => setState(sampleBattle(layout))}>
+            <button type="button" className="ghost sm" onClick={() => dispatch({ type: "replace", battle: sampleBattle(layout) })}>
               {t("battle.reset")}
             </button>
           </>
@@ -279,27 +445,31 @@ export function BattlePage() {
       <div className="battle-body">
         <div className="battle-stage">
           {webgl ? (
-            <Suspense fallback={<p className="muted battle-loading">{t("battle.loading")}</p>}>
-              <BattleCanvas
-                state={state}
-                cameraMode={view}
-                selectedId={selectedId}
-                activeModelId={activeModelId}
-                incoherent={incoherent}
-                reach={tool === "select" ? reach : []}
-                rays={shot?.rays ?? []}
-                path={charge?.path ?? []}
-                measure={measurePair}
-                canDrag={tool === "select"}
-                terrainId={tool === "terrain" ? terrainId : undefined}
-                {...(tool === "terrain" ? { onTerrainSelect: setTerrainId, onTerrainMove: (id: string, at: Vec2) => editLayout(placePiece(state.layout, id, at)) } : {})}
-                labelsRef={labelsRef}
-                onSelect={pickUnit}
-                onMove={onMove}
-                onDrag={setDrag}
-                onTableDown={onTableDown}
-              />
-            </Suspense>
+            <ErrorBoundary compact resetKey={layout.id}>
+              <Suspense fallback={<p className="muted battle-loading">{t("battle.loading")}</p>}>
+                <BattleCanvas
+                  state={state}
+                  cameraMode={view}
+                  selectedId={selectedId}
+                  activeModelId={activeModelId}
+                  incoherent={incoherent}
+                  reach={tool === "select" ? reach : []}
+                  rays={shot?.rays ?? []}
+                  path={charge?.path ?? []}
+                  measure={measurePair}
+                  measureFrom={measureFrom}
+                  onMeasureHover={setAim}
+                  canDrag={tool === "select"}
+                  editing={editing}
+                  labelsRef={labelsRef}
+                  readoutRef={readoutRef}
+                  onSelect={pickUnit}
+                  onMove={onMove}
+                  onDrag={onDrag}
+                  onTableDown={onTableDown}
+                />
+              </Suspense>
+            </ErrorBoundary>
           ) : (
             <p className="muted battle-loading">{t("battle.noWebgl")}</p>
           )}
@@ -310,12 +480,39 @@ export function BattlePage() {
               </div>
             ))}
           </div>
+          <div ref={readoutRef} className={`battle-drag-readout ${readout ? "is-on" : ""} ${readout?.bad ? "bad" : ""}`.trim()} aria-hidden="true">
+            {readout?.text}
+          </div>
         </div>
 
         <aside className="battle-panel">
-          {tool === "terrain" ? <LayoutLibrary layout={state.layout} library={library} editable={editable} onStore={storeLayout} onLoad={(next: TerrainLayout) => { setState(sampleBattle(next)); setTerrainId(undefined); }} onRefresh={() => void listLayouts().then(setLibrary)} notify={notify} /> : null}
-          {tool === "terrain" ? <TerrainPanel layout={state.layout} selectedId={terrainId} onChange={editLayout} onSelect={setTerrainId} /> : null}
-          <BattlePanel state={state} selected={selected} activeModel={activeModel} target={target} tool={tool} drag={drag} reach={reach} upperFloor={upperFloor} shot={shot} charge={charge} picks={picks} onPick={pickUnit} onEdit={editUnit} />
+          {tool === "terrain" ? (
+            <>
+              <LayoutLibrary key={layout.id} layout={layout} library={library} editable={editable} dirty={dirty} onStore={storeLayout} onLoad={(next, force) => (force ? loadBattle(next) : guard(() => loadBattle(next)))} onRefresh={refreshLibrary} notify={notify} />
+              <TerrainPanel
+                layout={layout}
+                pieceId={terrainId}
+                objectiveId={objectiveId}
+                canUndo={canUndo(editor)}
+                canRedo={canRedo(editor)}
+                snap={snapOn}
+                onSnap={setSnapOn}
+                onChange={editLayout}
+                onSelectPiece={(id) => {
+                  setTerrainId(id);
+                  if (id) setObjectiveId(undefined);
+                }}
+                onSelectObjective={(id) => {
+                  setObjectiveId(id);
+                  if (id) setTerrainId(undefined);
+                }}
+                onUndo={() => dispatch({ type: "undo" })}
+                onRedo={() => dispatch({ type: "redo" })}
+              />
+            </>
+          ) : (
+            <BattlePanel state={state} selected={selected} activeModel={activeModel} target={target} tool={tool} drag={drag} reach={reach} upperFloor={upperFloor} shot={shot} charge={charge} picks={picks} live={live} onPick={pickUnit} onEdit={editUnit} onClearMeasure={() => setPicks([])} />
+          )}
         </aside>
       </div>
     </div>
@@ -408,7 +605,7 @@ function MovePanel({
       ) : null}
 
       <p className="muted small">{activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
-      {activeModel ? null : <p className="muted small">{t("battle.pickModel")}</p>}
+      <p className="muted small">{activeModel ? t("battle.nudgeHint") : t("battle.pickModel")}</p>
 
       {moved ? (
         <div className="battle-actions">
@@ -436,8 +633,10 @@ function BattlePanel({
   shot,
   charge,
   picks,
+  live,
   onPick,
   onEdit,
+  onClearMeasure,
 }: {
   state: BattleState;
   selected?: BattleUnit;
@@ -450,10 +649,14 @@ function BattlePanel({
   shot?: SightReadout;
   charge?: ChargeReadout;
   picks: readonly Vec3[];
+  /** The tape's reading to the pointer while its second mark is not yet set. */
+  live?: number;
   onPick: (id: string | undefined, modelId?: string) => void;
   onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
+  onClearMeasure: () => void;
 }) {
-  const gap = picks.length === 2 ? Math.hypot(picks[0]!.x - picks[1]!.x, picks[0]!.y - picks[1]!.y) : undefined;
+  const fixed = picks.length === 2 ? tapeDistance(picks[0]!, picks[1]!) : undefined;
+  const reading = fixed ?? live;
 
   return (
     <>
@@ -508,7 +711,14 @@ function BattlePanel({
         <section className="battle-section">
           <h2>{t("battle.tool.measure")}</h2>
           <p className="muted small">{t("battle.measureHint")}</p>
-          {gap === undefined ? null : <p className="battle-measure">{t("battle.measureResult", { d: gap.toFixed(1) })}</p>}
+          {reading === undefined ? null : <p className={`battle-measure ${fixed === undefined ? "is-live" : ""}`.trim()}>{t("battle.measureResult", { d: reading.toFixed(1) })}</p>}
+          {picks.length ? (
+            <div className="battle-actions">
+              <button type="button" className="ghost sm" onClick={onClearMeasure}>
+                {t("battle.measureClear")}
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </>

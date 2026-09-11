@@ -12,7 +12,7 @@
 import type { ModelHull } from "./shapes";
 import { silhouettePoints, topZ } from "./shapes";
 import type { TerrainPiece , TerrainIndex} from "./terrain";
-import { blocksSight, containsPoint, grantsCover, hasTrait, segmentHitsPrism } from "./terrain";
+import { blocksSight, containsPoint, grantsCover, hasTrait, segmentHitsPrism, topOf } from "./terrain";
 import type { Vec2, Vec3 } from "./vec";
 import { EPS, bounds, expand, segInPolygonSpans } from "./vec";
 
@@ -206,11 +206,13 @@ function candidateBlockers(from: ModelHull, to: ModelHull, index: TerrainIndex, 
   const there: Vec2 = { x: to.pos.x, y: to.pos.y };
   const region = expand(bounds([here, there]), Math.max(from.foot.r, to.foot.r));
   const ceiling = Math.max(topZ(from), topZ(to));
+  const floor = Math.min(from.pos.z, to.pos.z);
 
   return index.candidates(region, (p) => {
     if (!blocksSight(p)) return false;
-    // Nothing lower than both models' feet can come between them.
-    if (p.base > ceiling) return false;
+    // A solid that starts above both models' heads, or ends below both their feet, is never between
+    // them: every ray runs inside the two height spans.
+    if (p.base > ceiling + EPS || topOf(p) < floor - EPS) return false;
     if (opts.ignore?.(p)) return false;
     if (selfExempt && (containsPoint(p, here) || containsPoint(p, there))) return false;
     return true;
