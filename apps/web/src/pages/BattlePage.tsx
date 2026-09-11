@@ -290,10 +290,10 @@ export function BattlePage() {
     const kind = unitArtFor(unit.keywords);
     if (plan.modelId) {
       const model = findModel(unit, plan.modelId);
-      return model ? { hulls: [{ ...model.hull, pos: plan.at }], kind, legal: true } : undefined;
+      return model ? { unitId: plan.unitId, modelId: plan.modelId, hulls: [{ ...model.hull, pos: plan.at }], kind, legal: true } : undefined;
     }
     const anchor = anchorOf(unit);
-    return { hulls: unitHulls(translateUnit(unit, { x: plan.at.x - anchor.pos.x, y: plan.at.y - anchor.pos.y }, plan.at.z)), kind, legal: true };
+    return { unitId: plan.unitId, hulls: unitHulls(translateUnit(unit, { x: plan.at.x - anchor.pos.x, y: plan.at.y - anchor.pos.y }, plan.at.z)), kind, legal: true };
   }, [plan, state, tool]);
 
   /**

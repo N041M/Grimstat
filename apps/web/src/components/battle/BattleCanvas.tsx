@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { ModelHull, ReachNode, Vec2, Vec3 } from "@grimstat/board";
 import type { BattleState, BattleUnit, Tape } from "../../lib/battle";
-import { anchorOf, deployVerdict, findModel, findUnit, indexOf, modelMoveVerdict, placeUnit, translateUnit, unitHulls, type Side } from "../../lib/battle";
+import { anchorOf, deployVerdict, dragVerdict, findModel, findUnit, indexOf, modelMoveVerdict, placeUnit, translateUnit, unitHulls, type Side } from "../../lib/battle";
+import { fromScene } from "../../lib/battleScene";
 import { centre } from "../../lib/layoutEdit";
 import { Cameras, type CameraMode } from "./Cameras";
 import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
@@ -58,7 +59,7 @@ export interface BattleCanvasProps {
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
   /** A planned move not yet approved: the unit's ghost standing where it would go. */
-  planned?: { readonly hulls: readonly ModelHull[]; readonly kind: SilhouetteId; readonly legal: boolean };
+  planned?: { readonly unitId: string; readonly modelId?: string; readonly hulls: readonly ModelHull[]; readonly kind: SilhouetteId; readonly legal: boolean };
   /** Tapes left on the table. Each stays until its line is double-clicked. */
   tapes?: readonly Tape[];
   onTapeRemove?(id: string): void;
@@ -114,7 +115,8 @@ export function BattleCanvas(props: BattleCanvasProps) {
 
 /** Whatever the pointer is holding (a model, a terrain piece or an objective) and where on it. */
 type Held =
-  | { readonly kind: "model"; readonly unitId: string; readonly modelId: string; readonly offset: Vec2 }
+  /** A model by id, or the whole unit by its leading model when `modelId` is absent. */
+  | { readonly kind: "model"; readonly unitId: string; readonly modelId?: string; readonly offset: Vec2 }
   | { readonly kind: "piece"; readonly id: string; readonly offset: Vec2 }
   | { readonly kind: "objective"; readonly id: string; readonly offset: Vec2 };
 
@@ -185,6 +187,23 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       hold({ kind: "model", unitId, modelId, offset: { x: model.hull.pos.x - at.x, y: model.hull.pos.y - at.y } });
     },
     [canDrag, hold],
+  );
+
+  /**
+   * Pick a planned move back up by its ghost.
+   *
+   * The ghost is where the player put the model, so it is what they reach for to adjust it. The
+   * drag it starts is the same as one from the model itself — judged from the model's real position,
+   * and the plan is replaced by the drop — only the hand's offset is measured from the ghost.
+   */
+  const grabGhost = useCallback(
+    (at: Vec2) => {
+      if (!planned || !canDrag || dragMode !== "move") return;
+      const anchor = planned.hulls[0];
+      if (!anchor) return;
+      hold({ kind: "model", unitId: planned.unitId, ...(planned.modelId ? { modelId: planned.modelId } : {}), offset: { x: anchor.pos.x - at.x, y: anchor.pos.y - at.y } });
+    },
+    [planned, canDrag, dragMode, hold],
   );
 
   const pickPiece = useCallback(
@@ -293,14 +312,16 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       }
 
       const unit = findUnit(now, what.unitId);
-      const model = unit && findModel(unit, what.modelId);
-      if (!unit || !model) return;
-      const at = pointAt(e, latest.current.dragMode === "deploy" ? 0 : model.hull.pos.z);
+      if (!unit) return;
+      const model = what.modelId ? findModel(unit, what.modelId) : undefined;
+      if (what.modelId && !model) return;
+      const deploying = latest.current.dragMode === "deploy";
+      const at = pointAt(e, deploying ? 0 : (model?.hull ?? anchorOf(unit)).pos.z);
       if (!at) return;
       const to = { x: at.x + what.offset.x, y: at.y + what.offset.y };
-      const deploying = latest.current.dragMode === "deploy";
-      const verdict = deploying ? deployVerdict(now, unit, to, idx) : modelMoveVerdict(now, unit, model, to, idx);
-      const next: DragState = { unitId: what.unitId, ...(deploying ? {} : { modelId: what.modelId }), to, at: verdict.at, legal: verdict.ok, cost: verdict.cost, path: verdict.path, problems: verdict.problems };
+      // A whole unit travels as a body, judged by where its leading model would stand.
+      const verdict = deploying ? deployVerdict(now, unit, to, idx) : model ? modelMoveVerdict(now, unit, model, to, idx) : dragVerdict(now, unit, to, idx);
+      const next: DragState = { unitId: what.unitId, ...(deploying || !model ? {} : { modelId: model.id }), to, at: verdict.at, legal: verdict.ok, cost: verdict.cost, path: verdict.path, problems: verdict.problems };
       pending.current = next;
       setDrag(next);
       report?.(next);
@@ -369,7 +390,8 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       <Objectives objectives={state.layout.objectives} selectedId={editing?.objectiveId} onPick={editing ? pickObjective : undefined} />
       {reach?.length ? <ReachOverlay nodes={reach} size={state.layout.size} budget={reachBudget} /> : null}
       {rays?.length ? <SightRays rays={rays} /> : null}
-      {path?.length ? <PathLine path={path} /> : null}
+      {/* While something is being dragged, the route drawn is the drag's own; the plan's waits. */}
+      {(drag ? drag.path : path)?.length ? <PathLine path={(drag ? drag.path : path)!} /> : null}
       {tapes?.map((tape) => (
         <TapeObject key={tape.id} from={tape.from} to={tape.to} onRemove={() => onTapeRemove?.(tape.id)} />
       ))}
@@ -381,7 +403,26 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         </>
       ) : null}
       <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grabModel} />
-      {ghost && drag ? <Ghost hulls={ghost.hulls} kind={ghost.kind} legal={drag.legal} /> : planned ? <Ghost hulls={planned.hulls} kind={planned.kind} legal={planned.legal} /> : null}
+      {ghost && drag ? (
+        <Ghost hulls={ghost.hulls} kind={ghost.kind} legal={drag.legal} />
+      ) : planned ? (
+        <group
+          onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+            e.stopPropagation();
+            const p = fromScene(e.point.x, e.point.y, e.point.z);
+            grabGhost({ x: p.x, y: p.y });
+          }}
+          onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+            e.stopPropagation();
+            if (canDrag && dragMode === "move") document.body.style.cursor = "grab";
+          }}
+          onPointerOut={() => {
+            if (!held.current) document.body.style.cursor = "";
+          }}
+        >
+          <Ghost hulls={planned.hulls} kind={planned.kind} legal={planned.legal} />
+        </group>
+      ) : null}
       {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}
       {tapesRef && tapes?.length ? <TapeLabelProjector tapesRef={tapesRef} tapes={tapes} /> : null}
     </>
