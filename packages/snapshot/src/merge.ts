@@ -17,7 +17,7 @@ export interface MergePolicy {
   pointsPrecedence: string[];
   /** Adapter ids in order of authority for stats, weapons, abilities, keywords and rules text. */
   textPrecedence: string[];
-  /** Per adapter, fields whose values are placeholders (used only when nobody else has a value, never reported as conflicts). */
+  /** Per adapter, fields whose values are placeholders (used only when nobody else has a value, and not reported as conflicts). */
   untrusted?: Record<string, string[]>;
   /** Also join datasheets by name across unrelated factions when the name is globally unique (default false). */
   matchAcrossFactions?: boolean;

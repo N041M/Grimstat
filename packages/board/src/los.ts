@@ -146,8 +146,8 @@ export function visibleFraction(from: readonly ModelHull[], to: readonly ModelHu
 
 /**
  * A unit is hidden when no enemy model within `range` can see any of its models — the shape of the
- * 11e HIDDEN rule and of Lone Operative, with the range left to the caller because it is a rules
- * number, not a geometric one.
+ * 11e HIDDEN rule and of Lone Operative, with the range left to the caller because it comes from
+ * the rules rather than from geometry.
  */
 export function hiddenFrom(unit: readonly ModelHull[], enemies: readonly ModelHull[], index: TerrainIndex, range: number, opts?: SightOptions): boolean {
   for (const enemy of enemies) {

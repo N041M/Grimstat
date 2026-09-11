@@ -193,7 +193,7 @@ export interface IncomingFireRow extends DurabilityIndexRow {
 
 /**
  * The attack profile "effective wounds" is measured against: a plain BS 3+, S4, AP 0, damage 1
- * shot with no keywords and no modifiers. Deliberately generic — it is a ruler, not a threat.
+ * shot with no keywords and no modifiers. It is deliberately generic, a measuring stick rather than a real threat.
  */
 export const REFERENCE_ATTACK = { skill: 3, S: 4, AP: 0 } as const;
 export type ReferenceAttack = { skill: number; S: number; AP: number };

@@ -6,7 +6,7 @@
  * circle-or-capsule cross section, which keeps every distance query closed-form and every
  * ray-versus-model test cheap.
  *
- * This is an abstraction, not the miniature. It is deliberately generous in the same way a tape
+ * This is an abstraction of the miniature rather than its exact shape. It is deliberately generous in the same way a tape
  * measure held against a real model is: nothing here pretends to know where a banner pole is.
  */
 

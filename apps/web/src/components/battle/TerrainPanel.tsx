@@ -28,7 +28,7 @@ import {
 } from "../../lib/layoutEdit";
 import { t, type I18nKey } from "../../i18n";
 
-/** The traits worth a checkbox. The rest are set by what a piece *is*, not by hand. */
+/** The traits worth a checkbox. The rest follow from the piece's kind and are not set by hand. */
 const EDITABLE_TRAITS: readonly TerrainTrait[] = ["obscuring", "light-cover", "heavy-cover", "impassable", "difficult", "breachable", "scalable", "defensible", "transparent"];
 
 /**
@@ -55,7 +55,7 @@ export type LayoutChange = (change: (layout: TerrainLayout) => TerrainLayout) =>
  * import theirs, which is what this panel and the layout file format are for.
  *
  * Every control edits through the pure functions in `layoutEdit`, and every edit is expressed as a
- * function of the layout *as it will be when applied*, not as it was when this rendered. The panel has
+ * function of the layout as it will be when applied, rather than as it was when this rendered. The panel has
  * no rules of its own, and an edit is always a whole new layout — which is what makes "mirror the
  * table" a single call and undo a stack of old layouts.
  */

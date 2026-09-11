@@ -24,7 +24,7 @@ export interface PublishedList {
   readonly listText: string;
 }
 
-/** Where a set of lists came from. Provenance is required, not decorative. */
+/** Where a set of lists came from. Every stored list must carry this. */
 export interface ArticleSource {
   readonly url?: string;
   readonly title?: string;
@@ -51,7 +51,7 @@ export interface FeedEntry {
   readonly isWarhammer40k: boolean;
 }
 
-/** A published list as kept on the user's machine: the list, where it came from, and when. */
+/** A published list as kept on the user's machine, with its source and the time it was imported. */
 export interface StoredPublishedList extends PublishedList {
   readonly source: ArticleSource;
   readonly importedAt: string;

@@ -2,7 +2,7 @@
  * `@grimstat/adapters` — terrain layout interchange.
  *
  * A versioned JSON envelope for battle-board terrain layouts, with provenance on every layout because
- * this project imports other people's arrangements onto the user's machine and never ships them.
+ * this project imports arrangements made by others onto the user's machine and does not ship them.
  */
 
 export { parseLayoutFile, LayoutImportError } from "./import";

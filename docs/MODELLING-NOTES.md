@@ -42,18 +42,18 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 
 ## Reverse mathhammer and what-if (`reverse.ts`, `sensitivity.ts`)
 - Reverse: every candidate and every combination up to the chosen size is evaluated exactly with chained defender states (combinations fire in the listed order); rows that meet the threshold are ranked by points, the rest by value. Capped at 1,500 combinations.
-- What-if: one change at a time against the base scenario (26 variants: attacker buffs, context changes, defender debuffs). Deltas are exact differences, not approximations, so interactions between two changes are not shown.
+- What-if: one change at a time against the base scenario (26 variants: attacker buffs, context changes, defender debuffs). Deltas are exact differences rather than approximations, so interactions between two changes are not shown.
 - Overrides: an ability whose override sets `effects: []` counts as modelled ("no combat effect") and leaves the coverage list.
 
 ## Army-level readouts (Statistics and Arsenal tabs)
-- **Arsenal figures are printed profiles, not a simulation.** Attacks come from the Attacks
+- **Arsenal figures come from printed profiles and are not simulated.** Attacks come from the Attacks
   characteristic with dice averaged; bonuses that depend on range, target size or a roll (Rapid Fire,
   Blast, Sustained Hits, Melta) are not added. The tab counts how many attacks carry such a keyword
   so the gap is visible rather than silent.
-- **Averages are weighted by attacks, not by weapon.** Twenty bolt rifles and three lascannons
+- **Averages are weighted by attack count rather than by weapon.** Twenty bolt rifles and three lascannons
   average S5, not S8.
 - **The wound and save tables** apply the edition's Strength-versus-Toughness table and AP directly;
-  they say what a roll needs, not what it achieves, since hit rolls and saves are the engine's job.
+  they give the roll needed and do not simulate its outcome, since hit rolls and saves are the engine's job.
 - **Threat range** is Movement plus the longest weapon range, and for melee Movement plus an average
   charge of seven inches. It ignores terrain, which the battle simulator will model.
 - **Statistics output figures** assume every unit shoots the same target for one round at half range

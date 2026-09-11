@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import { SYNTHETIC_DIR } from "../test-utils";
 import { importRosterText } from "../roster/index";
-import { dedupePublishedLists, extractList, parseArticle, parseFeed, parseHeading, parsePublishedListsFile, publishedListKey, sourceOf, stringifyPublishedListsFile, type StoredPublishedList } from "./index";
+import { dedupePublishedLists, extractList, feedSource, guessListHeader, parseArticle, parseFeed, parseHeading, parsePublishedListsFile, pastedList, publishedListKey, sourceOf, stringifyPublishedListsFile, type StoredPublishedList } from "./index";
 
 const read = (rel: string) => readFileSync(join(SYNTHETIC_DIR, rel), "utf8");
 const html = read("competitive/write-up.html");
@@ -188,3 +188,83 @@ describe("where a saved page says it came from", () => {
   });
 });
 
+describe("the feed's own provenance", () => {
+  it("names the publication and links to the page its write-ups are listed on", () => {
+    expect(feedSource(read("competitive/feed.xml"))).toEqual({ title: "Invented Wargaming Publication", url: "https://example.invalid/tag/competitive-innovations/" });
+  });
+
+  it("gives nothing for text that is not a feed", () => {
+    expect(feedSource("<html>not a feed</html>")).toEqual({});
+    expect(feedSource("")).toEqual({});
+  });
+});
+
+describe("a pasted list", () => {
+  const text = ["Ashen Wardens - Club Night (975 points)", "Ashen Wardens", "Ember Vanguard (3 Detachment Points)", "HOLD THE RIDGE", "Incursion (1,000 points)", "", "Warden Captain (95 points)", "• Warlord", "", "Warden Squad (180 points)", "• 1x Warden Sergeant", "• 9x Warden"].join("\n");
+
+  it("builds the record a write-up would have given, from what the user typed", () => {
+    const got = pastedList({ listText: text, player: "A. Player", faction: "Ashen Wardens", detachments: "Ember Vanguard", forceDisposition: "HOLD THE RIDGE", placing: 1, sourceTitle: "Club Night Invitational", sourceUrl: "https://tournaments.example.invalid/event/abc" });
+    expect(got).toMatchObject({
+      heading: "A. Player - Ashen Wardens (Ember Vanguard) - HOLD THE RIDGE - 1st Place",
+      player: "A. Player",
+      faction: "Ashen Wardens",
+      detachments: ["Ember Vanguard"],
+      forceDisposition: "HOLD THE RIDGE",
+      placing: 1,
+      listName: "Ashen Wardens - Club Night",
+      source: { title: "Club Night Invitational", url: "https://tournaments.example.invalid/event/abc", publication: "tournaments.example.invalid" },
+    });
+    expect(got?.listText).toBe(text);
+    // The heading reads back through the write-up parser, so a corpus re-read stays whole.
+    expect(parseHeading(got!.heading)).toMatchObject({ player: "A. Player", faction: "Ashen Wardens", detachments: ["Ember Vanguard"], forceDisposition: "HOLD THE RIDGE", placing: 1 });
+  });
+
+  it("keeps only the list when the paste brought a page's chrome, or the app's sign-off, with it", () => {
+    const pasted = ["Event  Overview  Roster  Pairings", "Round 5 · Table 3", "", text, "", "Exported with App Version: v1.2.3", "Copyright someone", "Privacy Policy"].join("\n");
+    expect(pastedList({ listText: pasted })?.listText).toBe(text);
+  });
+
+  it("needs two costed lines, or it is not a list", () => {
+    expect(pastedList({ listText: "Just a sentence about 2000 points." })).toBeUndefined();
+    expect(pastedList({ listText: "" })).toBeUndefined();
+  });
+
+  it("falls back to the list's own first line as the heading when nothing else was said", () => {
+    const got = pastedList({ listText: text });
+    expect(got?.heading).toBe("Ashen Wardens - Club Night (975 points)");
+    expect(got?.detachments).toEqual([]);
+    expect(got?.placing).toBeUndefined();
+    expect(got?.source).toEqual({});
+  });
+
+  it("makes a link out of a bare host, names the publication after it, and ignores a non-link", () => {
+    expect(pastedList({ listText: text, sourceUrl: " tournaments.example.invalid/event/abc " })?.source).toEqual({ url: "https://tournaments.example.invalid/event/abc", publication: "tournaments.example.invalid" });
+    expect(pastedList({ listText: text, sourceUrl: "https://www.example.invalid/x" })?.source.publication).toBe("example.invalid");
+    expect(pastedList({ listText: text, sourceUrl: "somewhere" })?.source).toEqual({});
+  });
+
+  it("splits detachments on the slash a heading uses, and drops a placing that is not one", () => {
+    const got = pastedList({ listText: text, detachments: "Ember Vanguard / Thorn Tide", placing: 0 });
+    expect(got?.detachments).toEqual(["Ember Vanguard", "Thorn Tide"]);
+    expect(got?.heading).toBe("(Ember Vanguard/Thorn Tide)");
+    expect(got?.placing).toBeUndefined();
+    expect(pastedList({ listText: text, player: "B", placing: 22 })?.heading).toBe("B - 22nd Place");
+  });
+});
+
+describe("guessing a list's header for prefilling", () => {
+  it("reads the app's header: faction, detachment in Detachment Points, disposition in capitals", () => {
+    const text = ["Ashen Wardens - Club Night (975 points)", "Ashen Wardens", "Ember Vanguard (3 Detachment Points)", "HOLD THE RIDGE", "Incursion (1,000 points)", "", "Warden Captain (95 points)", "• Warlord"].join("\n");
+    expect(guessListHeader(text)).toEqual({ faction: "Ashen Wardens", detachment: "Ember Vanguard", forceDisposition: "HOLD THE RIDGE" });
+  });
+
+  it("reads the older header, where the detachment follows the size line and sections are in capitals", () => {
+    const old = ["My Army (2000 points)", "", "Verdant Swarm", "Strike Force (2000 points)", "Thorn Tide", "", "CHARACTERS", "", "Thorn Broodmother (110 points)"].join("\n");
+    expect(guessListHeader(old)).toEqual({ faction: "Verdant Swarm", detachment: "Thorn Tide" });
+  });
+
+  it("guesses nothing from a list with no header", () => {
+    expect(guessListHeader("Warden Captain (95 points)\n• Warlord")).toEqual({});
+    expect(guessListHeader("")).toEqual({});
+  });
+});

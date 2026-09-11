@@ -81,7 +81,7 @@ The user wants a Warhammer 40,000 app that is (a) a **statistics dashboard** for
 
 ### R5. Legal / IP (drives the data strategy)
 - GW sent BattleScribe takedowns (2011, 2020), Wahapedia a C&D (2021, survives on .ru). BSData *data* repos have **no licence**. GW IP guidelines: unofficial, no copied art/text, **non-commercial**.
-- Survivable pattern: **ship the importer, not the import.** Data is fetched on the user's device from upstream URLs, cached locally, never rehosted. Free, no ads, no donations tied to the app. Engine and schemas contain no GW text (OSS-publishable). Attribution everywhere. Design for any upstream vanishing on 14 days' notice (pluggable adapters = legal risk mitigation).
+- Survivable pattern: **the app ships importers and no data.** Data is fetched on the user's device from upstream URLs, cached locally and not rehosted. Free, no ads, no donations tied to the app. Engine and schemas contain no GW text (OSS-publishable). Attribution everywhere. Design for any upstream vanishing on 14 days' notice (pluggable adapters = legal risk mitigation).
 
 ---
 
@@ -114,7 +114,7 @@ The user wants a Warhammer 40,000 app that is (a) a **statistics dashboard** for
 - 40k 10e plugin (second game system proves the plugin API).
 
 **Could (later)**
-- Meta-weighted efficiency by importing tournament lists (BCP/Listhammer) to build the empirical T/Sv/W target distribution.
+- Meta-weighted efficiency built on the published corpus (the weekly MiniHeadQuarters relay; BCP forbids automated access by contract and Tabletop Battles gates its pages, so neither is a source) to build the empirical T/Sv/W target distribution.
 - Game tracker (VP/CP/secondaries) that feeds back real outcomes.
 - Geometry-lite: range/cover/HIDDEN toggles per scenario (full LoS out of scope).
 - Kill Team / AoS plugins; Tauri desktop wrapper; optional CRDT sync (Yjs) with no server-side data.
@@ -126,7 +126,7 @@ The user wants a Warhammer 40,000 app that is (a) a **statistics dashboard** for
 Scope today is a personal local tool, but the architecture must let a public web app and paid tiers be added without redesign:
 - **Server-optional by construction.** Every feature works fully offline against IndexedDB. A future backend only *adds*: permalink relay (short links), cross-device sync, accounts, shared override packs, hosted heavy compute (turn optimiser). Web app talks to it through a `services/` interface with a local no-op implementation.
 - **Entitlements abstraction.** `packages/entitlements`: `can(feature) → boolean` with a `LocalAllUnlocked` provider now and a server-backed provider later. Widgets/analyses declare `requires?: FeatureKey`. Nothing in `engine`/`resolver` ever checks entitlements (keeps them OSS-publishable).
-- **What could ever be paid** (per research on what users punish vs accept): convenience and compute — sync, cloud storage, hosted optimiser runs, team/TO features. **Never** data access, never the pairwise matrix (that's the differentiator vs UnitCrunch), never anything already free. Legal note from R5: GW's guidelines are non-commercial for fan content and the Wahapedia C&D cited monetisation, so a paid tier must charge for *software services* with user-imported data, and should get a solicitor's review before launch.
+- **What could ever be paid** (per research on what users punish vs accept): convenience and compute — sync, cloud storage, hosted optimiser runs, team/TO features. Data access, the pairwise matrix (the differentiator vs UnitCrunch) and anything already free stay unpaid. Legal note from R5: GW's guidelines are non-commercial for fan content and the Wahapedia C&D cited monetisation, so a paid tier must charge for *software services* with user-imported data, and should get a solicitor's review before launch.
 - **Identity-ready data model.** Every stored record carries `ownerId` (local: `"local"`), `createdAt`, `updatedAt`, `revision` so a CRDT/sync layer can be added later without migration.
 - **Privacy defaults.** No telemetry in v1; if added later, opt-in only.
 - **i18n groundwork.** All user-facing strings through an i18n layer; data strings already arrive as locale maps from GDC-style sources.
@@ -137,7 +137,7 @@ Scope today is a personal local tool, but the architecture must let a public web
 ## Part 3 — Architecture
 
 ### Guiding principle
-Everything that changes when GW publishes a codex, dataslate, FAQ or edition is **data or a plugin**, never core code. The core is a generic *dice pipeline + constraint solver + widget host*. Rule text from GW never enters `engine`, `effects`, `resolver` or `schema` (tests use synthetic fixtures).
+Everything that changes when GW publishes a codex, dataslate, FAQ or edition lives in **data or a plugin** rather than in core code. The core is a generic *dice pipeline + constraint solver + widget host*. Rule text from GW never enters `engine`, `effects`, `resolver` or `schema` (tests use synthetic fixtures).
 
 ### Layers & packages (pnpm monorepo, TypeScript)
 ```
@@ -196,7 +196,7 @@ Semver `apiVersion`; first-party plugins in-process, third-party in a Worker san
 - **Exact path:** per-attack categorical → binomial/convolution over attack count (itself a dice-expression PMF, +Blast/Cleave); rerolls as analytic per-die adjustments; single-die reroll via order statistics; damage allocation via DP over (models left, wounds on current model) with policy; FNP as binomial thinning. State-space guard → automatic **Monte Carlo** fallback (shared stage defs) with reported CI. MC doubles as cross-validation in tests.
 - Outputs: damage PMF, models-slain PMF, P(kill), P(≥k), mean/percentiles, wasted damage, per-point metrics, and a **trace** (per-stage expected values) for the UI.
 
-### Effects tiers (data + plugin, never hardcoded per unit)
+### Effects tiers (data and plugins; nothing is hardcoded per unit)
 - Ability row: `{ id, text, coreKeyword?, effects?: EffectRecord[] , manualToggle? }`. Tier-3 has only `text`; promoting to Tier-2 is a data change (override pack), no migration.
 - `EffectRecord = { when: {phase?, stage, side}, if?: Condition (keywords, range band, charged, stationary, target keyword…), op, target: channel, value, cap?, source }`.
 

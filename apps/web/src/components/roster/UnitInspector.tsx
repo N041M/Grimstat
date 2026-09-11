@@ -119,8 +119,8 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
     return out;
   }, [ds, snapshot]);
 
-  // Attach candidates: units this character can lead or support — never itself, never an attached unit, and
-  // never a host that already has another character in the same role (one Leader / one Support per unit).
+  // Attach candidates: units this character can lead or support. Excluded are the character itself, any unit
+  // that is already attached, and any host that already has another character in the same role (one Leader / one Support per unit).
   const hosts = useMemo(() => {
     if (!ds || !isCharacter) return [];
     const can = new Set([...ds.leaderTo, ...ds.supportTo]);

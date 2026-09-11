@@ -14,7 +14,7 @@ const GROUPS: readonly PickGroup[] = ["shipped", "published", "mine"];
  * Closed, it is one line: the current layout's name and size. Open, it is a picker built for the
  * library the app now has — a search box, the three groups, and for the published cards the two
  * Force Dispositions, which is how a player looks a card up: "we rolled Take and Hold against
- * Purge the Foe" is three cards, not fifty.
+ * Purge the Foe" narrows the library to three cards.
  */
 export function LayoutPicker({ options, current, dirty, onPick }: { options: readonly StoredLayout[]; current: TerrainLayout; dirty: boolean; onPick: (layout: TerrainLayout) => void }) {
   const [open, setOpen] = useState(false);

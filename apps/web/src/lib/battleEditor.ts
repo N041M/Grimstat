@@ -3,7 +3,7 @@
  *
  * A reducer rather than a handful of `useState`s, for two reasons that are the same reason. Terrain
  * edits arrive faster than React renders while a piece is being dragged, so an edit has to be computed
- * from the state as it *is* when the edit is applied, never from the state a component saw when it
+ * from the state as it is when the edit is applied, rather than from the state a component saw when it
  * rendered — or two moves in one frame put the piece back where the first one found it. And undo needs
  * the layout as it was *before* each edit, which only the place applying the edit can know. Both
  * belong to a pure function of (state, action), and that function is this file.

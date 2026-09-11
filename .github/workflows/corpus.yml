@@ -1,0 +1,63 @@
+# The relay behind the app's "fetch the published corpus" button.
+#
+# Once a week it reads MiniHeadQuarters for ended Warhammer 40,000 tournaments (one request a second,
+# under a named user agent), folds their lists and placings into the corpus, and pushes the result to
+# a separate dataset repository, which the app fetches at runtime. Player names are dropped.
+#
+# Setup, once: create an empty public repository for the dataset, set the repository variable
+# CORPUS_REPO to "owner/name", and add a secret CORPUS_TOKEN holding a fine-grained token with
+# contents read/write on that repository. Without the variable the job does not run.
+name: Corpus
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Only tournaments on or after this date (YYYY-MM-DD); default is 90 days ago"
+        required: false
+      limit:
+        description: "Stop after this many new tournaments"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: ${{ vars.CORPUS_REPO != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check out the dataset repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.CORPUS_REPO }}
+          token: ${{ secrets.CORPUS_TOKEN }}
+          path: corpus
+      - name: Read the platform into the corpus
+        run: >
+          pnpm cli corpus --source minihq --out corpus
+          ${{ inputs.since && format('--since {0}', inputs.since) || '' }}
+          ${{ inputs.limit && format('--limit {0}', inputs.limit) || '' }}
+      - name: Publish the dataset
+        working-directory: corpus
+        run: |
+          git config user.name "grimstat-corpus"
+          git config user.email "grimstat-corpus@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing new."
+          else
+            git commit -m "Corpus $(date -u +%F)"
+            git push
+          fi

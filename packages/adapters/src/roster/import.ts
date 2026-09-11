@@ -22,7 +22,7 @@ import {
  * - the WTC-compact one-line-per-unit form (`5x Warden Squad (90 pts): 1 with Flux carbine, 4 with Shock maul`)
  * - 10th-edition-style GW app text (`Unit (80 points)` + `• 1x Wargear` lines)
  *
- * Everything is best-effort: a line that cannot be understood becomes a warning, never an exception. Name lookups,
+ * Everything is best-effort. A line that cannot be understood becomes a warning rather than an exception. Name lookups,
  * detachments, enhancements and leader attachment live in `RosterImportContext`, shared with the `.rosz` importer.
  */
 
@@ -340,8 +340,8 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       st.cur = null;
       continue;
     }
-    // A bare force disposition on the line after its detachment — the app's layout. Recognised by
-    // asking that detachment which dispositions it allows, never by a list of names in here.
+    // A bare force disposition on the line after its detachment, as the app lays it out. It is recognised
+    // by asking that detachment which dispositions it allows rather than by a list of names in here.
     if (!isBullet && lastDetachment?.allowed.some((d) => normaliseName(d) === normaliseName(line))) {
       lastDetachment.entry.forceDisposition = line;
       continue;

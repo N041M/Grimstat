@@ -61,7 +61,7 @@ export function ArmiesPage() {
   const [customLimit, setCustomLimit] = useState(2000);
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState<string | undefined>(undefined);
-  /** A BattleScribe/New Recruit file is a zip, not text; keep the bytes until the import runs. */
+  /** A BattleScribe/New Recruit file is a zip rather than text, so the bytes are kept until the import runs. */
   const [bytes, setBytes] = useState<Uint8Array | undefined>(undefined);
   const [over, setOver] = useState(false);
   const [imported, setImported] = useState<{ id: string; name: string; warnings: string[] } | undefined>(undefined);

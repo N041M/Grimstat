@@ -253,7 +253,7 @@ the caching the AI section describes before they run inside a search.
    from primitives in code — on a schematic table. No sculpts, no GW artwork, no photogrammetry, no
    downloaded models (the "free" Warhammer ones online are rips or fan works of GW designs, and
    Tabletop Simulator packs are licensed to Steam alone). Cheap to render and legally clean.
-2. **Rules enforcement**: planning mode is advisory (warns, never blocks); play mode enforces core
+2. **Rules enforcement**: planning mode is advisory (it warns and does not block); play mode enforces core
    movement/targeting/charge rules and lets the human override with a note.
 3. **AI ambition**: v1 plays legally and sensibly (Normal difficulty) rather than competitively; Hard
    comes with rollouts in B5.
@@ -262,7 +262,7 @@ the caching the AI section describes before they run inside a search.
    three sources it labels as Games Workshop copyright (MFM points, Wahapedia datasheet text, BSData
    structure). The rule is not "avoid GW content"; it is **do not redistribute it in the repository**,
    fetch at runtime onto the user's own machine, and record the licence and attribution.
-5. **The published layouts are fetched, not shipped.** Games Workshop publishes 11th-edition
+5. **The published layouts are fetched at runtime and are not shipped with the app.** Games Workshop publishes 11th-edition
    terrain layouts free in its Event Companion PDFs, three per mission with objective positions, and
    revises them in balance passes — so shipped copies would go stale anyway. The community
    [40kdc-data](https://github.com/wn-mitch/40kdc-data) project publishes their geometry as data under

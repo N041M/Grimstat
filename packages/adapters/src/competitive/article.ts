@@ -1,10 +1,10 @@
 /**
  * Pulling published army lists out of a tournament write-up.
  *
- * The article is supplied by the caller — saved from a browser, or pasted. This module never fetches:
- * the write-up pages sit behind a bot challenge their publisher deliberately put there, and getting
- * past it would mean pretending to be a browser. Reading a page you opened yourself and handing it to
- * a local tool is a different thing entirely, and it is the only thing supported here.
+ * The article is supplied by the caller, saved from a browser or pasted. This module never fetches.
+ * The write-up pages sit behind a bot challenge their publisher put there deliberately, and getting
+ * past it would mean pretending to be a browser. The only supported path is a page the user opened
+ * and saved themselves.
  */
 
 import { stripHtml } from "../util/html";
@@ -21,9 +21,9 @@ const HEADING = /^(?<player>.+?)\s+[-–—]\s+(?<rest>.+?)\s+[-–—]\s+(?<pla
 /** The faction part of a heading, with its detachments in brackets after it. */
 const FACTION = /^(?<faction>.+?)\s*(?:\((?<dets>[^)]*)\))?$/;
 /** A list's own first line, as the official app writes it. */
-const LIST_NAME = /^(?<name>.+?)\s*\(\s*[\d,]+\s*(?:points?|pts?)\s*\)\s*$/i;
+export const LIST_NAME = /^(?<name>.+?)\s*\(\s*[\d,]+\s*(?:points?|pts?)\s*\)\s*$/i;
 
-/** Anything that reads as a heading but has no placing is a section title, not a result. */
+/** Anything that reads as a heading but has no placing is treated as a section title rather than a result. */
 export function parseHeading(heading: string): Omit<PublishedList, "listText"> | undefined {
   const m = HEADING.exec(heading.trim());
   if (!m?.groups) return undefined;
@@ -53,8 +53,8 @@ export function parseHeading(heading: string): Omit<PublishedList, "listText"> |
 /**
  * Every list in one article, each paired with the heading above it.
  *
- * Structure rather than styling: a heading element carrying a placing, then the next collapsible
- * body after it. Matching on the class names a publication happens to use today would break the
+ * Lists are found by structure rather than styling. A heading element carrying a placing is followed
+ * by the next collapsible body after it. Matching on the class names a publication happens to use today would break the
  * first time they restyle; a heading followed by a block of list text will not.
  */
 export function parseArticle(html: string, source: ArticleSource = {}): PublishedArticle {
@@ -150,13 +150,13 @@ export function extractList(body: string): string | undefined {
 const PROSE_TOLERANCE = 3;
 
 /**
- * A parenthetical cost: "(95 points)", "(1,000 pts)", and the app's "(3 Detachment Points)" — the
- * last matters because it is the line between a list's header and its units, and treating it as
- * prose splits the list in two.
+ * A bracketed cost: "(95 points)", "(1,000 pts)", "[95pts]" as New Recruit and some organisers'
+ * templates write it, and the app's "(3 Detachment Points)". The last matters because it is the line
+ * between a list's header and its units, and treating it as prose splits the list in two.
  */
-const COSTED = /\(\s*[\d,]+\s*[A-Za-z ]*?(?:points?|pts?)\s*\)/gi;
+const COSTED = /[([]\s*[\d,]+\s*[A-Za-z ]*?(?:points?|pts?)\s*[)\]]/gi;
 
-const looksLikeList = (line: string): boolean => new RegExp(COSTED.source, "i").test(line) || /^[\u2022\u25e6\u25aa\u2023\u00b7-]/.test(line) || /^\d+\s*[x\u00d7]\s+\S/.test(line);
+export const looksLikeList = (line: string): boolean => new RegExp(COSTED.source, "i").test(line) || /^[\u2022\u25e6\u25aa\u2023\u00b7-]/.test(line) || /^\d+\s*[x\u00d7]\s+\S/.test(line);
 
 /* ---- provenance ------------------------------------------------------------------------------ */
 
@@ -178,8 +178,8 @@ function publisherOf(html: string): string | undefined {
 /**
  * Where a saved page says it came from.
  *
- * Provenance is the point, not decoration: these are other people's lists and the record has to be
- * able to say whose. So each field is looked for in more than one place — a canonical link, then
+ * Every list belongs to someone else, so the record has to be able to say whose. Each field is
+ * therefore looked for in more than one place — a canonical link, then
  * Open Graph, then the browser title, which by convention ends with the publication's name. The
  * caller's fallback title is usually the file name, which is what a saved page has left when its
  * markup has none of the above.

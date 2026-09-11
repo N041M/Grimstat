@@ -5,7 +5,7 @@ import { woundTarget } from "@grimstat/game-40k-11e";
 /**
  * What an army can put out, read straight off its weapon profiles.
  *
- * These are counts and averages, not a simulation: attacks come from the printed Attacks
+ * These are counts and averages rather than a simulation. Attacks come from the printed Attacks
  * characteristic (dice expressions averaged), so conditional bonuses that depend on the board —
  * Rapid Fire at half range, Blast against a big unit, Sustained Hits on a critical — are not
  * included. `conditional` reports how many attacks carry such a keyword so the gap is visible

@@ -63,7 +63,7 @@ export function AnalysesPage() {
   switch (tab) {
     case "matrix":
     case "heatmap":
-      // No `key`: switching between Matrix and Heatmap must keep the run, not discard it.
+      // No `key`, so that switching between Matrix and Heatmap keeps the run instead of discarding it.
       panel = <MatrixTab view={tab === "heatmap" ? "swatches" : "values"} />;
       break;
     case "durability":

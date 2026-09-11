@@ -52,7 +52,7 @@ export function box(id: string, centre: Vec2, width: number, depth: number, heig
   });
 }
 
-/** Who can get up a ruin: models on their own feet, not a tank. An edition may say otherwise. */
+/** Who can climb a ruin: models on foot, but not vehicles. An edition may say otherwise. */
 export const CLIMBERS = ["INFANTRY", "CHARACTER", "BEAST", "SWARM"] as const;
 
 /**
@@ -128,7 +128,7 @@ export const TERRAIN_AREA_PRESETS: readonly FootprintPreset[] = [
   { id: "short-line", label: 'Short line 6 x 2"', width: 6, depth: 2, shape: "rectangle", count: 4 },
 ];
 
-/** A crater or wreck: low, gives light cover, never blocks a sight line. */
+/** A crater or wreck. It is low, gives light cover, and does not block a sight line. */
 export function crater(id: string, centre: Vec2, width: number, depth: number): TerrainPiece {
   return box(id, centre, width, depth, 0.4, ["light-cover", "transparent"], [0]);
 }
@@ -240,7 +240,7 @@ export const CROSSFIRE: TerrainLayout = mirrored({
   half: ({ ruin, box }) => [box("core", { x: 30, y: 22 }, 12, 10, 13, ["obscuring", "heavy-cover", "scalable", "breachable"], [0, 4, 8], CLIMBERS, BREACHERS), ruin("f1", { x: 13, y: 32 }, 8, 6, 2), ruin("f2", { x: 47, y: 32 }, 8, 6, 2)],
 });
 
-/** Hard cover that cannot be walked through, plus low craters: a layout about angles, not floors. */
+/** Hard cover that cannot be walked through, plus low craters, so the layout is about angles rather than floors. */
 export const REDOUBT: TerrainLayout = mirrored({
   id: "redoubt",
   name: "Redoubt",

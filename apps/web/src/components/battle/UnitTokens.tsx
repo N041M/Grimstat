@@ -106,7 +106,7 @@ function figureMaterial(colour: string, ghost: boolean): Material[] {
 /**
  * A model is a base disc with its class's figure standing on it.
  *
- * The figure is a proxy, never a sculpt: it is drawn to the height the kernel actually measured
+ * The figure is a proxy rather than a sculpt. It is drawn to the height the kernel actually measured
  * with, so the player can see why a wall does or does not hide it, and it is chosen by what the
  * unit is rather than who — see `silhouettes.ts`. An oval base is a disc stretched along its
  * facing; the figure is scaled to the base and the height separately, so a tank is as long as
@@ -183,7 +183,7 @@ function LiveToken({ modelId, at, route, children }: { modelId: string; at: Vec3
 /**
  * Every model is its own handle.
  *
- * Pressing one selects and picks up *that model*, not its unit: a unit is a handful of models that
+ * Pressing one selects and picks up that model rather than its unit, because a unit is a handful of models that
  * spread, screen and string out, and a token you can only move as a body cannot do any of it. The
  * press reports where on the table it landed, so a drag can keep the model under the finger that
  * took it rather than snapping its centre to the pointer. Units in reserve have no tokens: they are

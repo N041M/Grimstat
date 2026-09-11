@@ -10,8 +10,8 @@
  *
  * Two things to know about the translation. The data is a y-down frame with clockwise rotations,
  * and Grimstat measures y up from the near edge, so every resolved vertex is flipped once at the end.
- * And the data records footprints, not heights: where a template says nothing, the height here is
- * an assumption chosen to be honest rather than pretty, and the layout's note says so.
+ * And the data records footprints without heights, so where a template says nothing the height here
+ * is an assumption chosen to be honest rather than pretty, and the layout's note says so.
  */
 
 import { z } from "zod";
@@ -539,7 +539,7 @@ export async function fetchFortykdc(fetchImpl: FetchLike = fetch as unknown as F
     const res = await fetchImpl(FORTYKDC.refUrl, { headers: { Accept: "application/vnd.github+json" } });
     if (res.ok) ref = (JSON.parse(await res.text()) as { sha?: string }).sha?.slice(0, 12);
   } catch {
-    // The commit is provenance, not data: a rate-limited API costs the note, not the layouts.
+    // The commit only records provenance, so a rate-limited API loses the note and keeps the layouts.
   }
   return { files: files as unknown as FortykdcFiles, ...(ref ? { ref } : {}), url: FORTYKDC.rawBase };
 }

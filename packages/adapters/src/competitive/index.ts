@@ -1,4 +1,10 @@
 export { parseArticle, parseHeading, extractList, sourceOf } from "./article";
-export { parseFeed } from "./feed";
+export { parseFeed, feedSource } from "./feed";
+export { pastedList, guessListHeader, normaliseUrl } from "./pasted";
 export { PUBLISHED_LISTS_FORMAT, PUBLISHED_LISTS_VERSION, PublishedListsError, PublishedListsFile, dedupePublishedLists, parsePublishedListsFile, publishedListKey, stringifyPublishedListsFile } from "./file";
+export { MINIHQ, minihqUrls, parsePlatformDate, parseTournamentIndex, parseIndexTotal, parseResults, parseArmyLists, scrubNames, joinTournament, crawlMinihq } from "./minihq";
+export { CORPUS_FORMAT, CORPUS_VERSION, CORPUS_INDEX_FILE, CorpusIndex, parseCorpusIndex, stringifyCorpusIndex, corpusMonth, corpusFileName, emptyCorpusIndex, addToCorpus } from "./corpus";
 export type { ArticleSource, FeedEntry, PublishedArticle, PublishedList, StoredPublishedList } from "./types";
+export type { ListHeaderGuess, PastedList, PastedListInput } from "./pasted";
+export type { MinihqTournament, MinihqResult, MinihqList, MinihqJoinOptions, MinihqTournamentLists, MinihqCrawlOptions, MinihqCrawl } from "./minihq";
+export type { CorpusSource, CorpusUpdate } from "./corpus";

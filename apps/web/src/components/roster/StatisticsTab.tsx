@@ -83,7 +83,7 @@ function Pending({ n }: { n: number }) {
   );
 }
 
-/** The same quiet count for the army-wide searches, which are per target archetype, not per unit. */
+/** The same quiet count for the army-wide searches, which run per target archetype rather than per unit. */
 function PendingTargets({ n }: { n: number }) {
   if (n <= 0) return null;
   return (
@@ -153,7 +153,7 @@ interface Props {
  * Armies → Statistics: the army as a whole. Composition and keywords are pure arithmetic over the
  * roster; Output, Durability, the casualty curve, threat saturation and the details table's last
  * four columns come from the simulation worker (see `useArmyStats`) and stream in behind the first
- * paint. Anything the worker has not answered for yet shows a dash, never a zero and never a
+ * paint. Anything the worker has not answered for yet shows a dash rather than a zero or a
  * spinner.
  */
 export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelectUnit }: Props) {
@@ -173,7 +173,7 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
           durability: s?.pointsToRemove,
           effectiveWounds: s?.effectiveWounds,
           // Enemy points destroyed per point spent. Nothing to divide without a points value, and
-          // nothing to report at all for a unit with no weapons switched on — a dash, not a zero.
+          // nothing to report at all for a unit with no weapons switched on, so the cell shows a dash rather than a zero.
           trade: s?.armed && r.points > 0 ? s.pointsSlain[target] / r.points : undefined,
         };
       }),
@@ -188,8 +188,8 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
       for (const r of composition.rows) total += solve.get(r.id)?.damage[id] ?? 0;
       return { id, total, per100: composition.points > 0 ? (total / composition.points) * 100 : 0 };
     });
-    // The bar encodes damage per point, not the raw total: per-point output is the figure that
-    // decides a list, and the eye follows the bar rather than the number beside it. Both are shown.
+    // The bar encodes damage per point rather than the raw total, because per-point output is the figure
+    // that decides a list and the eye follows the bar rather than the number beside it. Both are shown.
     const max = Math.max(...out.map((o) => o.per100), 0);
     return out.map((o) => ({ ...o, fraction: max > 0 ? o.per100 / max : 0 }));
   }, [composition.rows, composition.points, solve]);

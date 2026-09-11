@@ -5,6 +5,7 @@ import { runDiff } from "./commands/diff";
 import { runShow } from "./commands/show";
 import { runSynthetic } from "./commands/synthetic";
 import { parseCompetitiveArgs, runCompetitive } from "./commands/competitive";
+import { parseCorpusArgs, runCorpus } from "./commands/corpus";
 
 const USAGE = `grimstat <command> [options]
 
@@ -17,6 +18,9 @@ Commands:
   competitive --feed <url> | --dir <folder of saved articles> [--out data/competitive]
            List the tournament write-ups a feed advertises, and pull the published army lists out of
            write-up pages you have saved. Article pages are never fetched: their publishers gate them.
+  corpus   [--source minihq] [--since YYYY-MM-DD] [--out data/corpus] [--limit n] [--keep-names] [--delay ms]
+           Build the published corpus: read a tournament platform whose pages a machine may read, one
+           request a second, and fold its ended tournaments' lists and placings into monthly files.
 `;
 
 export async function main(argv: string[]): Promise<number> {
@@ -43,6 +47,9 @@ export async function main(argv: string[]): Promise<number> {
       }
       case "competitive": {
         return await runCompetitive(parseCompetitiveArgs(rest));
+      }
+      case "corpus": {
+        return await runCorpus(parseCorpusArgs(rest));
       }
       case "synthetic": {
         const { values } = parseArgs({ args: rest, options: { check: { type: "boolean", default: false } } });

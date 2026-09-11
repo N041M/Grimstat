@@ -20,7 +20,7 @@ export function looksLikeRosterXml(text: string): boolean {
   return /^\uFEFF?\s*<(\?xml|roster)\b/i.test(text);
 }
 
-/** What to do with a file's bytes. Decided on content, never on the name. */
+/** What to do with a file's bytes, decided from the content rather than the file name. */
 export function rosterFileKind(bytes: Uint8Array): RosterFileKind {
   if (isZip(bytes)) return "zip";
   return looksLikeRosterXml(new TextDecoder().decode(bytes.subarray(0, 64))) ? "xml" : "text";

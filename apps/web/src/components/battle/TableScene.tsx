@@ -47,7 +47,7 @@ const cursorOn = (cursor: string) => ({
 });
 
 /**
- * The table itself: a slab, an edge, and a grid to measure against by eye.
+ * The table itself, drawn as a slab with an edge and a grid for measuring by eye.
  *
  * Only presses are reported. A measuring tape takes deliberate picks, and a drag does not go through
  * here at all — it casts against a plane from window events, which has no gaps.
@@ -77,8 +77,8 @@ export const Table = memo(function Table({ size, onDown }: { size: BoardSize; on
  * A six-inch grid, clipped to the table.
  *
  * `gridHelper` is square, so on a 60 × 44 table it hangs off two edges and the table stops looking
- * like a table. Six inches rather than one: a one-inch grid at this zoom is noise, and six is the
- * spacing a player already thinks in.
+ * like a table. The grid is six inches rather than one because a one-inch grid is noise at this zoom
+ * and six inches is the spacing a player already thinks in.
  */
 function TableGrid({ size, step = 6 }: { size: BoardSize; step?: number }) {
   const geometry = useDisposable(() => {
@@ -103,7 +103,7 @@ function TableGrid({ size, step = 6 }: { size: BoardSize; step?: number }) {
  * would hide everything inside it, and the whole reason to model floors is to see who is standing on
  * them. Each walkable surface gets a visible slab so a storey reads as somewhere to stand.
  *
- * Each piece is its own memoised component, so dragging one rebuilds one geometry, not sixteen.
+ * Each piece is its own memoised component, so dragging one rebuilds only that piece's geometry.
  */
 export const Terrain = memo(function Terrain({ pieces, selectedId, onPick }: { pieces: readonly TerrainPiece[]; selectedId?: string; onPick?: PickHandler }) {
   return (
@@ -151,7 +151,7 @@ const TerrainSolid = memo(function TerrainSolid({ piece, selected, onPick }: { p
 });
 
 /**
- * Deployment zones, tinted into the table rather than fenced off — they are advisory, not walls.
+ * Deployment zones, tinted into the table rather than fenced off, since they are advisory and nothing collides with them.
  * The side being deployed gets its zone lit, so the edge a unit must stay inside is the edge on show.
  */
 export const Zones = memo(function Zones({ zones, highlight }: { zones: readonly Zone[]; highlight?: Zone["owner"] }) {

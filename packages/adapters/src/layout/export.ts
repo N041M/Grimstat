@@ -2,7 +2,7 @@
  * Writing a layout file.
  *
  * The contract is narrow on purpose: whatever comes out of here must go back through
- * `parseLayoutFile` unchanged, so this module never rounds, never re-orders and never omits a field
+ * `parseLayoutFile` unchanged, so this module does not round, re-order or omit any field
  * that carries meaning. `floors` in particular is always written explicitly — the importer treats an
  * absent `floors` as "ordinary ground-level piece", which would quietly grow a floor onto the sealed
  * bunkers in REDOUBT if the exporter left it off as a default.
@@ -10,7 +10,7 @@
  * Output is always in inches even though the importer reads millimetres. Inches are what the geometry
  * kernel stores, and a millimetre round trip would divide and re-multiply by 25.4 in binary floating
  * point, so a file exported in millimetres could not be re-imported to the same board. The asymmetry
- * is the point: read what other tools write, write only what is exact.
+ * is deliberate. The importer accepts what other tools write, and the exporter writes only what is exact.
  */
 
 import type { Objective, TerrainLayout, TerrainPiece, Vec2, Zone } from "@grimstat/board";

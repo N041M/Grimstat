@@ -65,7 +65,7 @@ export const snapPoint = (p: Vec2, step = EDIT_STEP): Vec2 => ({ x: snap(p.x, st
 /**
  * Put a piece's centre at `at`, then settle it so its left and bottom sides land on the grid.
  *
- * The sides, not the centre. A published layout gives edge distances in half inches, and an 11.5"
+ * The sides are snapped rather than the centre. A published layout gives edge distances in half inches, and an 11.5"
  * piece whose *centre* sits on the grid has both its sides a quarter inch off it — so a dragged piece
  * would never read back the round numbers the diagram was written in.
  */

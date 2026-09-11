@@ -101,8 +101,8 @@ const FIELD_FLOOR = 4;
 /**
  * Every datasheet this list or the field takes, with what the field does with it.
  *
- * Rows the list lacks are kept only when a fair share of the field takes them: the reader wants to
- * know what they are missing, not everything anyone ever took once.
+ * Rows the list lacks are kept only when a fair share of the field takes them, so the reader sees
+ * what they are missing without every unit anyone ever took once.
  */
 export function fieldRows(yours: ReadonlyMap<string, UnitTally>, peers: readonly PeerList[], snapshot: Snapshot, floor = 0.2): FieldRow[] {
   const names = new Map(snapshot.data.datasheets.map((d) => [d.id, d.name] as const));

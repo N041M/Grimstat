@@ -1,7 +1,7 @@
 import type { PMF } from "./pmf";
 
 /**
- * The engine is game-agnostic: it consumes *probabilities and distributions*, never stats.
+ * The engine is game-agnostic. It consumes probabilities and distributions rather than stats.
  * A game-system plugin turns BS/S/AP/keywords/modifiers into these numbers.
  */
 

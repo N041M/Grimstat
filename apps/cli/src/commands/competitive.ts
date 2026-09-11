@@ -13,11 +13,11 @@ import { dedupePublishedLists, parseArticle, parseFeed, parsePublishedListsFile,
  * past it would mean pretending to be a browser. Reading a page yourself and handing the file to a
  * local tool is a different thing, and it is the supported one.
  *
- * It does not resolve the lists into units. That needs a snapshot, and the corpus is more useful
- * kept as text: it survives a points change, an edition, and a different reader's game data.
+ * It does not resolve the lists into units. That needs a snapshot, and a corpus kept as text
+ * survives a points change, an edition change, and a different reader's game data.
  *
- * The feed is another matter — an interface published for machines, which answers this tool by name —
- * so `--feed` is offered for discovery: it reports which write-ups exist and which are new.
+ * The feed is different. It is an interface published for machines and answers this tool by name,
+ * so `--feed` reads it to report which write-ups exist and which are new.
  */
 
 const UA = "Grimstat/0.1 (local-first Warhammer 40,000 statistics tool)";
@@ -56,7 +56,7 @@ export async function runCompetitive(opts: CompetitiveOptions): Promise<number> 
     if (!opts.dir) {
       log("");
       log("Open the ones you want in a browser and save the page, then re-run with --dir <folder>.");
-      log("This tool does not fetch article pages: their publishers gate them, and it respects that.");
+      log("This tool does not fetch article pages, because their publishers gate them.");
     }
     if (!opts.dir) return 0;
   }
@@ -87,7 +87,7 @@ export async function runCompetitive(opts: CompetitiveOptions): Promise<number> 
   log("");
   log(`${merged.length} lists (${merged.length - existing.length} new) → ${target}`);
   if (skipped) log(`${skipped} files held no results.`);
-  log("These are other people's lists, published by other people. The file records where each came from.");
+  log("The lists belong to the players named in them. The file records where each came from.");
   return 0;
 }
 

@@ -14,7 +14,7 @@
  * - `traits` is `string[]`, not an enum, so that a file written against a later build of
  *   `@grimstat/board` still imports — the importer drops what it does not know and says so, which is
  *   the whole reason validation and import are separate steps here;
- * - lengths are declared once for the file via `units`, never guessed per value.
+ * - lengths are declared once for the file via `units` and are not guessed per value.
  *
  * This module only decides whether a document is *well formed*. Whether it describes a **playable**
  * board (pieces on the table, floors inside their piece, no duplicate ids) is `import.ts`'s job,

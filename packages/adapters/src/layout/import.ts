@@ -31,7 +31,7 @@ import { LayoutFile as LayoutFileSchema, MM_PER_INCH, isTerrainTrait } from "./s
  * survives an export.
  */
 export interface ImportedLayout extends TerrainLayout {
-  /** Absent when neither the layout nor the envelope said anything; fields nobody set are absent, never invented. */
+  /** Absent when neither the layout nor the envelope said anything. Fields nobody set stay absent rather than being invented. */
   readonly provenance?: LayoutProvenance;
 }
 
@@ -244,7 +244,7 @@ function readFloors(raw: readonly number[] | undefined, at: string, toInches: To
 
 /**
  * Deployment zones are decoration as far as the geometry kernel is concerned — nothing measures
- * against one unless a mission asks it to — so a malformed zone loses the zone, not the layout.
+ * against one unless a mission asks it to. A malformed zone is therefore dropped without failing the layout.
  */
 function readZones(raw: readonly LayoutZone[] | undefined, where: string, toInches: ToInches, warnings: string[]): readonly Zone[] | undefined {
   if (raw === undefined) return undefined;

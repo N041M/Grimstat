@@ -6,7 +6,8 @@ An **unofficial, fan-made, local-first** statistics dashboard and army builder f
 
 - Models unit-vs-unit and army-vs-army interactions with exact probability distributions (Monte Carlo fallback).
 - Army builder with 11th-edition validation (Detachment Points, Leader/Support, tiered points).
-- Everything that changes with a codex, dataslate or edition is **data or a plugin** — never core code.
+- A Codex: every datasheet of your snapshot laid out like a codex page, and any two to six side by side with the best value of each row marked.
+- Everything that changes with a codex, dataslate or edition lives in **data or a plugin** rather than in core code.
 
 ## Data policy
 
@@ -53,9 +54,9 @@ pnpm cli show data/snapshots/<snapshot>.json "Intercessor Squad"
 pnpm cli diff data/snapshots/<old>.json data/snapshots/<new>.json
 ```
 
-Gather published tournament lists onto your own machine. The feed is read directly; article pages are
-not fetched, because their publishers gate them — open the ones you want, save the page, and point
-`--dir` at the folder:
+Gather published tournament lists onto your own machine. The CLI reads the feed directly but does not
+fetch article pages, because their publishers gate them. Open the ones you want, save the page, and
+point `--dir` at the folder:
 
 ```bash
 pnpm cli competitive --feed https://<publication>/tag/competitive-innovations/feed/
@@ -63,10 +64,27 @@ pnpm cli competitive --dir ~/Downloads/write-ups --out data/competitive
 ```
 
 Each list is stored as published, with the player, faction, detachments, Force Disposition, placing
-and the URL it came from. They are other people's lists; the file records whose.
+and the URL it came from. The lists belong to the players named in them, and the file records that.
 
-The web app reads the same files without the CLI: drop saved write-up pages, or the corpus file, on
-the Data page. An army's **Meta** tab then measures it against the placing lists of its faction —
+The web app reads the same files without the CLI. Drop saved write-up pages, or the corpus file, on
+the Data page. **Paste a list** stores a single list from a tournament platform, a write-up or a
+friend, together with where it was seen. **Load a feed** takes a saved copy of the feed and lists its
+write-ups, marking each one once its lists are stored. The browser fetches neither the feed nor the
+pages, because the publisher sends no CORS headers and puts a bot challenge in front of its pages.
+**Fetch the published corpus** brings in a dataset built by a weekly relay: `.github/workflows/corpus.yml`
+reads [MiniHeadQuarters](https://miniheadquarters.com), a tournament platform whose pages a machine
+may read (its robots.txt restricts nothing and its terms say nothing about automated access), one
+request a second under a named user agent, and pushes the ended tournaments' lists and placings to a
+separate dataset repository as monthly files. Player names are removed before publishing. To run the
+relay yourself, create an empty public repository for the dataset, set the repository variable
+`CORPUS_REPO` to `owner/name` and the secret `CORPUS_TOKEN` to a token with contents read/write on
+it; the app's Corpus URL setting points at the dataset. The same build runs locally:
+
+```bash
+pnpm cli corpus --source minihq --since 2026-06-01 --out data/corpus     # names dropped; --keep-names for a private copy
+```
+
+An army's **Meta** tab then measures it against the placing lists of its faction —
 which units the field takes and how often, where this list has more or fewer or none, the placing
 lists it most resembles by points in common, and any one of them laid beside it unit by unit. The
 published lists are resolved against your own snapshot, so a corpus gathered under one points update

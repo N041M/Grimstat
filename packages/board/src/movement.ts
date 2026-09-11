@@ -357,7 +357,7 @@ class SurfaceMap {
     // Whoever may pass a ruin's walls was let through in `standable` before this was asked; anyone
     // still asking cannot be inside them, on any storey.
     if (hasTrait(piece, "breachable")) return true;
-    // Inside a hollow piece the model must be on one of its storeys, not embedded in it.
+    // Inside a hollow piece the model must stand on one of its storeys rather than inside the walls.
     return !floorHeights(piece).some((z) => Math.abs(z - at.z) <= this.rules.floorTolerance);
   }
 

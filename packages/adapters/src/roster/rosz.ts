@@ -4,7 +4,7 @@
  * A `.rosz` file is a zip archive holding one `.ros` document: XML in the http://www.battlescribe.net/schema/rosterSchema
  * namespace (`roster` → `forces/force` → `selections/selection`, each selection typed `unit`, `model` or `upgrade`).
  * Units become RosterUnits by matching selection names against the snapshot with `normaliseName`; anything that does
- * not resolve (units, detachments, enhancements, hosts of a leader) is reported in `warnings` and skipped, never thrown.
+ * not resolve (units, detachments, enhancements, hosts of a leader) is reported in `warnings` and skipped rather than thrown.
  * Only structural problems throw: a zip without a roster document, malformed XML, or XML without a `<roster>` root.
  */
 import { strFromU8, unzipSync } from "fflate";

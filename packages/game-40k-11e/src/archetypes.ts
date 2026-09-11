@@ -1,6 +1,6 @@
 import type { Archetype, ScenarioUnit } from "@grimstat/schema";
 
-/** Generic defender/attacker presets. Profiles are illustrative numbers, not any specific datasheet. */
+/** Generic defender/attacker presets. The profiles are illustrative numbers and match no specific datasheet. */
 function unit(name: string, models: ScenarioUnit["models"], weapons: ScenarioUnit["weapons"] = [], keywords: string[] = [], points?: number): ScenarioUnit {
   return { name, keywords, models, weapons, effects: [], ...(points !== undefined ? { points } : {}) };
 }
