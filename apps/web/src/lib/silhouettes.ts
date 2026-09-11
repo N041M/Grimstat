@@ -21,7 +21,7 @@
  * a coloured brick. Parts may overlap freely; the merge costs nothing at draw time.
  */
 
-import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, LatheGeometry, Quaternion, Shape, SphereGeometry, Vector2, Vector3 } from "three";
+import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Quaternion, Shape, SphereGeometry, Vector3 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { ModelHull } from "@grimstat/board";
 import { footReach, inches } from "@grimstat/board";
@@ -161,11 +161,6 @@ function trackShape(length: number, height: number, r: number): (readonly [numbe
   return pts;
 }
 
-/** A body of revolution along x — a fuselage — from `(x, r)` samples, nose at the highest x. */
-function spindle(samples: readonly (readonly [number, number])[], y: number, z: number): BufferGeometry {
-  return new LatheGeometry(samples.map(([x, r]) => new Vector2(r, x)), 16).rotateZ(-HALF).translate(0, y, z);
-}
-
 /** A half-cylinder shell over a wheel — a mudguard — of radius `r`, `width` across, axle at `(x, y)`. */
 function mudguard(r: number, width: number, x: number, y: number): BufferGeometry {
   return new CylinderGeometry(r, r, width, 14, 1, true, 0, Math.PI).rotateX(HALF).rotateZ(HALF).translate(x, y, 0);
@@ -214,36 +209,45 @@ interface Figure {
 const merge = (...figures: Figure[]): Figure => ({ armour: figures.flatMap((f) => f.armour), accent: figures.flatMap((f) => f.accent) });
 
 /**
- * A trooper's body from the waist up, two inches tall standing: heavy shoulders, a visored helm, a
- * pack with twin exhausts. No arms — they depend on what the figure is doing with them.
+ * A trooper's body from the waist up, two inches tall standing, in the heavy powered plate the
+ * setting is known for: a barrel chest, oversized pauldrons with a trim ring, a snouted, visored
+ * helm, a tabard from the belt, a power pack on the back with twin vents. No arms — they depend on
+ * what the figure is doing with them.
  */
 function torso(): Figure {
   return {
     armour: [
       post(0.2, 0.2, 0.2, 0, 0.98, 0),
-      box(0.42, 0.55, 0.6, 0.02, 1.32, 0),
-      box(0.12, 0.4, 0.42, 0.24, 1.32, 0, 0.1),
-      ...both(blob(0.2, 0.02, 1.58, 0.36, 1, 0.7, 1)),
+      box(0.46, 0.55, 0.62, 0.02, 1.32, 0),
+      blob(0.28, 0.2, 1.36, 0, 0.6, 0.9, 1.05),
+      ...both(blob(0.25, 0.02, 1.6, 0.4, 1, 0.75, 1)),
       post(0.08, 0.08, 0.12, 0.02, 1.64, 0),
-      blob(0.16, 0.03, 1.84, 0),
-      box(0.22, 0.5, 0.44, -0.3, 1.32, 0),
+      blob(0.17, 0.03, 1.83, 0),
+      box(0.26, 0.5, 0.5, -0.34, 1.32, 0),
+      blob(0.24, -0.34, 1.57, 0, 0.55, 0.6, 1),
     ],
-    accent: [box(0.08, 0.07, 0.2, 0.17, 1.83, 0), ...both(post(0.045, 0.045, 0.22, -0.32, 1.65, 0.14, 6))],
+    accent: [
+      post(0.21, 0.21, 0.08, 0, 1.02, 0),
+      box(0.06, 0.45, 0.24, 0.06, 0.75, 0),
+      ...both(post(0.255, 0.255, 0.05, 0.02, 1.58, 0.4, 14), post(0.06, 0.06, 0.24, -0.36, 1.68, 0.17, 6)),
+      box(0.12, 0.12, 0.16, 0.17, 1.78, 0),
+      box(0.06, 0.06, 0.24, 0.17, 1.9, 0),
+    ],
   };
 }
 
-/** Striding legs, the left forward. */
+/** Striding legs in greaves, the left forward. */
 function legs(): Figure {
   return {
     armour: [
-      limb([0, 0.95, 0.15], [0.12, 0.5, 0.18], 0.12, 0.1),
-      limb([0.12, 0.5, 0.18], [0.18, 0.1, 0.19], 0.1, 0.085),
-      joint(0.1, [0.12, 0.5, 0.18]),
-      box(0.34, 0.1, 0.2, 0.22, 0.05, 0.2),
-      limb([0, 0.95, -0.15], [-0.08, 0.5, -0.18], 0.12, 0.1),
-      limb([-0.08, 0.5, -0.18], [-0.12, 0.1, -0.19], 0.1, 0.085),
-      joint(0.1, [-0.08, 0.5, -0.18]),
-      box(0.34, 0.1, 0.2, -0.08, 0.05, -0.2),
+      limb([0, 0.95, 0.15], [0.12, 0.5, 0.18], 0.13, 0.11),
+      limb([0.12, 0.5, 0.18], [0.18, 0.1, 0.19], 0.12, 0.1),
+      joint(0.11, [0.12, 0.5, 0.18]),
+      box(0.36, 0.12, 0.22, 0.22, 0.06, 0.2),
+      limb([0, 0.95, -0.15], [-0.08, 0.5, -0.18], 0.13, 0.11),
+      limb([-0.08, 0.5, -0.18], [-0.12, 0.1, -0.19], 0.12, 0.1),
+      joint(0.11, [-0.08, 0.5, -0.18]),
+      box(0.36, 0.12, 0.22, -0.08, 0.06, -0.2),
     ],
     accent: [],
   };
@@ -251,14 +255,14 @@ function legs(): Figure {
 
 /** An arm from `shoulder` through `elbow` to `hand`. */
 function arm(shoulder: P3, elbow: P3, hand: P3): BufferGeometry[] {
-  return [limb(shoulder, elbow, 0.085, 0.07), limb(elbow, hand, 0.07, 0.06), joint(0.075, elbow), joint(0.065, hand)];
+  return [limb(shoulder, elbow, 0.1, 0.085), limb(elbow, hand, 0.085, 0.075), joint(0.09, elbow), joint(0.075, hand)];
 }
 
-/** A trooper: striding, rifle held across the body, right hand at the fore grip. */
+/** A trooper: striding, a boxy bolt-gun held across the body, right hand at the fore grip. */
 function trooper(): Figure {
   return merge(torso(), legs(), {
     armour: [...arm([0.02, 1.52, 0.4], [0.2, 1.18, 0.4], [0.41, 1.28, 0.1]), ...arm([0.02, 1.52, -0.4], [0.12, 1.16, -0.36], [0.15, 1.27, -0.06])],
-    accent: [box(0.6, 0.11, 0.1, 0.28, 1.31, 0.02, 0, -0.5), box(0.09, 0.14, 0.08, 0.2, 1.2, -0.03, 0, -0.5)],
+    accent: [box(0.5, 0.16, 0.14, 0.28, 1.31, 0.02, 0, -0.5), box(0.1, 0.18, 0.1, 0.2, 1.18, -0.03, 0, -0.5), barrel(0.03, 0.16, 0.56, 1.34, 0.18, 6)],
   });
 }
 
@@ -275,29 +279,30 @@ const FIGURES: Readonly<Record<SilhouetteId, () => Figure>> = {
     });
   },
 
-  /** A battle tank: tracks under guards, a bevelled hull with a sloped glacis, turret, gun, sponsons. */
+  /** A battle tank of the setting's boxy pattern: tall tracks, a hull gun in the glacis, the turret set back, sponsons. */
   vehicle: () => ({
     armour: [
-      ...both(box(4, 0.2, 0.58, 0, 1.3, 0.95), box(1, 0.5, 0.35, 0.5, 1.72, 1.2)),
-      hull([[-1.85, 0.7], [1.5, 0.7], [2, 1.45], [1.5, 2.3], [-1.55, 2.3], [-1.85, 1.75]], 1.45, 0, 0.05),
-      box(1.3, 0.25, 1.35, -1.1, 2.4, 0),
-      post(0.62, 0.75, 0.85, -0.1, 2.72, 0, 12),
-      post(0.24, 0.24, 0.3, -0.4, 3.3, 0.3, 10),
+      ...both(box(4, 0.2, 0.58, 0, 1.7, 0.95), box(1.1, 0.55, 0.4, 0.3, 2.05, 1.2)),
+      hull([[-1.85, 0.7], [1.4, 0.7], [2, 1.5], [1.6, 2.4], [-1.6, 2.4], [-1.85, 1.9]], 1.45, 0, 0.05),
+      box(1.2, 0.25, 1.35, -1.2, 2.5, 0),
+      post(0.6, 0.75, 0.8, -0.45, 2.8, 0, 12),
+      post(0.24, 0.24, 0.3, -0.7, 3.35, 0.3, 10),
     ],
     accent: [
       ...both(
-        hull(trackShape(3.9, 1.15, 0.5), 0.5, 0.95).translate(0, 0.625, 0),
-        barrel(0.05, 0.5, 1.25, 1.72, 1.2, 6),
-        post(0.08, 0.08, 0.35, -1.75, 2.5, 0.5, 6, -0.4),
-        box(0.08, 0.12, 0.18, 1.9, 1.7, 0.5),
+        hull(trackShape(3.9, 1.6, 0.6), 0.5, 0.95).translate(0, 0.85, 0),
+        barrel(0.06, 0.5, 1.1, 2.05, 1.2, 6),
+        post(0.08, 0.08, 0.35, -1.75, 2.6, 0.5, 6, -0.4),
+        box(0.08, 0.12, 0.18, 1.92, 1.9, 0.35),
       ),
-      box(0.9, 0.05, 1, -1.1, 2.55, 0),
-      box(0.35, 0.5, 0.55, 0.6, 2.75, 0),
-      barrel(0.09, 1.3, 1.4, 2.8, 0),
-      barrel(0.13, 0.18, 1.98, 2.8, 0),
-      post(0.2, 0.2, 0.05, -0.4, 3.475, 0.3, 10),
-      barrel(0.04, 0.5, 0.05, 3.42, 0.3, 6),
-      post(0.02, 0.02, 0.7, -1.4, 3, -0.6, 4),
+      box(0.9, 0.05, 1, -1.2, 2.65, 0),
+      box(0.35, 0.5, 0.55, 0.2, 2.8, 0),
+      barrel(0.09, 1.7, 1.25, 2.85, 0),
+      barrel(0.13, 0.18, 2.05, 2.85, 0),
+      barrel(0.06, 0.5, 2, 1.95, -0.5, 6),
+      post(0.2, 0.2, 0.05, -0.7, 3.475, 0.3, 10),
+      barrel(0.04, 0.5, -0.25, 3.42, 0.3, 6),
+      post(0.02, 0.02, 0.7, -1.5, 3.05, -0.6, 4),
     ],
   }),
 
@@ -320,35 +325,35 @@ const FIGURES: Readonly<Record<SilhouetteId, () => Figure>> = {
     ],
   }),
 
-  /** A walker: reverse-jointed legs, a sarcophagus torso, a gun pod one side and a fist the other. */
+  /** A walker: long reverse-jointed legs under a narrow sarcophagus torso, a gun pod one side and a fist the other. */
   walker: () => ({
     armour: [
       ...both(
-        box(0.9, 0.22, 0.55, 0.1, 0.11, 0.62),
-        limb([0.05, 0.2, 0.6], [0.3, 0.85, 0.58], 0.16, 0.18),
-        joint(0.2, [0.3, 0.85, 0.58]),
-        limb([0.3, 0.85, 0.58], [-0.05, 1.5, 0.45], 0.2, 0.2),
-        blob(0.32, 0.05, 3.25, 0.85, 1, 0.8, 1),
+        box(0.75, 0.2, 0.45, 0.1, 0.1, 0.55),
+        limb([0.05, 0.18, 0.55], [0.3, 0.95, 0.52], 0.12, 0.14),
+        joint(0.16, [0.3, 0.95, 0.52]),
+        limb([0.3, 0.95, 0.52], [-0.05, 1.7, 0.4], 0.15, 0.15),
+        blob(0.24, 0.05, 3.3, 0.68, 1, 0.8, 1),
       ),
-      box(0.8, 0.4, 1.2, -0.05, 1.6, 0),
-      hull([[-0.65, 1.8], [0.5, 1.8], [0.75, 2.2], [0.65, 3.4], [-0.7, 3.4], [-0.8, 2.6]], 1.4, 0, 0.05),
-      box(0.5, 0.3, 0.5, 0.35, 3.55, 0),
-      box(0.8, 0.5, 0.4, 0.3, 3, 0.75),
-      box(0.7, 0.45, 0.42, 0.25, 2.95, -0.75),
+      box(0.6, 0.35, 0.95, -0.05, 1.8, 0),
+      hull([[-0.55, 2], [0.4, 2], [0.62, 2.35], [0.55, 3.45], [-0.55, 3.45], [-0.65, 2.7]], 1.1, 0, 0.05),
+      box(0.42, 0.28, 0.42, 0.32, 3.59, 0),
+      box(0.75, 0.38, 0.32, 0.3, 3.05, 0.68),
+      box(0.6, 0.38, 0.34, 0.25, 3, -0.68),
     ],
     accent: [
-      ...both(box(0.25, 0.18, 0.18, 0.6, 0.09, 0.5), box(0.25, 0.18, 0.18, 0.6, 0.09, 0.74), limb([0.2, 1.35, 0.5], [0.35, 0.85, 0.58], 0.06, 0.06, 6), post(0.1, 0.1, 0.6, -0.55, 3.7, 0.35, 6)),
-      box(0.06, 0.2, 0.6, 0.71, 3, 0),
-      box(0.06, 0.12, 0.36, 0.6, 3.55, 0),
-      barrel(0.06, 0.3, 0.82, 3.1, 0.75, 6),
-      barrel(0.06, 0.3, 0.82, 2.92, 0.65, 6),
-      barrel(0.06, 0.3, 0.82, 2.92, 0.85, 6),
-      box(0.45, 0.1, 0.1, 0.8, 3.1, -0.75, -0.25),
-      box(0.45, 0.1, 0.1, 0.8, 2.8, -0.75, 0.25),
+      ...both(box(0.2, 0.16, 0.15, 0.55, 0.08, 0.45), box(0.2, 0.16, 0.15, 0.55, 0.08, 0.65), limb([0.2, 1.5, 0.45], [0.35, 0.95, 0.52], 0.05, 0.05, 6), post(0.08, 0.08, 0.55, -0.45, 3.72, 0.28, 6)),
+      box(0.06, 0.18, 0.5, 0.6, 3.05, 0),
+      box(0.06, 0.1, 0.3, 0.53, 3.59, 0),
+      barrel(0.05, 0.3, 0.8, 3.13, 0.68, 6),
+      barrel(0.05, 0.3, 0.8, 2.97, 0.6, 6),
+      barrel(0.05, 0.3, 0.8, 2.97, 0.76, 6),
+      box(0.4, 0.09, 0.09, 0.72, 3.13, -0.68, -0.25),
+      box(0.4, 0.09, 0.09, 0.72, 2.87, -0.68, 0.25),
     ],
   }),
 
-  /** A monster: hunched on two clawed legs, arms reaching, a horned and jawed head, a tail, spines. */
+  /** A monster of the hive: hunched on two clawed legs, a lower pair of arms reaching, an upper pair of scything talons, a crested head, plated back, tail. */
   monster: () => ({
     armour: [
       ...both(
@@ -356,9 +361,11 @@ const FIGURES: Readonly<Record<SilhouetteId, () => Figure>> = {
         limb([0.3, 1.25, 0.55], [-0.1, 0.3, 0.6], 0.18, 0.14),
         joint(0.2, [0.3, 1.25, 0.55]),
         box(0.6, 0.28, 0.36, 0.1, 0.14, 0.6),
-        limb([0.55, 2.8, 0.55], [1.05, 2, 0.7], 0.17, 0.14),
+        limb([0.55, 2.7, 0.55], [1.05, 2, 0.7], 0.17, 0.14),
         limb([1.05, 2, 0.7], [1.45, 1.2, 0.55], 0.14, 0.12),
         joint(0.15, [1.05, 2, 0.7]),
+        limb([0.4, 2.9, 0.45], [0.85, 3.5, 0.8], 0.13, 0.09),
+        joint(0.1, [0.85, 3.5, 0.8]),
       ),
       blob(0.75, -0.2, 2.45, 0, 1.35, 0.85, 1),
       blob(0.55, 0.45, 2.1, 0, 1.1, 1, 0.95),
@@ -375,13 +382,18 @@ const FIGURES: Readonly<Record<SilhouetteId, () => Figure>> = {
         spike(0.05, 0.3, 1.45, 1.2, 0.45, 2),
         spike(0.05, 0.3, 1.45, 1.2, 0.55, 2),
         spike(0.05, 0.3, 1.45, 1.2, 0.65, 2),
-        spike(0.07, 0.4, 1.35, 3.8, 0.18, -1),
+        spike(0.07, 0.95, 0.85, 3.5, 0.8, 1.3),
       ),
       box(0.45, 0.08, 0.3, 1.85, 3.34, 0, 0.15),
-      spike(0.1, 0.45, 0.4, 2.96, 0, -0.35),
-      spike(0.1, 0.45, 0.05, 3.07, 0, -0.35),
-      spike(0.1, 0.45, -0.3, 3.08, 0, -0.35),
-      spike(0.1, 0.45, -0.65, 3.02, 0, -0.35),
+      box(0.55, 0.12, 0.7, 1.3, 3.92, 0, -0.45),
+      box(0.4, 0.08, 0.95, 0.4, 2.98, 0, 0.2),
+      box(0.4, 0.08, 1, 0.05, 3.09, 0, 0.05),
+      box(0.4, 0.08, 1, -0.3, 3.1, 0, -0.1),
+      box(0.4, 0.08, 0.9, -0.65, 3.04, 0, -0.3),
+      spike(0.07, 0.3, 0.4, 3.02, 0, -0.35),
+      spike(0.07, 0.3, 0.05, 3.13, 0, -0.35),
+      spike(0.07, 0.3, -0.3, 3.14, 0, -0.35),
+      spike(0.07, 0.3, -0.65, 3.08, 0, -0.35),
     ],
   }),
 
@@ -418,23 +430,24 @@ const FIGURES: Readonly<Record<SilhouetteId, () => Figure>> = {
     return merge({ armour: [blob(0.3, 0, 0.18, 0, 1.1, 0.6, 1.1)], accent: [] }, ...critters);
   },
 
-  /** An aircraft on its stand: a spindle fuselage, swept wings with engines, twin fins, missiles. */
+  /** A gunship on its stand, blocky as the setting's flyers are: a slab fuselage, stub wings carrying engines and missile pods, a tail fin, a nose gun. */
   aircraft: () => ({
     armour: [
-      spindle([[-1.1, 0.06], [-0.8, 0.14], [-0.3, 0.22], [0.3, 0.2], [0.8, 0.12], [1, 0]], 4.2, 0),
+      hull([[-0.95, 3.8], [0.7, 3.8], [1.05, 4.05], [1, 4.45], [0.5, 4.6], [-0.7, 4.6], [-0.95, 4.4]], 0.6, 0, 0.04),
+      box(0.35, 0.55, 0.06, -0.8, 4.75, 0),
       ...both(
-        plate([[-0.5, 0.15], [0.3, 0.15], [-0.28, 1.05], [-0.65, 1.05]], 0.07, 4.15),
-        plate([[-1.05, 0.1], [-0.8, 0.1], [-0.9, 0.55], [-1.1, 0.55]], 0.05, 4.2),
-        barrel(0.13, 0.9, -0.35, 4.05, 0.42, 12),
-        hull([[-1.1, 0], [-0.65, 0], [-0.8, 0.75], [-1.1, 0.75]], 0.05, 0).rotateX(-0.35).translate(0, 4.2, 0.18),
+        plate([[-0.3, 0.28], [0.35, 0.28], [0.2, 1.05], [-0.45, 1.05]], 0.08, 4.3),
+        plate([[-0.95, 0.15], [-0.7, 0.15], [-0.75, 0.5], [-0.95, 0.5]], 0.05, 4.4),
+        barrel(0.16, 0.8, -0.1, 4.2, 0.75, 12),
+        box(0.5, 0.18, 0.22, -0.05, 4.05, 0.55),
       ),
     ],
     accent: [
-      post(0.15, 0.15, 0.05, -0.2, 0.025, 0, 12),
-      post(0.04, 0.04, 3.2, -0.2, 1.65, 0, 6),
-      blob(0.12, 0.4, 4.38, 0, 2, 0.7, 1),
-      barrel(0.03, 0.3, 1.1, 4.16, 0, 6),
-      ...both(barrel(0.11, 0.06, 0.11, 4.05, 0.42, 12), barrel(0.1, 0.08, -0.82, 4.05, 0.42, 12), barrel(0.04, 0.5, -0.25, 4.05, 0.8, 6)),
+      post(0.15, 0.15, 0.05, -0.15, 0.025, 0, 12),
+      post(0.04, 0.04, 3.6, -0.15, 1.85, 0, 6),
+      box(0.35, 0.22, 0.4, 0.75, 4.55, 0, 0.2),
+      barrel(0.04, 0.35, 1.15, 4, 0, 6),
+      ...both(barrel(0.14, 0.06, 0.31, 4.2, 0.75, 12), barrel(0.13, 0.08, -0.52, 4.2, 0.75, 12), barrel(0.03, 0.12, 0.25, 4.02, 0.5, 6), barrel(0.03, 0.12, 0.25, 4.08, 0.6, 6)),
     ],
   }),
 
@@ -494,7 +507,7 @@ const FIGURES: Readonly<Record<SilhouetteId, () => Figure>> = {
     ],
   }),
 
-  /** A titan: a knight of a walker — armoured legs, a carapace with guns, a cannon arm, a blade arm. */
+  /** A titan in the manner of the setting's knights: armoured legs, a domed carapace with guns, a cannon arm, a chain-blade arm, a tilting plate at the shoulder. */
   titanic: () => ({
     armour: [
       ...both(
@@ -509,11 +522,13 @@ const FIGURES: Readonly<Record<SilhouetteId, () => Figure>> = {
       ),
       box(1.1, 0.9, 1.9, -0.05, 4.45, 0),
       hull([[-0.9, 4.75], [0.8, 4.75], [1.1, 5.6], [0.9, 6.3], [-0.9, 6.3], [-1.1, 5.4]], 1.8, 0, 0.06),
-      box(2.3, 0.35, 2.7, -0.25, 6.5, 0, -0.1),
+      box(2.3, 0.3, 2.7, -0.25, 6.45, 0, -0.1),
+      blob(1.4, -0.2, 6.5, 0, 0.85, 0.3, 1),
       box(0.9, 0.5, 0.7, -0.3, 6.75, 1),
       box(1.6, 0.65, 0.65, 0.6, 5.3, -1.75),
       box(1, 0.6, 0.6, 0.35, 5.3, 1.75),
       box(0.65, 0.45, 0.65, 0.95, 5.9, 0),
+      box(0.08, 1.1, 0.8, 1.2, 4.9, 0.75, 0.1),
     ],
     accent: [
       ...both(box(0.36, 0.32, 0.24, 1, 0.16, 0.75), box(0.36, 0.32, 0.24, 1, 0.16, 1.05), box(0.36, 0.32, 0.24, 1, 0.16, 1.35), post(0.14, 0.14, 0.5, -0.9, 6.55, 0.6, 6)),
