@@ -5885,12 +5885,6 @@ button.battle-scope-btn:hover {
   border-color: rgba(201, 70, 75, 0.9);
   color: #f0b2b4;
 }
-/* A layout's name is the user's to make long; the header is not the place to find that out. */
-.battle-layout-pick {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* The tape's reading: the live one is lighter until the second mark fixes it. */
 .battle-measure.is-live {
   color: var(--muted);
@@ -6006,4 +6000,64 @@ button.battle-scope-btn:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ---------- The table picker ---------- */
+.battle-pick-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.battle-pick-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.battle-pick-meta {
+  flex-basis: 100%;
+  font: 400 10px/1.4 var(--mono);
+  color: var(--faint);
+}
+.battle-pick-body {
+  margin-top: 10px;
+}
+.battle-pick-search {
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.battle-pick-pairing {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.battle-pick-pairing label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.battle-pick-pairing select {
+  width: 100%;
+  min-width: 0;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+.battle-pick-vs {
+  padding-bottom: 5px;
+  font: 400 11px/1 var(--mono);
+  color: var(--faint);
+}
+.battle-pick-group + .battle-pick-group {
+  margin-top: 8px;
+}
+.battle-pick-list {
+  max-height: 220px;
 }

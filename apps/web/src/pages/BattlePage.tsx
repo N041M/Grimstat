@@ -5,11 +5,11 @@ import { PageHeader } from "../components/shell";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { TerrainPanel } from "../components/battle/TerrainPanel";
 import { LayoutLibrary } from "../components/battle/LayoutLibrary";
+import { LayoutPicker } from "../components/battle/LayoutPicker";
 import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
-import { isPublished } from "../lib/layoutFetch";
 import { canRedo, canUndo, editorReducer, initialEditor } from "../lib/battleEditor";
 import { Badge, Tabs } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
@@ -384,9 +384,6 @@ export function BattlePage() {
   const measurePair = picks.length === 2 ? ([picks[0]!, picks[1]!] as const) : undefined;
   const measureFrom = tool === "measure" && picks.length === 1 ? picks[0] : undefined;
   const live = measureFrom && aim ? tapeDistance(measureFrom, aim) : undefined;
-  const shipped = options.filter((o) => o.builtIn);
-  const published = options.filter((o) => !o.builtIn && isPublished(o.layout.id));
-  const mine = options.filter((o) => !o.builtIn && !isPublished(o.layout.id));
 
   /**
    * What sits beside the pointer: a drag's verdict, or the tape's live reading. The canvas moves
@@ -401,43 +398,6 @@ export function BattlePage() {
         subtitle={t("battle.subtitle", { layout: layout.name, w: layout.size.width, d: layout.size.depth, units: state.units.length })}
         actions={
           <>
-            <select
-              className="sm battle-layout-pick"
-              aria-label={t("battle.layout")}
-              value={layout.id}
-              onChange={(e) => {
-                const next = options.find((l) => l.layout.id === e.target.value);
-                if (next) guard(() => loadBattle(next.layout));
-              }}
-            >
-              <optgroup label={t("battle.library.shipped")}>
-                {shipped.map((l) => (
-                  <option key={l.layout.id} value={l.layout.id}>
-                    {l.layout.name}
-                  </option>
-                ))}
-              </optgroup>
-              {published.length ? (
-                <optgroup label={t("battle.library.published")}>
-                  {published.map((l) => (
-                    <option key={l.layout.id} value={l.layout.id}>
-                      {l.layout.name}
-                      {l.layout.id === layout.id && dirty ? ` · ${t("battle.library.unsavedShort")}` : ""}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {mine.length ? (
-                <optgroup label={t("battle.library.yours")}>
-                  {mine.map((l) => (
-                    <option key={l.layout.id} value={l.layout.id}>
-                      {l.layout.name}
-                      {l.layout.id === layout.id && dirty ? ` · ${t("battle.library.unsavedShort")}` : ""}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-            </select>
             <Tabs tabs={TOOLS.map((x) => ({ id: x.id, label: t(x.label) }))} value={tool} onChange={setTool} label={t("battle.tool")} />
             <Tabs
               tabs={[
@@ -500,6 +460,7 @@ export function BattlePage() {
         </div>
 
         <aside className="battle-panel">
+          <LayoutPicker options={options} current={layout} dirty={dirty} onPick={(next) => guard(() => loadBattle(next))} />
           {tool === "terrain" ? (
             <>
               <LayoutLibrary key={layout.id} layout={layout} library={library} editable={editable} dirty={dirty} onStore={storeLayout} onLoad={(next, force) => (force ? loadBattle(next) : guard(() => loadBattle(next)))} onRefresh={refreshLibrary} notify={notify} />
