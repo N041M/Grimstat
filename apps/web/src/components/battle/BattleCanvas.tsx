@@ -37,6 +37,10 @@ export interface BattleCanvasProps {
   measure?: readonly [Vec3, Vec3];
   /** Whether pressing a unit picks it up. Off under the tools where moving is not the point. */
   canDrag?: boolean;
+  /** Terrain editing: which piece is selected, and what to do when one is picked or dragged. */
+  terrainId?: string;
+  onTerrainSelect?(id: string): void;
+  onTerrainMove?(id: string, to: Vec2): void;
   /** One child per unit, in the same order; the projector moves them to follow the table. */
   labelsRef?: RefObject<HTMLDivElement>;
   onSelect(unitId: string | undefined, modelId?: string): void;
@@ -78,13 +82,14 @@ export function BattleCanvas(props: BattleCanvasProps) {
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, measure, canDrag = true, labelsRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, measure, canDrag = true, terrainId, onTerrainSelect, onTerrainMove, labelsRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
   const [drag, setDrag] = useState<DragState | undefined>();
   const index = useMemo(() => indexOf(state), [state]);
   const grabbed = useRef<{ unitId: string; modelId: string } | undefined>();
+  const heldPiece = useRef<string | undefined>();
   const dragRef = useRef<DragState | undefined>();
 
   const ghost = useMemo(() => {
@@ -112,7 +117,23 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
     [controls, canDrag],
   );
 
+  const grabPiece = useCallback(
+    (id: string) => {
+      if (!onTerrainMove) return;
+      heldPiece.current = id;
+      if (controls) controls.enabled = false;
+      document.body.style.cursor = "grabbing";
+    },
+    [controls, onTerrainMove],
+  );
+
   const drop = useCallback(() => {
+    if (heldPiece.current) {
+      heldPiece.current = undefined;
+      if (controls) controls.enabled = true;
+      document.body.style.cursor = "";
+      return;
+    }
     if (!grabbed.current) return;
     const pending = dragRef.current;
     if (pending?.legal && pending.at && pending.cost !== undefined) onMove(pending.unitId, pending.at, pending.cost, pending.modelId);
@@ -158,17 +179,26 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
     const hit = new Vector3();
     const plane = new Plane(new Vector3(0, 1, 0), 0);
 
+    const pointAt = (e: PointerEvent, height: number): Vec2 | undefined => {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return undefined;
+      ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
+      ray.setFromCamera(ndc, camera);
+      plane.constant = -height;
+      return ray.ray.intersectPlane(plane, hit) ? { x: hit.x, y: -hit.z } : undefined;
+    };
+
     const onPointerMove = (e: PointerEvent) => {
+      if (heldPiece.current) {
+        const at = pointAt(e, 0);
+        if (at) onTerrainMove?.(heldPiece.current, at);
+        return;
+      }
       if (!grabbed.current) return;
       const unit = findUnit(state, grabbed.current.unitId);
       if (!unit) return;
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-      ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
-      ray.setFromCamera(ndc, camera);
-      plane.constant = -(findModel(unit, grabbed.current.modelId)?.hull.pos.z ?? 0);
-      if (!ray.ray.intersectPlane(plane, hit)) return;
-      onHover({ x: hit.x, y: -hit.z });
+      const at = pointAt(e, findModel(unit, grabbed.current.modelId)?.hull.pos.z ?? 0);
+      if (at) onHover(at);
     };
 
     window.addEventListener("pointermove", onPointerMove);
@@ -179,7 +209,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       window.removeEventListener("pointerup", drop);
       window.removeEventListener("pointercancel", drop);
     };
-  }, [drop, onHover, state, camera, canvas]);
+  }, [drop, onHover, onTerrainMove, state, camera, canvas]);
 
   const onDown = useCallback((at: Vec2) => (grabbed.current ? undefined : onTableDown?.(at)), [onTableDown]);
 
@@ -189,7 +219,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       <Lighting size={state.layout.size} />
       <Table size={state.layout.size} onDown={onDown} />
       <Zones zones={state.zones} />
-      <Terrain pieces={state.layout.pieces} />
+      <Terrain pieces={state.layout.pieces} selectedId={terrainId} {...(onTerrainSelect ? { onSelect: onTerrainSelect, onGrab: grabPiece } : {})} />
       <Objectives objectives={state.layout.objectives} />
       {reach?.length ? <ReachOverlay nodes={reach} /> : null}
       {rays?.length ? <SightRays rays={rays} /> : null}

@@ -1,10 +1,14 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReachNode, Vec2, Vec3 } from "@grimstat/board";
+import type { ReachNode, TerrainLayout, Vec2, Vec3 } from "@grimstat/board";
 import { reachable } from "@grimstat/board";
 import { PageHeader } from "../components/shell";
+import { TerrainPanel } from "../components/battle/TerrainPanel";
+import { LayoutLibrary } from "../components/battle/LayoutLibrary";
+import { useApp } from "../state/AppContext";
+import { placePiece } from "../lib/layoutEdit";
+import { BUILT_IN, copyLayout, isBuiltIn, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
 import { Badge, Tabs } from "../components/ui";
 import {
-  BATTLE_LAYOUTS,
   anchorOf,
   applyModelMove,
   applyUnitMove,
@@ -27,6 +31,7 @@ import {
   sightBetween,
   unitCoherency,
   unitsOf,
+  withLayout,
   type BattleModel,
   type BattleState,
   type BattleTool,
@@ -62,6 +67,7 @@ const TOOLS: { id: BattleTool; label: I18nKey }[] = [
   { id: "select", label: "battle.tool.select" },
   { id: "measure", label: "battle.tool.measure" },
   { id: "sight", label: "battle.tool.sight" },
+  { id: "terrain", label: "battle.tool.terrain" },
 ];
 
 /**
@@ -71,6 +77,7 @@ const TOOLS: { id: BattleTool; label: I18nKey }[] = [
  * resolved and nothing is enforced: the table explains what it thinks and lets the player decide.
  */
 export function BattlePage() {
+  const { notify } = useApp();
   const [state, setState] = useState<BattleState>(() => sampleBattle());
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [activeModelId, setActiveModelId] = useState<string | undefined>();
@@ -79,10 +86,24 @@ export function BattlePage() {
   const [view, setView] = useState<CameraMode>("orbit");
   const [drag, setDrag] = useState<DragState | undefined>();
   const [picks, setPicks] = useState<Vec3[]>([]);
+  const [terrainId, setTerrainId] = useState<string | undefined>();
+  const [library, setLibrary] = useState<StoredLayout[]>(() => [...BUILT_IN]);
   const labelsRef = useRef<HTMLDivElement>(null);
   const [webgl] = useState(webglAvailable);
 
   const index = useMemo(() => indexOf(state), [state]);
+  const editable = !isBuiltIn(state.layout.id);
+  /**
+   * The picker's options.
+   *
+   * Editing a shipped layout forks it, and the fork is not in the library until it is saved — so
+   * without this the picker would show some other layout's name while you were standing on the one
+   * you just made.
+   */
+  const options = useMemo(
+    () => (library.some((l) => l.layout.id === state.layout.id) ? library : [...library, { layout: state.layout, builtIn: false }]),
+    [library, state.layout],
+  );
   const selected = findUnit(state, selectedId);
   const activeModel = selected && findModel(selected, activeModelId);
   const target = findUnit(state, targetId);
@@ -95,6 +116,35 @@ export function BattlePage() {
     setDrag(undefined);
   }, [tool, selectedId, activeModelId]);
   useEffect(() => setTargetId(undefined), [selectedId]);
+  useEffect(() => {
+    void listLayouts().then(setLibrary);
+  }, []);
+
+  /**
+   * Apply an edit to the terrain.
+   *
+   * A shipped layout is never edited in place — the first change forks it into one of the user's,
+   * so the four that come with the app stay as a place to start from rather than something you can
+   * quietly destroy.
+   */
+  const editLayout = useCallback(
+    (next: TerrainLayout) => {
+      setState((prev) => withLayout(prev, isBuiltIn(prev.layout.id) ? copyLayout(next, `${next.name} (edited)`) : next));
+    },
+    [],
+  );
+
+  const storeLayout = useCallback(
+    (layout: TerrainLayout, asNew = false) => {
+      const record = asNew ? copyLayout(layout) : layout;
+      void saveLayout(record).then(async () => {
+        setLibrary(await listLayouts());
+        if (asNew) setState((prev) => withLayout(prev, record));
+        notify(t("battle.library.saved", { name: record.name }), "success");
+      });
+    },
+    [notify],
+  );
 
   /**
    * Where the selection can go: one model's own reach when a model is active, otherwise the whole
@@ -195,15 +245,17 @@ export function BattlePage() {
               aria-label={t("battle.layout")}
               value={layout.id}
               onChange={(e) => {
-                const next = BATTLE_LAYOUTS.find((l) => l.id === e.target.value);
+                const next = options.find((l) => l.layout.id === e.target.value);
                 if (!next) return;
-                setState(sampleBattle(next));
+                setState(sampleBattle(next.layout));
                 setSelectedId(undefined);
+                setTerrainId(undefined);
               }}
             >
-              {BATTLE_LAYOUTS.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
+              {options.map((l) => (
+                <option key={l.layout.id} value={l.layout.id}>
+                  {l.layout.name}
+                  {l.builtIn ? "" : " ·"}
                 </option>
               ))}
             </select>
@@ -239,6 +291,8 @@ export function BattlePage() {
                 path={charge?.path ?? []}
                 measure={measurePair}
                 canDrag={tool === "select"}
+                terrainId={tool === "terrain" ? terrainId : undefined}
+                {...(tool === "terrain" ? { onTerrainSelect: setTerrainId, onTerrainMove: (id: string, at: Vec2) => editLayout(placePiece(state.layout, id, at)) } : {})}
                 labelsRef={labelsRef}
                 onSelect={pickUnit}
                 onMove={onMove}
@@ -259,6 +313,8 @@ export function BattlePage() {
         </div>
 
         <aside className="battle-panel">
+          {tool === "terrain" ? <LayoutLibrary layout={state.layout} library={library} editable={editable} onStore={storeLayout} onLoad={(next: TerrainLayout) => { setState(sampleBattle(next)); setTerrainId(undefined); }} onRefresh={() => void listLayouts().then(setLibrary)} notify={notify} /> : null}
+          {tool === "terrain" ? <TerrainPanel layout={state.layout} selectedId={terrainId} onChange={editLayout} onSelect={setTerrainId} /> : null}
           <BattlePanel state={state} selected={selected} activeModel={activeModel} target={target} tool={tool} drag={drag} reach={reach} upperFloor={upperFloor} shot={shot} charge={charge} picks={picks} onPick={pickUnit} onEdit={editUnit} />
         </aside>
       </div>

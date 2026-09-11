@@ -82,17 +82,30 @@ function TableGrid({ size, step = 6 }: { size: BoardSize; step?: number }) {
  * would hide everything inside it, and the whole reason to model floors is to see who is standing on
  * them. Each walkable surface gets a visible slab so a storey reads as somewhere to stand.
  */
-export function Terrain({ pieces }: { pieces: readonly TerrainPiece[] }) {
+export function Terrain({ pieces, selectedId, onSelect, onGrab }: { pieces: readonly TerrainPiece[]; selectedId?: string; onSelect?: (id: string) => void; onGrab?: (id: string) => void }) {
   return (
     <group>
       {pieces.map((piece) => (
-        <TerrainSolid key={piece.id} piece={piece} />
+        <TerrainSolid
+          key={piece.id}
+          piece={piece}
+          selected={piece.id === selectedId}
+          {...(onSelect
+            ? {
+                onPick: (e: ThreeEvent<PointerEvent>) => {
+                  e.stopPropagation();
+                  onSelect(piece.id);
+                  onGrab?.(piece.id);
+                },
+              }
+            : {})}
+        />
       ))}
     </group>
   );
 }
 
-function TerrainSolid({ piece }: { piece: TerrainPiece }) {
+function TerrainSolid({ piece, selected, onPick }: { piece: TerrainPiece; selected?: boolean; onPick?: (e: ThreeEvent<PointerEvent>) => void }) {
   const { colour, opacity } = terrainAppearance(piece);
   const shape = useMemo(() => shapeOf(piece.polygon), [piece.polygon]);
   const solid = useMemo(() => new ExtrudeGeometry(shape, { depth: Math.max(piece.height, 0.05), bevelEnabled: false }), [shape, piece.height]);
@@ -100,13 +113,25 @@ function TerrainSolid({ piece }: { piece: TerrainPiece }) {
   const surfaces = useMemo(() => surfaceHeights(piece), [piece]);
 
   return (
-    <group>
+    <group
+      {...(onPick
+        ? {
+            onPointerDown: onPick,
+            onPointerOver: () => {
+              document.body.style.cursor = "grab";
+            },
+            onPointerOut: () => {
+              document.body.style.cursor = "";
+            },
+          }
+        : {})}
+    >
       <mesh geometry={solid} rotation={FLAT} position={[0, piece.base, 0]}>
-        <meshStandardMaterial color={colour} transparent opacity={opacity} roughness={0.9} depthWrite={opacity > 0.9} />
+        <meshStandardMaterial color={selected ? SCENE_COLOURS.selected : colour} transparent opacity={selected ? Math.min(0.8, opacity + 0.2) : opacity} roughness={0.9} depthWrite={opacity > 0.9} />
       </mesh>
       <lineSegments position={[0, piece.base, 0]} rotation={FLAT}>
         <edgesGeometry args={[solid]} />
-        <lineBasicMaterial color={SCENE_COLOURS.floorEdge} transparent opacity={0.55} />
+        <lineBasicMaterial color={selected ? SCENE_COLOURS.selected : SCENE_COLOURS.floorEdge} transparent opacity={selected ? 1 : 0.55} />
       </lineSegments>
       {surfaces.map((z) => (
         <mesh key={z} geometry={flat} rotation={FLAT} position={[0, z + 0.02, 0]}>

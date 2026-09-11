@@ -17,7 +17,7 @@ import type { CoherencyReport, ModelHull, Objective, ReachNode, TerrainLayout, T
 import { BATTLE_SIZES, LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, distance, edgeZones, heightForKeywords, inEngagementRange, onBoard, reachable, sight, unitDistance } from "@grimstat/board";
 
 export type Side = "attacker" | "defender";
-export type BattleTool = "select" | "measure" | "sight";
+export type BattleTool = "select" | "measure" | "sight" | "terrain";
 
 export interface BattleModel {
   readonly id: string;
@@ -359,7 +359,7 @@ function sampleUnit(side: Side, i: number, at: Vec2): BattleUnit {
 
 /** A layout, its zones and a sample force per side, spread across each deployment zone. */
 export function sampleBattle(layout: TerrainLayout = LAYOUTS[1] ?? LAYOUTS[0]!): BattleState {
-  const zones = edgeZones(layout.size);
+  const zones = layout.zones?.length === 2 ? (layout.zones as [Zone, Zone]) : edgeZones(layout.size);
   const { width, depth } = layout.size;
   const units: BattleUnit[] = [];
   for (let i = 0; i < SAMPLE.length; i++) {
@@ -368,6 +368,11 @@ export function sampleBattle(layout: TerrainLayout = LAYOUTS[1] ?? LAYOUTS[0]!):
     units.push(sampleUnit("defender", i, { x: width - x, y: depth - 6 }));
   }
   return { layout, zones, units };
+}
+
+/** Swap the layout under a battle, keeping the units where they stand. */
+export function withLayout(state: BattleState, layout: TerrainLayout): BattleState {
+  return { ...state, layout, zones: (layout.zones?.length === 2 ? (layout.zones as [Zone, Zone]) : undefined) ?? edgeZones(layout.size) };
 }
 
 export const BATTLE_LAYOUTS = LAYOUTS;
