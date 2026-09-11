@@ -173,9 +173,11 @@ apps/web
 - **Renderer**: `three` + `@react-three/fiber` with three's own `OrbitControls`, lazily loaded so the
   calculator's bundle is untouched by anyone who never opens the Battle page.
 - **Look**: abstract, legally clean, readable from above — a matt table, terrain as extruded solids
-  with faces tinted by trait, models as base discs with a simple extruded silhouette (a proxy volume,
-  never a sculpt) in faction colour, wound pips and unit labels as billboards that stay upright and
-  scale with distance.
+  with faces tinted by trait, models as base discs with a stylised, posed figure standing on them —
+  one per unit class (trooper, tank, walker, monster, swarm…), built in code from primitives in
+  armour colour and gunmetal (`apps/web/src/lib/silhouettes.ts`), drawn to the exact height the
+  kernel measures with and never a sculpt — wound pips and unit labels as billboards that stay
+  upright and scale with distance.
 - **Cameras**: an orbit camera for the immersive view and an orthographic top-down camera one key
   away — the top-down camera *is* the old 2D planning view, so nothing is lost by going 3D.
 - **Interaction**: drag a unit on the ground plane with a legality ghost (green/red) and a live path
@@ -247,8 +249,10 @@ the caching the AI section describes before they run inside a search.
 
 ## Decisions (defaults chosen)
 
-1. **Look**: abstract 3D proxies — base discs plus simple extruded silhouettes — on a schematic
-   table. No sculpts, no GW artwork, no photogrammetry. Cheap to render and legally clean.
+1. **Look**: abstract 3D proxies — base discs plus one stylised silhouette per unit class, built
+   from primitives in code — on a schematic table. No sculpts, no GW artwork, no photogrammetry, no
+   downloaded models (the "free" Warhammer ones online are rips or fan works of GW designs, and
+   Tabletop Simulator packs are licensed to Steam alone). Cheap to render and legally clean.
 2. **Rules enforcement**: planning mode is advisory (warns, never blocks); play mode enforces core
    movement/targeting/charge rules and lets the human override with a note.
 3. **AI ambition**: v1 plays legally and sensibly (Normal difficulty) rather than competitively; Hard

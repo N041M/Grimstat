@@ -8,6 +8,7 @@ import { centre } from "../../lib/layoutEdit";
 import { Cameras, type CameraMode } from "./Cameras";
 import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
 import { Ghost, UnitTokens, livePositions } from "./UnitTokens";
+import { silhouetteFor, type SilhouetteId } from "../../lib/silhouettes";
 import { MeasureLine, MeasureMarker, PathLine, Protractor, ReachOverlay, SightRays, TapeObject } from "./Overlays";
 
 export type { CameraMode };
@@ -55,7 +56,7 @@ export interface BattleCanvasProps {
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
   /** A planned move not yet approved: the unit's ghost standing where it would go. */
-  planned?: { readonly hulls: readonly ModelHull[]; readonly legal: boolean };
+  planned?: { readonly hulls: readonly ModelHull[]; readonly kind: SilhouetteId; readonly legal: boolean };
   /** Tapes left on the table. Each stays until its line is double-clicked. */
   tapes?: readonly Tape[];
   onTapeRemove?(id: string): void;
@@ -209,16 +210,17 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
     if (!drag) return undefined;
     const unit = findUnit(state, drag.unitId);
     if (!unit) return undefined;
+    const kind = silhouetteFor(unit.keywords);
     // The ghost stands where it would land. Only when the move is refused does it follow the pointer
     // instead, so the player can see what they are pointing at and why it will not do.
     const spot = drag.at ?? drag.to;
-    if (dragMode === "deploy") return unitHulls(placeUnit(unit, spot));
+    if (dragMode === "deploy") return { hulls: unitHulls(placeUnit(unit, spot)), kind };
     if (drag.modelId) {
       const model = findModel(unit, drag.modelId);
-      return model ? [{ ...model.hull, pos: { x: spot.x, y: spot.y, z: drag.at?.z ?? model.hull.pos.z } }] : undefined;
+      return model ? { hulls: [{ ...model.hull, pos: { x: spot.x, y: spot.y, z: drag.at?.z ?? model.hull.pos.z } }], kind } : undefined;
     }
     const anchor = anchorOf(unit);
-    return unitHulls(translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y }));
+    return { hulls: unitHulls(translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y })), kind };
   }, [drag, state, dragMode]);
 
   /**
@@ -376,7 +378,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         </>
       ) : null}
       <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grabModel} />
-      {ghost && drag ? <Ghost hulls={ghost} legal={drag.legal} /> : planned ? <Ghost hulls={planned.hulls} legal={planned.legal} /> : null}
+      {ghost && drag ? <Ghost hulls={ghost.hulls} kind={ghost.kind} legal={drag.legal} /> : planned ? <Ghost hulls={planned.hulls} kind={planned.kind} legal={planned.legal} /> : null}
       {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}
       {tapesRef && tapes?.length ? <TapeLabelProjector tapesRef={tapesRef} tapes={tapes} /> : null}
     </>

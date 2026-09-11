@@ -7,7 +7,8 @@
  * to tell a list apart at a glance.
  *
  * The silhouettes are from game-icons.net under CC BY 3.0, vendored as path data by
- * `apps/web/scripts/unit-art.ts`; the authors are credited on the About page.
+ * `apps/web/scripts/unit-art.ts`; the authors are credited on the About page. The same rule
+ * chooses the model's shape on the battle table (`silhouettes.ts`), so the two always agree.
  */
 
 import { UNIT_ART_PATHS } from "./unitArtPaths";

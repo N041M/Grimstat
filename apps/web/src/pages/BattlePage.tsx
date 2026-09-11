@@ -13,6 +13,7 @@ import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/lay
 import { canRedo, canUndo, editorReducer, initialEditor } from "../lib/battleEditor";
 import { Badge, Tabs } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
+import { unitArtFor } from "../lib/unitArt";
 import {
   anchorOf,
   applyModelMove,
@@ -271,12 +272,14 @@ export function BattlePage() {
     if (!plan || tool !== "select") return undefined;
     const unit = findUnit(state, plan.unitId);
     if (!unit) return undefined;
+    // The picture's rule names the silhouette too; the canvas, loaded later, draws it.
+    const kind = unitArtFor(unit.keywords);
     if (plan.modelId) {
       const model = findModel(unit, plan.modelId);
-      return model ? { hulls: [{ ...model.hull, pos: plan.at }], legal: true } : undefined;
+      return model ? { hulls: [{ ...model.hull, pos: plan.at }], kind, legal: true } : undefined;
     }
     const anchor = anchorOf(unit);
-    return { hulls: unitHulls(translateUnit(unit, { x: plan.at.x - anchor.pos.x, y: plan.at.y - anchor.pos.y }, plan.at.z)), legal: true };
+    return { hulls: unitHulls(translateUnit(unit, { x: plan.at.x - anchor.pos.x, y: plan.at.y - anchor.pos.y }, plan.at.z)), kind, legal: true };
   }, [plan, state, tool]);
 
   /**

@@ -1,10 +1,11 @@
 import { memo, useEffect, useRef, type ReactNode } from "react";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
-import { DoubleSide, type Group } from "three";
+import { Color, DoubleSide, MeshStandardMaterial, type Group, type Material } from "three";
 import type { ModelHull, Vec2, Vec3 } from "@grimstat/board";
 import { footReach } from "@grimstat/board";
 import type { BattleUnit } from "../../lib/battle";
 import { SCENE_COLOURS, SIDE_COLOURS, fromScene, toScene } from "../../lib/battleScene";
+import { ACCENT, ARMOUR, figureScale, silhouetteFor, silhouetteGeometry, type SilhouetteId } from "../../lib/silhouettes";
 
 /**
  * Where each model's token is right now, mid-animation included, by model id.
@@ -39,36 +40,96 @@ function pointAlong(path: readonly Vec3[], along: number): Vec3 {
   return path[path.length - 1] ?? { x: 0, y: 0, z: 0 };
 }
 
+/**
+ * The silhouette for one of a unit's models.
+ *
+ * One rule per unit, so a unit's models agree — except that a CHARACTER unit of several models is
+ * a character with a retinue, as far as keywords can tell, and drawing every one of them with a
+ * standard makes a colour guard. The model that leads the unit, the first, is the one whole-unit
+ * moves are measured from, so it carries the standard; the rest are troopers.
+ */
+function kindOf(unit: BattleUnit, index: number, models: readonly unknown[]): SilhouetteId {
+  const kind = silhouetteFor(unit.keywords);
+  return kind === "character" && models.length > 1 && index > 0 ? "infantry" : kind;
+}
+
 const pathLength = (path: readonly Vec3[]): number => path.reduce((s, p, i) => (i ? s + gap(path[i - 1]!, p) : 0), 0);
 
+/** The base's thickness: the silhouette stands on top of it. */
+const BASE_H = 0.16;
+
+/** Gunmetal, for the parts of a figure that are not armour: tracks, weapons, visors, claws. */
+const ACCENT_COLOUR = "#3b3e46";
+
+const materials = new Map<string, MeshStandardMaterial>();
+const figureMaterials = new Map<string, Material[]>();
+
 /**
- * A model is a base disc with a plain tapered proxy standing on it.
+ * One material per colour and finish, shared by every token drawn in it.
  *
- * The proxy is a volume, never a sculpt: it is the height the kernel actually measured with, drawn
- * so the player can see why a wall does or does not hide it. An oval base is a cylinder stretched
- * along its facing — close enough at this scale, and the kernel measures the real capsule regardless.
- * Drawn at the origin: whoever places it decides where it stands.
+ * A table holds a hundred tokens in two colours; a material each would be a hundred GPU programs
+ * to switch between for nothing. The handful made here are never disposed: they are the page's.
+ * Figures are drawn double-sided: a cape or a mudguard is an open surface with a back.
  */
-function TokenBody({ hull, colour, ghost, selected, warn }: { hull: ModelHull; colour: string; ghost?: boolean; selected?: boolean; warn?: boolean }) {
+function material(colour: string, finish: "base" | "armour" | "accent" | "ghost"): MeshStandardMaterial {
+  const key = `${finish}:${colour}`;
+  let m = materials.get(key);
+  if (!m) {
+    const ghost = finish === "ghost";
+    const tint = finish === "base" ? `#${new Color(colour).multiplyScalar(0.72).getHexString()}` : colour;
+    m = new MeshStandardMaterial({
+      color: tint,
+      roughness: finish === "accent" ? 0.5 : 0.65,
+      metalness: finish === "accent" ? 0.4 : 0.08,
+      transparent: ghost,
+      opacity: ghost ? 0.4 : 1,
+      ...(finish === "base" ? {} : { side: DoubleSide }),
+    });
+    materials.set(key, m);
+  }
+  return m;
+}
+
+/** The figure's two materials, armour then accent, in the side's colour — or both the ghost's. */
+function figureMaterial(colour: string, ghost: boolean): Material[] {
+  const key = `${ghost}:${colour}`;
+  let set = figureMaterials.get(key);
+  if (!set) {
+    set = [];
+    set[ARMOUR] = material(colour, ghost ? "ghost" : "armour");
+    set[ACCENT] = ghost ? set[ARMOUR] : material(ACCENT_COLOUR, "accent");
+    figureMaterials.set(key, set);
+  }
+  return set;
+}
+
+/**
+ * A model is a base disc with its class's figure standing on it.
+ *
+ * The figure is a proxy, never a sculpt: it is drawn to the height the kernel actually measured
+ * with, so the player can see why a wall does or does not hide it, and it is chosen by what the
+ * unit is rather than who — see `silhouettes.ts`. An oval base is a disc stretched along its
+ * facing; the figure is scaled to the base and the height separately, so a tank is as long as
+ * its base and a trooper as tall as the kernel thinks. Drawn at the origin: whoever places it
+ * decides where it stands.
+ */
+function TokenBody({ hull, kind, colour, ghost, selected, warn }: { hull: ModelHull; kind: SilhouetteId; colour: string; ghost?: boolean; selected?: boolean; warn?: boolean }) {
   const r = hull.foot.r;
   const stretch = footReach(hull.foot) / r;
-  const bodyR = r * 0.62;
   return (
-    <group rotation={[0, -hull.facing, 0]} scale={[stretch, 1, 1]}>
-      <mesh position={[0, 0.08, 0]}>
-        <cylinderGeometry args={[r, r, 0.16, 22]} />
-        <meshStandardMaterial color={colour} transparent={ghost} opacity={ghost ? 0.45 : 1} roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 0.16 + hull.height / 2, 0]}>
-        <cylinderGeometry args={[bodyR * 0.55, bodyR, hull.height, 14]} />
-        <meshStandardMaterial color={colour} transparent opacity={ghost ? 0.3 : 0.82} roughness={0.6} />
-      </mesh>
-      {selected || warn ? (
-        <mesh position={[0, 0.19, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[r + 0.06, r + 0.24, 28]} />
-          <meshBasicMaterial color={warn ? SCENE_COLOURS.rayBlocked : SCENE_COLOURS.selected} side={DoubleSide} />
+    <group rotation={[0, -hull.facing, 0]}>
+      <group scale={[stretch, 1, 1]}>
+        <mesh position={[0, BASE_H / 2, 0]} material={material(colour, ghost ? "ghost" : "base")}>
+          <cylinderGeometry args={[r, r, BASE_H, 22]} />
         </mesh>
-      ) : null}
+        {selected || warn ? (
+          <mesh position={[0, 0.19, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[r + 0.06, r + 0.24, 28]} />
+            <meshBasicMaterial color={warn ? SCENE_COLOURS.rayBlocked : SCENE_COLOURS.selected} side={DoubleSide} />
+          </mesh>
+        ) : null}
+      </group>
+      <mesh position={[0, BASE_H, 0]} scale={figureScale(kind, hull)} geometry={silhouetteGeometry(kind)} material={figureMaterial(colour, !!ghost)} />
     </group>
   );
 }
@@ -153,7 +214,7 @@ export const UnitTokens = memo(function UnitTokens({
         .filter((unit) => !unit.reserve)
         .map((unit) => (
           <group key={unit.id}>
-            {unit.models.map((m) => (
+            {unit.models.map((m, i, all) => (
               <LiveToken key={m.id} modelId={m.id} at={m.hull.pos} route={m.route}>
                 <group
                   onPointerDown={(e: ThreeEvent<PointerEvent>) => {
@@ -170,7 +231,7 @@ export const UnitTokens = memo(function UnitTokens({
                     document.body.style.cursor = "";
                   }}
                 >
-                  <TokenBody hull={m.hull} colour={SIDE_COLOURS[unit.side]} selected={m.id === activeModelId || (unit.id === selectedId && !activeModelId)} warn={incoherent?.has(m.id)} />
+                  <TokenBody hull={m.hull} kind={kindOf(unit, i, all)} colour={SIDE_COLOURS[unit.side]} selected={m.id === activeModelId || (unit.id === selectedId && !activeModelId)} warn={incoherent?.has(m.id)} />
                 </group>
               </LiveToken>
             ))}
@@ -181,12 +242,12 @@ export const UnitTokens = memo(function UnitTokens({
 });
 
 /** The translucent copy that follows the pointer during a drag, tinted by whether the move is legal. */
-export function Ghost({ hulls, legal }: { hulls: readonly ModelHull[]; legal: boolean }) {
+export function Ghost({ hulls, kind = "infantry", legal }: { hulls: readonly ModelHull[]; kind?: SilhouetteId; legal: boolean }) {
   return (
     <group>
       {hulls.map((hull, i) => (
         <group key={i} position={toScene(hull.pos)}>
-          <TokenBody hull={hull} colour={legal ? SCENE_COLOURS.rayClear : SCENE_COLOURS.rayBlocked} ghost />
+          <TokenBody hull={hull} kind={kind} colour={legal ? SCENE_COLOURS.rayClear : SCENE_COLOURS.rayBlocked} ghost />
         </group>
       ))}
     </group>
