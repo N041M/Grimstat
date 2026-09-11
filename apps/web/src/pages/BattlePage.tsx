@@ -38,6 +38,7 @@ import {
   remainingMove,
   replaceUnit,
   resetMove,
+  rotateVerdict,
   sampleBattle,
   dropMark,
   sightBetween,
@@ -245,11 +246,13 @@ export function BattlePage() {
   }, [selected, activeModel, tool, index, state]);
 
   const upperFloor = useMemo(() => reach.filter((n) => n.at.z > 0.5).length, [reach]);
+  /** The movement the reach was searched with: the region is drawn out to exactly that. */
+  const reachBudget = selected ? (activeModel ? remainingMove(selected, activeModel) : selected.move) : 0;
 
   const shot: SightReadout | undefined = useMemo(() => (selected && target && tool === "sight" ? sightBetween(selected, target, index) : undefined), [selected, target, tool, index]);
   const charge: ChargeReadout | undefined = useMemo(() => (selected && target && tool === "sight" ? chargeBetween(selected, target, state, index) : undefined), [selected, target, tool, state, index]);
 
-  /** Make a move: the unit travels, along the route the search found, and pays for it. */
+  /** Make a move. The unit travels along the route the search found and pays for it. */
   const applyMove = useCallback(
     (unitId: string, to: Vec3, cost: number, modelId?: string, path?: readonly Vec3[]) => editUnit(unitId, (unit) => (modelId ? applyModelMove(unit, modelId, to, cost, path) : applyUnitMove(unit, to, cost, path))),
     [editUnit],
@@ -265,6 +268,17 @@ export function BattlePage() {
     setPlan(undefined);
   }, [plan, applyMove]);
   const onDeploy = useCallback((unitId: string, at: Vec2) => editUnit(unitId, (unit) => deployUnit(unit, at)), [editUnit]);
+
+  /** Turn the active model, or the whole unit, in place; a turn the table refuses is reported, not applied. */
+  const rotateSelection = useCallback(
+    (by: number) => {
+      if (!selected || selected.reserve) return;
+      const verdict = rotateVerdict(state, selected, by, activeModel?.id, index);
+      if (verdict.ok) editUnit(selected.id, () => verdict.unit);
+      else notify(t(verdict.problems[0] as I18nKey), "error");
+    },
+    [selected, activeModel, state, index, editUnit, notify],
+  );
   const deployAll = useCallback(() => dispatch({ type: "units", change: (b) => autoDeploy(autoDeploy(b, "attacker"), "defender") }), []);
 
   /** The planned move's ghost: the model, or the whole formation, standing where it would land. */
@@ -304,7 +318,7 @@ export function BattlePage() {
   const pickUnit = useCallback(
     (id: string | undefined, modelId?: string) => {
       if (tool === "terrain") return;
-      // Under the tape a model is something to measure to, not something to select: the mark goes
+      // Under the tape a model is something to measure to rather than something to select. The mark goes
       // on its base, which is where a player would hold the end of a real one.
       if (tool === "measure") {
         const unit = findUnit(state, id);
@@ -318,7 +332,7 @@ export function BattlePage() {
         return;
       }
       const unit = findUnit(state, id);
-      // Deploying is about units, not models; and a unit still in reserve has nothing to do under
+      // Deploying works on units rather than models, and a unit still in reserve has nothing to do under
       // any other tool, so picking one takes the player to the deploy tool with it in hand.
       if (tool === "deploy" || unit?.reserve) {
         if (tool !== "deploy") setTool("deploy");
@@ -443,6 +457,12 @@ export function BattlePage() {
         return;
       }
 
+      if ((tool === "select" || tool === "deploy") && key === "r" && selected && !selected.reserve) {
+        e.preventDefault();
+        rotateSelection(e.shiftKey ? ROTATE_STEP : -ROTATE_STEP);
+        return;
+      }
+
       const arrow = ARROWS[key];
       if (tool === "terrain") {
         const step = e.shiftKey ? 4 * EDIT_STEP : EDIT_STEP;
@@ -480,7 +500,7 @@ export function BattlePage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, proposeMove, approvePlan, plan, editUnit, pickUnit, setPendingMark]);
+  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, proposeMove, approvePlan, rotateSelection, plan, editUnit, pickUnit, setPendingMark]);
 
   const measureFrom = tool === "measure" ? pendingMark : undefined;
   const live = measureFrom && aim ? tapeDistance(measureFrom, aim) : undefined;
@@ -532,6 +552,7 @@ export function BattlePage() {
                   activeModelId={activeModelId}
                   incoherent={incoherent}
                   reach={tool === "select" ? reach : []}
+                  reachBudget={reachBudget}
                   rays={shot?.rays ?? []}
                   path={tool === "sight" ? (charge?.path ?? []) : (plan?.path ?? [])}
                   planned={planned}
@@ -621,6 +642,7 @@ export function BattlePage() {
               onPick={pickUnit}
               onEdit={editUnit}
               onApprove={approvePlan}
+              onRotate={rotateSelection}
               onDiscard={() => setPlan(undefined)}
               onDeployAll={deployAll}
               onAutoDeploy={(side) => dispatch({ type: "units", change: (b) => autoDeploy(b, side) })}
@@ -642,6 +664,12 @@ export function BattlePage() {
  * unit is out of coherency for most of the time it takes to move, and the player needs to see when
  * it is back rather than be stopped from getting there.
  */
+/** A turn of the selection per press: fifteen degrees. */
+const ROTATE_STEP = Math.PI / 12;
+
+/** A model's facing as a compass-style bearing, 0–359°, counter-clockwise from the table's +x. */
+const facingDegrees = (model: BattleModel | undefined): number => ((Math.round(((model?.hull.facing ?? 0) * 180) / Math.PI) % 360) + 360) % 360;
+
 function MovePanel({
   selected,
   activeModel,
@@ -653,6 +681,7 @@ function MovePanel({
   onEdit,
   onApprove,
   onDiscard,
+  onRotate,
 }: {
   selected?: BattleUnit;
   activeModel?: BattleModel;
@@ -664,6 +693,7 @@ function MovePanel({
   onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
   onApprove: () => void;
   onDiscard: () => void;
+  onRotate: (by: number) => void;
 }) {
   if (!selected) {
     return (
@@ -746,6 +776,16 @@ function MovePanel({
         <>
           <p className="muted small">{activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
           <p className="muted small">{activeModel ? t("battle.nudgeHint") : t("battle.pickModel")}</p>
+          <div className="battle-actions">
+            <button type="button" className="ghost sm" onClick={() => onRotate(ROTATE_STEP)} title={t("battle.rotate.left")} aria-label={t("battle.rotate.left")}>
+              ⟲
+            </button>
+            <span className="muted small">{t("battle.rotate.facing", { deg: facingDegrees(activeModel ?? selected.models[0]) })}</span>
+            <button type="button" className="ghost sm" onClick={() => onRotate(-ROTATE_STEP)} title={t("battle.rotate.right")} aria-label={t("battle.rotate.right")}>
+              ⟳
+            </button>
+          </div>
+          <p className="muted small">{t("battle.rotate.hint")}</p>
         </>
       )}
 
@@ -781,6 +821,7 @@ function BattlePanel({
   onEdit,
   onApprove,
   onDiscard,
+  onRotate,
   onDeployAll,
   onAutoDeploy,
   onClearDeployment,
@@ -805,6 +846,7 @@ function BattlePanel({
   onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
   onApprove: () => void;
   onDiscard: () => void;
+  onRotate: (by: number) => void;
   onDeployAll: () => void;
   onAutoDeploy: (side: Side) => void;
   onClearDeployment: () => void;
@@ -887,7 +929,7 @@ function BattlePanel({
         </section>
       )}
 
-      {tool === "select" ? <MovePanel selected={selected} activeModel={activeModel} drag={drag} plan={plan} reach={reach} upperFloor={upperFloor} onPick={onPick} onEdit={onEdit} onApprove={onApprove} onDiscard={onDiscard} /> : null}
+      {tool === "select" ? <MovePanel selected={selected} activeModel={activeModel} drag={drag} plan={plan} reach={reach} upperFloor={upperFloor} onPick={onPick} onEdit={onEdit} onApprove={onApprove} onDiscard={onDiscard} onRotate={onRotate} /> : null}
 
       {tool === "sight" ? (
         <section className="battle-section">

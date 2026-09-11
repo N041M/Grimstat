@@ -84,7 +84,7 @@ export const remainingMove = (unit: BattleUnit, model: BattleModel): number => M
 /** Has any model of this unit moved since the move began? */
 export const hasMoved = (unit: BattleUnit): boolean => unit.models.some((m) => (m.spent ?? 0) > 0);
 
-/** Coherency of the unit as it currently stands. Reported, never enforced mid-move. */
+/** Coherency of the unit as it currently stands. It is reported and is not enforced mid-move. */
 export const unitCoherency = (unit: BattleUnit): CoherencyReport => coherency(unitHulls(unit));
 
 /** Ids of the models that are out of coherency, for the table to ring in red. */
@@ -233,7 +233,7 @@ export function applyModelMove(unit: BattleUnit, modelId: string, to: Vec3, cost
 /**
  * Can the whole unit move here as a body?
  *
- * A convenience for putting a unit down, not a substitute for moving models: it keeps the formation
+ * A convenience for putting a unit down rather than a substitute for moving models. It keeps the formation
  * and charges every model the lead model's route. Fine for deployment and for a unit crossing open
  * ground; useless for screening, which is what the per-model move is for.
  */
@@ -313,6 +313,30 @@ export function deployUnit(unit: BattleUnit, at: Vec2): BattleUnit {
 /** Take a unit off the table and back into reserve. */
 export const withdrawUnit = (unit: BattleUnit): BattleUnit => ({ ...unit, reserve: true });
 
+/** An angle brought back into (−π, π]. */
+const wrapAngle = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
+
+/** Turn one model, or every model of the unit, by `by` radians about its own base, in place. */
+export function rotateUnit(unit: BattleUnit, by: number, modelId?: string): BattleUnit {
+  return { ...unit, models: unit.models.map((m) => (modelId && m.id !== modelId ? m : { ...m, hull: { ...m.hull, facing: wrapAngle(m.hull.facing + by) } })) };
+}
+
+/**
+ * Whether a turn is allowed, and the turned unit if so.
+ *
+ * A round base turns freely. An oval one sweeps a different footprint, and can swing off the table,
+ * into a wall or another base, or into an enemy's engagement range — the same refusals as a move.
+ */
+export function rotateVerdict(state: BattleState, unit: BattleUnit, by: number, modelId?: string, index = indexOf(state)): { ok: boolean; unit: BattleUnit; problems: string[] } {
+  const turned = rotateUnit(unit, by, modelId);
+  const { enemies, blockers } = obstacles(state, unit);
+  const problems: string[] = [];
+  if (turned.models.some((m) => !onBoard(m.hull, state.layout.size))) problems.push("battle.problem.offTable");
+  if (turned.models.some((m) => !canStand(m.hull, m.hull.pos, index, { keywords: unit.keywords, blockers: [...blockers, ...turned.models.filter((o) => o !== m).map((o) => o.hull)] }))) problems.push("battle.problem.blocked");
+  if (turned.models.some((m) => enemies.some((e) => inEngagementRange(m.hull, e)))) problems.push("battle.problem.engagement");
+  return { ok: !problems.length, unit: turned, problems };
+}
+
 export const clearDeployment = (state: BattleState): BattleState => ({ ...state, units: state.units.map(withdrawUnit) });
 
 /**
@@ -371,8 +395,8 @@ export interface SightReadout {
 /**
  * What one unit can see of another, and at what cost in cover — the readout behind the sight tool.
  *
- * Exhaustive on purpose: stopping at the first clear ray answers the boolean faster but tells the
- * player nothing about how exposed the target is, and the picture is the point.
+ * Exhaustive on purpose. Stopping at the first clear ray would answer the boolean faster but would
+ * tell the player nothing about how exposed the target is, which is what the tool exists to show.
  */
 export function sightBetween(from: BattleUnit, to: BattleUnit, index: TerrainIndex): SightReadout {
   const eye = anchorOf(from);
@@ -423,8 +447,8 @@ export interface Tape {
 
 /**
  * What a mark does: with no tape in progress it starts one; with one in progress it finishes it.
- * A finished tape stays on the table — tapes are removed one at a time, by hand, never by the next
- * measurement — so the caller gets either a new pending mark or a new tape, not both.
+ * A finished tape stays on the table until it is removed by hand; the next measurement does not clear
+ * it. The caller therefore gets either a new pending mark or a new tape, and not both at once.
  */
 export function dropMark(pending: Vec3 | undefined, at: Vec3, id: string): { pending?: Vec3; tape?: Tape } {
   if (!pending) return { pending: at };

@@ -53,6 +53,8 @@ export interface BattleCanvasProps {
   activeModelId?: string;
   incoherent?: ReadonlySet<string>;
   reach?: readonly ReachNode[];
+  /** The movement `reach` was searched with, so the region can be drawn out to its true edge. */
+  reachBudget?: number;
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
   /** A planned move not yet approved: the unit's ghost standing where it would go. */
@@ -110,7 +112,7 @@ export function BattleCanvas(props: BattleCanvasProps) {
   );
 }
 
-/** Whatever the pointer is holding: a model, a terrain piece or an objective, and where on it. */
+/** Whatever the pointer is holding (a model, a terrain piece or an objective) and where on it. */
 type Held =
   | { readonly kind: "model"; readonly unitId: string; readonly modelId: string; readonly offset: Vec2 }
   | { readonly kind: "piece"; readonly id: string; readonly offset: Vec2 }
@@ -125,7 +127,7 @@ type Held =
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, rays, path, planned, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
@@ -211,31 +213,32 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
     const unit = findUnit(state, drag.unitId);
     if (!unit) return undefined;
     const kind = silhouetteFor(unit.keywords);
-    // The ghost stands where it would land. Only when the move is refused does it follow the pointer
-    // instead, so the player can see what they are pointing at and why it will not do.
-    const spot = drag.at ?? drag.to;
+    // The ghost follows the hand, so a drag feels like picking the model up rather than pushing it
+    // from cell to cell; only its storey comes from the search. What the drop settles into is the
+    // search's answer — the nearest cell it would actually land in — which is where it snaps.
+    const spot = drag.to;
     if (dragMode === "deploy") return { hulls: unitHulls(placeUnit(unit, spot)), kind };
     if (drag.modelId) {
       const model = findModel(unit, drag.modelId);
       return model ? { hulls: [{ ...model.hull, pos: { x: spot.x, y: spot.y, z: drag.at?.z ?? model.hull.pos.z } }], kind } : undefined;
     }
     const anchor = anchorOf(unit);
-    return { hulls: unitHulls(translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y })), kind };
+    return { hulls: unitHulls(translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y }, drag.at?.z)), kind };
   }, [drag, state, dragMode]);
 
   /**
-   * A drag follows the window, not the table mesh.
+   * A drag follows the window rather than the table mesh.
    *
    * Asking three.js which object is under the pointer answers "the ruin" or "another unit" as often
    * as "the table", and nothing at all once the pointer leaves the canvas — so a drag wired to the
    * table's own hover events stops updating exactly when the player moves somewhere interesting.
    * Casting against a mathematical plane at the unit's own height has no such gaps, and it is the
-   * right plane anyway: a unit being dragged along a gantry should track the gantry, not the floor.
+   * right plane anyway, since a unit being dragged along a gantry should track the gantry rather than the floor.
    *
    * The same reasoning applies to the release. It happens over the side panel as often as not.
    *
-   * One verdict per animation frame, not per event: a pointer reports far faster than the movement
-   * search finishes, and every event judged is a frame not drawn.
+   * There is one verdict per animation frame rather than per event, because a pointer reports far faster
+   * than the movement search finishes, and every event judged is a frame not drawn.
    */
   useEffect(() => {
     const ray = new Raycaster();
@@ -322,7 +325,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         cancelAnimationFrame(frame);
         frame = 0;
       }
-      // Land where the pointer let go, not where the last drawn frame had it.
+      // Land where the pointer let go rather than where the last drawn frame had it.
       if (last) follow(last);
       held.current = undefined;
       last = undefined;
@@ -364,7 +367,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       <Zones zones={state.zones} highlight={highlightZone} />
       <Terrain pieces={state.layout.pieces} selectedId={editing?.pieceId} onPick={editing ? pickPiece : undefined} />
       <Objectives objectives={state.layout.objectives} selectedId={editing?.objectiveId} onPick={editing ? pickObjective : undefined} />
-      {reach?.length ? <ReachOverlay nodes={reach} size={state.layout.size} /> : null}
+      {reach?.length ? <ReachOverlay nodes={reach} size={state.layout.size} budget={reachBudget} /> : null}
       {rays?.length ? <SightRays rays={rays} /> : null}
       {path?.length ? <PathLine path={path} /> : null}
       {tapes?.map((tape) => (

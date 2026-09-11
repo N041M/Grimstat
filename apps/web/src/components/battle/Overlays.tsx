@@ -1,33 +1,35 @@
 import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, Line, LineBasicMaterial } from "three";
 import type { BoardSize, ReachNode, Vec3 } from "@grimstat/board";
 import { SCENE_COLOURS, toScene, writeScene } from "../../lib/battleScene";
+import { reachMask, type ReachMask } from "../../lib/reachMask";
 import { useDisposable } from "./useDisposable";
 
 /**
  * Where the selected unit can go, as one smooth region per storey.
  *
  * The search answers in half-inch cells, and a field of little squares reads as a staircase. So
- * the cells are rasterised: a disc a little wider than half a cell is painted for each reachable
- * position into an off-screen canvas at eight pixels to the inch, and the union of those discs —
- * whose scallops are a fraction of a pixel — becomes the alpha of one plane laid over the table.
+ * the region is drawn instead — see `reachMask`: every point within the movement a node has left,
+ * with the edge smoothed to its true outline — as the alpha of one plane laid over the table.
  * Cells on an upper floor get their own plane at that height, in a different colour, because "you
  * can get there" and "you can get there *and* be a storey up" are different tactical facts.
+ * `budget` is the movement the region was searched with; without it the furthest node stands in.
  */
-export function ReachOverlay({ nodes, size, cell = 0.5 }: { nodes: readonly ReachNode[]; size: BoardSize; cell?: number }) {
+export function ReachOverlay({ nodes, size, cell = 0.5, budget }: { nodes: readonly ReachNode[]; size: BoardSize; cell?: number; budget?: number }) {
   const layers = useDisposable(() => {
-    const byStorey = new Map<number, Vec3[]>();
+    const byStorey = new Map<number, ReachNode[]>();
     for (const n of nodes) {
       const z = Math.round(n.at.z * 10) / 10;
-      (byStorey.get(z) ?? byStorey.set(z, []).get(z)!).push(n.at);
+      (byStorey.get(z) ?? byStorey.set(z, []).get(z)!).push(n);
     }
-    const built = [...byStorey.entries()].map(([z, points]) => ({ z, texture: rasterise(points, size, cell) }));
+    const spend = budget ?? nodes.reduce((m, n) => Math.max(m, n.cost), 0) + cell;
+    const built = [...byStorey.entries()].map(([z, storey]) => ({ z, texture: textureOf(reachMask(storey, size, cell, spend)) }));
     return {
       layers: built,
       dispose() {
         for (const l of built) l.texture.dispose();
       },
     };
-  }, [nodes, size.width, size.depth, cell]);
+  }, [nodes, size.width, size.depth, cell, budget]);
 
   return (
     <group>
@@ -41,29 +43,23 @@ export function ReachOverlay({ nodes, size, cell = 0.5 }: { nodes: readonly Reac
   );
 }
 
-/** Pixels to the inch in the reach mask: enough that a disc's edge is a curve, not a step. */
-const MASK_PPI = 8;
-
 /**
- * Paint the reachable positions as overlapping discs into a canvas the size of the table.
- *
- * The disc radius is just over the half-diagonal of a cell, so diagonal neighbours touch and the
- * region closes; the scallops left between them are under a tenth of an inch, less than a pixel.
- * Canvas rows run top-down and the table's y runs away from the near edge, so a row is `depth − y`.
+ * The mask as a texture: its coverage in every channel of an opaque canvas, since an alpha map
+ * reads the green channel. The mask's rows already run from the table's far edge, as a canvas's do.
  */
-function rasterise(points: readonly Vec3[], size: BoardSize, cell: number): CanvasTexture {
+function textureOf(mask: ReachMask): CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.ceil(size.width * MASK_PPI));
-  canvas.height = Math.max(1, Math.ceil(size.depth * MASK_PPI));
+  canvas.width = mask.width;
+  canvas.height = mask.height;
   const ctx = canvas.getContext("2d");
   if (ctx) {
-    ctx.fillStyle = "#fff";
-    const r = cell * 0.78 * MASK_PPI;
-    for (const p of points) {
-      ctx.beginPath();
-      ctx.arc(p.x * MASK_PPI, (size.depth - p.y) * MASK_PPI, r, 0, Math.PI * 2);
-      ctx.fill();
+    const image = ctx.createImageData(mask.width, mask.height);
+    const px = image.data;
+    for (let i = 0, j = 0; i < mask.alpha.length; i++, j += 4) {
+      px[j] = px[j + 1] = px[j + 2] = mask.alpha[i]!;
+      px[j + 3] = 255;
     }
+    ctx.putImageData(image, 0, 0);
   }
   const texture = new CanvasTexture(canvas);
   texture.needsUpdate = true;

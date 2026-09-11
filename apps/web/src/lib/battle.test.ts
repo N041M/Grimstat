@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, coherency, inZone } from "@grimstat/board";
+import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, coherency, inZone, ovalBase } from "@grimstat/board";
 import {
   anchorOf,
   applyModelMove,
@@ -17,6 +17,8 @@ import {
   modelReach,
   remainingMove,
   resetMove,
+  rotateUnit,
+  rotateVerdict,
   unitCoherency,
   chargeBetween,
   chargeOdds,
@@ -476,3 +478,25 @@ describe("routes", () => {
   });
 });
 
+
+describe("turning in place", () => {
+  it("turns one model, or the whole unit, about its own base and keeps the angle in range", () => {
+    const unit = attacker(0);
+    const one = rotateUnit(unit, Math.PI / 12, unit.models[1]!.id);
+    expect(one.models[1]!.hull.facing).toBeCloseTo(Math.PI / 12);
+    expect(one.models[0]!.hull.facing).toBe(unit.models[0]!.hull.facing);
+    expect(one.models[1]!.hull.pos).toEqual(unit.models[1]!.hull.pos);
+    const all = rotateUnit(unit, 2 * Math.PI + 0.1);
+    for (const m of all.models) expect(m.hull.facing).toBeCloseTo(0.1);
+  });
+
+  it("lets a round base turn anywhere, but not an oval one that would swing off the table", () => {
+    const round = { ...attacker(0), models: [{ ...attacker(0).models[0]!, hull: { ...attacker(0).models[0]!.hull, pos: { x: 2, y: 10, z: 0 } } }] };
+    expect(rotateVerdict(state, round, Math.PI / 2).ok).toBe(true);
+    const tank = { ...round, models: [{ ...round.models[0]!, hull: { ...round.models[0]!.hull, foot: ovalBase(120, 92), facing: Math.PI / 2 } }] };
+    expect(rotateVerdict(state, tank, 0).ok).toBe(true); // long axis along the edge: on the table
+    const swung = rotateVerdict(state, tank, -Math.PI / 2); // long axis across the edge: off it
+    expect(swung.ok).toBe(false);
+    expect(swung.problems).toContain("battle.problem.offTable");
+  });
+});
