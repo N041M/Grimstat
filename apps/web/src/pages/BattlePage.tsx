@@ -297,7 +297,7 @@ export function BattlePage() {
 
   /** Turn the active model, or the whole unit, in place; a turn the table refuses is reported, not applied. */
   const rotateSelection = useCallback(
-    (by: number) => {
+    (by: number, quiet = false) => {
       if (grouped) {
         // Every unit with a member turns its members; one refusal stops the lot, so the group stays consistent.
         const byUnit = new Map<string, Set<string>>();
@@ -308,7 +308,7 @@ export function BattlePage() {
           if (!unit) continue;
           const verdict = rotateVerdict(state, unit, by, ids, index);
           if (!verdict.ok) {
-            notify(t(verdict.problems[0] as I18nKey), "error");
+            if (!quiet) notify(t(verdict.problems[0] as I18nKey), "error");
             return;
           }
           turned.set(unitId, verdict.unit);
@@ -319,10 +319,18 @@ export function BattlePage() {
       if (!selected || selected.reserve) return;
       const verdict = rotateVerdict(state, selected, by, activeModel?.id, index);
       if (verdict.ok) editUnit(selected.id, () => verdict.unit);
-      else notify(t(verdict.problems[0] as I18nKey), "error");
+      else if (!quiet) notify(t(verdict.problems[0] as I18nKey), "error");
     },
     [selected, activeModel, state, index, editUnit, notify, grouped, group],
   );
+  /** The ring is dragged: the same turn as R, applied as the hand goes round, with refusals kept quiet. */
+  const turnSelection = useCallback((by: number) => rotateSelection(by, true), [rotateSelection]);
+  /** The model whose ring turns the selection: the active model, or a unit's leading model. */
+  const turnRing = useMemo(() => {
+    if (!selected || selected.reserve || (tool !== "select" && tool !== "deploy")) return undefined;
+    const model = activeModel ?? selected.models[0];
+    return model ? { unitId: selected.id, modelId: model.id, hull: model.hull } : undefined;
+  }, [selected, activeModel, tool]);
   const deployAll = useCallback(() => dispatch({ type: "units", change: (b) => autoDeploy(autoDeploy(b, "attacker"), "defender") }), []);
 
   /** The planned move's ghost: the model, or the whole formation, standing where it would land. */
@@ -684,6 +692,8 @@ export function BattlePage() {
                   onBoxSelect={onBoxSelect}
                   onMoveGroup={proposeGroupMove}
                   marqueeRef={marqueeRef}
+                  turnRing={turnRing}
+                  onTurn={turnSelection}
                   onMove={proposeMove}
                   onDrag={onDrag}
                   onTableDown={onTableDown}

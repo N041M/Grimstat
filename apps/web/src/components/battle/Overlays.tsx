@@ -1,6 +1,9 @@
+import { useState } from "react";
+import type { ThreeEvent } from "@react-three/fiber";
 import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, Line, LineBasicMaterial } from "three";
-import type { BoardSize, ReachNode, Vec3 } from "@grimstat/board";
-import { SCENE_COLOURS, toScene, writeScene } from "../../lib/battleScene";
+import type { BoardSize, ModelHull, ReachNode, Vec2, Vec3 } from "@grimstat/board";
+import { footReach } from "@grimstat/board";
+import { SCENE_COLOURS, fromScene, toScene, writeScene } from "../../lib/battleScene";
 import { reachMask, type ReachMask } from "../../lib/reachMask";
 import { useDisposable } from "./useDisposable";
 
@@ -64,6 +67,53 @@ function textureOf(mask: ReachMask): CanvasTexture {
   const texture = new CanvasTexture(canvas);
   texture.needsUpdate = true;
   return texture;
+}
+
+/** How far outside the base the turn ring's band starts and ends, in inches. */
+const RING_IN = 0.12;
+const RING_OUT = 0.42;
+
+/**
+ * The turn ring: a band around the selected model's base with a knob at its facing.
+ *
+ * Dragging the band turns the model to follow the hand, which is how a player turns a miniature
+ * on the table: by its base, not by a key. The knob shows which way the model faces, so a round
+ * base has a direction the eye can read.
+ */
+export function TurnRing({ hull, onGrab }: { hull: ModelHull; onGrab: (at: Vec2) => void }) {
+  const [hot, setHot] = useState(false);
+  const r = footReach(hull.foot);
+  const reach = r + (RING_IN + RING_OUT) / 2;
+  const knob = { x: hull.pos.x + reach * Math.cos(hull.facing), y: hull.pos.y + reach * Math.sin(hull.facing), z: hull.pos.z + 0.12 };
+  return (
+    <group>
+      <mesh
+        position={toScene({ x: hull.pos.x, y: hull.pos.y, z: hull.pos.z + 0.05 })}
+        rotation={[-Math.PI / 2, 0, 0]}
+        onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+          e.stopPropagation();
+          const p = fromScene(e.point.x, e.point.y, e.point.z);
+          onGrab({ x: p.x, y: p.y });
+        }}
+        onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+          e.stopPropagation();
+          setHot(true);
+          if (!document.body.style.cursor) document.body.style.cursor = "grab";
+        }}
+        onPointerOut={() => {
+          setHot(false);
+          if (document.body.style.cursor === "grab") document.body.style.cursor = "";
+        }}
+      >
+        <ringGeometry args={[r + RING_IN, r + RING_OUT, 48]} />
+        <meshBasicMaterial color={SCENE_COLOURS.selected} transparent opacity={hot ? 0.7 : 0.35} side={DoubleSide} depthWrite={false} />
+      </mesh>
+      <mesh position={toScene(knob)}>
+        <sphereGeometry args={[0.16, 12, 8]} />
+        <meshBasicMaterial color={SCENE_COLOURS.selected} />
+      </mesh>
+    </group>
+  );
 }
 
 /**

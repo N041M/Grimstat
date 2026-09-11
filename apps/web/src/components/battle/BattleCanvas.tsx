@@ -10,7 +10,7 @@ import { Cameras, type CameraMode } from "./Cameras";
 import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
 import { Ghost, UnitTokens, livePositions } from "./UnitTokens";
 import { silhouetteFor, type SilhouetteId } from "../../lib/silhouettes";
-import { MeasureLine, MeasureMarker, PathLine, Protractor, ReachOverlay, SightRays, TapeObject } from "./Overlays";
+import { MeasureLine, MeasureMarker, PathLine, Protractor, ReachOverlay, SightRays, TapeObject, TurnRing } from "./Overlays";
 
 export type { CameraMode };
 
@@ -72,6 +72,10 @@ export interface BattleCanvasProps {
   onMoveGroup?(moves: readonly GroupMove[]): void;
   /** The selection box, drawn over the table by the page and placed by the canvas. */
   marqueeRef?: RefObject<HTMLDivElement>;
+  /** The model whose ring turns the selection, when there is one to turn. */
+  turnRing?: { readonly unitId: string; readonly modelId: string; readonly hull: ModelHull };
+  /** The ring is being dragged: turn the selection by this much more, quietly refusing what will not go. */
+  onTurn?(by: number): void;
   /** Tapes left on the table. Each stays until its line is double-clicked. */
   tapes?: readonly Tape[];
   onTapeRemove?(id: string): void;
@@ -147,6 +151,8 @@ type Held =
   | { readonly kind: "group"; readonly lead: string; readonly members: readonly GroupMember[]; readonly offset: Vec2 }
   /** A selection box being drawn, from where the press was in window pixels. */
   | { readonly kind: "box"; readonly start: { readonly x: number; readonly y: number }; readonly additive: boolean }
+  /** The turn ring in hand: the bearing of the press from the model's centre, and the facing it had. */
+  | { readonly kind: "turn"; readonly leadId: string; readonly centre: Vec2; readonly z: number; readonly startAngle: number; readonly startFacing: number }
   | { readonly kind: "piece"; readonly id: string; readonly offset: Vec2 }
   | { readonly kind: "objective"; readonly id: string; readonly offset: Vec2 };
 
@@ -159,7 +165,7 @@ type Held =
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, groupIds, onBoxSelect, onMoveGroup, marqueeRef, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, groupIds, onBoxSelect, onMoveGroup, marqueeRef, turnRing, onTurn, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
@@ -175,8 +181,8 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
 
   // The window listeners are registered once and read the latest of everything through this ref,
   // rather than being torn down and re-added on every render — which, during a drag, is every frame.
-  const latest = useRef({ state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, groupIds, onBoxSelect, onMoveGroup });
-  latest.current = { state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, groupIds, onBoxSelect, onMoveGroup };
+  const latest = useRef({ state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, groupIds, onBoxSelect, onMoveGroup, onTurn });
+  latest.current = { state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, groupIds, onBoxSelect, onMoveGroup, onTurn };
 
   // A tape with no first mark has no free end.
   useEffect(() => {
@@ -257,6 +263,16 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       hold({ kind: "model", unitId: planned.unitId, ...(planned.modelId ? { modelId: planned.modelId } : {}), offset: { x: anchor.pos.x - at.x, y: anchor.pos.y - at.y } });
     },
     [planned, canDrag, dragMode, hold],
+  );
+
+  /** Take hold of the turn ring: remember the bearing of the press and the facing it started from. */
+  const grabRing = useCallback(
+    (at: Vec2) => {
+      if (!turnRing || !canDrag) return;
+      const centre = { x: turnRing.hull.pos.x, y: turnRing.hull.pos.y };
+      hold({ kind: "turn", leadId: turnRing.modelId, centre, z: turnRing.hull.pos.z, startAngle: Math.atan2(at.y - centre.y, at.x - centre.x), startFacing: turnRing.hull.facing });
+    },
+    [turnRing, canDrag, hold],
   );
 
   const pickPiece = useCallback(
@@ -417,6 +433,20 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         return;
       }
 
+      if (what.kind === "turn") {
+        const at = pointAt(e, what.z);
+        const lead = modelIn(now, what.leadId);
+        if (!at || !lead) return;
+        // The model faces where the hand has dragged the ring to, relative to where it took hold;
+        // Shift snaps that to fifteen degrees. Only the part not yet turned is asked for, so a turn
+        // the table refuses is simply not made, and does not accumulate.
+        let target = what.startFacing + (Math.atan2(at.y - what.centre.y, at.x - what.centre.x) - what.startAngle);
+        if (e.shiftKey) target = Math.round(target / (Math.PI / 12)) * (Math.PI / 12);
+        const residual = Math.atan2(Math.sin(target - lead.model.hull.facing), Math.cos(target - lead.model.hull.facing));
+        if (Math.abs(residual) > 1e-3) latest.current.onTurn?.(residual);
+        return;
+      }
+
       if (what.kind !== "model") {
         const at = pointAt(e, 0);
         if (!at) return;
@@ -490,6 +520,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         }
         return;
       }
+      if (what.kind === "turn") return;
       if (what.kind !== "model" && what.kind !== "group") {
         latest.current.editing?.onDrop();
         return;
@@ -543,6 +574,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       <Terrain pieces={state.layout.pieces} selectedId={editing?.pieceId} onPick={editing ? pickPiece : undefined} />
       <Objectives objectives={state.layout.objectives} selectedId={editing?.objectiveId} onPick={editing ? pickObjective : undefined} />
       {reach?.length ? <ReachOverlay nodes={reach} size={state.layout.size} budget={reachBudget} /> : null}
+      {turnRing && canDrag && !drag ? <TurnRing hull={turnRing.hull} onGrab={grabRing} /> : null}
       {rays?.length ? <SightRays rays={rays} /> : null}
       {/* While something is being dragged, the route drawn is the drag's own; the plan's waits. */}
       {(drag ? drag.path : path)?.length ? <PathLine path={(drag ? drag.path : path)!} /> : null}
