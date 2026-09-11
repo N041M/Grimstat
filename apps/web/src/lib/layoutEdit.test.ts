@@ -4,6 +4,7 @@ import {
   addObjective,
   addPiece,
   centre,
+  edgeOffsetsOf,
   emptyLayout,
   extent,
   freeId,
@@ -11,6 +12,7 @@ import {
   layoutIssues,
   mirror,
   moveObjective,
+  placeByEdges,
   movePiece,
   placePiece,
   removeObjective,
@@ -108,6 +110,72 @@ describe("storeys", () => {
   it("leaves a hand-chosen climbing list alone", () => {
     const custom = updatePiece(addPiece(blank(), box("t", { x: 20, y: 20 }, 8, 8, 9, [], [0, 4])), "t", (p) => ({ ...p, climbableBy: ["MONSTER"] }));
     expect(setStoreys(custom, "t", 3).pieces[0]!.climbableBy).toEqual(["MONSTER"]);
+  });
+});
+
+describe("placing by measurement", () => {
+  // Published layouts give two distances and a corner, because that is how terrain is placed with a
+  // tape measure. Transcribing one should be typing those numbers, not converting them to a centre.
+  const at = (layout: ReturnType<typeof blank>) => edgeOffsetsOf(layout, layout.pieces[0]!);
+
+  it("puts the named corner exactly where the measurements say", () => {
+    const layout = placeByEdges(withRuin(), "r1", { fromLeft: 17, fromBottom: 8 });
+    const box = at(layout);
+    expect(box.fromLeft).toBeCloseTo(17);
+    expect(box.fromBottom).toBeCloseTo(8);
+    expect(extent(layout.pieces[0]!)).toEqual({ width: 8, depth: 6 }); // the piece kept its size
+  });
+
+  it("measures from whichever edge was named", () => {
+    const layout = placeByEdges(withRuin(), "r1", { fromRight: 12, fromTop: 9 });
+    const box = at(layout);
+    expect(box.fromRight).toBeCloseTo(12);
+    expect(box.fromTop).toBeCloseTo(9);
+  });
+
+  it("reads back every edge, so a transcription can be checked against the diagram", () => {
+    const layout = placeByEdges(withRuin(), "r1", { fromLeft: 17, fromBottom: 8 });
+    const box = at(layout);
+    // Each reading is to the piece's own near side, so the four must account for the piece's size.
+    expect(box.fromLeft + 8 + box.fromRight).toBeCloseTo(SF.width);
+    expect(box.fromBottom + 6 + box.fromTop).toBeCloseTo(SF.depth);
+  });
+
+  it("prefers the edge that was named when both are given", () => {
+    const layout = placeByEdges(withRuin(), "r1", { fromLeft: 10, fromRight: 99, fromBottom: 5, fromTop: 99 });
+    const box = at(layout);
+    expect(box.fromLeft).toBeCloseTo(10);
+    expect(box.fromBottom).toBeCloseTo(5);
+  });
+
+  it("leaves an axis alone when that axis has no measurement", () => {
+    const start = at(withRuin());
+    const layout = placeByEdges(withRuin(), "r1", { fromLeft: 3 });
+    expect(at(layout).fromLeft).toBeCloseTo(3);
+    expect(at(layout).fromBottom).toBeCloseTo(start.fromBottom);
+  });
+
+  it("round-trips from either pair of edges", () => {
+    const original = withRuin();
+    const read = edgeOffsetsOf(original, original.pieces[0]!);
+    const moved = movePiece(original, "r1", { x: 9, y: -4 });
+    for (const pair of [{ fromLeft: read.fromLeft, fromBottom: read.fromBottom }, { fromRight: read.fromRight, fromTop: read.fromTop }]) {
+      const replaced = placeByEdges(moved, "r1", pair);
+      expect(centre(replaced.pieces[0]!).x).toBeCloseTo(centre(original.pieces[0]!).x);
+      expect(centre(replaced.pieces[0]!).y).toBeCloseTo(centre(original.pieces[0]!).y);
+    }
+  });
+
+  it("never needs a corner, because an edge distance names its own side", () => {
+    // 17 from the left and 35 from the right describe the same 8" piece on a 60" table.
+    const left = placeByEdges(withRuin(), "r1", { fromLeft: 17 });
+    const right = placeByEdges(withRuin(), "r1", { fromRight: SF.width - 17 - 8 });
+    expect(centre(left.pieces[0]!).x).toBeCloseTo(centre(right.pieces[0]!).x);
+  });
+
+  it("does nothing to a piece that is not there", () => {
+    const layout = withRuin();
+    expect(placeByEdges(layout, "nope", { fromLeft: 1 })).toEqual(layout);
   });
 });
 

@@ -108,6 +108,59 @@ export function setStoreys(layout: TerrainLayout, id: string, storeys: number, s
   });
 }
 
+/* ---- placing by measurement ------------------------------------------------------------------ */
+
+/**
+ * How far a piece sits from each board edge, measured to its nearest side on that axis.
+ *
+ * This is the form published layouts are written in — "17 inches from the left edge, 8 from the
+ * bottom" — because it is how terrain is placed with a tape measure. Nobody measures to a centre.
+ *
+ * Note there is no "which corner" to choose: a distance from the left edge is a distance to the
+ * piece's left side, and from the right edge to its right side. Conflating the two is how a
+ * transcription silently ends up a piece-width out.
+ */
+export interface EdgeOffsets {
+  /** Board's left edge (x = 0) to the piece's left side. */
+  readonly fromLeft?: number;
+  /** Board's right edge (x = width) to the piece's right side. */
+  readonly fromRight?: number;
+  /** Board's bottom edge (y = 0) to the piece's bottom side. */
+  readonly fromBottom?: number;
+  /** Board's top edge (y = depth) to the piece's top side. */
+  readonly fromTop?: number;
+}
+
+/**
+ * Where a piece currently sits, from every edge.
+ *
+ * The read-back matters as much as the write: with both, transcribing a published layout is typing
+ * two numbers off the diagram and then checking the other two against it. A layout entered correctly
+ * says so in the same units the diagram used.
+ */
+export function edgeOffsetsOf(layout: TerrainLayout, piece: TerrainPiece): Required<EdgeOffsets> {
+  const box = bounds(piece.polygon);
+  return { fromLeft: box.minX, fromRight: layout.size.width - box.maxX, fromBottom: box.minY, fromTop: layout.size.depth - box.maxY };
+}
+
+/**
+ * Place a piece by the measurements a published layout gives.
+ *
+ * Whichever edge is named wins; the opposite one is ignored rather than fought with, so passing both
+ * is not an error the user has to resolve. An axis with no measurement at all is left where it is,
+ * which is what lets one axis be set at a time.
+ */
+export function placeByEdges(layout: TerrainLayout, id: string, offsets: EdgeOffsets): TerrainLayout {
+  const piece = layout.pieces.find((p) => p.id === id);
+  if (!piece) return layout;
+  const box = bounds(piece.polygon);
+
+  const dx = offsets.fromLeft !== undefined ? offsets.fromLeft - box.minX : offsets.fromRight !== undefined ? layout.size.width - offsets.fromRight - box.maxX : 0;
+  const dy = offsets.fromBottom !== undefined ? offsets.fromBottom - box.minY : offsets.fromTop !== undefined ? layout.size.depth - offsets.fromTop - box.maxY : 0;
+
+  return movePiece(layout, id, { x: dx, y: dy });
+}
+
 /* ---- objectives ---------------------------------------------------------------------------- */
 
 export function addObjective(layout: TerrainLayout, at: Vec2): TerrainLayout {

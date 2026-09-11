@@ -6,11 +6,13 @@ import {
   addObjective,
   addPiece,
   centre,
+  edgeOffsetsOf,
   extent,
   freeId,
   isSymmetric,
   layoutIssues,
   mirror,
+  placeByEdges,
   removePiece,
   resizePiece,
   rotatePiece,
@@ -91,6 +93,18 @@ export function TerrainPanel({
             <Dimension label={t("battle.terrain.height")} value={piece.height} min={0} step={0.5} onChange={(v) => onChange(updatePiece(layout, piece.id, (p) => ({ ...p, height: Math.max(0, v) })))} />
             <Dimension label={t("battle.terrain.storeys")} value={piece.floors.length} min={1} step={1} onChange={(v) => onChange(setStoreys(layout, piece.id, v))} />
 
+            {/* The form a published layout is actually written in. Typing two of these places the
+                piece exactly; the other two update so the entry can be checked against the diagram. */}
+            <fieldset className="battle-edges">
+              <legend>{t("battle.terrain.fromEdges")}</legend>
+              <div className="battle-edge-grid">
+                <Dimension label={t("battle.terrain.fromLeft")} value={edgeOffsetsOf(layout, piece).fromLeft} min={-999} step={0.5} onChange={(v) => onChange(placeByEdges(layout, piece.id, { fromLeft: v }))} />
+                <Dimension label={t("battle.terrain.fromRight")} value={edgeOffsetsOf(layout, piece).fromRight} min={-999} step={0.5} onChange={(v) => onChange(placeByEdges(layout, piece.id, { fromRight: v }))} />
+                <Dimension label={t("battle.terrain.fromBottom")} value={edgeOffsetsOf(layout, piece).fromBottom} min={-999} step={0.5} onChange={(v) => onChange(placeByEdges(layout, piece.id, { fromBottom: v }))} />
+                <Dimension label={t("battle.terrain.fromTop")} value={edgeOffsetsOf(layout, piece).fromTop} min={-999} step={0.5} onChange={(v) => onChange(placeByEdges(layout, piece.id, { fromTop: v }))} />
+              </div>
+            </fieldset>
+
             <fieldset className="battle-traits">
               <legend>{t("battle.terrain.traits")}</legend>
               {EDITABLE_TRAITS.map((trait) => (
@@ -118,7 +132,7 @@ export function TerrainPanel({
             </div>
           </>
         )}
-        <p className="muted small">{t("battle.terrain.dragHint")}</p>
+        <p className="muted small">{piece ? t("battle.terrain.edgesHint") : t("battle.terrain.dragHint")}</p>
       </section>
 
       <section className="battle-section">

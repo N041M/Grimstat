@@ -858,6 +858,12 @@ export const en = {
   "battle.terrain.issues": "{n} problems",
   "battle.terrain.noIssues": "Playable",
   "battle.terrain.dragHint": "Drag a piece to move it.",
+  "battle.terrain.fromEdges": "From the board edges",
+  "battle.terrain.fromLeft": "Left",
+  "battle.terrain.fromRight": "Right",
+  "battle.terrain.fromBottom": "Bottom",
+  "battle.terrain.fromTop": "Top",
+  "battle.terrain.edgesHint": "Published layouts are given as distances from two board edges. Type them here; the other two are shown so you can check the transcription against the diagram.",
 
   "battle.library": "Layouts",
   "battle.library.save": "Save",

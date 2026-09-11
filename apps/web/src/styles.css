@@ -5712,3 +5712,25 @@ button.battle-scope-btn:hover {
   font-size: 11px;
   margin-top: 6px;
 }
+.battle-edges {
+  margin: 8px 0 0;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-input);
+}
+.battle-edges legend {
+  padding: 0 4px;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.battle-edge-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+.battle-edge-grid .battle-dim {
+  grid-template-columns: 1fr 52px;
+  margin: 0;
+}
