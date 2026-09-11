@@ -153,6 +153,12 @@ describe("stopping early", () => {
     expect(reach.nodes.length).toBeLessThan(reachable(model(0, 0), 12, index()).nodes.length);
   });
 
+  it("stops on the starting position when that already satisfies the condition", () => {
+    const reach = reachable(model(5, 5), 6, index(), { until: (at) => Math.hypot(at.x - 5, at.y - 5) < 0.1 });
+    expect(reach.stoppedAt).toBe(0);
+    expect(reach.nodes[0]!.cost).toBe(0);
+  });
+
   it("leaves `stoppedAt` unset when the condition is never met", () => {
     expect(reachable(model(0, 0), 6, index(), { until: (at) => at.x > 100 }).stoppedAt).toBeUndefined();
   });

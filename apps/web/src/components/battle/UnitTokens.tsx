@@ -39,11 +39,14 @@ function ModelToken({ hull, colour, ghost, selected }: { hull: ModelHull; colour
 export function UnitTokens({
   units,
   selectedId,
+  draggable = true,
   onSelect,
   onGrab,
 }: {
   units: readonly BattleUnit[];
   selectedId?: string;
+  /** Only the cursor: whether the press actually picks the unit up is the scene's decision. */
+  draggable?: boolean;
   onSelect?: (id: string) => void;
   onGrab?: (id: string) => void;
 }) {
@@ -58,7 +61,7 @@ export function UnitTokens({
             onGrab?.(unit.id);
           }}
           onPointerOver={() => {
-            document.body.style.cursor = "grab";
+            document.body.style.cursor = draggable ? "grab" : "pointer";
           }}
           onPointerOut={() => {
             document.body.style.cursor = "";

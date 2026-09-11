@@ -101,6 +101,35 @@ describe("drag legality", () => {
     expect(verdict.cost).toBeLessThanOrEqual(unit.move);
   });
 
+  it("allows a destination that falls between the search lattice's cells", () => {
+    // The search settles on half-inch cells anchored at the unit, so a destination offset by a
+    // quarter inch on both axes is 0.35" from every cell — further than a tight match would allow,
+    // and a tenth of an inch of movement is not a reason to refuse a move.
+    const unit = attacker();
+    const at = anchorOf(unit).pos;
+    const verdict = dragVerdict(state, unit, { x: at.x + 0.25, y: at.y + 0.25 }, index);
+    expect(verdict.problems).not.toContain("battle.problem.tooFar");
+    expect(verdict.ok).toBe(true);
+  });
+
+  it("reports the position it actually costed, not the raw click", () => {
+    const unit = attacker();
+    const at = anchorOf(unit).pos;
+    const verdict = dragVerdict(state, unit, { x: at.x + 3.2, y: at.y + 1.1 }, index);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.at).toBeDefined();
+    // Whatever it costed, that is where the unit goes: the two can never drift apart.
+    expect(Math.hypot(verdict.at!.x - at.x, verdict.at!.y - at.y)).toBeLessThanOrEqual(verdict.cost! + 0.01);
+  });
+
+  it("allows a unit to be put back where it already is", () => {
+    const unit = attacker();
+    const at = anchorOf(unit).pos;
+    const verdict = dragVerdict(state, unit, { x: at.x, y: at.y }, index);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.cost).toBe(0);
+  });
+
   it("refuses a move further than the unit can go", () => {
     const unit = attacker();
     const at = anchorOf(unit).pos;

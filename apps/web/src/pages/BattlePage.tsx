@@ -73,8 +73,12 @@ export function BattlePage() {
   const selected = findUnit(state, selectedId);
   const target = findUnit(state, targetId);
 
-  // Changing tool or unit invalidates whatever the previous tool was showing.
-  useEffect(() => setPicks([]), [tool, selectedId]);
+  // Changing tool or unit invalidates whatever the previous tool was showing — including a refusal,
+  // which is about one attempted destination and reads as a live warning once it outlives it.
+  useEffect(() => {
+    setPicks([]);
+    setDrag(undefined);
+  }, [tool, selectedId]);
   useEffect(() => setTargetId(undefined), [selectedId]);
 
   /** Where the selected unit can go. Recomputed when it moves, not while the pointer moves. */
@@ -106,9 +110,12 @@ export function BattlePage() {
   );
 
   /**
-   * One rule for clicking a unit, wherever it is clicked: an enemy of the selected unit becomes the
-   * target, anything else becomes the selection. Without the side check, the sight tool will happily
-   * measure a unit's line of sight to its own side, which is never a question anyone is asking.
+   * One rule for clicking a unit, wherever it is clicked: under the sight tool an enemy of the
+   * selected unit becomes the target; everything else becomes the selection.
+   *
+   * Both halves matter. Without the side check the sight tool measures a unit's line of sight to its
+   * own side, which nobody is asking about; without the tool check, clicking an enemy under the Move
+   * tool silently does nothing, because Move has nothing to show a target with.
    */
   const pickUnit = useCallback(
     (id: string | undefined) => {
@@ -117,10 +124,10 @@ export function BattlePage() {
         return;
       }
       const unit = findUnit(state, id);
-      if (selected && unit && unit.side !== selected.side) setTargetId(id);
+      if (tool === "sight" && selected && unit && unit.side !== selected.side) setTargetId(id);
       else setSelectedId(id);
     },
-    [state, selected],
+    [state, selected, tool],
   );
 
   /**
@@ -141,7 +148,7 @@ export function BattlePage() {
       }
       if (tool !== "select" || !selected) return;
       const verdict = dragVerdict(state, selected, at, index);
-      if (verdict.ok) onMove(selected.id, at);
+      if (verdict.ok && verdict.at) onMove(selected.id, verdict.at);
       setDrag(verdict.ok ? undefined : { unitId: selected.id, to: at, legal: false, problems: verdict.problems });
     },
     [tool, selected, state, index, onMove],
@@ -203,6 +210,7 @@ export function BattlePage() {
                 rays={shot?.rays ?? []}
                 path={charge?.path ?? []}
                 measure={measurePair}
+                canDrag={tool === "select"}
                 labelsRef={labelsRef}
                 onSelect={pickUnit}
                 onMove={onMove}

@@ -7,7 +7,7 @@
  */
 
 import type { ModelHull, Objective, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
-import { BATTLE_SIZES, LAYOUTS, TerrainIndex, canStand, chargeGeometry, circleBase, coverFor, distance, edgeZones, heightForKeywords, inEngagementRange, onBoard, reachable, sight, unitDistance } from "@grimstat/board";
+import { BATTLE_SIZES, LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coverFor, distance, edgeZones, heightForKeywords, inEngagementRange, onBoard, reachable, sight, unitDistance } from "@grimstat/board";
 
 export type Side = "attacker" | "defender";
 export type BattleTool = "select" | "measure" | "sight";
@@ -96,11 +96,26 @@ export const replaceUnit = (state: BattleState, unit: BattleUnit): BattleState =
 
 export interface DragVerdict {
   readonly ok: boolean;
+  /**
+   * Where the unit would actually end up — the nearest position the movement search can reach,
+   * which is not quite where the pointer was. Move the unit here, not to the raw click, or the
+   * distance it travels stops matching the distance it was charged for.
+   */
+  readonly at?: Vec2;
   /** Inches the anchor model travels; `undefined` when no legal route reaches the spot. */
   readonly cost?: number;
   /** Why not, in the order a player would notice them. */
   readonly problems: readonly string[];
 }
+
+/**
+ * How far a destination may be from the nearest cell of the movement search and still count as that
+ * cell: half a cell's diagonal, which is the furthest any point can be from all of them.
+ *
+ * Getting this wrong is not a rounding detail. A tighter figure leaves gaps between the cells where
+ * a perfectly ordinary move is reported as out of range.
+ */
+const SNAP = (MOVE_RULES.resolution * Math.SQRT2) / 2 + 1e-6;
 
 /**
  * Is this a legal place to put the unit, and what does getting there cost?
@@ -111,31 +126,29 @@ export interface DragVerdict {
  */
 export function dragVerdict(state: BattleState, unit: BattleUnit, to: Vec2, index = indexOf(state)): DragVerdict {
   const anchor = anchorOf(unit);
-  const moved = translateUnit(unit, { x: to.x - anchor.pos.x, y: to.y - anchor.pos.y });
+  const blockers = otherHulls(state, unit.id);
+  const enemies = enemyHulls(state, unit.side);
   const problems: string[] = [];
 
-  for (const m of moved.models) {
-    if (!onBoard(m.hull, state.layout.size)) {
-      problems.push("battle.problem.offTable");
-      break;
-    }
-  }
-  const blockers = otherHulls(state, unit.id);
-  for (const m of moved.models) {
-    if (!canStand(m.hull, m.hull.pos, index, { keywords: unit.keywords, blockers })) {
-      problems.push("battle.problem.blocked");
-      break;
-    }
-  }
-  const enemies = enemyHulls(state, unit.side);
+  // Ask the search first: it decides both whether the unit can get there and exactly where "there"
+  // is. Everything after this judges that position, not the pointer's.
+  const reach = reachable(anchor, unit.move, index, {
+    keywords: unit.keywords,
+    enemies,
+    blockers,
+    until: (at) => Math.hypot(at.x - to.x, at.y - to.y) <= SNAP,
+  });
+  const landed = reach.stoppedAt === undefined ? undefined : reach.nodes[reach.stoppedAt];
+  const at: Vec2 = landed ? { x: landed.at.x, y: landed.at.y } : to;
+  if (!landed) problems.push("battle.problem.tooFar");
+
+  const moved = translateUnit(unit, { x: at.x - anchor.pos.x, y: at.y - anchor.pos.y }, landed?.at.z);
+  if (moved.models.some((m) => !onBoard(m.hull, state.layout.size))) problems.push("battle.problem.offTable");
+  if (moved.models.some((m) => !canStand(m.hull, m.hull.pos, index, { keywords: unit.keywords, blockers }))) problems.push("battle.problem.blocked");
   if (moved.models.some((m) => enemies.some((e) => inEngagementRange(m.hull, e)))) problems.push("battle.problem.engagement");
 
-  const reach = reachable(anchor, unit.move, index, { keywords: unit.keywords, enemies, blockers, until: (at) => Math.hypot(at.x - to.x, at.y - to.y) < 0.26 });
-  const landed = reach.stoppedAt;
-  const cost = landed === undefined ? undefined : reach.nodes[landed]!.cost;
-  if (cost === undefined) problems.push("battle.problem.tooFar");
-
-  return { ok: problems.length === 0, cost, problems };
+  const ok = problems.length === 0;
+  return { ok, at: landed ? at : undefined, cost: landed?.cost, problems };
 }
 
 /* ---- the tools --------------------------------------------------------------------------------- */

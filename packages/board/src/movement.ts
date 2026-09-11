@@ -107,7 +107,9 @@ export function reachable(model: ModelHull, budget: number, index: TerrainIndex,
     const here = nodes[current]!;
     if (here.cost > budget + EPS) continue;
 
-    if (opts.until?.(here.at) && current !== 0) {
+    // The starting position counts. If the model is already where it needs to be, the answer is
+    // zero — excluding it turns "you are already there" into "you cannot get there".
+    if (opts.until?.(here.at)) {
       stoppedAt = current;
       break;
     }

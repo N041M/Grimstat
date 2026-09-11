@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
 import { BufferAttribute, BufferGeometry, DoubleSide, ExtrudeGeometry, Shape, ShapeGeometry } from "three";
 import type { BoardSize, Objective, TerrainPiece, Vec2, Zone } from "@grimstat/board";
-import { OBJECTIVE_RANGE, hasTrait } from "@grimstat/board";
+import { OBJECTIVE_MARKER_RADIUS, OBJECTIVE_RANGE, hasTrait } from "@grimstat/board";
 import { SCENE_COLOURS, SIDE_COLOURS, fromScene, surfaceHeights, terrainAppearance } from "../../lib/battleScene";
 
 /**
@@ -137,7 +137,7 @@ export function Objectives({ objectives }: { objectives: readonly Objective[] })
       {objectives.map((o) => (
         <group key={o.id} position={[o.at.x, (o.z ?? 0) + 0.03, -o.at.y]}>
           <mesh rotation={FLAT}>
-            <circleGeometry args={[o.markerRadius ?? 0.8, 24]} />
+            <circleGeometry args={[o.markerRadius ?? OBJECTIVE_MARKER_RADIUS, 24]} />
             <meshBasicMaterial color={SCENE_COLOURS.objective} />
           </mesh>
           <mesh rotation={FLAT}>

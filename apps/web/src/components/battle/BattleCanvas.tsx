@@ -13,7 +13,10 @@ export type { CameraMode };
 
 export interface DragState {
   readonly unitId: string;
+  /** Where the pointer is. */
   readonly to: Vec2;
+  /** Where the unit would actually land — the position the cost was measured to. */
+  readonly at?: Vec2;
   readonly legal: boolean;
   readonly cost?: number;
   readonly problems: readonly string[];
@@ -27,6 +30,8 @@ export interface BattleCanvasProps {
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
   measure?: readonly [Vec3, Vec3];
+  /** Whether pressing a unit picks it up. Off under the tools where moving is not the point. */
+  canDrag?: boolean;
   /** One child per unit, in the same order; the projector moves them to follow the table. */
   labelsRef?: RefObject<HTMLDivElement>;
   onSelect(id: string | undefined): void;
@@ -67,7 +72,7 @@ export function BattleCanvas(props: BattleCanvasProps) {
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labelsRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, canDrag = true, labelsRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
@@ -81,22 +86,26 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labe
     const unit = findUnit(state, drag.unitId);
     if (!unit) return undefined;
     const anchor = anchorOf(unit);
-    return translateUnit(unit, { x: drag.to.x - anchor.pos.x, y: drag.to.y - anchor.pos.y });
+    // The ghost stands where the unit would land. Only when the move is refused does it follow the
+    // pointer instead, so the player can see what they are pointing at and why it will not do.
+    const spot = drag.at ?? drag.to;
+    return translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y });
   }, [drag, state]);
 
   const grab = useCallback(
     (id: string) => {
+      if (!canDrag) return;
       grabbed.current = id;
       if (controls) controls.enabled = false;
       document.body.style.cursor = "grabbing";
     },
-    [controls],
+    [controls, canDrag],
   );
 
   const drop = useCallback(() => {
     if (!grabbed.current) return;
     const pending = dragRef.current;
-    if (pending?.legal) onMove(pending.unitId, pending.to);
+    if (pending?.legal && pending.at) onMove(pending.unitId, pending.at);
     grabbed.current = undefined;
     dragRef.current = undefined;
     if (controls) controls.enabled = true;
@@ -113,7 +122,7 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labe
       const unit = findUnit(state, unitId);
       if (!unit) return;
       const verdict = dragVerdict(state, unit, at, index);
-      const next: DragState = { unitId, to: at, legal: verdict.ok, cost: verdict.cost, problems: verdict.problems };
+      const next: DragState = { unitId, to: at, at: verdict.at, legal: verdict.ok, cost: verdict.cost, problems: verdict.problems };
       dragRef.current = next;
       setDrag(next);
       onDrag?.(next);
@@ -136,6 +145,7 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labe
     const ray = new Raycaster();
     const ndc = new Vector2();
     const hit = new Vector3();
+    const plane = new Plane(new Vector3(0, 1, 0), 0);
 
     const onPointerMove = (e: PointerEvent) => {
       if (!grabbed.current) return;
@@ -145,7 +155,7 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labe
       if (rect.width === 0 || rect.height === 0) return;
       ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
       ray.setFromCamera(ndc, camera);
-      const plane = new Plane(new Vector3(0, 1, 0), -anchorOf(unit).pos.z);
+      plane.constant = -anchorOf(unit).pos.z;
       if (!ray.ray.intersectPlane(plane, hit)) return;
       onHover({ x: hit.x, y: -hit.z });
     };
@@ -174,7 +184,7 @@ function Scene({ state, cameraMode, selectedId, reach, rays, path, measure, labe
       {rays?.length ? <SightRays rays={rays} /> : null}
       {path?.length ? <PathLine path={path} /> : null}
       {measure ? <MeasureLine from={measure[0]} to={measure[1]} /> : null}
-      <UnitTokens units={state.units} selectedId={selectedId} onSelect={onSelect} onGrab={grab} />
+      <UnitTokens units={state.units} selectedId={selectedId} draggable={canDrag} onSelect={onSelect} onGrab={grab} />
       {ghost && drag ? <GhostUnit unit={ghost} legal={drag.legal} /> : null}
       {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}
     </>
