@@ -402,9 +402,13 @@ export function BattlePage() {
         return;
       }
       if (additive && modelId && tool === "select") {
-        // A Shift-press toggles the model in the selection, which starts from the model already active.
+        // A Shift-press toggles the model in the selection, which starts from what is selected already:
+        // the active model, or every model of a unit selected as a whole.
         const next = new Set(groupIds);
-        if (activeModelId && !next.size) next.add(activeModelId);
+        if (!next.size) {
+          if (activeModelId) next.add(activeModelId);
+          else if (selected && !selected.reserve) for (const m of selected.models) next.add(m.id);
+        }
         if (next.has(modelId)) next.delete(modelId);
         else next.add(modelId);
         setGroupIds(next);
