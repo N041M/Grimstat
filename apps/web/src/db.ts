@@ -2,6 +2,7 @@ import Dexie, { type Table } from "dexie";
 import type { Roster, Scenario, Snapshot } from "@grimstat/schema";
 import type { StoredPublishedList } from "@grimstat/adapters";
 import type { OverrideRecord } from "./lib/overrides";
+import type { ResolvedSummary } from "./lib/meta";
 import type { Layout } from "react-grid-layout";
 
 /** Persisted dashboard layout for one dashboard id (e.g. "calculator"). */
@@ -62,6 +63,20 @@ export interface PublishedListRecord extends StoredPublishedList {
   id: string;
 }
 
+/**
+ * A published list resolved against one snapshot: the datasheets it holds and their points, which is
+ * what the Meta tab needs. Written by the meta worker off the main thread, read by the tab, and
+ * stamped with the snapshot's checksum (overrides included) so a changed snapshot resolves again.
+ * Derived data: rebuilt on demand and never exported.
+ */
+export interface ResolvedListRecord extends ResolvedSummary {
+  /** `${snapshotId}|${recordId}` */
+  key: string;
+  snapshotId: string;
+  recordId: string;
+  stamp: string;
+}
+
 export type { OverrideRecord } from "./lib/overrides";
 export { overrideKey } from "./lib/overrides";
 
@@ -75,6 +90,7 @@ export class GrimstatDb extends Dexie {
   overrides!: Table<OverrideRecord, string>;
   terrainLayouts!: Table<TerrainLayoutRecord, string>;
   publishedLists!: Table<PublishedListRecord, string>;
+  publishedResolved!: Table<ResolvedListRecord, string>;
 
   constructor(name = "grimstat") {
     super(name);
@@ -126,6 +142,19 @@ export class GrimstatDb extends Dexie {
       terrainLayouts: "id, name, updatedAt",
       publishedLists: "id, faction, placing, importedAt",
     });
+    // v6: published lists resolved per snapshot, so the Meta tab reads rather than parses.
+    this.version(6).stores({
+      snapshots: "id, gameSystemId, updatedAt",
+      scenarios: "id, name, updatedAt, snapshotId",
+      layouts: "id",
+      settings: "key",
+      rosters: "id, name, factionId, snapshotId, updatedAt",
+      rosterVersions: "id, rosterId, updatedAt",
+      overrides: "&key, entity, id, updatedAt",
+      terrainLayouts: "id, name, updatedAt",
+      publishedLists: "id, faction, placing, importedAt",
+      publishedResolved: "&key, snapshotId, recordId",
+    });
   }
 }
 
@@ -146,7 +175,7 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
  */
 export const STORE_CHANGED = "grimstat:store-changed";
 
-export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts" | "publishedLists";
+export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts" | "publishedLists" | "publishedResolved";
 
 export function notifyStoreChanged(store: StoreName): void {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORE_CHANGED, { detail: store }));

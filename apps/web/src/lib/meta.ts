@@ -22,14 +22,32 @@ export interface UnitTally {
   readonly points: number;
 }
 
-/** A published list resolved against a snapshot. */
+/**
+ * A published list resolved against a snapshot, in the form that is stored: what the Meta tab needs
+ * and nothing the importer only used on the way. Resolving is the expensive step, so it happens once
+ * per list and snapshot, in a worker, and the tab reads the result.
+ */
+export interface ResolvedSummary {
+  readonly readable: boolean;
+  readonly factionId?: string;
+  readonly detachmentIds: readonly string[];
+  readonly forceDisposition?: string;
+  readonly points: number;
+  readonly tally: readonly { datasheetId: string; units: number; models: number; points: number }[];
+  /** Lines the importer could not read. */
+  readonly warnings: number;
+}
+
+/** A published list the snapshot could read, ready to be measured against. */
 export interface PeerList {
   readonly record: PublishedListRecord;
-  readonly roster: Roster;
-  readonly warnings: readonly string[];
+  readonly factionId: string;
+  readonly detachmentIds: readonly string[];
+  readonly forceDisposition?: string;
   readonly points: number;
   /** By datasheet id. */
   readonly tally: ReadonlyMap<string, UnitTally>;
+  readonly warnings: number;
 }
 
 /** What a roster holds, by datasheet, with its points as the snapshot prices them. */
@@ -45,66 +63,45 @@ export function tallyOf(roster: Roster, snapshot: Snapshot): { tally: Map<string
   return { tally, points: summary.points };
 }
 
-/** Resolve one published list; undefined when its text is not a list this snapshot can read at all. */
-export function resolvePublished(record: PublishedListRecord, snapshot: Snapshot): PeerList | undefined {
+const UNREADABLE: ResolvedSummary = { readable: false, detachmentIds: [], points: 0, tally: [], warnings: 0 };
+
+/** Resolve one published list into its stored form. Pure, and the only expensive call in this module. */
+export function summarise(record: PublishedListRecord, snapshot: Snapshot): ResolvedSummary {
   try {
     const { roster, warnings } = importRosterText(record.listText, snapshot, { name: record.listName ?? record.heading });
-    if (roster.units.length === 0) return undefined;
+    if (roster.units.length === 0) return UNREADABLE;
     const { tally, points } = tallyOf(roster, snapshot);
-    return { record, roster, warnings, points, tally };
+    const disposition = roster.detachments.find((d) => d.forceDisposition)?.forceDisposition;
+    return {
+      readable: true,
+      factionId: roster.factionId,
+      detachmentIds: roster.detachments.map((d) => d.detachmentId),
+      ...(disposition ? { forceDisposition: disposition } : {}),
+      points,
+      tally: [...tally.entries()].map(([datasheetId, t]) => ({ datasheetId, ...t })),
+      warnings: warnings.length,
+    };
   } catch {
-    return undefined;
+    return UNREADABLE;
   }
 }
 
-/* ---- resolving a whole corpus ---------------------------------------------------------------- */
-
-/**
- * Resolved lists, kept by record so a tab reopened or a filter changed costs nothing. One snapshot's
- * results are kept at a time; switching snapshots starts over.
- */
-const cache = { snapshotId: "", peers: new Map<string, PeerList | null>() };
-
-export function resolvePublishedCached(record: PublishedListRecord, snapshot: Snapshot): PeerList | undefined {
-  if (cache.snapshotId !== snapshot.id) {
-    cache.snapshotId = snapshot.id;
-    cache.peers.clear();
-  }
-  const hit = cache.peers.get(record.id);
-  if (hit !== undefined) return hit ?? undefined;
-  const peer = resolvePublished(record, snapshot);
-  cache.peers.set(record.id, peer ?? null);
-  return peer;
+/** A stored summary back into a peer, or nothing for a list the snapshot could not read. */
+export function peerFrom(record: PublishedListRecord, summary: ResolvedSummary): PeerList | undefined {
+  if (!summary.readable || !summary.factionId) return undefined;
+  return {
+    record,
+    factionId: summary.factionId,
+    detachmentIds: summary.detachmentIds,
+    ...(summary.forceDisposition ? { forceDisposition: summary.forceDisposition } : {}),
+    points: summary.points,
+    tally: new Map(summary.tally.map((t) => [t.datasheetId, { units: t.units, models: t.models, points: t.points }])),
+    warnings: summary.warnings,
+  };
 }
 
-export interface ResolveFieldOptions {
-  readonly onProgress?: (done: number, total: number) => void;
-  readonly signal?: AbortSignal;
-  /** How long to work before handing control back to the page, in milliseconds. */
-  readonly sliceMs?: number;
-}
-
-/**
- * Every record the snapshot can read, resolved in slices with the page given control between them,
- * so a corpus of hundreds of lists does not freeze the tab. Records resolved before cost nothing.
- */
-export async function resolveField(records: readonly PublishedListRecord[], snapshot: Snapshot, opts: ResolveFieldOptions = {}): Promise<PeerList[]> {
-  const budget = opts.sliceMs ?? 25;
-  const out: PeerList[] = [];
-  let i = 0;
-  while (i < records.length) {
-    const start = performance.now();
-    do {
-      const peer = resolvePublishedCached(records[i]!, snapshot);
-      if (peer) out.push(peer);
-      i++;
-    } while (i < records.length && performance.now() - start < budget);
-    opts.onProgress?.(i, records.length);
-    if (opts.signal?.aborted) throw new DOMException("Resolving cancelled", "AbortError");
-    if (i < records.length) await new Promise<void>((r) => setTimeout(r, 0));
-  }
-  return out;
-}
+/** Resolve one published list; undefined when its text is not a list this snapshot can read at all. */
+export const resolvePublished = (record: PublishedListRecord, snapshot: Snapshot): PeerList | undefined => peerFrom(record, summarise(record, snapshot));
 
 export type PlacingFilter = "all" | "top3" | "winners";
 export type DetachmentFilter = "any" | "same";
@@ -119,7 +116,7 @@ const placingOk = (placing: number | undefined, filter: PlacingFilter): boolean 
 /** The published lists this roster should be measured against: its own faction, as filtered. */
 export function peersFor(all: readonly PeerList[], roster: Roster, filter: PeerFilter): PeerList[] {
   const mine = new Set(roster.detachments.map((d) => d.detachmentId));
-  return all.filter((p) => p.roster.factionId === roster.factionId && placingOk(p.record.placing, filter.placing) && (filter.detachment === "any" || p.roster.detachments.some((d) => mine.has(d.detachmentId))));
+  return all.filter((p) => p.factionId === roster.factionId && placingOk(p.record.placing, filter.placing) && (filter.detachment === "any" || p.detachmentIds.some((id) => mine.has(id))));
 }
 
 /** How a unit in this list stands against the field. */
@@ -236,7 +233,7 @@ export function detachmentField(peers: readonly PeerList[], snapshot: Snapshot):
   const names = new Map(snapshot.data.detachments.map((d) => [d.id, d.name] as const));
   const counts = new Map<string, number>();
   for (const p of peers) {
-    const taken = new Set(p.roster.detachments.map((d) => names.get(d.detachmentId) ?? d.detachmentId));
+    const taken = new Set(p.detachmentIds.map((id) => names.get(id) ?? id));
     if (taken.size === 0) for (const d of p.record.detachments) taken.add(d);
     for (const name of taken) counts.set(name, (counts.get(name) ?? 0) + 1);
   }
@@ -247,7 +244,7 @@ export function detachmentField(peers: readonly PeerList[], snapshot: Snapshot):
 export function dispositionField(peers: readonly PeerList[]): FieldCount[] {
   const counts = new Map<string, number>();
   for (const p of peers) {
-    const name = p.record.forceDisposition ?? p.roster.detachments.find((d) => d.forceDisposition)?.forceDisposition;
+    const name = p.record.forceDisposition ?? p.forceDisposition;
     if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
   }
   return field(counts, peers.length);

@@ -70,10 +70,14 @@ export async function storePublishedLists(lists: readonly StoredPublishedList[])
  */
 export async function replacePublishedLists(publication: string, lists: readonly StoredPublishedList[]): Promise<{ added: number; removed: number }> {
   const keep = new Set(dedupePublishedLists(lists).map((l) => publishedListId(l)));
-  const removed = await db.publishedLists.filter((r) => r.source.publication === publication && !keep.has(r.id)).delete();
+  const gone = await db.publishedLists.filter((r) => r.source.publication === publication && !keep.has(r.id)).primaryKeys();
+  if (gone.length) {
+    await db.publishedLists.bulkDelete(gone);
+    await db.publishedResolved.where("recordId").anyOf(gone).delete();
+  }
   const { added } = lists.length ? await storePublishedLists(lists) : { added: 0 };
-  if (removed && !lists.length) notifyStoreChanged("publishedLists");
-  return { added, removed };
+  if (gone.length && !lists.length) notifyStoreChanged("publishedLists");
+  return { added, removed: gone.length };
 }
 
 /** Import one file, whichever kind it is. Throws `PublishedListsError` when it is neither. */
@@ -99,6 +103,7 @@ export async function listPublishedLists(): Promise<PublishedListRecord[]> {
 
 export async function clearPublishedLists(): Promise<void> {
   await db.publishedLists.clear();
+  await db.publishedResolved.clear();
   notifyStoreChanged("publishedLists");
 }
 

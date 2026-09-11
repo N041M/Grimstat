@@ -6,6 +6,7 @@ import { useStoreVersion } from "../../hooks/useStoreVersion";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { classifyPublishedText, clearPublishedLists, feedChecklist, importPastedList, importPublishedFile, listPublishedLists, parsePublishedFeed, publishedSources, readPublishedFeed, type PublishedFeed } from "../../lib/publishedLists";
 import { CORPUS_SETTING, CORPUS_URL_SETTING, DEFAULT_CORPUS_URL, fetchPublishedCorpus, parseCorpusRecord, type CorpusRecord } from "../../lib/corpusFetch";
+import { metaClient } from "../../worker/metaClient";
 import { fmtDay, fmtInt } from "../../lib/format";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead } from "../kit";
 import { Dialog, Field } from "../ui";
@@ -46,7 +47,7 @@ const ALL_GUESSED: Guessed = { faction: true, detachments: true, disposition: tr
  * table is arranged by source, and every write-up links back to where it was published.
  */
 export function PublishedLists() {
-  const { notify } = useApp();
+  const { notify, activeSnapshotId } = useApp();
   const version = useStoreVersion("publishedLists");
   const [records, setRecords] = useState<PublishedListRecord[]>([]);
   const [busy, setBusy] = useState(false);
@@ -109,6 +110,8 @@ export function PublishedLists() {
     }
     if (found === 0 && !loadedFeed && problems.length) notify(t("data.published.nothing"), "error", problems.slice(0, 8));
     else if (found || problems.length) notify(t("data.published.imported", { added, found }), problems.length ? "info" : "success", problems.slice(0, 8));
+    // Resolving against the active snapshot starts now, in the worker, so the Meta tab finds it done.
+    if (added) metaClient.warm(activeSnapshotId);
   };
 
   const fetchCorpus = async () => {
@@ -117,6 +120,7 @@ export function PublishedLists() {
       const result = await fetchPublishedCorpus(corpusUrl);
       setCorpus(result.record);
       notify(t("data.published.corpus.fetched", { added: result.added, found: result.found }), result.warnings.length ? "info" : "success", result.warnings.slice(0, 8));
+      metaClient.warm(activeSnapshotId);
     } catch (e) {
       notify(t("data.published.corpus.failed"), "error", [e instanceof Error ? e.message : String(e)]);
     } finally {
@@ -163,6 +167,7 @@ export function PublishedLists() {
         return;
       }
       notify(t(result.added ? "data.published.paste.added" : "data.published.paste.duplicate", { heading: result.list.heading }), result.added ? "success" : "info");
+      if (result.added) metaClient.warm(activeSnapshotId);
       closePaste();
     } catch (e) {
       notify(e instanceof Error ? e.message : String(e), "error");

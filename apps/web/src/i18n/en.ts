@@ -1589,7 +1589,7 @@ export const en = {
   "roster.meta.col.note": "",
   "roster.meta.col.player": "Player",
   "roster.meta.col.placing": "Placed",
-  "roster.meta.resolving": "Reading {done} of {total} published lists against this snapshot…",
+  "roster.meta.resolving": "Reading {done} of {total} published lists against this snapshot in the background; the numbers below fill in as it goes.",
   "roster.meta.col.source": "Write-up",
   "roster.meta.col.overlap": "Points in common",
   "roster.meta.col.theirs": "Theirs",

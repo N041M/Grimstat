@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { Roster, Snapshot } from "@grimstat/schema";
-import type { PublishedListRecord } from "../../db";
-import { useStoreVersion } from "../../hooks/useStoreVersion";
-import { listPublishedLists } from "../../lib/publishedLists";
-import { closest, detachmentField, dispositionField, fieldRows, peersFor, resolveField, sideBySide, tallyOf, type DetachmentFilter, type FieldCount, type FieldNote, type PeerList, type PlacingFilter } from "../../lib/meta";
+import { usePublishedField } from "../../hooks/usePublishedField";
+import { closest, detachmentField, dispositionField, fieldRows, peersFor, sideBySide, tallyOf, type DetachmentFilter, type FieldCount, type FieldNote, type PlacingFilter } from "../../lib/meta";
 import { fmt, fmtInt } from "../../lib/format";
 import { hrefFor } from "../../router";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead, ProportionBar, SelectBox } from "../kit";
@@ -52,41 +50,13 @@ function Tile({ label, value, title }: { label: string; value: ReactNode; title?
  * are counts, and every source is a link.
  */
 export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapshot }) {
-  const version = useStoreVersion("publishedLists");
-  const [records, setRecords] = useState<PublishedListRecord[] | undefined>();
+  const { records, peers: resolved, resolved: fresh, pending, progress } = usePublishedField(snapshot);
   const [placing, setPlacing] = useState<PlacingFilter>("all");
   const [detachment, setDetachment] = useState<DetachmentFilter>("any");
   const [nearId, setNearId] = useState<string | undefined>();
 
-  useEffect(() => {
-    let alive = true;
-    void listPublishedLists().then((rows) => {
-      if (alive) setRecords(rows);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [version]);
-
-  // Resolving is the expensive half, a parse per list, so it runs in slices off the render path and
-  // its results are cached per snapshot; a filter change then costs nothing.
-  const [resolved, setResolved] = useState<PeerList[] | undefined>();
-  const [progress, setProgress] = useState<{ done: number; total: number } | undefined>();
-  useEffect(() => {
-    if (!records) return;
-    const controller = new AbortController();
-    setResolved(undefined);
-    setProgress({ done: 0, total: records.length });
-    resolveField(records, snapshot, { signal: controller.signal, onProgress: (done, total) => setProgress({ done, total }) })
-      .then((peers) => {
-        setResolved(peers);
-        setProgress(undefined);
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [records, snapshot]);
   const faction = snapshot.data.factions.find((f) => f.id === roster.factionId);
-  const peers = useMemo(() => peersFor(resolved ?? [], roster, { placing, detachment }), [resolved, roster, placing, detachment]);
+  const peers = useMemo(() => peersFor(resolved, roster, { placing, detachment }), [resolved, roster, placing, detachment]);
   const mine = useMemo(() => tallyOf(roster, snapshot), [roster, snapshot]);
   const rows = useMemo(() => fieldRows(mine.tally, peers, snapshot), [mine, peers, snapshot]);
   const near = useMemo(() => closest(mine.tally, mine.points, peers, 5), [mine, peers]);
@@ -96,12 +66,11 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
   const side = useMemo(() => (chosen ? sideBySide(mine.tally, chosen.peer.tally, snapshot) : []), [mine, chosen, snapshot]);
 
   // Lists that name this faction but could not be read against this snapshot: worth saying, since
-  // they are silently absent from every number below.
+  // they are silently absent from every number below. Lists still being resolved are not counted.
   const unreadable = useMemo(() => {
     const name = faction?.name.toLowerCase();
-    const readable = new Set((resolved ?? []).map((p) => p.record.id));
-    return (records ?? []).filter((r) => !readable.has(r.id) && name !== undefined && r.faction?.toLowerCase() === name).length;
-  }, [records, resolved, faction]);
+    return (records ?? []).filter((r) => fresh.get(r.id)?.readable === false && name !== undefined && r.faction?.toLowerCase() === name).length;
+  }, [records, fresh, faction]);
   const writeUps = useMemo(() => new Set(peers.map((p) => p.record.source.url ?? p.record.source.title ?? p.record.id)).size, [peers]);
 
   if (records === undefined) return null;
@@ -113,15 +82,6 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
           <a href={hrefFor("data")}>{t("roster.meta.emptyLink")}</a>
         </p>
       </Empty>
-    );
-  }
-
-  if (resolved === undefined) {
-    return (
-      <div className="meta-tab">
-        <PanelHead title={t("roster.meta.title", { faction: faction?.name ?? roster.factionId })} />
-        <p className="data-note">{t("roster.meta.resolving", { done: fmtInt(progress?.done ?? 0), total: fmtInt(progress?.total ?? records.length) })}</p>
-      </div>
     );
   }
 
@@ -153,6 +113,7 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
           </span>
         }
       />
+      {pending ? <p className="data-note meta-resolving">{t("roster.meta.resolving", { done: fmtInt(progress ? progress.done : records.length - pending), total: fmtInt(progress ? progress.total : records.length) })}</p> : null}
       <div className="meta-tiles">
         <Tile label={t("roster.meta.tile.lists")} value={fmtInt(peers.length)} title={t("roster.meta.tile.listsTitle")} />
         <Tile label={t("roster.meta.tile.writeUps")} value={fmtInt(writeUps)} />
@@ -260,7 +221,7 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
                   </GridRow>
                 ))}
               </GridTable>
-              {chosen.peer.warnings.length ? <p className="data-note">{tn(chosen.peer.warnings.length, "roster.meta.warnings.one", "roster.meta.warnings.many", { n: chosen.peer.warnings.length })}</p> : null}
+              {chosen.peer.warnings ? <p className="data-note">{tn(chosen.peer.warnings, "roster.meta.warnings.one", "roster.meta.warnings.many", { n: chosen.peer.warnings })}</p> : null}
             </section>
           ) : null}
 

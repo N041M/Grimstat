@@ -5,7 +5,7 @@ import { importRosterText, parseArticle } from "@grimstat/adapters";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import type { PublishedListRecord } from "../db";
 import { publishedListId } from "./publishedLists";
-import { closest, detachmentField, dispositionField, fieldRows, overlap, peersFor, resolveField, resolvePublished, resolvePublishedCached, sideBySide, tallyOf, type PeerList } from "./meta";
+import { closest, detachmentField, dispositionField, fieldRows, overlap, peerFrom, peersFor, resolvePublished, sideBySide, summarise, tallyOf, type PeerList } from "./meta";
 
 const snapshot = loadSyntheticSnapshot();
 const html = readFileSync(join(process.cwd(), "fixtures/synthetic/competitive/write-up.html"), "utf8");
@@ -37,7 +37,7 @@ describe("resolving the field", () => {
 
   it("reads every published list the snapshot knows into units, and drops the ones it does not", () => {
     // The fixture's second list is for units the synthetic snapshot never heard of.
-    expect(resolved.map((p) => p?.roster.factionId)).toEqual(["faction:ashen-wardens", undefined, "faction:ashen-wardens"]);
+    expect(resolved.map((p) => p?.factionId)).toEqual(["faction:ashen-wardens", undefined, "faction:ashen-wardens"]);
     expect(peers[0]!.tally.get("ds:ashen-wardens:warden-squad")).toMatchObject({ units: 1, models: 10 });
     expect(peers[0]!.points).toBeGreaterThan(0);
   });
@@ -101,27 +101,23 @@ describe("a list against the field", () => {
   });
 });
 
-describe("resolving a corpus in slices", () => {
-  it("gives the same peers as resolving one by one, reports progress up to the total, and yields between slices", async () => {
-    const records = corpus();
-    const seen: number[] = [];
-    const peers = await resolveField(records, snapshot, { sliceMs: 0, onProgress: (done) => seen.push(done) });
-    expect(peers.map((p) => p.record.id)).toEqual(records.map((r) => resolvePublished(r, snapshot)).filter((p): p is PeerList => p !== undefined).map((p) => p.record.id));
-    expect(seen[seen.length - 1]).toBe(records.length);
-    expect(seen.length).toBeGreaterThan(1);
+describe("a resolved list as stored", () => {
+  const records = corpus();
+
+  it("round-trips through its summary and reads back as the same peer", () => {
+    const summary = summarise(records[0]!, snapshot);
+    expect(summary.readable).toBe(true);
+    expect(summary.factionId).toBe("faction:ashen-wardens");
+    const peer = peerFrom(records[0]!, JSON.parse(JSON.stringify(summary)))!;
+    const direct = resolvePublished(records[0]!, snapshot)!;
+    expect([...peer.tally.entries()]).toEqual([...direct.tally.entries()]);
+    expect(peer.points).toBe(direct.points);
+    expect(peer.detachmentIds).toEqual(direct.detachmentIds);
   });
 
-  it("remembers what it resolved, so a second pass returns the same objects", async () => {
-    const records = corpus();
-    const first = await resolveField(records, snapshot, { sliceMs: 0 });
-    const second = await resolveField(records, snapshot, { sliceMs: 0 });
-    expect(second).toEqual(first);
-    expect(resolvePublishedCached(records[0]!, snapshot)).toBe(first[0]);
-  });
-
-  it("stops when asked", async () => {
-    const controller = new AbortController();
-    controller.abort();
-    await expect(resolveField(corpus(), snapshot, { sliceMs: 0, signal: controller.signal })).rejects.toThrow(/cancelled/);
+  it("marks a list the snapshot cannot read as unreadable, which no peer is made from", () => {
+    const summary = summarise(records[1]!, snapshot);
+    expect(summary).toMatchObject({ readable: false, points: 0, tally: [] });
+    expect(peerFrom(records[1]!, summary)).toBeUndefined();
   });
 });
