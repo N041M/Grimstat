@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import { SYNTHETIC_DIR } from "../test-utils";
 import { importRosterText } from "../roster/index";
-import { extractList, parseArticle, parseFeed, parseHeading } from "./index";
+import { dedupePublishedLists, extractList, parseArticle, parseFeed, parseHeading, parsePublishedListsFile, publishedListKey, sourceOf, stringifyPublishedListsFile, type StoredPublishedList } from "./index";
 
 const read = (rel: string) => readFileSync(join(SYNTHETIC_DIR, rel), "utf8");
 const html = read("competitive/write-up.html");
@@ -151,3 +151,40 @@ describe("what the lists are for", () => {
     expect(warnings).toEqual([]);
   });
 });
+
+describe("the corpus file", () => {
+  const stored = (): StoredPublishedList[] => parseArticle(html, { title: "Club Night", url: "https://example.invalid/club-night/" }).lists.map((l) => ({ ...l, source: { title: "Club Night", url: "https://example.invalid/club-night/" }, importedAt: "2026-09-11T00:00:00.000Z" }));
+
+  it("round-trips every list, with its provenance", () => {
+    const lists = stored();
+    const back = parsePublishedListsFile(stringifyPublishedListsFile(lists, "2026-09-11T00:00:00.000Z"));
+    expect(back).toEqual(lists);
+  });
+
+  it("refuses what is not a corpus file, and says why", () => {
+    expect(() => parsePublishedListsFile("not json")).toThrow(/Not JSON/);
+    expect(() => parsePublishedListsFile({ format: "something-else", version: 1, lists: [] })).toThrow(/Not a published-lists file/);
+    expect(() => parsePublishedListsFile({ format: "grimstat-published-lists", version: 1, lists: [{ heading: "x" }] })).toThrow(/Not a published-lists file/);
+  });
+
+  it("keeps one copy of a list published twice, the later one", () => {
+    const [a, b] = stored();
+    const reprint = { ...a!, source: { title: "Club Night pt.2" }, listText: `${a!.listText}   ` };
+    const kept = dedupePublishedLists([a!, b!, reprint]);
+    expect(kept).toHaveLength(2);
+    expect(kept.find((l) => l.player === a!.player)?.source.title).toBe("Club Night pt.2");
+    expect(publishedListKey(a!)).toBe(publishedListKey(reprint));
+  });
+});
+
+describe("where a saved page says it came from", () => {
+  it("prefers the canonical link and Open Graph, then the browser title's tail", () => {
+    const page = `<html><head><title>Club Night pt.1 - Invented Wargaming</title><link rel="canonical" href="https://example.invalid/club-night/"><meta property="og:title" content="Club Night Invitational"></head><body></body></html>`;
+    expect(sourceOf(page)).toEqual({ title: "Club Night Invitational", url: "https://example.invalid/club-night/", publication: "Invented Wargaming" });
+  });
+
+  it("falls back to the name it was given when the page says nothing", () => {
+    expect(sourceOf("<html><body><p>hi</p></body></html>", "write-up")).toEqual({ title: "write-up" });
+  });
+});
+

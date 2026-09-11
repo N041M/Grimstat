@@ -11,6 +11,7 @@ import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead } from 
 import { SnapshotCompare } from "../components/data/SnapshotCompare";
 import { FetchSources } from "../components/data/FetchSources";
 import { SourceAttribution } from "../components/data/SourceAttribution";
+import { PublishedLists } from "../components/data/PublishedLists";
 import { hrefFor } from "../router";
 import { PageHeader } from "../components/shell";
 import { t } from "../i18n";
@@ -291,6 +292,8 @@ export function DataPage() {
           )}
           <p className="data-note">{t("overrides.dataSummary", { n: overrides.length, applied: overrideStatus.applied })}</p>
         </section>
+
+        <PublishedLists />
 
         <section aria-labelledby="data-compare-h">
           <PanelHead id="data-compare-h" title={t("data.compare")} aside={<span className="t-meta">{t("data.compare.meta")}</span>} />

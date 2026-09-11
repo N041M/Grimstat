@@ -42,7 +42,7 @@ The user wants a Warhammer 40,000 app that is (a) a **statistics dashboard** for
 
 **Gripes (ranked):** stacked paywall (~$1.5k/edition for all factions); access decays as codexes release; crashes; rules drift; withheld free content (Legends); retroactive monetisation; sync data loss; menu depth / no roster duplication; community data lag; tool mortality.
 
-**Wishlist:** roster duplication + versioning; two-list side-by-side; meta/matchup context on a list; printable per-list reference pack; interoperable exports; deployment/reserve validation; stable non-subscription tier.
+**Wishlist:** roster duplication + versioning; ~~two-list side-by-side; meta context on a list~~ (built: the Meta tab compares a list with imported published lists of its faction); matchup context on a list; printable per-list reference pack; interoperable exports; deployment/reserve validation; stable non-subscription tier.
 
 ### R2. Mathhammer / stats tools — landscape
 | Tool | Model | Notable |

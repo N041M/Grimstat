@@ -65,6 +65,13 @@ pnpm cli competitive --dir ~/Downloads/write-ups --out data/competitive
 Each list is stored as published, with the player, faction, detachments, Force Disposition, placing
 and the URL it came from. They are other people's lists; the file records whose.
 
+The web app reads the same files without the CLI: drop saved write-up pages, or the corpus file, on
+the Data page. An army's **Meta** tab then measures it against the placing lists of its faction —
+which units the field takes and how often, where this list has more or fewer or none, the placing
+lists it most resembles by points in common, and any one of them laid beside it unit by unit. The
+published lists are resolved against your own snapshot, so a corpus gathered under one points update
+still reads correctly under the next.
+
 Scenarios built from a 10th-edition snapshot run under the 10th-edition rules model automatically (`scenario.gameSystemId`).
 
 ## Deployment

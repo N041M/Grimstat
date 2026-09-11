@@ -157,3 +157,37 @@ const PROSE_TOLERANCE = 3;
 const COSTED = /\(\s*[\d,]+\s*[A-Za-z ]*?(?:points?|pts?)\s*\)/gi;
 
 const looksLikeList = (line: string): boolean => new RegExp(COSTED.source, "i").test(line) || /^[\u2022\u25e6\u25aa\u2023\u00b7-]/.test(line) || /^\d+\s*[x\u00d7]\s+\S/.test(line);
+
+/* ---- provenance ------------------------------------------------------------------------------ */
+
+const meta = (html: string, property: string): string | undefined =>
+  new RegExp(`<meta[^>]+(?:property|name)=["']${property}["'][^>]+content=["']([^"']+)["']`, "i").exec(html)?.[1] ??
+  new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${property}["']`, "i").exec(html)?.[1];
+
+const titleTag = (html: string): string | undefined => /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim();
+
+/** The publication's own name, or the tail of a "<article> - <publication>" browser title. */
+function publisherOf(html: string): string | undefined {
+  const named = meta(html, "og:site_name");
+  if (named) return named;
+  const title = titleTag(html);
+  const tail = title?.split(/\s+[-–|]\s+/).pop()?.trim();
+  return tail && tail !== title ? tail : undefined;
+}
+
+/**
+ * Where a saved page says it came from.
+ *
+ * Provenance is the point, not decoration: these are other people's lists and the record has to be
+ * able to say whose. So each field is looked for in more than one place — a canonical link, then
+ * Open Graph, then the browser title, which by convention ends with the publication's name. The
+ * caller's fallback title is usually the file name, which is what a saved page has left when its
+ * markup has none of the above.
+ */
+export function sourceOf(html: string, fallbackTitle?: string): ArticleSource {
+  const title = meta(html, "og:title") ?? titleTag(html) ?? fallbackTitle;
+  const url = /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i.exec(html)?.[1] ?? meta(html, "og:url");
+  const publication = publisherOf(html);
+  const published = meta(html, "article:published_time");
+  return { ...(title ? { title } : {}), ...(url ? { url } : {}), ...(publication ? { publication } : {}), ...(published ? { published } : {}) };
+}

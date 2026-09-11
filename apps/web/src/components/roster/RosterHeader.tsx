@@ -13,9 +13,9 @@ import { t, tn, type I18nKey } from "../../i18n";
 export type EditorMode = "unit" | "export" | "history";
 
 /** The editor's three views: the list you build, the description of what you built, and what it puts out. */
-export type EditorTab = "units" | "stats" | "arsenal";
-export const EDITOR_TABS: EditorTab[] = ["units", "stats", "arsenal"];
-const TAB_LABEL: Record<EditorTab, I18nKey> = { units: "roster.tab.units", stats: "roster.tab.stats", arsenal: "roster.tab.arsenal" };
+export type EditorTab = "units" | "stats" | "arsenal" | "meta";
+export const EDITOR_TABS: EditorTab[] = ["units", "stats", "arsenal", "meta"];
+const TAB_LABEL: Record<EditorTab, I18nKey> = { units: "roster.tab.units", stats: "roster.tab.stats", arsenal: "roster.tab.arsenal", meta: "roster.tab.meta" };
 
 /** Reject anything but a known tab id when reading the remembered value back. */
 export function parseEditorTab(raw: unknown): EditorTab | undefined {

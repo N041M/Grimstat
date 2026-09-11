@@ -15,6 +15,7 @@ import { UnitTable, type CalcSide } from "../components/roster/UnitTable";
 import { UnitInspector } from "../components/roster/UnitInspector";
 import { StatisticsTab } from "../components/roster/StatisticsTab";
 import { ArsenalTab } from "../components/roster/ArsenalTab";
+import { MetaTab } from "../components/roster/MetaTab";
 import { RosterDock, type DockBudget } from "../components/roster/RosterDock";
 import { ExportDrawer } from "../components/roster/ExportDrawer";
 import { HistoryPanel } from "../components/roster/HistoryPanel";
@@ -241,8 +242,10 @@ export function RosterEditorPage({ id }: { id: string }) {
             />
           ) : tab === "stats" ? (
             <StatisticsTab roster={roster} snapshot={snapshot} datasheets={datasheets} costById={costById} onSelectUnit={selectFromStats} />
-          ) : (
+          ) : tab === "arsenal" ? (
             <ArsenalTab roster={roster} snapshot={snapshot} />
+          ) : (
+            <MetaTab roster={roster} snapshot={snapshot} />
           )}
         </div>
       </div>

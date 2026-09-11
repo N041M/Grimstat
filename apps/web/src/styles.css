@@ -5942,3 +5942,68 @@ button.battle-scope-btn:hover {
   height: 22px;
   color: var(--ink);
 }
+
+/* ---------- Meta tab and the published-lists corpus ---------- */
+.meta-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.meta-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.meta-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 6px 0 14px;
+}
+.meta-section {
+  margin-top: 18px;
+}
+.meta-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0 24px;
+}
+.meta-table {
+  margin-top: 6px;
+}
+.meta-unit {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.meta-share {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.meta-share > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.meta-row.is-missing .meta-unit {
+  color: var(--ink-2);
+}
+.meta-row.is-theirs .meta-unit {
+  color: var(--muted);
+}
+.meta-row.current {
+  background: var(--hover);
+}
+.meta-source a {
+  color: inherit;
+}
+.data-published.is-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 6px;
+  border-radius: var(--radius);
+}
+.data-published-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

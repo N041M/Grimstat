@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { parseArticle, parseFeed, type PublishedArticle, type PublishedList } from "@grimstat/adapters";
+import { dedupePublishedLists, parseArticle, parseFeed, parsePublishedListsFile, sourceOf, stringifyPublishedListsFile, type StoredPublishedList } from "@grimstat/adapters";
 
 /**
  * Published tournament lists, gathered onto this machine.
@@ -45,12 +45,6 @@ export function parseCompetitiveArgs(argv: string[]): CompetitiveOptions {
   return { ...(values.dir ? { dir: values.dir } : {}), ...(values.feed ? { feed: values.feed } : {}), out: values.out!, quiet: values.quiet! };
 }
 
-/** One record per published list: everything the write-up said, plus where it came from. */
-interface StoredList extends PublishedList {
-  readonly source: PublishedArticle["source"];
-  readonly importedAt: string;
-}
-
 export async function runCompetitive(opts: CompetitiveOptions): Promise<number> {
   const log = (s: string) => !opts.quiet && process.stdout.write(`${s}\n`);
 
@@ -71,13 +65,13 @@ export async function runCompetitive(opts: CompetitiveOptions): Promise<number> 
   const files = readdirSync(dir).filter((f) => [".html", ".htm"].includes(extname(f).toLowerCase()));
   if (!files.length) throw new Error(`no .html files in ${dir}`);
 
-  const lists: StoredList[] = [];
+  const lists: StoredPublishedList[] = [];
   const importedAt = new Date().toISOString();
   let skipped = 0;
 
   for (const file of files) {
     const html = readFileSync(join(dir, file), "utf8");
-    const article = parseArticle(html, { title: titleOf(html) ?? basename(file, extname(file)), url: canonicalOf(html) ?? undefined, publication: publisherOf(html) ?? undefined });
+    const article = parseArticle(html, sourceOf(html, basename(file, extname(file))));
     for (const w of article.warnings) log(`  ${file}: ${w}`);
     if (!article.lists.length) skipped++;
     for (const list of article.lists) lists.push({ ...list, source: article.source, importedAt });
@@ -87,8 +81,8 @@ export async function runCompetitive(opts: CompetitiveOptions): Promise<number> 
   mkdirSync(resolve(opts.out), { recursive: true });
   const target = join(resolve(opts.out), `lists-${importedAt.slice(0, 10)}.json`);
   const existing = readExisting(target);
-  const merged = dedupe([...existing, ...lists]);
-  writeFileSync(target, `${JSON.stringify({ format: "grimstat-published-lists", version: 1, importedAt, lists: merged }, null, 2)}\n`);
+  const merged = dedupePublishedLists([...existing, ...lists]);
+  writeFileSync(target, stringifyPublishedListsFile(merged, importedAt));
 
   log("");
   log(`${merged.length} lists (${merged.length - existing.length} new) → ${target}`);
@@ -104,47 +98,11 @@ async function readFeed(url: string): Promise<ReturnType<typeof parseFeed>> {
   return parseFeed(await res.text());
 }
 
-/**
- * The same list, published twice, is one list.
- *
- * Keyed on the player, the placing and the list text rather than on the article, because write-ups
- * run in parts and a bonus round often reprints what an earlier part already carried.
- */
-function dedupe(lists: readonly StoredList[]): StoredList[] {
-  const seen = new Map<string, StoredList>();
-  for (const l of lists) seen.set(`${l.player ?? ""}|${l.placing ?? ""}|${l.listText.replace(/\s+/g, " ").trim()}`, l);
-  return [...seen.values()];
-}
-
-function readExisting(path: string): StoredList[] {
+function readExisting(path: string): StoredPublishedList[] {
   try {
     if (!statSync(path).isFile()) return [];
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as { lists?: StoredList[] };
-    return Array.isArray(parsed.lists) ? parsed.lists : [];
+    return parsePublishedListsFile(readFileSync(path, "utf8"));
   } catch {
     return [];
   }
-}
-
-/**
- * Where the page says it came from.
- *
- * Provenance is the point, not decoration: these are other people's lists and the file has to be
- * able to say whose. So each is looked for in more than one place — a canonical link, then Open
- * Graph, then the browser title, which by convention ends with the publication's name.
- */
-const meta = (html: string, property: string): string | undefined =>
-  new RegExp(`<meta[^>]+(?:property|name)=["']${property}["'][^>]+content=["']([^"']+)["']`, "i").exec(html)?.[1] ??
-  new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${property}["']`, "i").exec(html)?.[1];
-
-const titleOf = (html: string): string | undefined => meta(html, "og:title") ?? /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim();
-const canonicalOf = (html: string): string | undefined => /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i.exec(html)?.[1] ?? meta(html, "og:url");
-
-/** The publication's own name, or the tail of a "<article> - <publication>" browser title. */
-function publisherOf(html: string): string | undefined {
-  const named = meta(html, "og:site_name");
-  if (named) return named;
-  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim();
-  const tail = title?.split(/\s+[-–|]\s+/).pop()?.trim();
-  return tail && tail !== title ? tail : undefined;
 }

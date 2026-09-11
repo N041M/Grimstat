@@ -50,3 +50,9 @@ export interface FeedEntry {
    */
   readonly isWarhammer40k: boolean;
 }
+
+/** A published list as kept on the user's machine: the list, where it came from, and when. */
+export interface StoredPublishedList extends PublishedList {
+  readonly source: ArticleSource;
+  readonly importedAt: string;
+}

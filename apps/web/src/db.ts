@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { Roster, Scenario, Snapshot } from "@grimstat/schema";
+import type { StoredPublishedList } from "@grimstat/adapters";
 import type { OverrideRecord } from "./lib/overrides";
 import type { Layout } from "react-grid-layout";
 
@@ -49,6 +50,18 @@ export interface TerrainLayoutRecord {
   source?: string;
 }
 
+/**
+ * A published tournament list, as imported from a write-up or from the CLI's corpus file.
+ *
+ * The list stays as text: resolving it into units needs a snapshot, and a list resolved against the
+ * snapshot of the day it was imported would go stale with the next points update. The id is a hash
+ * of what identifies the list — player, placing and text — so importing the same write-up twice
+ * stores it once.
+ */
+export interface PublishedListRecord extends StoredPublishedList {
+  id: string;
+}
+
 export type { OverrideRecord } from "./lib/overrides";
 export { overrideKey } from "./lib/overrides";
 
@@ -61,6 +74,7 @@ export class GrimstatDb extends Dexie {
   rosterVersions!: Table<RosterVersionRecord, string>;
   overrides!: Table<OverrideRecord, string>;
   terrainLayouts!: Table<TerrainLayoutRecord, string>;
+  publishedLists!: Table<PublishedListRecord, string>;
 
   constructor(name = "grimstat") {
     super(name);
@@ -100,6 +114,18 @@ export class GrimstatDb extends Dexie {
       overrides: "&key, entity, id, updatedAt",
       terrainLayouts: "id, name, updatedAt",
     });
+    // v5: published tournament lists, kept as text with their provenance.
+    this.version(5).stores({
+      snapshots: "id, gameSystemId, updatedAt",
+      scenarios: "id, name, updatedAt, snapshotId",
+      layouts: "id",
+      settings: "key",
+      rosters: "id, name, factionId, snapshotId, updatedAt",
+      rosterVersions: "id, rosterId, updatedAt",
+      overrides: "&key, entity, id, updatedAt",
+      terrainLayouts: "id, name, updatedAt",
+      publishedLists: "id, faction, placing, importedAt",
+    });
   }
 }
 
@@ -120,7 +146,7 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
  */
 export const STORE_CHANGED = "grimstat:store-changed";
 
-export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts";
+export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts" | "publishedLists";
 
 export function notifyStoreChanged(store: StoreName): void {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORE_CHANGED, { detail: store }));
@@ -209,20 +235,23 @@ export interface ExportBundle {
     overrides?: OverrideRecord[];
     /** Added with db v4; absent in older bundles. */
     terrainLayouts?: TerrainLayoutRecord[];
+    /** Added with db v5; absent in older bundles. */
+    publishedLists?: PublishedListRecord[];
   };
 }
 
 export async function exportAll(): Promise<ExportBundle> {
-  const [snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray(), db.terrainLayouts.toArray()]);
-  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts } };
+  const [snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray(), db.terrainLayouts.toArray(), db.publishedLists.toArray()]);
+  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists } };
 }
 
-export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number; terrainLayouts: number }> {
+export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number; terrainLayouts: number; publishedLists: number }> {
   const s = bundle.stores;
   const rosters = s.rosters ?? [];
   const overrides = s.overrides ?? [];
   const terrainLayouts = s.terrainLayouts ?? [];
-  await db.transaction("rw", [db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, db.overrides, db.terrainLayouts], async () => {
+  const publishedLists = s.publishedLists ?? [];
+  await db.transaction("rw", [db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, db.overrides, db.terrainLayouts, db.publishedLists], async () => {
     if (s.snapshots.length) await db.snapshots.bulkPut(s.snapshots);
     if (s.scenarios.length) await db.scenarios.bulkPut(s.scenarios);
     if (s.layouts.length) await db.layouts.bulkPut(s.layouts);
@@ -230,10 +259,12 @@ export async function importAll(bundle: ExportBundle): Promise<{ snapshots: numb
     if (rosters.length) await db.rosters.bulkPut(rosters);
     if (overrides.length) await db.overrides.bulkPut(overrides);
     if (terrainLayouts.length) await db.terrainLayouts.bulkPut(terrainLayouts);
+    if (publishedLists.length) await db.publishedLists.bulkPut(publishedLists);
   });
   notifyStoreChanged("rosters");
   if (terrainLayouts.length) notifyStoreChanged("terrainLayouts");
-  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length, terrainLayouts: terrainLayouts.length };
+  if (publishedLists.length) notifyStoreChanged("publishedLists");
+  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length, terrainLayouts: terrainLayouts.length, publishedLists: publishedLists.length };
 }
 
 /** Every stored override, oldest first. */
