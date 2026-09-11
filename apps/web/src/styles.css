@@ -5734,3 +5734,32 @@ button.battle-scope-btn:hover {
   grid-template-columns: 1fr 52px;
   margin: 0;
 }
+
+.battle-presets {
+  margin: 10px 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.battle-presets-head {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.battle-preset-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 3px;
+}
+.battle-preset-row > button:first-child {
+  flex: 1;
+  justify-content: flex-start;
+  text-align: left;
+}
+.battle-preset-count {
+  flex: none;
+  font: 400 10px/1 var(--mono);
+  color: var(--faint);
+}

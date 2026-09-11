@@ -60,6 +60,55 @@ export function ruin(id: string, centre: Vec2, width: number, depth: number, sto
   return box(id, centre, width, depth, storeys * 4 + 1, ["obscuring", "heavy-cover", "scalable", "breachable"], floors, CLIMBERS);
 }
 
+/**
+ * A right-angled triangular footprint, given by its centre and the extents of its bounding box.
+ *
+ * `flip` mirrors it across the x axis, because the shape is used in mirrored pairs — a layout built
+ * from one handedness only cannot be made symmetric.
+ */
+export function wedge(id: string, centre: Vec2, width: number, depth: number, height: number, traits: readonly TerrainTrait[] = [], floors?: readonly number[], climbableBy?: readonly string[], flip = false): TerrainPiece {
+  const w = width / 2;
+  const d = depth / 2;
+  const y = (dy: number) => (flip ? -dy : dy);
+  return terrain({
+    id,
+    polygon: [
+      { x: centre.x - w, y: centre.y + y(-d) },
+      { x: centre.x + w, y: centre.y + y(-d) },
+      { x: centre.x - w, y: centre.y + y(d) },
+    ],
+    height,
+    traits,
+    floors: floors ?? [0],
+    climbableBy: climbableBy ?? [],
+  });
+}
+
+/**
+ * The footprints an 11th-edition table is laid out with: sixteen areas in five sizes.
+ *
+ * Sizes only — these are the dimensions of the terrain areas the edition's layouts are specified in,
+ * which is what makes transcribing one a matter of choosing a shape and typing two measurements. No
+ * layout is reproduced here; the numbers are the shapes themselves, not anyone's arrangement of them.
+ */
+export interface FootprintPreset {
+  readonly id: string;
+  readonly label: string;
+  readonly width: number;
+  readonly depth: number;
+  readonly shape: "rectangle" | "wedge";
+  /** How many of this size a standard set contains. */
+  readonly count: number;
+}
+
+export const TERRAIN_AREA_PRESETS: readonly FootprintPreset[] = [
+  { id: "large-rect", label: 'Large rectangle 11.5 x 7"', width: 11.5, depth: 7, shape: "rectangle", count: 4 },
+  { id: "large-wedge", label: 'Large wedge 11.5 x 8"', width: 11.5, depth: 8, shape: "wedge", count: 2 },
+  { id: "medium-rect", label: 'Medium rectangle 6 x 4"', width: 6, depth: 4, shape: "rectangle", count: 4 },
+  { id: "long-line", label: 'Long line 10 x 2.5"', width: 10, depth: 2.5, shape: "rectangle", count: 2 },
+  { id: "short-line", label: 'Short line 6 x 2"', width: 6, depth: 2, shape: "rectangle", count: 4 },
+];
+
 /** A crater or wreck: low, gives light cover, never blocks a sight line. */
 export function crater(id: string, centre: Vec2, width: number, depth: number): TerrainPiece {
   return box(id, centre, width, depth, 0.4, ["light-cover", "transparent"], [0]);

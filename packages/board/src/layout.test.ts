@@ -19,6 +19,8 @@ import {
   reachable,
   ruin,
   terrain,
+  TERRAIN_AREA_PRESETS,
+  wedge,
   unitSight,
   type ModelHull,
   type TerrainLayout,
@@ -60,6 +62,57 @@ describe("layout building blocks", () => {
       { x: 15, y: 33 },
       { x: 45, y: 33 },
     ]);
+  });
+});
+
+describe("the standard terrain areas", () => {
+  it("is sixteen areas in five sizes", () => {
+    expect(TERRAIN_AREA_PRESETS).toHaveLength(5);
+    expect(TERRAIN_AREA_PRESETS.reduce((a, p) => a + p.count, 0)).toBe(16);
+  });
+
+  it("carries the sizes an 11th-edition layout is written in", () => {
+    const by = (id: string) => TERRAIN_AREA_PRESETS.find((p) => p.id === id)!;
+    expect([by("large-rect").width, by("large-rect").depth]).toEqual([11.5, 7]);
+    expect([by("large-wedge").width, by("large-wedge").depth]).toEqual([11.5, 8]);
+    expect([by("medium-rect").width, by("medium-rect").depth]).toEqual([6, 4]);
+    expect([by("long-line").width, by("long-line").depth]).toEqual([10, 2.5]);
+    expect([by("short-line").width, by("short-line").depth]).toEqual([6, 2]);
+  });
+
+  it("fits every preset on a Strike Force table", () => {
+    const size = BATTLE_SIZES.strikeForce;
+    for (const preset of TERRAIN_AREA_PRESETS) {
+      const piece = preset.shape === "wedge" ? wedge(preset.id, { x: size.width / 2, y: size.depth / 2 }, preset.width, preset.depth, 5) : box(preset.id, { x: size.width / 2, y: size.depth / 2 }, preset.width, preset.depth, 5);
+      expect(layoutIssues({ id: "t", name: "T", size, pieces: [piece], objectives: [] })).toEqual([]);
+    }
+  });
+});
+
+describe("wedges", () => {
+  it("is a right-angled triangle filling its bounding box", () => {
+    const piece = wedge("w", { x: 20, y: 20 }, 12, 8, 5);
+    expect(piece.polygon).toHaveLength(3);
+    const xs = piece.polygon.map((p) => p.x);
+    const ys = piece.polygon.map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(12);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(8);
+  });
+
+  it("mirrors, because the shape is used in handed pairs", () => {
+    const right = wedge("r", { x: 20, y: 20 }, 12, 8, 5);
+    const left = wedge("l", { x: 20, y: 20 }, 12, 8, 5, [], undefined, undefined, true);
+    const key = (p: typeof right) => p.polygon.map((q) => `${q.x},${q.y}`).sort().join("|");
+    expect(key(left)).not.toBe(key(right));
+    // Reflected across the piece's own horizontal axis, so the pair covers both handednesses.
+    const reflected = right.polygon.map((q) => `${q.x},${40 - q.y}`).sort().join("|");
+    expect(reflected).toBe(key(left));
+  });
+
+  it("is a real solid that blocks a sight line through it", () => {
+    const board = new TerrainIndex([wedge("w", { x: 30, y: 22 }, 12, 8, 9, ["obscuring"])]);
+    // Through the thick corner of the wedge, where the triangle actually is.
+    expect(unitSight([model(25, 10)], [model(25, 34)], board)).toBe(false);
   });
 });
 

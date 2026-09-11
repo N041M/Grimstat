@@ -246,10 +246,22 @@ the caching the AI section describes before they run inside a search.
 3. **AI ambition**: v1 plays legally and sensibly (Normal difficulty) rather than competitively; Hard
    comes with rollouts in B5.
 4. **Missions**: ship generic layouts and a generic mission set; official mission packs and tournament
-   layouts are user-imported data.
-5. **Where it lives**: a new "Battle" section of the same PWA, reusing the worker, storage and
+   layouts are user-imported data. Note what this does and does not mean — the app already fetches
+   three sources it labels as Games Workshop copyright (MFM points, Wahapedia datasheet text, BSData
+   structure). The rule is not "avoid GW content"; it is **do not redistribute it in the repository**,
+   fetch at runtime onto the user's own machine, and record the licence and attribution.
+5. **Transcribing a published layout is typing, not scraping.** Games Workshop publishes 11th-edition
+   terrain layouts free in its Event Companion PDFs, three per mission with objective positions, and
+   revises them in balance passes — so shipped copies would go stale anyway. They are laid out with a
+   fixed set of sixteen terrain areas in five sizes (11.5×7", 11.5×8" wedges in a mirrored pair,
+   6×4", 10×2.5", 6×2"), and specified as distances from two board edges. Those sizes are shipped as
+   editor presets and the panel takes edge measurements directly, which makes transcribing a layout a
+   matter of choosing a shape and typing two numbers. The measurements are the unprotectable part of
+   a published diagram; the diagram itself is not reproduced, and running computer vision over one to
+   recover numbers that are printed on it as text would be more machinery for a worse result.
+6. **Where it lives**: a new "Battle" section of the same PWA, reusing the worker, storage and
    permalink infrastructure; the 3D dependency is code-split behind that route.
-6. **Model heights**: a keyword-derived default table shipped as data, overridable per datasheet and
+7. **Model heights**: a keyword-derived default table shipped as data, overridable per datasheet and
    per model, and always shown in the UI — a guessed height must never masquerade as a rule.
 
 ## Risks

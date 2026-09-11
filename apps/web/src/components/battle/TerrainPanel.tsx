@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import type { TerrainLayout, TerrainPiece, TerrainTrait } from "@grimstat/board";
-import { box, crater, ruin } from "@grimstat/board";
+import { TERRAIN_AREA_PRESETS, box, crater, ruin, wedge } from "@grimstat/board";
 import { Badge } from "../ui";
+import { CLIMBERS } from "@grimstat/board";
 import {
   addObjective,
   addPiece,
@@ -53,6 +54,12 @@ export function TerrainPanel({
 
   /** New pieces land in the middle of the near half, where there is usually room to see them. */
   const dropAt = { x: layout.size.width / 2, y: layout.size.depth / 4 };
+
+  /**
+   * An 11th-edition terrain area: obscuring, two storeys, climbable by models on their own feet.
+   * Sensible defaults rather than a rules claim — every trait is a checkbox below.
+   */
+  const AREA_TRAITS = ["obscuring", "heavy-cover", "scalable", "breachable"] as const;
   const add = (make: (id: string) => TerrainPiece, stem: string) => {
     const id = freeId(layout, stem);
     onChange(addPiece(layout, make(id)));
@@ -76,6 +83,28 @@ export function TerrainPanel({
           <button type="button" className="ghost sm" onClick={() => add((id) => box(id, dropAt, 10, 8, 1.8, ["light-cover"], [1.8]), "hill")}>
             + {t("battle.terrain.hill")}
           </button>
+        </div>
+
+        <div className="battle-presets">
+          <div className="battle-presets-head">{t("battle.terrain.standard")}</div>
+          {TERRAIN_AREA_PRESETS.map((preset) => (
+            <div key={preset.id} className="battle-preset-row">
+              <button
+                type="button"
+                className="ghost sm"
+                onClick={() => add((id) => (preset.shape === "wedge" ? wedge(id, dropAt, preset.width, preset.depth, 9, [...AREA_TRAITS], [0, 4], [...CLIMBERS]) : box(id, dropAt, preset.width, preset.depth, 9, [...AREA_TRAITS], [0, 4], [...CLIMBERS])), preset.id)}
+              >
+                + {preset.label}
+              </button>
+              {preset.shape === "wedge" ? (
+                <button type="button" className="ghost sm" title={t("battle.terrain.flip")} onClick={() => add((id) => wedge(id, dropAt, preset.width, preset.depth, 9, [...AREA_TRAITS], [0, 4], [...CLIMBERS], true), `${preset.id}-flipped`)}>
+                  ⇄
+                </button>
+              ) : null}
+              <span className="battle-preset-count">×{preset.count}</span>
+            </div>
+          ))}
+          <p className="muted small">{t("battle.terrain.standardHint")}</p>
         </div>
 
         {!piece ? (
