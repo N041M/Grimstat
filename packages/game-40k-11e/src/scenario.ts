@@ -97,10 +97,32 @@ export function runScenarioWith(rules: RulesParams, registry: ReturnType<typeof 
   void defenderAllVehicleMonster;
   const attackerAllVM = attacker.keywords.some((k) => ["VEHICLE", "MONSTER"].includes(upper(k)));
   const defenderModelCount = defender.models.reduce((s, m) => s + m.count, 0);
-  const allEffects = [...attacker.effects, ...defender.effects, ...active.effects, ...scenario.extraEffects];
+  // An effect's `when.side` says which role its carrier has to be playing for it to apply: a "+1 to
+  // hit" a unit gets while attacking is recorded as `attacker`, and a "-1 to be hit" it gets while
+  // being shot at is recorded as `defender`. So each unit contributes only the effects matching the
+  // role it holds in this scenario. Pooling both units and splitting on the field alone handed a
+  // defender's offensive ability to the attacker.
+  const carried = [
+    ...attacker.effects.filter((e) => (e.when.side ?? "attacker") === "attacker"),
+    ...defender.effects.filter((e) => (e.when.side ?? "attacker") === "defender"),
+  ];
+  // Only the manual toggles are added. An ability toggle was built from these same unit effects and
+  // would otherwise apply them a second time; it acts through `offSources` below instead.
+  const allEffects = [...carried, ...active.manual, ...scenario.extraEffects];
   // ability toggles that were switched off must remove the unit's own effects with that source
   const off = new Set(scenario.enabledToggles.filter((t) => t.startsWith("-")).map((t) => t.slice(1)));
   const offSources = new Set(toggles.filter((t) => off.has(t.id) && t.id.startsWith("ability:")).map((t) => t.label));
+  /**
+   * Does this effect come from an ability the player switched off? An attached character's effects
+   * are re-sourced as "<Character>: <ability>" while the toggle is named after the ability alone,
+   * so both spellings have to be recognised or the character's toggle does nothing.
+   */
+  const switchedOff = (source: string | undefined): boolean => {
+    if (!source) return false;
+    if (offSources.has(source)) return true;
+    const colon = source.indexOf(": ");
+    return colon > 0 && offSources.has(source.slice(colon + 2));
+  };
 
   const weapons: WeaponParams[] = [];
   const phaseKind = ctx.phase === "fight" ? "melee" : "ranged";
@@ -109,7 +131,7 @@ export function runScenarioWith(rules: RulesParams, registry: ReturnType<typeof 
     if (w.kind !== phaseKind) continue;
     const ec = evalContext(attacker, defender, w, scenario, active.flags);
     const mods = new ModifierSet();
-    const unitEffects = allEffects.filter((e) => !(e.source && offSources.has(e.source)));
+    const unitEffects = allEffects.filter((e) => !switchedOff(e.source));
     mods.addAll(collectModifiers(unitEffects.filter((e) => (e.when.side ?? "attacker") === "attacker"), "attacker", ec));
     mods.addAll(collectModifiers(unitEffects.filter((e) => e.when.side === "defender"), "defender", ec));
     const kctx: KeywordContext = { ...ec, mods, targetModelCount: defenderModelCount, warnings };

@@ -90,6 +90,34 @@ describe("bsdata-json adapter (synthetic fixture)", () => {
     expect(ds("Spine Drake").fallbackPoints).toBe(210);
   });
 
+  it("keeps every price step of a unit with three model bands", () => {
+    const unit = {
+      name: "Bramble Host",
+      id: "se-bramble-host",
+      type: "unit",
+      costs: [{ name: "pts", typeId: "ct-pts", value: 40 }],
+      modifiers: [
+        { field: "ct-pts", type: "set", value: 80, conditions: [{ childId: "model", field: "selections", scope: "se-bramble-host", type: "atLeast", value: 4 }] },
+        { field: "ct-pts", type: "set", value: 120, conditions: [{ childId: "model", field: "selections", scope: "se-bramble-host", type: "atLeast", value: 7 }] },
+      ],
+      selectionEntryGroups: [
+        {
+          name: "3-9 Brambles",
+          id: "seg-bramble",
+          constraints: [
+            { id: "c-min", field: "selections", scope: "parent", type: "min", value: 3 },
+            { id: "c-max", field: "selections", scope: "parent", type: "max", value: 9 },
+          ],
+          selectionEntries: [{ name: "Bramble", id: "se-bramble", type: "model", profiles: [{ id: "p-bramble", name: "Bramble", typeId: "pt-unit", typeName: "Unit", characteristics: [{ name: "M", $text: "6\"" }, { name: "T", $text: "4" }, { name: "Sv", $text: "5+" }, { name: "W", $text: "1" }, { name: "LD", $text: "7+" }, { name: "OC", $text: "1" }] }] }],
+        },
+      ],
+    };
+    const cat = { catalogue: { name: "Xenos - Bramble Court", id: "cat-bramble", costTypes: [{ id: "ct-pts", name: "pts" }], selectionEntries: [unit] } };
+    const r = parse({ "Xenos - Bramble Court.json": JSON.stringify(cat) });
+    expect(r.datasheets!.find((d) => d.name === "Bramble Host")!.composition).toEqual([{ description: "3-9 Brambles", min: 3, max: 9 }]);
+    expect(r.priceRules!.find((p) => p.datasheetId === "ds:bramble-court:bramble-host")!.tiers).toEqual([{ models: 3, points: 40 }, { models: 6, points: 80 }, { models: 9, points: 120 }]);
+  });
+
   it("extracts detachments with DP, unique tags and rules, and links enhancements to them", () => {
     const ember = out.detachments!.find((d) => d.id === "det:ashen-wardens:ember-vanguard")!;
     expect(ember).toMatchObject({ dp: 2, uniqueTag: "Ember", forceDispositions: [] });

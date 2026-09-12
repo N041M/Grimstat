@@ -55,6 +55,34 @@ export function fnv1a(s: string): string {
   return h.toString(16).padStart(8, "0");
 }
 
+/**
+ * A 128-bit hash of a string, as 32 hex characters.
+ *
+ * Four FNV-1a lanes run over the same characters, each with its own offset basis and prime, and
+ * each lane takes the one beside it along on every character, so a pair of strings that collides
+ * in one lane has to collide in all four to collide here. A closing round mixes the lanes again so
+ * a change in the last character reaches every digit. It is used where a hash is a primary key and
+ * a 32-bit one would collide. The corpus of published lists runs to six figures of records.
+ */
+export function fnv1a128(s: string): string {
+  let a = 0x811c9dc5;
+  let b = 0x9dc5811c;
+  let c = 0xc59d1c81;
+  let d = 0x1c81c59d;
+  for (let i = 0; i < s.length; i++) {
+    const k = s.charCodeAt(i);
+    a = b ^ Math.imul(a ^ k, 0x01000193);
+    b = c ^ Math.imul(b ^ k, 0x85ebca6b);
+    c = d ^ Math.imul(c ^ k, 0xc2b2ae35);
+    d = a ^ Math.imul(d ^ k, 0x27d4eb2f);
+  }
+  a = Math.imul(a ^ (c >>> 15), 0x01000193);
+  b = Math.imul(b ^ (d >>> 13), 0x85ebca6b);
+  c = Math.imul(c ^ (a >>> 16), 0xc2b2ae35);
+  d = Math.imul(d ^ (b >>> 11), 0x27d4eb2f);
+  return [a, b, c, d].map((h) => (h >>> 0).toString(16).padStart(8, "0")).join("");
+}
+
 /** Stable fingerprint of an override set (order-independent). */
 export function overridesFingerprint(overrides: Override[]): string {
   const keys = overrides.map((o) => `${o.entity}:${o.id}:${JSON.stringify(o.patch)}`).sort();
@@ -220,6 +248,17 @@ export function effectToForm(e: EffectRecord): EffectForm {
     bool: typeof e.value === "boolean" ? e.value : true,
     condition: conditionToForm(e.if),
   };
+}
+
+/**
+ * Which effect is being edited once the one at `removed` is taken out of the list.
+ *
+ * The editor holds the effect under edit as a position, so removing an effect above it slides it
+ * down one. Removing the effect being edited closes the form.
+ */
+export function editingAfterRemove(editing: number | undefined, removed: number): number | undefined {
+  if (editing === undefined || editing === removed) return undefined;
+  return editing > removed ? editing - 1 : editing;
 }
 
 /** One-line description of an effect for lists. */

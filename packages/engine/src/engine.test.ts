@@ -32,6 +32,16 @@ describe("pmf primitives", () => {
     expect(dicePMF(2)).toEqual([0, 0, 1]);
     close(mean(dicePMF("d6")), 3.5);
   });
+  it("averages a negative bonus the way the distribution floors it", () => {
+    // `dicePMF` caps each shifted roll at zero, so "D6-2" rolls 0, 0, 1, 2, 3, 4 and averages 1.667.
+    // Subtracting the bonus from 3.5 gives 1.5, which is the mean of a distribution nothing samples.
+    close(diceMean("D6-2"), 5 / 3);
+    close(diceMean("D3-2"), 1 / 3);
+    for (const expr of ["1", "2", "D3", "D6", "2D6", "D3+1", "D6+2", "D6-1", "D6-2", "D3-2", "2D6-2", "2D6-4", "3D3-5", "0-2"]) {
+      close(diceMean(expr), mean(dicePMF(expr)));
+    }
+    close(diceMean(3), mean(dicePMF(3)));
+  });
   it("binomial sums to one and thin matches binomial", () => {
     const b = binomial(5, 0.3);
     close(b.reduce((s, v) => s + v, 0), 1);
@@ -263,5 +273,31 @@ describe("chained runs", () => {
     const mc = runMonteCarlo({ weapons: [w2], groups, allocation: "in-order", backend: "mc", mcIterations: 40000, seed: 3, initialState: first.finalState! });
     expect(Math.abs(mc.expectedDamage - second.expectedDamage)).toBeLessThan(3 * (mc.ciHalfWidth ?? 0.1) + 0.03);
     expect(Math.abs(mc.pKill - second.pKill)).toBeLessThan(0.02);
+  });
+
+  it("sizes a chained run's confidence interval on the damage that run adds", () => {
+    const groups = [{ id: "g", name: "g", models: 4, wounds: 3, isCharacter: false, pointsPerModel: 10 }];
+    const w1 = weapon({ name: "a", count: 4, groups: [{ pUnsaved: 0.5, damage: dicePMF("D3"), mortalDamage: dicePMF("D3") }] });
+    const w2 = weapon({ name: "b", count: 3, attacks: dicePMF("D6"), groups: [{ pUnsaved: 0.7, damage: delta(2), mortalDamage: delta(2) }] });
+    const first = runExact({ weapons: [w1], groups, allocation: "in-order", backend: "exact", mcIterations: 0 })!;
+    const chained = (seed: number, mcIterations: number) =>
+      runMonteCarlo({ weapons: [w2], groups, allocation: "in-order", backend: "mc", mcIterations, seed, initialState: first.finalState! });
+
+    // Independent runs scatter about the answer by the standard error the interval quotes, so the
+    // spread of two hundred of them is what the quote has to match. Accumulating the square of the
+    // cumulative damage against an incremental mean quoted about twice that, and iterating harder
+    // would never have brought it down.
+    const runs = Array.from({ length: 200 }, (_, i) => chained(i + 1, 4000));
+    const means = runs.map((r) => r.expectedDamage);
+    const centre = means.reduce((a, b) => a + b, 0) / means.length;
+    const spread = Math.sqrt(means.reduce((a, b) => a + (b - centre) * (b - centre), 0) / (means.length - 1));
+    const quoted = runs.reduce((a, r) => a + (r.ciHalfWidth ?? 0), 0) / runs.length / 1.96;
+    expect(quoted / spread).toBeGreaterThan(0.8);
+    expect(quoted / spread).toBeLessThan(1.25);
+
+    // One run of that set, pinned: 2.33 of per-iteration spread behind the interval, where the
+    // cumulative total gave 4.35.
+    const one = chained(3, 20000);
+    expect((one.ciHalfWidth! * Math.sqrt(20000)) / 1.96).toBeCloseTo(2.33, 1);
   });
 });

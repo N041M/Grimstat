@@ -4,6 +4,7 @@ import { loadSyntheticSnapshot } from "./synthetic/index";
 
 describe("buildSnapshot", () => {
   const base = loadSyntheticSnapshot();
+  const SOME_DAY = "2026-01-01T00:00:00.000Z";
 
   it("produces a dated id with the checksum prefix and record meta", async () => {
     const snap = await buildSnapshot({ data: base.data, now: "2026-03-04T05:06:07.000Z", label: "x", sources: base.sources });
@@ -36,5 +37,36 @@ describe("buildSnapshot", () => {
   it("sorts collections deterministically", () => {
     const n = normaliseData({ ...base.data, factions: [...base.data.factions].reverse() });
     expect(n.factions.map((f) => f.id)).toEqual([...base.data.factions.map((f) => f.id)].sort());
+  });
+
+  it("orders wargear items by code unit so the host locale cannot move the checksum", async () => {
+    const wargearPrices = [
+      { datasheetId: "ds:ashen-wardens:warden-squad", item: "Zeal cannon", points: 5 },
+      { datasheetId: "ds:ashen-wardens:warden-squad", item: "Åsh blade", points: 10 },
+    ];
+    expect(normaliseData({ ...base.data, wargearPrices }).wargearPrices.map((w) => w.item)).toEqual(["Zeal cannon", "Åsh blade"]);
+    const a = await buildSnapshot({ data: { ...base.data, wargearPrices }, now: SOME_DAY });
+    const b = await buildSnapshot({ data: { ...base.data, wargearPrices: [...wargearPrices].reverse() }, now: SOME_DAY });
+    expect(b.checksum).toBe(a.checksum);
+  });
+
+  it("keeps the checksum stable when two keys compare equal to a collator", async () => {
+    // A soft hyphen makes localeCompare report 0 for these two items while they are distinct strings.
+    const wargearPrices = [
+      { datasheetId: "ds:ashen-wardens:warden-squad", item: "Plasma\u00adgun", points: 5 },
+      { datasheetId: "ds:ashen-wardens:warden-squad", item: "Plasmagun", points: 10 },
+    ];
+    const a = await buildSnapshot({ data: { ...base.data, wargearPrices }, now: SOME_DAY });
+    const b = await buildSnapshot({ data: { ...base.data, wargearPrices: [...wargearPrices].reverse() }, now: SOME_DAY });
+    expect(b.checksum).toBe(a.checksum);
+  });
+
+  it("breaks ties between price rules of one datasheet on copy range and label", () => {
+    const priceRules = [
+      { datasheetId: "ds:ashen-wardens:ashen-crusher", copyRange: { min: 1 }, label: "B", tiers: [{ models: 1, points: 20 }] },
+      { datasheetId: "ds:ashen-wardens:ashen-crusher", copyRange: { min: 1, max: 1 }, label: "A", tiers: [{ models: 1, points: 10 }] },
+    ];
+    expect(normaliseData({ ...base.data, priceRules }).priceRules.map((r) => r.label)).toEqual(["A", "B"]);
+    expect(normaliseData({ ...base.data, priceRules: [...priceRules].reverse() }).priceRules.map((r) => r.label)).toEqual(["A", "B"]);
   });
 });

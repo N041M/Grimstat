@@ -6,6 +6,7 @@ import { Id } from "./common";
  * on the model count band, and on selected wargear. Never a flat number.
  */
 export const PriceTier = z.object({ models: z.number().int().positive(), points: z.number() });
+export type PriceTier = z.infer<typeof PriceTier>;
 
 export const PriceRule = z.object({
   datasheetId: Id,

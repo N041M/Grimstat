@@ -82,10 +82,13 @@ interface Pattern {
 const PATTERNS: Pattern[] = [
   { re: /feel no pain (\d)\+/i, build: (m, _t, n) => ({ effects: [rec("fnp", "defender", "set", CH.fnp, Number(m[1]), n)], fnp: Number(m[1]) }) },
   { re: /(\d)\+ invulnerable save/i, build: (m, _t, n) => [rec("save", "defender", "cap", CH.invuln, Number(m[1]), n)] },
-  { re: /re-?roll (?:a )?hit rolls? of 1/i, build: (_m, t, n) => [rec("hit", "attacker", "reroll", CH.rerollHit, "ones", n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
-  { re: /re-?roll (?:a )?wound rolls? of 1/i, build: (_m, t, n) => [rec("wound", "attacker", "reroll", CH.rerollWound, "ones", n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
-  { re: /re-?roll (?:a |the )?hit rolls?(?! of 1)/i, build: (_m, t, n) => [rec("hit", "attacker", "reroll", CH.rerollHit, "failed", n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
-  { re: /re-?roll (?:a |the )?wound rolls?(?! of 1)/i, build: (_m, t, n) => [rec("wound", "attacker", "reroll", CH.rerollWound, "failed", n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
+  { re: /re-?roll (?:a |the )?hit rolls? of 1/i, build: (_m, t, n) => [rec("hit", "attacker", "reroll", CH.rerollHit, "ones", n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
+  { re: /re-?roll (?:a |the )?wound rolls? of 1/i, build: (_m, t, n) => [rec("wound", "attacker", "reroll", CH.rerollWound, "ones", n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
+  // The word boundary after `rolls?` matters. Without it the optional `s` gives way under
+  // backtracking, so "re-roll hit rolls of 1" matches here as well as on the line above and the
+  // better of the two re-rolls wins, turning a re-roll of 1s into a re-roll of every failure.
+  { re: /re-?roll (?:a |the )?hit rolls?\b(?! of 1)/i, build: (_m, t, n) => [rec("hit", "attacker", "reroll", CH.rerollHit, "failed", n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
+  { re: /re-?roll (?:a |the )?wound rolls?\b(?! of 1)/i, build: (_m, t, n) => [rec("wound", "attacker", "reroll", CH.rerollWound, "failed", n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
   { re: /add 1 to (?:the )?hit rolls?|\+1 to hit/i, build: (_m, t, n) => [rec("hit", "attacker", "add", CH.hitRoll, 1, n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
   { re: /add 1 to (?:the )?wound rolls?|\+1 to wound/i, build: (_m, t, n) => [rec("wound", "attacker", "add", CH.woundRoll, 1, n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
   { re: /subtract 1 from (?:the )?hit rolls?|-1 to hit/i, build: (_m, t, n) => [rec("hit", "defender", "add", CH.hitRoll, -1, n, { ...kindCond(t) })] },

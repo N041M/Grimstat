@@ -32,9 +32,13 @@ export interface CorpusRecord {
 
 export type FetchText = (url: string) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
 
+const INDEX_FILE_AT_END = new RegExp(`/?${CORPUS_INDEX_FILE.replace(/\./g, "\\.")}$`);
+
 /** The directory the index lives in, with one trailing slash, whether the user typed the index file or not. */
 export function corpusBase(url: string): string {
-  const trimmed = url.trim().replace(new RegExp(`/?${CORPUS_INDEX_FILE.replace(".", "\\.")}$`), "");
+  // Trailing slashes come off first. A link copied from a browser's address bar can end
+  // "index.json/", and the file has to sit at the end of the text to be taken off.
+  const trimmed = url.trim().replace(/\/+$/, "").replace(INDEX_FILE_AT_END, "");
   return trimmed.replace(/\/+$/, "") + "/";
 }
 

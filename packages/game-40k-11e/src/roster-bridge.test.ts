@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Roster } from "@grimstat/schema";
+import type { Roster, Scenario, ScenarioUnit } from "@grimstat/schema";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
-import { unitFromRosterUnit, unitFromDatasheet, parseLoadout } from "./index";
+import { unitFromRosterUnit, unitFromDatasheet, parseLoadout, pointsFor, listToggles, runScenario } from "./index";
 
 const snapshot = loadSyntheticSnapshot();
 const now = new Date().toISOString();
@@ -67,5 +67,56 @@ describe("parseLoadout", () => {
     expect(by["Flux carbine"]!.count).toBe(10);
     expect(by["Power fist"]!.count).toBe(1);
     expect(by["Power fist"]!.enabled).toBe(true);
+  });
+});
+
+describe("an attached character's weapons", () => {
+  it("survive the host's wargear selection when the character's own group lists none", () => {
+    const bare: Roster = { ...roster, units: roster.units.map((u) => (u.id === "u2" ? { ...u, models: u.models.map((m) => ({ ...m, wargear: [] })) } : u)) };
+    const u = unitFromRosterUnit(bare.units[0]!, bare, snapshot);
+    const captain = u.weapons.filter((w) => w.name.startsWith("Warden Captain: "));
+    expect(captain.map((w) => `${w.name}x${w.count}`)).toEqual(["Warden Captain: Flux pistolx1", "Warden Captain: Relic bladex1"]);
+    expect(captain.some((w) => w.enabled)).toBe(true);
+    // The host's own selection is still applied.
+    const by = Object.fromEntries(u.weapons.map((w) => [w.name, w]));
+    expect(by["Flux carbine"]!.count).toBe(10);
+  });
+});
+
+describe("pointsFor", () => {
+  it("takes the largest tier the unit is big enough for, whatever order the tiers were listed in", () => {
+    const squad = snapshot.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;
+    const rule = snapshot.data.priceRules.find((r) => r.datasheetId === squad.id)!;
+    const descending = { ...snapshot, data: { ...snapshot.data, priceRules: [{ ...rule, tiers: [...rule.tiers].reverse() }] } };
+    expect(pointsFor(squad, descending, 5)).toBe(90);
+    expect(pointsFor(squad, descending, 10)).toBe(180);
+    expect(pointsFor(squad, snapshot, 5)).toBe(90);
+    expect(pointsFor(squad, snapshot, 10)).toBe(180);
+    // Below every tier, the smallest stands in.
+    expect(pointsFor(squad, descending, 1)).toBe(90);
+  });
+});
+
+describe("an attached character's ability toggle", () => {
+  const squadWithCaptain = () => unitFromRosterUnit(roster.units[0]!, roster, snapshot);
+  const target: ScenarioUnit = { name: "target", keywords: ["INFANTRY"], models: [{ name: "m", count: 10, T: 4, Sv: 3, W: 1, isCharacter: false, keywords: [] }], weapons: [], attached: [], effects: [] };
+  const now2 = new Date().toISOString();
+  const scenarioOf = (attacker: ScenarioUnit, enabledToggles: string[]): Scenario => ({
+    id: "s", ownerId: "local", createdAt: now2, updatedAt: now2, revision: 0, name: "t",
+    gameSystemId: "wh40k-11e", attacker, defender: target,
+    context: { rangeBand: "full", charged: false, stationary: false, inCover: false, snapShooting: false, phase: "shooting", flags: [], allocationPolicy: "protect-character", lethalChoice: "auto", weaponOrder: "listed", mcIterations: 5000, backend: "exact" },
+    enabledToggles, extraEffects: [],
+  });
+
+  it("is listed, and switching it off changes the result", () => {
+    const attacker = squadWithCaptain();
+    const toggles = listToggles(scenarioOf(attacker, []), snapshot);
+    const rally = toggles.find((t) => t.id === "ability:attacker:ab:ashen-wardens:warden-captain:rally-the-line");
+    expect(rally).toBeDefined();
+
+    const on = runScenario(scenarioOf(attacker, []), { snapshot });
+    const off = runScenario(scenarioOf(attacker, [`-${rally!.id}`]), { snapshot });
+    // Rally the Line re-rolls hit rolls of 1 on ranged attacks, so removing it must lower the damage.
+    expect(off.expectedDamage).toBeLessThan(on.expectedDamage);
   });
 });

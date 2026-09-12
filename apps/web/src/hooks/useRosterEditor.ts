@@ -32,9 +32,36 @@ export function useRosterEditor(id: string): RosterEditorState {
   const rosterRef = useRef<Roster | undefined>(undefined);
   const dirtyRef = useRef(false);
   const timer = useRef<number | undefined>(undefined);
+  /** The army the state on screen belongs to, so a save that lands after a switch keeps quiet. */
+  const editingRef = useRef(id);
+
+  const flush = useCallback(async () => {
+    window.clearTimeout(timer.current);
+    const cur = rosterRef.current;
+    if (!cur || !dirtyRef.current) return;
+    const editing = editingRef.current;
+    dirtyRef.current = false;
+    const saved = touchRoster(cur);
+    rosterRef.current = saved;
+    setRosterState(saved);
+    setStatus("saving");
+    try {
+      await saveRosterWithVersion(saved);
+      // The editor may have moved to another army while the write was in flight. The army is
+      // stored either way; the status and the save time on screen now belong to the other one.
+      if (editingRef.current !== editing) return;
+      setSavedAt(saved.updatedAt);
+      if (!dirtyRef.current) setStatus("saved");
+    } catch {
+      if (editingRef.current !== editing) return;
+      dirtyRef.current = true;
+      setStatus("error");
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
+    editingRef.current = id;
     rosterRef.current = undefined;
     dirtyRef.current = false;
     setRosterState(undefined);
@@ -48,27 +75,11 @@ export function useRosterEditor(id: string): RosterEditorState {
     });
     return () => {
       alive = false;
+      // The army list navigates from one army straight to another without the page unmounting, so
+      // the queued save is written here, while the ref still holds the army being left.
+      void flush();
     };
-  }, [id]);
-
-  const flush = useCallback(async () => {
-    window.clearTimeout(timer.current);
-    const cur = rosterRef.current;
-    if (!cur || !dirtyRef.current) return;
-    dirtyRef.current = false;
-    const saved = touchRoster(cur);
-    rosterRef.current = saved;
-    setRosterState(saved);
-    setStatus("saving");
-    try {
-      await saveRosterWithVersion(saved);
-      setSavedAt(saved.updatedAt);
-      if (!dirtyRef.current) setStatus("saved");
-    } catch {
-      dirtyRef.current = true;
-      setStatus("error");
-    }
-  }, []);
+  }, [id, flush]);
 
   const schedule = useCallback(() => {
     window.clearTimeout(timer.current);

@@ -125,6 +125,28 @@ describe("wahapedia-csv adapter (synthetic fixture)", () => {
     expect(staging.upstreamDatasheetIds["ds:ashen-wardens:warden-captain"]).toBe("000000101");
   });
 
+  it("strips the phase word from every part of a comma-separated phase list", () => {
+    const csv = "faction_id|name|id|type|cp_cost|legend|turn|phase|detachment|detachment_id|description|\n|DOUBLE TIME|000000799|Core – Strategic Ploy Stratagem|1||Your turn|Movement phase, Charge phase|||<b>WHEN:</b> Your Movement phase.|\n";
+    const r = parse({ "Stratagems.csv": csv });
+    expect(r.stratagems!.find((s) => s.name === "DOUBLE TIME")!.phases).toEqual(["Movement", "Charge"]);
+  });
+
+  it("keeps two same-named abilities of one faction apart", () => {
+    const files = {
+      "Factions.csv": "id|name|link|\nAW|Ashen Wardens|https://example.invalid/factions/ashen-wardens|\n",
+      "Datasheets.csv": "id|name|faction_id|source_id|legend|role|loadout|transport|virtual|is_support|leader_head|leader_footer|damaged_w|damaged_description|link|\n000000901|Ash Walker|AW|000000001||Other Datasheets|||false|false|||||\n000000902|Ash Rider|AW|000000001||Other Datasheets|||false|false|||||\n",
+      "Abilities.csv": "id|name|legend|faction_id|description|\n000000801|Cinder Shroud|AW||Models in this unit have a 5+ invulnerable save.|\n000000802|Cinder Shroud|AW||Each time this unit is targeted, subtract 1 from the hit roll.|\n",
+      "Datasheets_abilities.csv": "datasheet_id|line|ability_id|model|name|description|type|parameter|\n000000901|1|000000801||||Datasheet||\n000000902|1|000000802||||Datasheet||\n",
+    };
+    const r = parse(files);
+    const walker = r.datasheets!.find((d) => d.name === "Ash Walker")!;
+    const rider = r.datasheets!.find((d) => d.name === "Ash Rider")!;
+    expect(walker.abilityIds).toEqual(["ab:ashen-wardens:cinder-shroud"]);
+    expect(rider.abilityIds).toEqual(["ab:ashen-wardens:cinder-shroud-2"]);
+    expect(r.abilities!.filter((a) => a.name === "Cinder Shroud").map((a) => a.text)).toEqual(["Models in this unit have a 5+ invulnerable save.", "Each time this unit is targeted, subtract 1 from the hit roll."]);
+    expect(r.warnings.some((w) => w.includes('"Cinder Shroud" appears more than once'))).toBe(true);
+  });
+
   it("rejects a single string input", () => {
     expect(() => parse("id|name|\n")).toThrow(/map of table name/);
   });

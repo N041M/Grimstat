@@ -113,8 +113,8 @@ export function parsePipeCsv(text: string, opts: PipeCsvOptions = {}): PipeCsvRe
         // merge the surplus into the last column (a delimiter inside free text)
         const head = rec.slice(0, header.length - 1);
         head.push(rec.slice(header.length - 1).join(delimiter));
-        rec = head;
         warnings.push(`row ${idx + 2}: ${rec.length} fields, merged surplus into last column`);
+        rec = head;
       } else {
         warnings.push(`row ${idx + 2}: expected ${header.length} fields, got ${rec.length}`);
         while (rec.length < header.length) rec.push("");

@@ -11,14 +11,24 @@ export interface BuildSnapshotInput {
   ownerId?: string;
 }
 
-function byId<T extends { id: string }>(a: T, b: T): number {
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+/** Code-unit comparison. The host locale must not reach the checksum, so `localeCompare` is never used here. */
+function cmp(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
+
+function byId<T extends { id: string }>(a: T, b: T): number {
+  return cmp(a.id, b.id);
+}
+
+/** Sorts after every real value, standing in for an open-ended `copyRange.max`. */
+const OPEN_ENDED = Number.MAX_SAFE_INTEGER;
 
 /**
  * Deterministic ordering of every collection so that the same data always yields the same checksum
- * regardless of the order adapters emitted it. Nested arrays (models, weapons, keywords...) keep their
- * upstream order because it carries meaning (e.g. the first model profile is the default one).
+ * regardless of the order adapters emitted it. Every comparator is a strict total order over the fields
+ * that distinguish two records, so equal keys can never let the input order decide the result. Nested
+ * arrays (models, weapons, keywords...) keep their upstream order because it carries meaning (e.g. the
+ * first model profile is the default one).
  */
 export function normaliseData(data: SnapshotData): SnapshotData {
   const parsed = SnapshotData.parse(data);
@@ -31,8 +41,8 @@ export function normaliseData(data: SnapshotData): SnapshotData {
     detachments: [...parsed.detachments].sort(byId),
     enhancements: [...parsed.enhancements].sort(byId),
     stratagems: [...parsed.stratagems].sort(byId),
-    priceRules: [...parsed.priceRules].sort((a, b) => a.datasheetId.localeCompare(b.datasheetId) || a.copyRange.min - b.copyRange.min),
-    wargearPrices: [...parsed.wargearPrices].sort((a, b) => a.datasheetId.localeCompare(b.datasheetId) || a.item.localeCompare(b.item)),
+    priceRules: [...parsed.priceRules].sort((a, b) => cmp(a.datasheetId, b.datasheetId) || a.copyRange.min - b.copyRange.min || (a.copyRange.max ?? OPEN_ENDED) - (b.copyRange.max ?? OPEN_ENDED) || cmp(a.label ?? "", b.label ?? "")),
+    wargearPrices: [...parsed.wargearPrices].sort((a, b) => cmp(a.datasheetId, b.datasheetId) || cmp(a.item, b.item) || a.points - b.points),
   };
 }
 

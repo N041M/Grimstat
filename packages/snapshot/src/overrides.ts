@@ -1,8 +1,23 @@
 import type { Override, SnapshotData } from "@grimstat/schema";
 
-/** RFC 7396 JSON merge patch. `null` in the patch removes a key; objects merge recursively; anything else replaces. */
+/** Structural copy of arrays and plain objects. Anything else (numbers, strings, null) is returned as it is. */
+function copy<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((v) => copy(v)) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) out[key] = copy(v);
+    return out as T;
+  }
+  return value;
+}
+
+/**
+ * RFC 7396 JSON merge patch. `null` in the patch removes a key; objects merge recursively; anything else
+ * replaces. Values taken from the patch are copied, so one override applied to several entities gives each
+ * of them its own arrays and objects and the caller's patch stays detached from the result.
+ */
 export function mergePatch<T>(target: T, patch: unknown): T {
-  if (patch === null || typeof patch !== "object" || Array.isArray(patch)) return patch as T;
+  if (patch === null || typeof patch !== "object" || Array.isArray(patch)) return copy(patch) as T;
   const base: Record<string, unknown> = target && typeof target === "object" && !Array.isArray(target) ? { ...(target as Record<string, unknown>) } : {};
   for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
     if (value === null) delete base[key];

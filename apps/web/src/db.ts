@@ -1,7 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import type { Roster, Scenario, ScenarioUnit, Snapshot } from "@grimstat/schema";
-import type { StoredPublishedList } from "@grimstat/adapters";
-import type { OverrideRecord } from "./lib/overrides";
+import { publishedListKey, type StoredPublishedList } from "@grimstat/adapters";
+import { fnv1a128, type OverrideRecord } from "./lib/overrides";
 import type { ResolvedSummary } from "./lib/meta";
 import type { GameState, LogEntry } from "./lib/game";
 import type { Layout } from "react-grid-layout";
@@ -63,6 +63,16 @@ export interface TerrainLayoutRecord {
 export interface PublishedListRecord extends StoredPublishedList {
   id: string;
 }
+
+/**
+ * The record id: a hash of what identifies a list, so importing it twice stores it once.
+ *
+ * The hash is 128 bits wide because it is the primary key of a table a relay's corpus fills. A
+ * 32-bit hash collides at odds of one in four by fifty thousand lists, and a collision there is one
+ * list quietly overwriting another. It lives here rather than beside the import code because the v9
+ * migration re-keys the table with it.
+ */
+export const publishedListId = (list: StoredPublishedList): string => `pl-${fnv1a128(publishedListKey(list))}`;
 
 /**
  * A published list resolved against one snapshot: the datasheets it holds and their points, which is
@@ -230,6 +240,35 @@ export class GrimstatDb extends Dexie {
       games: "id, rosterId, updatedAt",
       unitPresets: "id, name, factionId, updatedAt",
     });
+    // v9: wider published-list ids. The stores are unchanged; the records are re-keyed.
+    this.version(9)
+      .stores({
+        snapshots: "id, gameSystemId, updatedAt",
+        scenarios: "id, name, updatedAt, snapshotId",
+        layouts: "id",
+        settings: "key",
+        rosters: "id, name, factionId, snapshotId, updatedAt",
+        rosterVersions: "id, rosterId, updatedAt",
+        overrides: "&key, entity, id, updatedAt",
+        terrainLayouts: "id, name, updatedAt",
+        publishedLists: "id, faction, placing, importedAt",
+        publishedResolved: "&key, snapshotId, recordId",
+        games: "id, rosterId, updatedAt",
+        unitPresets: "id, name, factionId, updatedAt",
+      })
+      .upgrade(async (tx) => {
+        // Every stored list keeps its content and takes the id the wider hash gives it. Two lists
+        // never share a new id unless they already shared the old one, so the re-key is a straight
+        // swap. The resolved summaries are keyed by the old ids and are derived data, so they go;
+        // the Meta tab builds them again on its next run.
+        const lists = tx.table<PublishedListRecord, string>("publishedLists");
+        const all = await lists.toArray();
+        const stale = all.filter((r) => r.id !== publishedListId(r));
+        if (!stale.length) return;
+        await lists.bulkDelete(stale.map((r) => r.id));
+        await lists.bulkPut(stale.map((r) => ({ ...r, id: publishedListId(r) })));
+        await tx.table("publishedResolved").clear();
+      });
   }
 }
 
@@ -366,7 +405,9 @@ export async function importAll(bundle: ExportBundle): Promise<{ snapshots: numb
     if (rosters.length) await db.rosters.bulkPut(rosters);
     if (overrides.length) await db.overrides.bulkPut(overrides);
     if (terrainLayouts.length) await db.terrainLayouts.bulkPut(terrainLayouts);
-    if (publishedLists.length) await db.publishedLists.bulkPut(publishedLists);
+    // A bundle exported before the ids were widened carries the old ones; the id is a function of
+    // the list itself, so it is recomputed here and an import stays one record per list.
+    if (publishedLists.length) await db.publishedLists.bulkPut(publishedLists.map((r) => ({ ...r, id: publishedListId(r) })));
     if (unitPresets.length) await db.unitPresets.bulkPut(unitPresets);
   });
   notifyStoreChanged("rosters");

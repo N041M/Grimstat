@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import type { ScenarioModel, ScenarioUnit, ScenarioWeapon } from "@grimstat/schema";
+import { isDiceExpr, type ScenarioModel, type ScenarioUnit, type ScenarioWeapon } from "@grimstat/schema";
 import { keywordsToText, parseKeywordText } from "../lib/keywordParser";
 import { defaultModel, defaultWeapon } from "../lib/scenario";
 import { numOrNull } from "./ui";
 import { t } from "../i18n";
 
-const DICE_RE = /^\s*(\d+)?[dD]?(3|6)?\s*([+-]\s*\d+)?\s*$/;
-export const isDice = (s: string): boolean => s.trim().length > 0 && DICE_RE.test(s);
+/** The schema's own test, so the field refuses exactly what the engine would refuse to parse. */
+export const isDice = (s: string): boolean => isDiceExpr(s);
 const normKeywords = (s: string) => keywordsToText(parseKeywordText(s));
 
 /** Text input that keeps local text while typing and only commits valid values; resyncs when the prop changes elsewhere. */

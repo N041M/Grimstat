@@ -255,6 +255,20 @@ describe("text import edge cases", () => {
     expect(r.units[0]!.models.map((g) => [g.count, g.wargear.join("+")])).toEqual([[1, "Power fist"], [4, "Shock maul"]]);
   });
 
+  it("sizes an undeclared unit by its `N with` groups rather than by the items they carry", () => {
+    const line = "Warden Squad (180 pts): 1 with Flux carbine, Power fist, 9 with Flux carbine, Shock maul";
+    const { roster: r } = importLines("Ashen Wardens", "Ember Vanguard", line);
+    const { roster: sized } = importLines("Ashen Wardens", "Ember Vanguard", `10x ${line}`);
+    expect(r.units[0]!.models.map((g) => [g.count, g.wargear.join("+")])).toEqual([[1, "Flux carbine+Power fist"], [9, "Flux carbine+Shock maul"]]);
+    expect(r.units[0]!.models).toEqual(sized.units[0]!.models);
+  });
+
+  it("does not shrink a squad to one model because it listed its wargear", () => {
+    const size = (lines: string[]) => importLines("Ashen Wardens", "Ember Vanguard", ...lines).roster.units[0]!.models.reduce((s, g) => s + g.count, 0);
+    expect(size(["Warden Squad (180 points)"])).toBe(5);
+    expect(size(["Warden Squad (180 points)", "• 10x Flux carbine", "• 2x Shock maul"])).toBe(5);
+  });
+
   it("parses wargear with per-model counts and per-model copies", () => {
     expect(parseWargearItems("1 with Flux carbine, Power fist, 9 with Flux carbine")).toEqual([
       { name: "Flux carbine", n: 1, copies: 1 },

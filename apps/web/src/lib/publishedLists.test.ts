@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { PublishedListRecord } from "../db";
-import { classifyPublishedText, feedChecklist, parsePublishedFeed, publishedListId, readPublishedFeed, readPublishedFile, type PublishedFeed } from "./publishedLists";
+import { classifyPublishedText, feedChecklist, parsePublishedFeed, publishedListId, publishedSources, readPublishedFeed, readPublishedFile, type PublishedFeed } from "./publishedLists";
 
 const fixture = (rel: string) => readFileSync(join(process.cwd(), "fixtures/synthetic/competitive", rel), "utf8");
 
@@ -10,6 +10,45 @@ const record = (source: PublishedListRecord["source"], n = 1): PublishedListReco
   const stored = { heading: `P${n} - Faction - 1st Place`, player: `P${n}`, detachments: [], listText: `Unit (${n * 10} points)\n• 1x thing\nOther (5 points)`, source, importedAt: "2026-09-11T00:00:00.000Z" };
   return { ...stored, id: publishedListId(stored) };
 };
+
+describe("the record id", () => {
+  const list = (player: string, placing: number) => ({ heading: `${player} - Faction - ${placing}`, player, placing, detachments: [], listText: "Intercessor Squad (80 points) 5x bolt rifle", source: {}, importedAt: "2026-09-11T00:00:00.000Z" });
+
+  it("is the same for the same list and different for a different one", () => {
+    expect(publishedListId(list("Ada", 1))).toBe(publishedListId(list("Ada", 1)));
+    expect(publishedListId(list("Ada", 1))).not.toBe(publishedListId(list("Ada", 2)));
+  });
+
+  it("is 128 bits wide, so the corpus does not outgrow it", () => {
+    expect(publishedListId(list("Ada", 1))).toMatch(/^pl-[0-9a-f]{32}$/);
+  });
+
+  it("keeps apart two lists the 32-bit hash gave the same id", () => {
+    // Both sides of this pair hash to 60b46b73 under FNV-1a — the first collision a run of
+    // generated players and placings turned up, at some sixty thousand records.
+    expect(publishedListId(list("Player 14301", 30))).not.toBe(publishedListId(list("Player 62254", 47)));
+  });
+
+  it("gives a hundred thousand generated lists a hundred thousand ids", () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 100000; i++) ids.add(publishedListId(list(`Player ${i}`, (i % 64) + 1)));
+    expect(ids.size).toBe(100000);
+  });
+});
+
+describe("the sources table", () => {
+  it("gives a write-up with neither a link nor a title a row of its own", () => {
+    const rows = publishedSources([record({ title: "Anonymous" }, 1), record({}, 2), record({}, 3)]);
+    expect(rows.map((r) => r.lists)).toEqual([1, 1, 1]);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(3);
+  });
+
+  it("still folds the lists of one write-up into one row", () => {
+    const rows = publishedSources([record({ url: "https://example.invalid/a/" }, 1), record({ url: "https://example.invalid/a/" }, 2)]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.lists).toBe(2);
+  });
+});
 
 describe("telling the files apart", () => {
   it("knows a corpus, a feed and a page by their content, not their names", () => {

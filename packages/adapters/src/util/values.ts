@@ -51,7 +51,7 @@ const DICE_RE = /^\s*(\d+)?[dD]?(3|6)?\s*([+-]\s*\d+)?\s*$/;
  */
 export function parseDice(v: string | undefined | null): number | string | null {
   if (v === undefined || v === null) return null;
-  const s = v.trim().replace(/\s+/g, "").toUpperCase();
+  const s = v.trim().replace(/\s+/g, "").replace(/\*$/, "").toUpperCase(); // "D6*" carries a footnote in some exports
   if (!s || s === "-" || s === "N/A") return null;
   if (/^\d+$/.test(s)) return Number(s);
   if (!s.includes("D")) return null;

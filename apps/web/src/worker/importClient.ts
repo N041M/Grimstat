@@ -18,6 +18,7 @@ export class ImportClient {
   private worker: Worker | undefined;
   private proxy: Comlink.Remote<ImportWorkerApi> | undefined;
   private pending: { reject(e: Error): void } | undefined;
+  private listeners = new Set<() => void>();
 
   private ensure(): Comlink.Remote<ImportWorkerApi> {
     if (!this.proxy) {
@@ -38,15 +39,35 @@ export class ImportClient {
     return this.pending !== undefined;
   }
 
+  /**
+   * Be told when a run starts or ends; returns the way to stop being told.
+   *
+   * The panel that starts an import is not always mounted for the whole of it — the user can leave
+   * the Data page and come back, and the run carries on in the worker. A panel that asks here knows
+   * the run has ended even though it was somebody else's mount that started it.
+   */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private announce(): void {
+    for (const l of this.listeners) l();
+  }
+
   run(request: ImportRequest, onEvent: (e: ImportEvent) => void): Promise<ImportResult> {
     if (this.pending) return Promise.reject(new Error("An import is already running"));
     const proxy = this.ensure();
     return new Promise<ImportResult>((resolve, reject) => {
       const mine = { reject };
       this.pending = mine;
+      this.announce();
       const settle = (): boolean => {
         if (this.pending !== mine) return false; // cancelled meanwhile; the worker is gone
         this.pending = undefined;
+        this.announce();
         return true;
       };
       proxy.run(request, Comlink.proxy(onEvent)).then(
@@ -62,6 +83,7 @@ export class ImportClient {
     this.pending = undefined;
     this.respawn();
     p.reject(new ImportCancelledError());
+    this.announce();
   }
 
   dispose(): void {

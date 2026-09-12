@@ -186,6 +186,18 @@ describe("cover", () => {
     expect(coverFor(trooper(10, 0), trooper(0, 0), index(wide)).level).toBe("none"); // attacker is inside it
   });
 
+  it("measures the bases rather than the two centre points", () => {
+    // A 32 mm base is 0.63" in radius, so a trooper whose centre is 0.3" outside the crater still
+    // has most of his base inside it. The line between the two centres misses the crater entirely,
+    // which is what used to leave him in the open.
+    expect(coverFor(trooper(10.5, 2.3), trooper(0, 2.3), index(crater))).toMatchObject({ level: "light", from: "crater", reason: "within" });
+
+    // The same measurement on the attacker's side: a footprint his own base is in is not in his way,
+    // even when the line between the centres runs through it.
+    const wide = terrain({ id: "wide", polygon: rect(2, -6, 6, 6), height: 1.5, traits: ["heavy-cover"] });
+    expect(coverFor(trooper(10, 0), trooper(1.7, 0), index(wide)).level).toBe("none");
+  });
+
   it("prefers heavy cover when both apply", () => {
     expect(coverFor(trooper(10, 0), trooper(0, 0), index(crater, ruin)).level).toBe("heavy");
   });

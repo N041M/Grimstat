@@ -17,7 +17,7 @@ import type { ArticleSource, PublishedArticle, PublishedList } from "./types";
  * in brackets after the placing, or name a team instead of a player — so the only thing required is
  * the placing, which is what makes a heading a *result* rather than a section title.
  */
-const HEADING = /^(?<player>.+?)\s+[-–—]\s+(?<rest>.+?)\s+[-–—]\s+(?<place>\d+)(?:st|nd|rd|th)\s+Place\b/i;
+const HEADING = /^(?<player>.+?)\s+[-–—]\s+(?:(?<rest>.+?)\s+[-–—]\s+)?(?<place>\d+)(?:st|nd|rd|th)\s+Place\b/i;
 /** The faction part of a heading, with its detachments in brackets after it. */
 const FACTION = /^(?<faction>.+?)\s*(?:\((?<dets>[^)]*)\))?$/;
 /** A list's own first line, as the official app writes it. */
@@ -27,10 +27,10 @@ export const LIST_NAME = /^(?<name>.+?)\s*\(\s*[\d,]+\s*(?:points?|pts?)\s*\)\s*
 export function parseHeading(heading: string): Omit<PublishedList, "listText"> | undefined {
   const m = HEADING.exec(heading.trim());
   if (!m?.groups) return undefined;
-  const { player, rest, place } = m.groups as Record<string, string>;
+  const { player, rest, place } = m.groups as Record<string, string | undefined>;
 
   // What sits between the faction and the placing is the disposition, when the heading gave one.
-  const parts = rest!.split(/\s+[-–—]\s+/);
+  const parts = (rest ?? "").split(/\s+[-–—]\s+/).filter(Boolean);
   const factionPart = parts[0] ?? "";
   const disposition = parts.length > 1 ? parts[parts.length - 1]!.trim() : undefined;
 

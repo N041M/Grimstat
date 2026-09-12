@@ -65,6 +65,12 @@ describe("reading a result heading", () => {
     expect(parseHeading("P - F - 1st Place")?.heading).toBe("P - F - 1st Place");
   });
 
+  it("copes with a heading that names nothing between the player and the placing", () => {
+    expect(parseHeading("Alex Vance - 1st Place")).toMatchObject({ player: "Alex Vance", detachments: [], placing: 1 });
+    expect(parseHeading("Alex Vance - 1st Place")!.faction).toBeUndefined();
+    expect(parseHeading("Team Ember - 2nd Place")).toMatchObject({ player: "Team Ember", placing: 2 });
+  });
+
   it("refuses a heading with no placing, because that is a section title", () => {
     expect(parseHeading("Acknowledgements")).toBeUndefined();
     expect(parseHeading("Closing Thoughts")).toBeUndefined();

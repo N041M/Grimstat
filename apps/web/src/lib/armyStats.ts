@@ -12,7 +12,8 @@ import { BAR_ORDER, pointsBarModel, type SegmentTone } from "./pointsBar";
  *
  * Two different foldings are used on purpose, and both are correct:
  *  - the **unit rows** fold an attached character into its host, because that is one unit on the
- *    table (and the same folding the units list and `unitFromRosterUnit` use);
+ *    table (and the same folding the units list and `unitFromRosterUnit` use); a character attached
+ *    to an attached character folds into the same row, at the top of the chain;
  *  - the **role split** counts every roster entry under its own role, because that is what the
  *    header's points bar shows — so the two totals always agree.
  */
@@ -114,12 +115,28 @@ export function armyComposition(roster: Roster, datasheets: Map<string, Datashee
   const pointsOf = (u: RosterUnit) => costById.get(u.id)?.total ?? 0;
 
   // ---- unit rows: top-level units in section order, attached characters folded in ----
+  // A character attached to a character that is itself attached belongs to the unit at the top of
+  // the chain, so the whole chain is walked. A chain that loops back on itself has no top, and the
+  // unit then stands on its own. Every roster entry lands in exactly one row either way.
+  const topHostOf = (u: RosterUnit): RosterUnit => {
+    const seen = new Set<string>([u.id]);
+    let cur = u;
+    for (;;) {
+      const hostId = cur.attachedTo?.unitId;
+      const host = hostId ? byId.get(hostId) : undefined;
+      if (!host) return cur;
+      if (seen.has(host.id)) return u;
+      seen.add(host.id);
+      cur = host;
+    }
+  };
+
   const attachedByHost = new Map<string, RosterUnit[]>();
   const top: RosterUnit[] = [];
   for (const u of roster.units) {
-    const hostId = u.attachedTo?.unitId;
-    if (hostId && byId.has(hostId) && hostId !== u.id) attachedByHost.set(hostId, [...(attachedByHost.get(hostId) ?? []), u]);
-    else top.push(u);
+    const host = topHostOf(u);
+    if (host.id === u.id) top.push(u);
+    else attachedByHost.set(host.id, [...(attachedByHost.get(host.id) ?? []), u]);
   }
 
   const rows: ArmyUnitRow[] = [];

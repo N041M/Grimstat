@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Roster, Snapshot } from "@grimstat/schema";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
-import { cpRange, filterStratagems, groupStratagems, stratagemParts, stratagemPhases, stratagemsForRoster, type RosterStratagem, type StratagemGroup } from "../../lib/stratagems";
+import { anyStratagemNamesAUnit, cpRange, filterStratagems, groupStratagems, stratagemParts, stratagemPhases, stratagemsForRoster, type RosterStratagem, type StratagemGroup } from "../../lib/stratagems";
 import { hrefFor } from "../../router";
 import { Empty } from "../ui";
 import { PanelHead, PillChip } from "../kit";
@@ -84,9 +84,19 @@ export function StratagemsTab({ roster, snapshot }: Props) {
 
   const all = useMemo(() => stratagemsForRoster(roster, snapshot), [roster, snapshot]);
   const phases = useMemo(() => stratagemPhases(all), [all]);
-  const shown = useMemo(() => filterStratagems(all, { query, phase, unitsOnly }), [all, query, phase, unitsOnly]);
+  // A snapshot with no datasheet-to-stratagem links cannot answer "only the ones a unit names", so
+  // the filter is neither offered nor applied against one. Left applied it emptied the tab for every
+  // army, and the setting is remembered across armies, so one click hid the list for good.
+  const byUnitAvailable = useMemo(() => anyStratagemNamesAUnit(all), [all]);
+  const byUnit = unitsOnly && byUnitAvailable;
+  const shown = useMemo(() => filterStratagems(all, { query, phase, unitsOnly: byUnit }), [all, query, phase, byUnit]);
   const groups = useMemo(() => groupStratagems(shown), [shown]);
   const cp = useMemo(() => cpRange(all), [all]);
+  const clearFilters = () => {
+    setQuery("");
+    setPhase(undefined);
+    setUnitsOnly(false);
+  };
 
   if (all.length === 0) {
     const hasAny = (snapshot.data.stratagems ?? []).length > 0;
@@ -121,11 +131,16 @@ export function StratagemsTab({ roster, snapshot }: Props) {
             ))}
           </div>
         ) : null}
-        <PillChip label={t("roster.strat.unitsOnly")} title={t("roster.strat.unitsOnlyTitle")} on={unitsOnly} onChange={setUnitsOnly} />
+        {byUnitAvailable ? <PillChip label={t("roster.strat.unitsOnly")} title={t("roster.strat.unitsOnlyTitle")} on={byUnit} onChange={setUnitsOnly} /> : null}
       </div>
 
       {shown.length === 0 ? (
-        <p className="strat-none">{t("roster.strat.noMatch")}</p>
+        <p className="strat-none">
+          {t("roster.strat.noMatch")}{" "}
+          <button type="button" className="link-btn" onClick={clearFilters}>
+            {t("roster.strat.clearFilters")}
+          </button>
+        </p>
       ) : (
         groups.map((g) => (
           <section key={`${g.source}:${g.name ?? ""}`} className="strat-group" aria-label={g.name ?? t(SOURCE_LABEL[g.source])}>

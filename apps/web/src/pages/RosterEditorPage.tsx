@@ -7,7 +7,7 @@ import { useRosterEditor, useRosterSnapshot } from "../hooks/useRosterEditor";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
 import { hrefFor, navigate } from "../router";
-import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, enhancementsFor, moveUnit, newRosterUnit, pointsLimitFor, sectionOf, unitDisplayName } from "../lib/roster";
+import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, enhancementsFor, moveUnit, newRosterUnit, pointsLimitFor, removeUnits, restoreUnits, sectionOf, unitDisplayName, type RemovedUnit } from "../lib/roster";
 import { pointsBarModel } from "../lib/pointsBar";
 import { RosterHeader, parseEditorTab, type EditorMode, type EditorTab } from "../components/roster/RosterHeader";
 import { DetachmentStrip } from "../components/roster/DetachmentsBlock";
@@ -107,35 +107,32 @@ export function RosterEditorPage({ id }: { id: string }) {
   };
   /**
    * Removing a unit also detaches whatever was attached to it and puts whatever was riding in it
-   * back on the table. The units and their positions are captured first so the notice can put them
-   * back exactly where they were.
+   * back on the table. What came out is recorded, so Undo puts each unit back at the index it held
+   * and gives it its characters and its passengers again.
    *
    * Both references have to be cleared, or the rules report a problem the player did not make:
    * a squad left pointing at a deleted Rhino reads as "embarked in a unit that is not in the army".
+   *
+   * The notice stays on screen for several seconds and the player can add a unit in the meantime,
+   * so Undo puts back what was taken out and leaves the rest of the list as it now stands.
    */
-  const removeUnits = (units: RosterUnit[]) => {
+  const removeMany = (units: RosterUnit[]) => {
     if (!roster || units.length === 0) return;
     const ids = new Set(units.map((u) => u.id));
-    const before = roster.units;
-    update((r) => ({
-      ...r,
-      units: withoutDanglingTransports(
-        r.units
-          .filter((u) => !ids.has(u.id))
-          .map((u) => {
-            if (!u.attachedTo || !ids.has(u.attachedTo.unitId)) return u;
-            const { attachedTo: _a, ...rest } = u;
-            return rest;
-          }),
-      ),
-    }));
+    // `update` runs the function it is given straight away, so the record is ready below.
+    let removed: RemovedUnit[] = [];
+    update((r) => {
+      const out = removeUnits(r, ids);
+      removed = out.removed;
+      return { ...out.roster, units: withoutDanglingTransports(out.roster.units) };
+    });
     if (selectedId && ids.has(selectedId)) setSelectedId(undefined);
-    const restore = () => update((r) => ({ ...r, units: before.map((u) => r.units.find((x) => x.id === u.id) ?? u) }));
+    const restore = () => update((r) => restoreUnits(r, removed));
     const first = units[0]!;
     const text = units.length === 1 ? t("roster.units.removed", { name: unitDisplayName(first, datasheets.get(first.datasheetId)) }) : t("roster.units.removedMany", { n: units.length });
     notify(text, "info", undefined, { label: t("common.undo"), run: restore });
   };
-  const remove = (unit: RosterUnit) => removeUnits([unit]);
+  const remove = (unit: RosterUnit) => removeMany([unit]);
   const move = (unit: RosterUnit, delta: number) => update((r) => moveUnit(r, unit.id, delta));
 
   const setBattleSize = (size: BattleSize) => update((r) => ({ ...r, battleSize: size, pointsLimit: pointsLimitFor(size, r.pointsLimit) }));
@@ -258,7 +255,7 @@ export function RosterEditorPage({ id }: { id: string }) {
               onAdd={addUnit}
               onDuplicate={duplicate}
               onRemove={remove}
-              onRemoveMany={removeUnits}
+              onRemoveMany={removeMany}
               onMove={move}
               onOpenInCalculator={(u, side) => void openInCalculator(u, side)}
               onOpenDetachmentPicker={() => setDetPicker(true)}

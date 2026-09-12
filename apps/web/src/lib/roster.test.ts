@@ -133,6 +133,14 @@ describe("compositionBounds", () => {
     expect(compositionBounds(sheet({ id: "x", name: "x", models: squad.models }))).toEqual({ min: 2, max: undefined });
     expect(compositionBounds(sheet({ id: "y", name: "y", models: captain.models }))).toEqual({ min: 1, max: undefined });
   });
+  it("leaves the maximum open when one line has none, so the unit can still be grown", () => {
+    const ds = sheet({ id: "x", name: "x", models: squad.models, composition: [{ description: "1 Sergeant", min: 1, max: 1 }, { description: "5+ Troopers", min: 5 }] });
+    expect(compositionBounds(ds)).toEqual({ min: 6, max: undefined });
+  });
+  it("sums the maximum when every line carries one", () => {
+    const ds = sheet({ id: "x", name: "x", models: squad.models, composition: [{ description: "1 Sergeant", min: 1, max: 1 }, { description: "5-10 Troopers", min: 5, max: 10 }] });
+    expect(compositionBounds(ds)).toEqual({ min: 6, max: 11 });
+  });
 });
 
 describe("loadout-based wargear prefill", () => {
@@ -305,6 +313,14 @@ describe("removeUnits / restoreUnits", () => {
     // the unit is already back: nothing is duplicated
     const back = restoreUnits(next, removed);
     expect(restoreUnits(back, removed).units).toHaveLength(3);
+  });
+
+  it("keeps a unit added since the removal, and the order it was added in", () => {
+    // The Undo notice stands for several seconds, which is long enough to add a unit.
+    const { roster: next, removed } = removeUnits(roster, ["sqA"]);
+    const squadC = { ...newRosterUnit(squad), id: "sqC" };
+    const added = { ...next, units: [...next.units, squadC] };
+    expect(restoreUnits(added, removed).units.map((u) => u.id)).toEqual(["sqA", "cap", "sqB", "sqC"]);
   });
 });
 

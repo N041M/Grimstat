@@ -11,14 +11,14 @@
  */
 
 import type { ModelHull } from "./shapes";
-import { footReach } from "./shapes";
+import { coreSegment, footReach } from "./shapes";
 import type { BoardSize } from "./board";
 import { onBoard } from "./board";
 import type { TerrainPiece , TerrainIndex} from "./terrain";
 import { floorHeights, hasTrait, mayClimb, topOf } from "./terrain";
 import { ENGAGEMENT_HORIZONTAL, ENGAGEMENT_VERTICAL, horizontalGap, inEngagementRange, verticalGap } from "./distance";
 import type { Vec2, Vec3 } from "./vec";
-import { EPS, dist2, norm2 } from "./vec";
+import { EPS, dist2, norm2, segPolygonDistance } from "./vec";
 
 export interface MoveRules {
   /** Terrain no taller than this is stepped over at no cost. */
@@ -328,31 +328,47 @@ class SurfaceMap {
    * Candidate standing heights over a point, lowest first. Low terrain keeps its surface — the
    * step-over allowance makes a 1.5" ruin free to climb, not invisible, and standing on top of it
    * still raises the model's eye line.
+   *
+   * A `scalable` piece's roof counts as one of those surfaces. A ruin's `floors` list the storeys
+   * inside it and stop five inches below the top, so leaving the roof out gave the search a building
+   * whose highest reachable level was a storey under the one the table draws.
    */
   at(p: Vec2): number[] {
     const out = [0];
     for (const piece of this.index.at(p)) {
       if (!mayClimb(piece, this.keywords)) continue;
       for (const z of floorHeights(piece)) if (z > EPS) out.push(z);
+      if (hasTrait(piece, "scalable")) {
+        const roof = topOf(piece);
+        if (roof > EPS) out.push(roof);
+      }
     }
     return out.length > 1 ? [...new Set(out)].sort((a, b) => a - b) : out;
   }
 
   /** Can the model's base rest here without any solid running through it? */
   standable(at: Vec3): boolean {
-    const reach = footReach(this.model.foot);
-    for (const piece of this.index.near({ x: at.x, y: at.y }, reach)) {
+    // The enclosing circle is the broad phase. It over-reaches an oval base by `half`, which is
+    // harmless here because everything it lets through is measured again inside `occupies`.
+    const here: ModelHull = { ...this.model, pos: at };
+    for (const piece of this.index.near({ x: at.x, y: at.y }, footReach(this.model.foot))) {
       if (this.permitted(piece)) continue;
-      if (this.occupies(piece, at)) return false;
+      if (this.occupies(piece, here)) return false;
     }
     return true;
   }
 
   /** Does this piece's solid fill the space the model would stand in? */
-  occupies(piece: TerrainPiece, at: Vec3): boolean {
+  occupies(piece: TerrainPiece, here: ModelHull): boolean {
+    const at = here.pos;
     if (piece.height <= this.rules.stepOver) return false; // stepped over
-    if (at.z + this.model.height <= piece.base + EPS) return false; // the model is under it
+    if (at.z + here.height <= piece.base + EPS) return false; // the model is under it
     if (at.z >= topOf(piece) - EPS) return false; // the model is on top of it
+    // The narrow phase: the base's own core segment against the piece's polygon, which is how the
+    // zone and cover tests measure a base too. A base exactly tangent to the footprint is left
+    // standing. This comes last because the flood fill runs it over every cell of the search, and
+    // the three height checks above settle most pieces before it is reached.
+    if (segPolygonDistance(coreSegment(here), piece.polygon) >= here.foot.r) return false;
     if (hasTrait(piece, "impassable")) return true;
     // Whoever may pass a ruin's walls was let through in `standable` before this was asked; anyone
     // still asking cannot be inside them, on any storey.

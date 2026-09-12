@@ -26,6 +26,15 @@ export function idleReason(s: Scenario): IdleReason | undefined {
 
 const DEBOUNCE_MS = 150;
 
+/**
+ * How many times a request that came back without an answer is put again.
+ *
+ * The worker client is shared and answers only whoever asked last, so a run can be cut across by
+ * another consumer on the same screen — the what-if widget evaluates its variants on a timer of its
+ * own. Asking again turns that into a short wait; without it the edit never gets a result at all.
+ */
+const SUPERSEDED_RETRIES = 4;
+
 function fingerprint(s: Scenario): string {
   // Only fields that influence the result; name/timestamps excluded.
   return JSON.stringify([s.attacker, s.defender, s.context, s.enabledToggles, s.extraEffects, s.snapshotId, s.gameSystemId]);
@@ -51,9 +60,20 @@ export function useSimulation(scenario: Scenario, snapshot: Snapshot | undefined
     const handle = window.setTimeout(async () => {
       setState((s) => ({ ...s, running: true, error: undefined }));
       try {
-        const { seq, outcome } = await simClient().run(latestScenario.current, snapshot);
-        if (cancelled || !outcome || seq !== simClient().latest) return;
-        setState({ result: outcome.result, running: false, error: undefined, elapsedMs: outcome.elapsedMs, resultFor: fp });
+        for (let attempt = 0; ; attempt++) {
+          const { seq, outcome } = await simClient().run(latestScenario.current, snapshot);
+          if (cancelled) return;
+          if (outcome && seq === simClient().latest) {
+            setState({ result: outcome.result, running: false, error: undefined, elapsedMs: outcome.elapsedMs, resultFor: fp });
+            return;
+          }
+          // No answer: someone else took the worker mid-flight. After a few goes, give up and let
+          // the state say so, rather than leaving the dock computing over the old numbers.
+          if (attempt >= SUPERSEDED_RETRIES) {
+            setState((s) => ({ ...s, running: false }));
+            return;
+          }
+        }
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);

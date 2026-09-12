@@ -78,10 +78,17 @@ export function terrainAppearance(piece: TerrainPiece): { colour: string; opacit
   return { colour: SCENE_COLOURS.terrain, opacity: 0.62 };
 }
 
-/** Absolute heights of a piece's walkable surfaces, including its roof when it has one. */
+/**
+ * Absolute heights of a piece's walkable surfaces: its floors, plus its roof when the piece is
+ * `scalable` and so has a way up.
+ *
+ * The `scalable` test is what keeps this list the same as the one the movement search stands models
+ * on. A crater's lid and the top of a sealed bunker are nowhere a model can be sent, and a plate
+ * drawn at either height reads on the table as a storey that turns out to be unreachable.
+ */
 export function surfaceHeights(piece: TerrainPiece): number[] {
   const out = piece.floors.map((f) => piece.base + f);
   const roof = topOf(piece);
-  if (!out.some((z) => Math.abs(z - roof) < 0.1)) out.push(roof);
+  if (hasTrait(piece, "scalable") && !out.some((z) => Math.abs(z - roof) < 0.1)) out.push(roof);
   return [...new Set(out)].sort((a, b) => a - b);
 }

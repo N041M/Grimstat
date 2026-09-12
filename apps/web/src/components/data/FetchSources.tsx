@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useReducer, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useReducer, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { SOURCES } from "@grimstat/adapters";
 import type { SourceRef } from "@grimstat/schema";
 import { db } from "../../db";
@@ -28,6 +28,10 @@ function parseSelection(raw: unknown): ImportSelection | undefined {
 
 const NAME_KEY: Record<CardSourceId, I18nKey> = { "mfm-yaml": "data.fetch.source.mfm-yaml", "bsdata-json": "data.fetch.source.bsdata-json", "wahapedia-csv": "data.fetch.source.wahapedia-csv" };
 const KIND_KEY: Record<CardSourceId, I18nKey> = { "mfm-yaml": "data.source.kind.mfm-yaml", "bsdata-json": "data.source.kind.bsdata-json", "wahapedia-csv": "data.source.kind.wahapedia-csv" };
+
+/** The shared import client's `running`, read through React so a panel re-renders when it changes. */
+const subscribeToImport = (listener: () => void) => importClient().subscribe(listener);
+const importIsRunning = () => importClient().running;
 
 function sourceName(id: CardSourceId): string {
   return t(NAME_KEY[id]);
@@ -127,8 +131,7 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   const { refreshSnapshots, setActiveSnapshot, notify, rawSnapshot } = useApp();
   const [selection, setSelection] = usePersistedSetting<ImportSelection>(SETTING_KEY, DEFAULT_SELECTION, parseSelection);
   const [progress, dispatch] = useReducer(reduceProgress, IDLE_PROGRESS);
-  // A run started before this mount (the user navigated away and back) keeps going in the worker.
-  const [background, setBackground] = useState(() => importClient().running);
+  const clientRunning = useSyncExternalStore(subscribeToImport, importIsRunning);
   const alive = useRef(true);
   const filterId = "data-fetch-filter";
 
@@ -140,6 +143,10 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   }, []);
 
   const running = isRunning(progress);
+  // A run started before this mount (the user navigated away and back) keeps going in the worker,
+  // and it ends without this panel's own code hearing about it, so the client is asked each render
+  // rather than remembered from mount time.
+  const background = clientRunning && !running;
   const request = importRequestFor(selection);
   const pointsOnly = selection.sources["mfm-yaml"] && !selection.sources["bsdata-json"];
   const datasheetCount = rawSnapshot?.data.datasheets.length;
@@ -173,14 +180,11 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
         return;
       }
       dispatch({ type: "error", message: errorMessage(e), kind: classifyError(e) });
-    } finally {
-      if (alive.current) setBackground(false);
     }
   }, [selection, notify, refreshSnapshots, setActiveSnapshot]);
 
   const cancel = useCallback(() => {
     importClient().cancel();
-    setBackground(false);
   }, []);
 
   useImperativeHandle(ref, () => ({ run: start }), [start]);

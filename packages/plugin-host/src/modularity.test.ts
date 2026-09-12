@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PLUGIN_API_VERSION, type ScenarioUnit } from "@grimstat/schema";
-import { PluginHost, type PluginModule } from "./index";
+import { compatible, PluginHost, type PluginModule } from "./index";
 import { registerKeyword, runScenario, makeScenario, coverageFor, CH } from "@grimstat/game-40k-11e";
 
 /**
@@ -38,5 +38,28 @@ describe("plugin host modularity", () => {
   it("rejects plugins built for another API version", async () => {
     const host = new PluginHost();
     await expect(host.load({ ...thirdParty, manifest: { ...thirdParty.manifest, id: "old", apiVersion: "9.0.0" } })).rejects.toThrow(/API/);
+  });
+
+  it("reads the semver ranges a manifest may declare", () => {
+    const [major, minor, patch] = PLUGIN_API_VERSION.split(".").map(Number) as [number, number, number];
+    const host = `${major}.${minor}.${patch}`;
+    for (const range of [host, `^${host}`, `~${host}`, `>=${host}`, `>= ${major}.${minor}.0`]) expect(compatible(range)).toBe(true);
+    for (const range of [`${major}.${minor + 1}.0`, `^${major}.${minor + 1}.0`, `~${major}.${minor + 1}.0`, `>=${major}.${minor + 1}.0`, `${major + 1}.0.0`, "latest", ""]) {
+      expect(compatible(range)).toBe(false);
+    }
+  });
+
+  it("leaves nothing registered when activate throws", async () => {
+    const host = new PluginHost();
+    const broken: PluginModule = {
+      manifest: { ...thirdParty.manifest, id: "broken" },
+      activate(ctx) {
+        ctx.registerWidget({ id: "w1", title: "W1", inputs: ["result"], defaultSize: { w: 1, h: 1 }, render: null });
+        throw new Error("activation failed");
+      },
+    };
+    await expect(host.load(broken)).rejects.toThrow(/activation failed/);
+    expect([...host.registries.widgets.keys()]).toEqual([]);
+    expect([...host.registries.manifests.keys()]).toEqual([]);
   });
 });
