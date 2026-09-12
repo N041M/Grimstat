@@ -198,9 +198,16 @@ export function newRosterUnit(ds: Datasheet): RosterUnit {
   return { id: newId("u"), datasheetId: ds.id, models: groupsFromDatasheet(ds), isWarlord: false };
 }
 
-/** Copy of a unit with fresh identity; attachment, warlord and (unique) enhancement are not copied. */
+/**
+ * Copy of a unit with fresh identity; attachment, embarkation, warlord and (unique) enhancement are
+ * not copied.
+ *
+ * The copy starts free for the same reason the attachment does not come along: a second squad
+ * riding in the original's transport is a decision, not something to inherit silently from a
+ * duplicate that was probably made to go somewhere else.
+ */
 export function duplicateUnit(u: RosterUnit): RosterUnit {
-  const { attachedTo: _a, enhancementId: _e, ...rest } = JSON.parse(JSON.stringify(u)) as RosterUnit;
+  const { attachedTo: _a, embarkedIn: _t, enhancementId: _e, ...rest } = JSON.parse(JSON.stringify(u)) as RosterUnit;
   return { ...rest, id: newId("u"), isWarlord: false };
 }
 
@@ -228,29 +235,43 @@ export interface RemovedUnit {
   index: number;
   /** Characters that were attached to this unit and lost the attachment when it went. */
   detached: Array<{ id: string; attachedTo: UnitAttachment }>;
+  /** Units that were riding in this unit and were put back on the table when it went. */
+  disembarked: string[];
 }
 
 /**
- * Take the units with the given ids out of the roster. Characters attached to a removed unit stay
- * in the list and lose their attachment. `removed` records the former indices and attachments.
+ * Take the units with the given ids out of the roster.
+ *
+ * Characters attached to a removed unit stay in the list and lose their attachment, and units
+ * riding in a removed transport are put back on the table. Leaving either pointing at a unit that
+ * is gone would have the rules report an error the player did not make — the reference simply
+ * outlived what it referred to. `removed` records all of it, so Undo puts it back.
  */
 export function removeUnits(roster: Roster, ids: Iterable<string>): { roster: Roster; removed: RemovedUnit[] } {
   const gone = new Set(ids);
   const removed: RemovedUnit[] = [];
   roster.units.forEach((unit, index) => {
-    if (gone.has(unit.id)) removed.push({ unit, index, detached: [] });
+    if (gone.has(unit.id)) removed.push({ unit, index, detached: [], disembarked: [] });
   });
   if (removed.length === 0) return { roster, removed };
   const byId = new Map(removed.map((r) => [r.unit.id, r] as const));
   const units: RosterUnit[] = [];
   for (const u of roster.units) {
     if (gone.has(u.id)) continue;
-    const host = u.attachedTo ? byId.get(u.attachedTo.unitId) : undefined;
-    if (host && u.attachedTo) {
-      host.detached.push({ id: u.id, attachedTo: u.attachedTo });
-      const { attachedTo: _a, ...rest } = u;
-      units.push(rest);
-    } else units.push(u);
+    let next = u;
+    const host = next.attachedTo ? byId.get(next.attachedTo.unitId) : undefined;
+    if (host && next.attachedTo) {
+      host.detached.push({ id: next.id, attachedTo: next.attachedTo });
+      const { attachedTo: _a, ...rest } = next;
+      next = rest;
+    }
+    const ride = next.embarkedIn ? byId.get(next.embarkedIn) : undefined;
+    if (ride) {
+      ride.disembarked.push(next.id);
+      const { embarkedIn: _t, ...rest } = next;
+      next = rest;
+    }
+    units.push(next);
   }
   return { roster: { ...roster, units }, removed };
 }
@@ -270,11 +291,17 @@ export function restoreUnits(roster: Roster, removed: RemovedUnit[]): Roster {
   }
   const reattach = new Map<string, UnitAttachment>();
   for (const r of removed) for (const d of r.detached) reattach.set(d.id, d.attachedTo);
+  const reboard = new Map<string, string>();
+  for (const r of removed) for (const id of r.disembarked) reboard.set(id, r.unit.id);
   return {
     ...roster,
     units: units.map((u) => {
-      const a = reattach.get(u.id);
-      return a && !u.attachedTo && present.has(a.unitId) ? { ...u, attachedTo: a } : u;
+      let next = u;
+      const a = reattach.get(next.id);
+      if (a && !next.attachedTo && present.has(a.unitId)) next = { ...next, attachedTo: a };
+      const t = reboard.get(next.id);
+      if (t && !next.embarkedIn && present.has(t)) next = { ...next, embarkedIn: t };
+      return next;
     }),
   };
 }

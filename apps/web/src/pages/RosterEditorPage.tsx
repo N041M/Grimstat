@@ -21,6 +21,7 @@ import { RosterDock, type DockBudget } from "../components/roster/RosterDock";
 import { ExportDrawer } from "../components/roster/ExportDrawer";
 import { HistoryPanel } from "../components/roster/HistoryPanel";
 import { Empty, Sheet } from "../components/ui";
+import { withoutDanglingTransports } from "../lib/transport";
 import { t } from "../i18n";
 
 export function RosterEditorPage({ id }: { id: string }) {
@@ -105,8 +106,12 @@ export function RosterEditorPage({ id }: { id: string }) {
     selectUnit(copy.id);
   };
   /**
-   * Removing a unit also detaches whatever was attached to it. The units and their positions are
-   * captured first so the notice can put them back exactly where they were.
+   * Removing a unit also detaches whatever was attached to it and puts whatever was riding in it
+   * back on the table. The units and their positions are captured first so the notice can put them
+   * back exactly where they were.
+   *
+   * Both references have to be cleared, or the rules report a problem the player did not make:
+   * a squad left pointing at a deleted Rhino reads as "embarked in a unit that is not in the army".
    */
   const removeUnits = (units: RosterUnit[]) => {
     if (!roster || units.length === 0) return;
@@ -114,13 +119,15 @@ export function RosterEditorPage({ id }: { id: string }) {
     const before = roster.units;
     update((r) => ({
       ...r,
-      units: r.units
-        .filter((u) => !ids.has(u.id))
-        .map((u) => {
-          if (!u.attachedTo || !ids.has(u.attachedTo.unitId)) return u;
-          const { attachedTo: _a, ...rest } = u;
-          return rest;
-        }),
+      units: withoutDanglingTransports(
+        r.units
+          .filter((u) => !ids.has(u.id))
+          .map((u) => {
+            if (!u.attachedTo || !ids.has(u.attachedTo.unitId)) return u;
+            const { attachedTo: _a, ...rest } = u;
+            return rest;
+          }),
+      ),
     }));
     if (selectedId && ids.has(selectedId)) setSelectedId(undefined);
     const restore = () => update((r) => ({ ...r, units: before.map((u) => r.units.find((x) => x.id === u.id) ?? u) }));

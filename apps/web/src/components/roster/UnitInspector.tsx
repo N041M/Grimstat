@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import type { UnitCost } from "@grimstat/resolver";
 import { groupBounds, hasWargear, isCharacterSheet, modelCountOf, toggleWargear, unitDisplayName, weaponBaseNames, type ModelGroup } from "../../lib/roster";
+import { canEmbark, loadsByTransport, transportCandidates } from "../../lib/transport";
 import { fmtInt } from "../../lib/format";
 import { DiagnosticItem } from "./DiagnosticItem";
 import { Field, Icon, Switch } from "../ui";
@@ -130,6 +131,17 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
       .map((u) => ({ unit: u, role: (ds.leaderTo.includes(u.datasheetId) ? "leader" : "support") as "leader" | "support", name: unitDisplayName(u, datasheets.get(u.datasheetId)) }))
       .filter((h) => !taken.has(`${h.unit.id}:${h.role}`));
   }, [ds, isCharacter, roster.units, unit.id, datasheets]);
+  /** Transports in this army, and whether this unit is the sort of thing that can ride in one. */
+  const rides = useMemo(() => transportCandidates(unit, roster, datasheets).map((u) => ({ unit: u, name: unitDisplayName(u, datasheets.get(u.datasheetId)) })), [unit, roster, datasheets]);
+  const embarkable = canEmbark(unit, datasheets);
+  /** Units riding in this one, when it is the transport. */
+  const carrying = useMemo(() => loadsByTransport(roster).get(unit.id) ?? [], [roster, unit.id]);
+  /** The capacity line the datasheet prints, shown as written rather than interpreted. */
+  const capacityText = useMemo(() => {
+    const ride = unit.embarkedIn ? roster.units.find((u) => u.id === unit.embarkedIn) : undefined;
+    return ride ? datasheets.get(ride.datasheetId)?.transportCapacity?.trim() : undefined;
+  }, [unit.embarkedIn, roster.units, datasheets]);
+
   const nameOf = (id: string) => datasheets.get(id)?.name ?? id;
   const canLead = ds?.leaderTo.map(nameOf) ?? [];
   const canSupport = ds?.supportTo.map(nameOf) ?? [];
@@ -145,6 +157,10 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
     const { attachedTo: _a, ...rest } = unit;
     const h = hosts.find((x) => x.unit.id === hostId);
     onChange(h ? { ...rest, attachedTo: { unitId: h.unit.id, role: h.role } } : rest);
+  };
+  const setEmbark = (transportId: string) => {
+    const { embarkedIn: _t, ...rest } = unit;
+    onChange(transportId ? { ...rest, embarkedIn: transportId } : rest);
   };
   const setEnhancement = (id: string) => {
     const { enhancementId: _e, ...rest } = unit;
@@ -210,6 +226,40 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
             {canLead.length ? <p className="small muted insp-note">{t("roster.inspector.canLead", { list: canLead.join(", ") })}</p> : null}
             {canSupport.length ? <p className="small muted insp-note">{t("roster.inspector.canSupport", { list: canSupport.join(", ") })}</p> : null}
             {!hosts.length && !unit.attachedTo && (canLead.length || canSupport.length) ? <p className="small muted insp-note">{t("roster.inspector.attachHint")}</p> : null}
+          </section>
+        ) : null}
+
+        {/*
+          Riding in a transport. Offered to anything that is not itself a transport and is not
+          attached to another unit — an attached character travels with its host, so its own
+          embarkation would be ignored. Whether it actually fits is the rules plugin's answer, and
+          it gives it in the army checks against the list as built.
+        */}
+        {embarkable && (rides.length || unit.embarkedIn) ? (
+          <section className="insp-section">
+            <h4 className="inspector-h">{t("roster.inspector.transport")}</h4>
+            <select value={unit.embarkedIn ?? ""} aria-label={t("roster.inspector.embark")} onChange={(e) => setEmbark(e.target.value)}>
+              <option value="">{t("roster.inspector.notEmbarked")}</option>
+              {unit.embarkedIn && !rides.some((r) => r.unit.id === unit.embarkedIn) ? <option value={unit.embarkedIn}>{unit.embarkedIn}</option> : null}
+              {rides.map((r) => (
+                <option key={r.unit.id} value={r.unit.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            {capacityText ? <p className="small muted insp-note">{capacityText}</p> : null}
+          </section>
+        ) : null}
+
+        {carrying.length ? (
+          <section className="insp-section">
+            <h4 className="inspector-h">{t("roster.inspector.carrying")}</h4>
+            <ul className="insp-carrying">
+              {carrying.map((c) => (
+                <li key={c.id}>{unitDisplayName(c, datasheets.get(c.datasheetId))}</li>
+              ))}
+            </ul>
+            <p className="small muted insp-note">{t("roster.inspector.carryingNote")}</p>
           </section>
         ) : null}
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Datasheet, Roster, Snapshot } from "@grimstat/schema";
-import { canAddCopy, compositionBounds, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
+import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
+import { canAddCopy, compositionBounds, duplicateUnit, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
 import { decodeRosterPermalink, encodeRosterPermalink, rosterPermalinkUrl, rosterTokenFromHash } from "./rosterPermalink";
 
 const NOW = "2026-09-09T10:00:00.000Z";
@@ -273,7 +273,7 @@ describe("removeUnits / restoreUnits", () => {
     const { roster: next, removed } = removeUnits(roster, ["sqA"]);
     expect(next.units.map((u) => u.id)).toEqual(["cap", "sqB"]);
     expect(next.units[0]!.attachedTo).toBeUndefined();
-    expect(removed).toEqual([{ unit: squadA, index: 0, detached: [{ id: "cap", attachedTo: { unitId: "sqA", role: "leader" } }] }]);
+    expect(removed).toEqual([{ unit: squadA, index: 0, detached: [{ id: "cap", attachedTo: { unitId: "sqA", role: "leader" } }], disembarked: [] }]);
     expect(roster.units).toHaveLength(3);
   });
 
@@ -451,5 +451,33 @@ describe("diagnosticsForUnit", () => {
     ];
     expect(diagnosticsForUnit(diags, 1).map((d) => d.code)).toEqual(["b", "d"]);
     expect(diagnosticsForUnit(diags, 2)).toEqual([]);
+  });
+});
+
+describe("removing a transport", () => {
+  const now = "2026-09-09T10:00:00.000Z";
+  const base = (units: RosterUnit[]): Roster => ({ id: "r", ownerId: "local", createdAt: now, updatedAt: now, revision: 0, name: "t", gameSystemId: "g", snapshotId: "s", factionId: "f", battleSize: "incursion", pointsLimit: 1000, detachments: [], units });
+  const u = (id: string, over: Partial<RosterUnit> = {}): RosterUnit => ({ id, datasheetId: "ds", models: [{ modelProfileId: "mp", count: 5, wargear: [] }], isWarlord: false, ...over });
+
+  /**
+   * Left alone, a passenger keeps pointing at a transport that is gone, and the rules report it as
+   * an error the player never made.
+   */
+  it("puts its passengers back on the table rather than leaving them pointing at nothing", () => {
+    const { roster: after, removed } = removeUnits(base([u("rhino"), u("squad", { embarkedIn: "rhino" })]), ["rhino"]);
+    expect(after.units.map((x) => x.id)).toEqual(["squad"]);
+    expect(after.units[0]!.embarkedIn).toBeUndefined();
+    expect(removed[0]!.disembarked).toEqual(["squad"]);
+  });
+
+  it("puts them back aboard when the removal is undone", () => {
+    const { roster: after, removed } = removeUnits(base([u("rhino"), u("squad", { embarkedIn: "rhino" })]), ["rhino"]);
+    const back = restoreUnits(after, removed);
+    expect(back.units.map((x) => x.id)).toEqual(["rhino", "squad"]);
+    expect(back.units[1]!.embarkedIn).toBe("rhino");
+  });
+
+  it("does not put a copy of a unit into the transport the original rides in", () => {
+    expect(duplicateUnit(u("squad", { embarkedIn: "rhino" })).embarkedIn).toBeUndefined();
   });
 });

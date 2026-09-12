@@ -4,6 +4,7 @@ import { newOpponentUnit, type OpponentUnit, type Side, type UnitFlags, type Uni
 import type { GameHandle } from "../../hooks/useGame";
 import type { AttachedCharacter } from "@grimstat/schema";
 import { Attached } from "../Attached";
+import { UnitArt } from "../UnitArt";
 import { num, numOrNull } from "../ui";
 import { t, tn, type I18nKey } from "../../i18n";
 import type { PlayContext } from "./types";
@@ -51,12 +52,16 @@ interface RowProps {
   /** Characters folded into this unit. Named on their own line, because at the table the player
       needs to know the captain is in there before deciding what to do with the squad. */
   attached?: readonly AttachedCharacter[] | undefined;
+  /** The transport this unit starts inside, and the units that start inside it. Both named on the
+      row, because at the table "where is that squad" is asked before anything else about it. */
+  aboard?: string | undefined;
+  carrying?: readonly string[] | undefined;
   /** Per-turn flags are the player's own bookkeeping, so only their units carry them. */
   mine: boolean;
   onRemove?: (() => void) | undefined;
 }
 
-function WoundRow({ game, side, id, name, profileWounds, models, woundsLeft, modelsLeft, state, attached, mine, onRemove }: RowProps) {
+function WoundRow({ game, side, id, name, profileWounds, models, woundsLeft, modelsLeft, state, attached, aboard, carrying, mine, onRemove }: RowProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("1");
   const target = { side, id };
@@ -102,6 +107,12 @@ function WoundRow({ game, side, id, name, profileWounds, models, woundsLeft, mod
         <span className="roll-count num">{t("roll.woundsShort", { left: woundsLeft, total })}</span>
       </div>
       <Attached unit={{ attached }} className="roll-attached" />
+      {aboard || carrying?.length ? (
+        <span className="attached roll-attached roll-ride">
+          <UnitArt id="transport" className="attached-mark" />
+          <span className="attached-text">{aboard ? t("transport.aboard", { name: aboard }) : t("transport.carrying", { names: carrying!.join(", ") })}</span>
+        </span>
+      ) : null}
       <div className="roll-bar" role="img" aria-label={t("roll.wounds", { left: woundsLeft, total })}>
         <span style={{ width: `${Math.max(0, Math.min(1, woundsLeft / total)) * 100}%` }} />
       </div>
@@ -322,7 +333,7 @@ export function UnitRoll({ ctx }: { ctx: PlayContext }) {
         ) : (
           <ul className="roll-list">
             {mine.map((u) => (
-              <WoundRow key={u.id} game={game} side="you" id={u.id} name={u.unit.name} attached={u.unit.attached} profileWounds={u.profileWounds} models={u.models} woundsLeft={u.woundsLeft} modelsLeft={u.modelsLeft} state={u.state} mine />
+              <WoundRow key={u.id} game={game} side="you" id={u.id} name={u.unit.name} attached={u.unit.attached} aboard={u.aboard} carrying={u.carrying} profileWounds={u.profileWounds} models={u.models} woundsLeft={u.woundsLeft} modelsLeft={u.modelsLeft} state={u.state} mine />
             ))}
           </ul>
         )}

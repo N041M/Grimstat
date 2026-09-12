@@ -3,7 +3,7 @@
   "createdAt": "2026-01-01T00:00:00.000Z",
   "updatedAt": "2026-01-01T00:00:00.000Z",
   "revision": 0,
-  "id": "snap_20260101_48f751e3",
+  "id": "snap_20260101_72d31b67",
   "gameSystemId": "wh40k-11e",
   "label": "synthetic fixture",
   "sources": [
@@ -29,7 +29,7 @@
       "notes": "Powered by Wahapedia (https://wahapedia.ru); text (c) Games Workshop"
     }
   ],
-  "checksum": "48f751e3c244a6a15ffb55455fd89bee5c246cd681b0263e313e39123987b414",
+  "checksum": "72d31b67f8707f8c80d00843d6c1de77033bb03ca3104ee03bddadd2779c7b73",
   "conflicts": [
     {
       "entity": "datasheet",
@@ -171,6 +171,7 @@
         "isEpicHero": false,
         "isBattleline": false,
         "isSupport": false,
+        "transportCapacity": "This model has a transport capacity of 10 ASHEN WARDENS INFANTRY models. Each WARDEN CAPTAIN model takes up the space of 2 models. It cannot transport WALKER models.",
         "keywords": [
           "VEHICLE",
           "WALKER",

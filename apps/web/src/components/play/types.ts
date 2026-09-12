@@ -16,6 +16,10 @@ export interface PlayUnit {
   models: number;
   woundsLeft: number;
   modelsLeft: number;
+  /** The transport this unit starts the battle inside, by name. */
+  aboard?: string;
+  /** Units that start inside this one, by name. */
+  carrying?: string[];
 }
 
 /** An enemy unit with the same shape, built from typed stats or a stand-in archetype. */

@@ -30,6 +30,24 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - **Fight phase**: only melee weapons; **shooting phase**: only ranged weapons. Pistols/Close-Quarters are not special-cased.
 - **Damaged profiles, Deadly Demise, healing, "ignore first failed save"**: not modelled.
 
+## Transports and embarked units
+- A passenger records `embarkedIn`, naming the transport roster unit it starts the battle inside.
+  The 11th-edition plugin owns every rule about it: capacity, keyword restrictions, models that take
+  more than one slot, characters riding with the unit they lead, transports inside transports, and
+  Reserves inherited from the transport. It reports what each one is carrying as a diagnostic.
+- **The app only says who is where.** The roster list names the ride on both rows, the unit inspector
+  offers every transport in the army, and the play companion names it on the unit row. None of them
+  decides whether it fits; that answer comes from the plugin, about the list as built, in words.
+- **The transport list is deliberately unfiltered.** Offering only transports that can legally take
+  the unit would replace "a Rhino cannot carry Terminators" with a transport mysteriously missing
+  from a menu.
+- **No importer or exporter carries embarkation.** A `.rosz` or a text list round-trips without it,
+  so a list imported from elsewhere arrives with everything on the table. That is a gap in the
+  adapters, not in the rules.
+- **Removing a transport disembarks its passengers** rather than leaving them pointing at a unit
+  that is gone, which the rules would otherwise report as an error nobody made. Undo puts them back
+  aboard. A duplicated unit does not inherit the original's transport.
+
 ## Play companion (the in-game tracker)
 - **Attached characters are folded into their host** everywhere the app resolves a roster unit, so a
   led squad is one row, one wound bar and one target — which is how the rules treat it. Who is

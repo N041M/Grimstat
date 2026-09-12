@@ -22,6 +22,8 @@ import { Scoreboard } from "../components/play/Scoreboard";
 import { SecondariesPanel } from "../components/play/SecondariesPanel";
 import { UnitRoll } from "../components/play/UnitRoll";
 import type { PlayContext, PlayFoe, PlayUnit } from "../components/play/types";
+import { loadsByTransport } from "../lib/transport";
+import { unitDisplayName } from "../lib/roster";
 import { t, type I18nKey } from "../i18n";
 
 /** The body under the scoreboard. Kept as a tab set because a phone has one screen's worth of room. */
@@ -134,11 +136,37 @@ export function PlayPage() {
 
   const mine = useMemo<PlayUnit[]>(() => {
     if (!roster || !snapshot) return [];
+    // Who is riding in what, so a row can say it. The transport and its cargo stay separate units
+    // here, as they are in the rules and on the table — the companion only says which is which.
+    const sheets = new Map(snapshot.data.datasheets.map((d) => [d.id, d] as const));
+    const nameOf = (u: (typeof roster.units)[number]) => unitDisplayName(u, sheets.get(u.datasheetId));
+    const byId = new Map(roster.units.map((u) => [u.id, u] as const));
+    const loads = loadsByTransport(roster);
+    const carrying = new Map<string, string[]>();
+    const aboard = new Map<string, string>();
+    for (const [transportId, list] of loads) {
+      carrying.set(transportId, list.map(nameOf));
+      const transport = byId.get(transportId);
+      if (transport) for (const p of list) aboard.set(p.id, nameOf(transport));
+    }
     return rosterHostEntries(roster, snapshot).map((e) => {
       const id = e.source.kind === "roster" ? e.source.unitId : e.id;
       const state: UnitState = game.state.units[id] ?? NEW_UNIT_STATE;
       const { profileWounds, models } = bulk(e.unit);
-      return { id, unit: e.unit, current: atStrength(e.unit, state, models), state, profileWounds, models, woundsLeft: woundsLeft(state, profileWounds, models), modelsLeft: modelsLeft(state, models) };
+      const riding = aboard.get(id);
+      const load = carrying.get(id);
+      return {
+        id,
+        unit: e.unit,
+        current: atStrength(e.unit, state, models),
+        state,
+        profileWounds,
+        models,
+        woundsLeft: woundsLeft(state, profileWounds, models),
+        modelsLeft: modelsLeft(state, models),
+        ...(riding ? { aboard: riding } : {}),
+        ...(load?.length ? { carrying: load } : {}),
+      };
     });
   }, [roster, snapshot, game.state.units]);
 

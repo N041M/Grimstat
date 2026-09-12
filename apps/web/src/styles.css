@@ -1519,6 +1519,33 @@ table.data input.dice {
 .unit-chip-attached {
   padding-left: 0.1rem;
 }
+/*
+ * Riding in, or carrying.
+ *
+ * A quieter note than the leader's accent. A row can carry both — a squad led by a captain, inside
+ * a transport — and two accented lines under one name read as one long alarm rather than two
+ * separate facts. Who is in the unit is accented; where the unit starts is not.
+ */
+.attached.roll-ride {
+  color: var(--muted);
+}
+/* The same fact on the roster's sub-line, where a transport's full name fits beside the wargear. */
+.ut-ride {
+  color: var(--muted);
+}
+.ut-ride-mark {
+  width: 10px;
+  height: 10px;
+  margin-right: 3px;
+  vertical-align: -1px;
+  color: var(--muted);
+}
+.insp-carrying {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
 /* The host row's own marker: who is standing in this unit, at a glance down the column. */
 .ut-badge.ut-attached {
   display: inline-flex;
@@ -4081,6 +4108,10 @@ a.btn:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* The unit's name is what the row is for, so the badges beside it give way first. A led squad
+     in a transport carries two of them, and without this the name went to "War…". */
+  flex: 1 1 auto;
+  min-width: 7ch;
 }
 .ut-nest {
   color: var(--faint);
@@ -4092,7 +4123,11 @@ a.btn:hover {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--accent);
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ut-sub {
   display: block;

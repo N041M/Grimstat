@@ -4,6 +4,7 @@ import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grims
 import type { UnitCost } from "@grimstat/resolver";
 import type { PointsBarModel } from "../../lib/pointsBar";
 import { diagnosticsForUnit, modelCountOf, sectionOf, unitDisplayName, wargearSummary, type UnitSection } from "../../lib/roster";
+import { loadsByTransport } from "../../lib/transport";
 import { fmtInt } from "../../lib/format";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable } from "../kit";
 import { AddUnitPanel } from "./AddUnitPanel";
@@ -215,11 +216,41 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
     return { rows: out, attachedNames: names };
   }, [roster, datasheets]);
 
+  /**
+   * Who is riding in what, both ways round.
+   *
+   * Passengers are not nested under their transport the way an attached character is nested under
+   * its host. A character is part of its host unit; a transport and its cargo are two units that
+   * each belong in their own section, and pulling a Battleline squad out of Battleline to sit under
+   * a Dedicated Transport would lose more than the relationship gains. Each row says it instead.
+   */
+  const rides = useMemo(() => {
+    const loads = loadsByTransport(roster);
+    const carrying = new Map<string, string[]>();
+    const aboard = new Map<string, string>();
+    const nameOf = (u: RosterUnit) => unitDisplayName(u, datasheets.get(u.datasheetId));
+    const byId = new Map(roster.units.map((u) => [u.id, u] as const));
+    for (const [transportId, list] of loads) {
+      carrying.set(transportId, list.map(nameOf));
+      const transport = byId.get(transportId);
+      if (transport) for (const p of list) aboard.set(p.id, nameOf(transport));
+    }
+    return { carrying, aboard };
+  }, [roster, datasheets]);
+
   /** Role text: the datasheet's own role when the data has one, else the section it is filed under. */
   const roleOf = (u: RosterUnit): string => {
     const ds = datasheets.get(u.datasheetId);
     const role = ds?.role?.trim();
     return role || t(SECTION_KEY[sectionOf(ds, roster)]);
+  };
+
+  /** What this row is riding in, or what it is carrying. Both, for a transport inside nothing, is
+      impossible: a transport cannot itself embark. */
+  const rideText = (carrying: string[] | undefined, aboard: string | undefined): string => {
+    if (aboard) return t("roster.badge.embarkedIn", { name: aboard });
+    if (!carrying?.length) return "";
+    return t("roster.badge.carrying", { names: carrying.join(", ") });
   };
 
   /** Sub-line: what the unit is attached to, or its wargear. */
@@ -373,6 +404,8 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                 const models = modelCountOf(unit);
                 const isPicked = picked.has(unit.id);
                 const attached = attachedNames.get(unit.id);
+                const carrying = rides.carrying.get(unit.id);
+                const aboard = rides.aboard.get(unit.id);
                 const badges: ReactNode = (
                   <>
                     {unit.isWarlord ? <span className="ut-badge">{t("roster.badge.warlord")}</span> : null}
@@ -413,7 +446,14 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                           <span className="ut-name-text">{name}</span>
                           {badges}
                         </span>
-                        <span className="ut-sub" title={subOf(unit)}>
+                        <span className="ut-sub" title={[rideText(carrying, aboard), subOf(unit)].filter(Boolean).join(" · ")}>
+                          {rideText(carrying, aboard) ? (
+                            <>
+                              <UnitArt id="transport" className="ut-ride-mark" />
+                              <span className="ut-ride">{rideText(carrying, aboard)}</span>
+                              {subOf(unit) ? " · " : null}
+                            </>
+                          ) : null}
                           {subOf(unit)}
                         </span>
                       </button>
