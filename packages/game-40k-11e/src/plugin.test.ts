@@ -238,4 +238,55 @@ describe("pattern library", () => {
     expect(e.tier).toBe("tier2");
     expect(e.notes).toEqual(["no combat effect"]);
   });
+
+  it("reads a re-roll of 1s as a re-roll of 1s however the ability spells it", () => {
+    for (const text of ["re-roll hit rolls of 1", "re-roll a hit roll of 1", "you can re-roll the hit rolls of 1"]) {
+      const a = abilityEffects({ id: "r", name: "Steady", scope: "datasheet", text, isLegends: false });
+      const rerolls = a.effects.filter((e) => e.op === "reroll");
+      expect(rerolls.map((e) => e.value)).toEqual(["ones"]);
+    }
+    for (const text of ["re-roll wound rolls of 1", "re-roll a wound roll of 1"]) {
+      const a = abilityEffects({ id: "r", name: "Steady", scope: "datasheet", text, isLegends: false });
+      expect(a.effects.filter((e) => e.op === "reroll").map((e) => e.value)).toEqual(["ones"]);
+    }
+    // The unqualified phrasings still mean every failure.
+    for (const text of ["re-roll hit rolls", "re-roll the wound roll"]) {
+      const a = abilityEffects({ id: "r", name: "Sure", scope: "datasheet", text, isLegends: false });
+      expect(a.effects.filter((e) => e.op === "reroll").map((e) => e.value)).toEqual(["failed"]);
+    }
+  });
+});
+
+describe("a unit's own abilities", () => {
+  const rifles = () => unit([{ name: "m", count: 5, T: 4, Sv: 3, W: 1, isCharacter: false, keywords: [] }], [gun({ count: 5, A: "2" })], ["INFANTRY"]);
+  const effect = (over: Record<string, unknown>) => ({ when: { stage: "attacks", side: "attacker" }, op: "add", target: "attacks", value: 1, source: "Extra Shot", ...over }) as ScenarioUnit["effects"][number];
+
+  it("apply once, and switching the ability off removes them", () => {
+    const plain = runScenario(scenario(rifles(), marines()));
+    expect(plain.weapons[0]!.expectedAttacks).toBe(10);
+
+    const buffed = runScenario(scenario(unit(rifles().models, rifles().weapons, ["INFANTRY"], [effect({})]), marines()));
+    expect(buffed.weapons[0]!.expectedAttacks).toBe(15);
+
+    const off = runScenario(scenario(unit(rifles().models, rifles().weapons, ["INFANTRY"], [effect({})]), marines(), {}, ["-ability:attacker:Extra Shot"]));
+    expect(off.weapons[0]!.expectedAttacks).toBe(10);
+  });
+
+  it("reach the side that carries them and no other", () => {
+    const plain = runScenario(scenario(rifles(), marines()));
+    const plus1Hit = { when: { stage: "hit", side: "attacker" }, op: "add", target: "hit-roll", value: 1, source: "Keen Eye" } as ScenarioUnit["effects"][number];
+    const minus1Hit = { when: { stage: "hit", side: "defender" }, op: "add", target: "hit-roll", value: -1, source: "Hard to See" } as ScenarioUnit["effects"][number];
+
+    // "+1 to hit" is an attacking ability. The defender carrying it must not lend it to the attacker.
+    const defenderHasPlus = runScenario(scenario(rifles(), unit(marines().models, [], ["INFANTRY"], [plus1Hit])));
+    close(defenderHasPlus.expectedDamage, plain.expectedDamage);
+
+    // "-1 to be hit" protects whoever carries it. The attacker carrying it must not worsen its own shooting.
+    const attackerHasMinus = runScenario(scenario(unit(rifles().models, rifles().weapons, ["INFANTRY"], [minus1Hit]), marines()));
+    close(attackerHasMinus.expectedDamage, plain.expectedDamage);
+
+    // Each still works on the side it belongs to.
+    expect(runScenario(scenario(unit(rifles().models, rifles().weapons, ["INFANTRY"], [plus1Hit]), marines())).expectedDamage).toBeGreaterThan(plain.expectedDamage);
+    expect(runScenario(scenario(rifles(), unit(marines().models, [], ["INFANTRY"], [minus1Hit]))).expectedDamage).toBeLessThan(plain.expectedDamage);
+  });
 });

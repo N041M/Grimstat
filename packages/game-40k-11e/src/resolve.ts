@@ -1,4 +1,4 @@
-import type { Ability, Archetype, AttachedCharacter, CoverageReport, Datasheet, EffectRecord, ManualToggle, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
+import type { Ability, Archetype, AttachedCharacter, CoverageReport, Datasheet, EffectRecord, ManualToggle, PriceTier, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
 import { createContext } from "@grimstat/resolver";
 import { abilityEffects, applyFnpToModels } from "./patterns";
 import { CH } from "./channels";
@@ -19,8 +19,13 @@ export function pointsFor(ds: Datasheet, snapshot: Snapshot, modelCount: number)
   const rules = snapshot.data.priceRules.filter((r) => r.datasheetId === ds.id && r.copyRange.min <= 1 && (r.copyRange.max === undefined || r.copyRange.max >= 1));
   const rule = rules[0];
   if (!rule) return ds.fallbackPoints;
-  let best = rule.tiers[0];
-  for (const t of rule.tiers) if (t.models <= modelCount && (!best || t.models >= best.models)) best = t;
+  // The largest tier the unit is big enough for. Tiers arrive in whatever order the source listed
+  // them, so the search has to start empty; seeding it with the first tier lets a large tier listed
+  // ahead of a small one stand even when the unit is well below it. A unit smaller than every tier
+  // falls back on the smallest, which is what the resolver does with the same data.
+  let best: PriceTier | undefined;
+  for (const t of rule.tiers) if (t.models <= modelCount && (!best || t.models > best.models)) best = t;
+  if (!best) for (const t of rule.tiers) if (!best || t.models < best.models) best = t;
   return best?.points ?? ds.fallbackPoints;
 }
 
@@ -222,19 +227,26 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
   };
 }
 
-/** Apply a roster unit's wargear selection to the weapon list produced by unitFromDatasheet. */
-function applyWargearSelection(weapons: ScenarioWeapon[], groups: RosterUnit["models"], prefix = ""): ScenarioWeapon[] {
+/**
+ * Apply a roster unit's wargear selection to the weapon list produced by unitFromDatasheet.
+ *
+ * `prefix` picks out whose weapons this pass is about. An attached character's weapons are named
+ * "<Character>: <weapon>", so the host's pass — whose prefix is empty — would otherwise match them
+ * too, and zero them, because the character's weapons are never named in the host's own wargear.
+ * `others` lists every attached character's prefix so each pass only touches its own.
+ */
+function applyWargearSelection(weapons: ScenarioWeapon[], groups: RosterUnit["models"], prefix = "", others: readonly string[] = []): ScenarioWeapon[] {
   const selected = new Map<string, number>();
   for (const g of groups) for (const item of g.wargear) {
     const key = baseWeaponName(item).toLowerCase();
     selected.set(key, (selected.get(key) ?? 0) + g.count);
   }
-  const relevant = weapons.filter((w) => w.name.startsWith(prefix));
-  const anyMatch = relevant.some((w) => selected.has(baseWeaponName(w.name.slice(prefix.length)).toLowerCase()));
+  const mine = (w: ScenarioWeapon): boolean => w.name.startsWith(prefix) && !others.some((p) => p !== prefix && w.name.startsWith(p));
+  const anyMatch = weapons.filter(mine).some((w) => selected.has(baseWeaponName(w.name.slice(prefix.length)).toLowerCase()));
   if (!anyMatch) return weapons;
   const enabledBase = new Set<string>();
   return weapons.map((w) => {
-    if (!w.name.startsWith(prefix)) return w;
+    if (!mine(w)) return w;
     const base = baseWeaponName(w.name.slice(prefix.length)).toLowerCase();
     const n = selected.get(base) ?? 0;
     const first = n > 0 && !enabledBase.has(base);
@@ -253,10 +265,11 @@ export function unitFromRosterUnit(unit: RosterUnit, roster: Roster, snapshot: S
   const attached = roster.units.filter((u) => u.attachedTo?.unitId === unit.id);
   const modelCount = unit.models.reduce((s, m) => s + m.count, 0);
   const base = unitFromDatasheet(ds, snapshot, { modelCount, attachedDatasheetIds: attached.map((a) => a.datasheetId) });
-  let weapons = applyWargearSelection(base.weapons, unit.models);
-  for (const a of attached) {
-    const cds = snapshot.data.datasheets.find((d) => d.id === a.datasheetId);
-    if (cds) weapons = applyWargearSelection(weapons, a.models, `${cds.name}: `);
+  const attachedSheets = attached.map((a) => ({ entry: a, ds: snapshot.data.datasheets.find((d) => d.id === a.datasheetId) }));
+  const prefixes = attachedSheets.flatMap((x) => (x.ds ? [`${x.ds.name}: `] : []));
+  let weapons = applyWargearSelection(base.weapons, unit.models, "", prefixes);
+  for (const { entry, ds: cds } of attachedSheets) {
+    if (cds) weapons = applyWargearSelection(weapons, entry.models, `${cds.name}: `, prefixes);
   }
   const ctx = createContext(roster, snapshot);
   const points = ctx.unitCost(unit).total + attached.reduce((s, a) => s + ctx.unitCost(a).total, 0);
@@ -455,18 +468,23 @@ export function listToggles(scenario: Scenario, snapshot?: Snapshot): ManualTogg
 }
 
 /** Effects active for the scenario after applying enabledToggles ("-id" disables a default-on toggle). */
-export function activeToggleEffects(scenario: Scenario, toggles: ManualToggle[]): { effects: EffectRecord[]; flags: string[] } {
+export function activeToggleEffects(scenario: Scenario, toggles: ManualToggle[]): { effects: EffectRecord[]; manual: EffectRecord[]; flags: string[] } {
   const on = new Set(scenario.enabledToggles.filter((t) => !t.startsWith("-")));
   const off = new Set(scenario.enabledToggles.filter((t) => t.startsWith("-")).map((t) => t.slice(1)));
   const effects: EffectRecord[] = [];
+  // The toggles a player adds to the scenario, as against the ones standing for an ability a unit
+  // already carries. Only these are new: an ability toggle repeats what the unit's own effects say.
+  const manual: EffectRecord[] = [];
   const flags: string[] = [];
   for (const t of toggles) {
     const enabled = on.has(t.id) || (t.defaultOn && !off.has(t.id));
     if (!enabled) continue;
-    effects.push(...t.effects.map((e) => ({ ...e, when: { ...e.when, side: e.when.side ?? t.side } })));
+    const sided = t.effects.map((e) => ({ ...e, when: { ...e.when, side: e.when.side ?? t.side } }));
+    effects.push(...sided);
+    if (!t.id.startsWith("ability:")) manual.push(...sided);
     if (t.id === "defender-indirect") flags.push("target-not-visible");
   }
-  return { effects, flags };
+  return { effects, manual, flags };
 }
 
 export type { Archetype };
