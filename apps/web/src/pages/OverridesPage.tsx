@@ -6,7 +6,7 @@ import { useApp } from "../state/AppContext";
 import { hrefFor, useRouteInfo } from "../router";
 import { download } from "../lib/download";
 import { nowIso } from "../lib/ids";
-import { abilityOverride, describeEffect, effectToForm, fnpOverride, mergeOverrides, noEffectOverride, overrideKey, parseOverridePack, toPack, toRecord, type EffectForm as EffectFormState } from "../lib/overrides";
+import { abilityOverride, describeEffect, editingAfterRemove, effectToForm, fnpOverride, mergeOverrides, noEffectOverride, overrideKey, parseOverridePack, toPack, toRecord, type EffectForm as EffectFormState } from "../lib/overrides";
 import { AbilitySearch, useAbilitySearch, tierLabel, tierTitle, type AbilityHit } from "../components/overrides/AbilitySearch";
 import { EffectForm } from "../components/overrides/EffectForm";
 import { OverridesList, RawPatchEditor } from "../components/overrides/OverridesList";
@@ -94,7 +94,7 @@ export function OverridesPage() {
       if (s.editing !== undefined) return { ...s, effects: s.effects.map((x, i) => (i === s.editing ? e : x)), editing: undefined };
       return { ...s, effects: [...s.effects, e] };
     });
-  const removeEffect = (i: number) => setEditor((s) => (s ? { ...s, effects: s.effects.filter((_, j) => j !== i), editing: s.editing === i ? undefined : s.editing } : s));
+  const removeEffect = (i: number) => setEditor((s) => (s ? { ...s, effects: s.effects.filter((_, j) => j !== i), editing: editingAfterRemove(s.editing, i) } : s));
 
   const nameOf = (entity: Override["entity"], id: string): string | undefined => {
     if (!rawSnapshot) return undefined;

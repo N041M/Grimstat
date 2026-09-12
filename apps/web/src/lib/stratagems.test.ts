@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Datasheet, Roster, Snapshot, Stratagem } from "@grimstat/schema";
-import { cpRange, filterStratagems, groupStratagems, stratagemParts, stratagemPhases, stratagemsForRoster } from "./stratagems";
+import { anyStratagemNamesAUnit, cpRange, filterStratagems, groupStratagems, stratagemParts, stratagemPhases, stratagemsForRoster, type RosterStratagem } from "./stratagems";
 
 const NOW = "2026-09-12T10:00:00.000Z";
 
@@ -191,5 +191,27 @@ describe("stratagemParts", () => {
   it("returns nothing when the source only gave one blob of text", () => {
     const hold = stratagemsForRoster(roster, snapshot).find((s) => s.stratagem.id === "st-hold");
     expect(stratagemParts(hold!.stratagem)).toEqual([]);
+  });
+});
+
+describe("anyStratagemNamesAUnit", () => {
+  it("is false for a snapshot that records no datasheet-to-stratagem links", () => {
+    const list = [
+      { stratagem: { id: "s1", name: "A", cpCost: 1, phases: [] }, source: "core" as const, units: [] },
+      { stratagem: { id: "s2", name: "B", cpCost: 2, phases: [] }, source: "core" as const, units: [] },
+    ] as unknown as RosterStratagem[];
+    expect(anyStratagemNamesAUnit(list)).toBe(false);
+    // Which is why the tab must not apply the filter: it can only ever return nothing.
+    expect(filterStratagems(list, { unitsOnly: true })).toEqual([]);
+    expect(filterStratagems(list, { unitsOnly: false })).toHaveLength(2);
+  });
+
+  it("is true as soon as one stratagem names a unit in the list", () => {
+    const list = [
+      { stratagem: { id: "s1", name: "A", cpCost: 1, phases: [] }, source: "core" as const, units: [] },
+      { stratagem: { id: "s2", name: "B", cpCost: 2, phases: [] }, source: "core" as const, units: ["Warden Squad"] },
+    ] as unknown as RosterStratagem[];
+    expect(anyStratagemNamesAUnit(list)).toBe(true);
+    expect(filterStratagems(list, { unitsOnly: true }).map((s) => s.stratagem.id)).toEqual(["s2"]);
   });
 });

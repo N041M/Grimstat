@@ -14,10 +14,14 @@ export function usePersistedSetting<T>(key: string, initial: T, parse: (raw: unk
   const timer = useRef<number | undefined>(undefined);
   const parseRef = useRef(parse);
   parseRef.current = parse;
+  const initialRef = useRef(initial);
 
   useEffect(() => {
     let alive = true;
     setLoaded(false);
+    // Back to the default while the new key is read. Leaving the old key's value in place meant a
+    // key with nothing stored kept it, and the write below then saved it under the new key.
+    setValue(initialRef.current);
     getSetting<unknown>(key)
       .then((raw) => {
         if (!alive) return;

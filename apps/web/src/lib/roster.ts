@@ -95,6 +95,10 @@ export interface ModelBounds {
 /**
  * Total model-count bounds of a datasheet. A single composition line gives the bounds directly;
  * several lines (one per model profile, e.g. "1 Sergeant" + "4-9 Troopers") are summed.
+ *
+ * A total maximum needs every line to carry one. "1 Sergeant" beside an open-ended "5+ Troopers"
+ * puts no ceiling on the unit, and saying the ceiling is the sergeant's 1 would pin the unit to its
+ * minimum size for good.
  */
 export function compositionBounds(ds: Datasheet): ModelBounds {
   const lines = ds.composition;
@@ -107,7 +111,7 @@ export function compositionBounds(ds: Datasheet): ModelBounds {
     return { min: Math.max(1, min), max: max !== undefined ? Math.max(max, min, 1) : undefined };
   }
   const min = mins.length === lines.length ? mins.reduce((s, m) => s + m, 0) : mins.length ? Math.max(...mins) : fallbackMin;
-  const max = maxs.length === lines.length ? maxs.reduce((s, m) => s + m, 0) : maxs.length ? Math.max(...maxs) : undefined;
+  const max = maxs.length === lines.length ? maxs.reduce((s, m) => s + m, 0) : undefined;
   return { min: Math.max(1, min), max: max !== undefined ? Math.max(max, min, 1) : undefined };
 }
 

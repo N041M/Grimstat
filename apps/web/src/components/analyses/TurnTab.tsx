@@ -81,7 +81,10 @@ function buildInputs(attackers: UnitEntry[], targets: UnitEntry[], opts: TurnOpt
   };
 }
 
-const runOptimise = (input: PlanInput, snapshot: Snapshot | undefined) => simClient().optimiseTurn(input, snapshot);
+// The task takes the sets themselves rather than the input built from them, so `task.ran` holds
+// what a result was computed for. That record lives in the task cache and outlives this component,
+// which is what lets the tab be left and come back to with its plan still on screen.
+const runOptimise = (attackers: UnitEntry[], targets: UnitEntry[], opts: TurnOptions, snapshot: Snapshot | undefined) => simClient().optimiseTurn(buildInputs(attackers, targets, opts).optimise, snapshot);
 const runEvaluate = (input: PlanInput, plan: TurnPlanStep[], snapshot: Snapshot | undefined) => simClient().evaluateTurnPlan(input, plan, snapshot);
 
 const fingerprint = (a: UnitEntry[], d: UnitEntry[], o: TurnOptions) => JSON.stringify([a.map((e) => [e.id, e.optionId]), d.map((e) => [e.id, e.weight]), o]);
@@ -231,8 +234,13 @@ export function TurnTab() {
   const [opts, setOpts] = usePersistedSetting<TurnOptions>("analyses.turn.options", DEFAULT_OPTIONS, parseOptions);
   const optimise = useWorkerTask(runOptimise, "analyses.turn");
   const evaluate = useWorkerTask(runEvaluate, "analyses.turn.evaluate");
-  const [ran, setRan] = useState<{ evaluate: PlanInput; view: TurnPlanView; fp: string } | undefined>(undefined);
   const [plan, setPlan] = useState<TurnPlanStep[] | undefined>(undefined);
+  const ran = useMemo(() => {
+    if (!optimise.ran) return undefined;
+    const [a, d, o] = optimise.ran;
+    const built = buildInputs(a, d, o);
+    return { evaluate: built.evaluate, view: built.view, fp: fingerprint(a, d, o) };
+  }, [optimise.ran]);
 
   const baseline = optimise.result;
   useEffect(() => {
@@ -246,9 +254,7 @@ export function TurnTab() {
 
   const run = () => {
     if (!canRun) return;
-    const built = buildInputs(attackers.entries, targets.entries, opts);
-    setRan({ evaluate: built.evaluate, view: built.view, fp: fingerprint(attackers.entries, targets.entries, opts) });
-    optimise.run(built.optimise, snapshot);
+    optimise.run(attackers.entries, targets.entries, opts, snapshot);
   };
 
   const overridden = !!baseline && !!plan && JSON.stringify(plan) !== JSON.stringify(stepsOf(baseline));

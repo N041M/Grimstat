@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Override, Snapshot } from "@grimstat/schema";
-import { buildEffect, conditionFromForm, defaultEffectForm, effectToForm, effectiveSnapshot, fnpOverride, isNoEffectPatch, mergeOverrides, noEffectOverride, overrideKey, parseOverridePack, suggestedValueKind, summarisePatch, toPack, toRecord, type EffectForm } from "./overrides";
+import { buildEffect, conditionFromForm, defaultEffectForm, editingAfterRemove, effectToForm, effectiveSnapshot, fnv1a128, fnpOverride, isNoEffectPatch, mergeOverrides, noEffectOverride, overrideKey, parseOverridePack, suggestedValueKind, summarisePatch, toPack, toRecord, type EffectForm } from "./overrides";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 
@@ -61,6 +61,39 @@ describe("effect form → EffectRecord", () => {
     expect(suggestedValueKind("set", "lethal")).toBe("boolean");
     expect(suggestedValueKind("add", "hit-roll")).toBe("number");
     expect(suggestedValueKind("set", "made-up")).toBe("number");
+  });
+});
+
+describe("removing an effect while one is open for edit", () => {
+  it("slides the open effect down when one above it goes", () => {
+    // Effects [A,B,C,D] with C open: taking A out leaves [B,C,D], and C is now index 1.
+    expect(editingAfterRemove(2, 0)).toBe(1);
+    expect(editingAfterRemove(3, 1)).toBe(2);
+  });
+
+  it("leaves the open effect where it is when one below it goes", () => {
+    expect(editingAfterRemove(1, 2)).toBe(1);
+    expect(editingAfterRemove(0, 3)).toBe(0);
+  });
+
+  it("closes the form when the effect being edited is the one removed", () => {
+    expect(editingAfterRemove(2, 2)).toBeUndefined();
+    expect(editingAfterRemove(undefined, 0)).toBeUndefined();
+  });
+});
+
+describe("the 128-bit hash", () => {
+  it("is 32 hex characters, the same for the same string", () => {
+    expect(fnv1a128("abc")).toMatch(/^[0-9a-f]{32}$/);
+    expect(fnv1a128("abc")).toBe(fnv1a128("abc"));
+    expect(fnv1a128("")).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it("moves every lane when one character changes, so no lane rides along with another", () => {
+    const lanes = (s: string) => [0, 1, 2, 3].map((i) => fnv1a128(s).slice(i * 8, i * 8 + 8));
+    const a = lanes("Ada Lovelace|1st|Intercessors (80 points)");
+    const b = lanes("Ada Lovelace|2nd|Intercessors (80 points)");
+    expect(a.filter((x, i) => x === b[i])).toEqual([]);
   });
 });
 

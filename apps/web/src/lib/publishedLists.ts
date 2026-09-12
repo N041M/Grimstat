@@ -8,12 +8,11 @@
  * stored. Every list keeps its source, since the lists belong to other players.
  */
 
-import { PublishedListsError, dedupePublishedLists, feedSource, parseArticle, parseFeed, parsePublishedListsFile, pastedList, publishedListKey, sourceOf, type FeedEntry, type PastedListInput, type StoredPublishedList } from "@grimstat/adapters";
-import { db, notifyStoreChanged, type PublishedListRecord } from "../db";
-import { fnv1a } from "./overrides";
+import { PublishedListsError, dedupePublishedLists, feedSource, parseArticle, parseFeed, parsePublishedListsFile, pastedList, sourceOf, type FeedEntry, type PastedListInput, type StoredPublishedList } from "@grimstat/adapters";
+import { db, notifyStoreChanged, publishedListId, type PublishedListRecord } from "../db";
 
-/** The record id: a hash of what identifies a list, so importing it twice stores it once. */
-export const publishedListId = (list: StoredPublishedList): string => `pl-${fnv1a(publishedListKey(list))}`;
+/** The record id, declared beside the table it keys. */
+export { publishedListId };
 
 export interface PublishedImport {
   /** Lists added that were not stored before. */
@@ -120,8 +119,11 @@ export interface PublishedSourceRow {
 
 export function publishedSources(records: readonly PublishedListRecord[]): PublishedSourceRow[] {
   const rows = new Map<string, { title: string; publication?: string; url?: string; published?: string; lists: number; factions: Set<string> }>();
+  let unnamed = 0;
   for (const r of records) {
-    const key = r.source.url ?? r.source.title ?? "?";
+    // A write-up with neither a link nor a title cannot be told from another one, so each gets a
+    // row of its own rather than every anonymous list piling into a single "?".
+    const key = r.source.url ?? r.source.title ?? `?${(unnamed += 1)}`;
     const row = rows.get(key) ?? { title: r.source.title ?? r.source.url ?? "?", publication: r.source.publication, url: r.source.url, published: r.source.published, lists: 0, factions: new Set<string>() };
     row.lists++;
     if (r.faction) row.factions.add(r.faction);

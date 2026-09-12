@@ -90,6 +90,15 @@ function haystack(s: Stratagem): string {
   return [s.name, s.type, s.when, s.target, s.effect, s.restrictions, s.text].filter(Boolean).join(" ").toLowerCase();
 }
 
+/**
+ * Whether "only the ones a unit names" can pick anything out of this list.
+ *
+ * Datasheet-to-stratagem links come from the Wahapedia export and are stored on the datasheet, so a
+ * snapshot built before that field existed carries none and the filter can only ever return nothing.
+ * The tab asks this before offering the filter, so it cannot be switched on into a dead end.
+ */
+export const anyStratagemNamesAUnit = (list: readonly RosterStratagem[]): boolean => list.some((s) => s.units.length > 0);
+
 export function filterStratagems(list: readonly RosterStratagem[], filter: StratagemFilter): RosterStratagem[] {
   const q = filter.query?.trim().toLowerCase() ?? "";
   const phase = filter.phase?.trim().toLowerCase();

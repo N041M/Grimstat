@@ -108,6 +108,44 @@ describe("armyComposition", () => {
     expect(c.rows.reduce((s, x) => s + x.points, 0)).toBe(c.points);
   });
 
+  it("folds a whole chain of attachments into the unit at the top of it", () => {
+    // A attached to B attached to C: hand-edited data the builder's own picker will not make.
+    const datasheets = new Map([["d", sheet("d")]]);
+    const units = [unit("a", "d", 1, { attachedTo: { unitId: "b", role: "leader" } }), unit("b", "d", 1, { attachedTo: { unitId: "c", role: "leader" } }), unit("c", "d", 1)];
+    const costs = new Map(units.map((u) => [u.id, cost(100)]));
+    const c = armyComposition(roster(units), datasheets, costs);
+
+    expect(c.rows).toHaveLength(1);
+    expect(c.rows[0]!.id).toBe("c");
+    expect(new Set(c.rows[0]!.memberIds)).toEqual(new Set(["a", "b", "c"]));
+    expect(c.rows[0]!.models).toBe(3);
+    expect(c.rows[0]!.wounds).toBe(6);
+    expect(c.rows[0]!.points).toBe(300);
+    expect(c.rows.reduce((s, x) => s + x.points, 0)).toBe(c.points);
+  });
+
+  it("keeps two units attached to each other on the table, one row apiece", () => {
+    const datasheets = new Map([["d", sheet("d")]]);
+    const units = [unit("a", "d", 1, { attachedTo: { unitId: "b", role: "leader" } }), unit("b", "d", 1, { attachedTo: { unitId: "a", role: "leader" } })];
+    const costs = new Map(units.map((u) => [u.id, cost(100)]));
+    const c = armyComposition(roster(units), datasheets, costs);
+
+    expect(c.units).toBe(2);
+    expect(c.models).toBe(2);
+    expect(c.wounds).toBe(4);
+    expect(c.rows.reduce((s, x) => s + x.points, 0)).toBe(c.points);
+  });
+
+  it("keeps a unit attached to itself on the table", () => {
+    const datasheets = new Map([["d", sheet("d")]]);
+    const units = [unit("a", "d", 1, { attachedTo: { unitId: "a", role: "leader" } })];
+    const c = armyComposition(roster(units), datasheets, new Map([["a", cost(100)]]));
+
+    expect(c.rows.map((x) => x.id)).toEqual(["a"]);
+    expect(c.points).toBe(100);
+    expect(c.rows[0]!.points).toBe(100);
+  });
+
   it("splits points by role with each entry under its own role, matching the header bar", () => {
     const { roster: r, datasheets, costs } = army();
     const c = armyComposition(r, datasheets, costs);

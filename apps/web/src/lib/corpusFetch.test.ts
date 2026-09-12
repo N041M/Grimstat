@@ -30,6 +30,16 @@ describe("the corpus location", () => {
     expect(corpusBase("https://example.invalid/corpus/")).toBe("https://example.invalid/corpus/");
     expect(corpusBase(" https://example.invalid/corpus/index.json ")).toBe("https://example.invalid/corpus/");
   });
+
+  it("takes the index file off a link that ends with a slash after it", () => {
+    expect(corpusBase("https://example.invalid/corpus/index.json/")).toBe("https://example.invalid/corpus/");
+    expect(corpusBase("https://example.invalid/corpus/index.json//")).toBe("https://example.invalid/corpus/");
+    expect(corpusBase("https://example.invalid/corpus//")).toBe("https://example.invalid/corpus/");
+  });
+
+  it("leaves a directory that merely reads like the index file alone", () => {
+    expect(corpusBase("https://example.invalid/indexXjson/")).toBe("https://example.invalid/indexXjson/");
+  });
 });
 
 describe("reading the corpus", () => {

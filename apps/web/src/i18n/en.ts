@@ -812,6 +812,7 @@ export const en = {
   "roster.strat.unitsOnly": "Named by a unit",
   "roster.strat.unitsOnlyTitle": "Only the stratagems a datasheet in this list names",
   "roster.strat.noMatch": "No stratagem matches that filter.",
+  "roster.strat.clearFilters": "Clear the filters",
   "roster.strat.when": "When",
   "roster.strat.target": "Target",
   "roster.strat.effect": "Effect",

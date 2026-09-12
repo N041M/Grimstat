@@ -68,6 +68,8 @@ describe("the compare set", () => {
     expect(toggleCompare(["a", "b"], "a")).toEqual(["b"]);
     const full = Array.from({ length: COMPARE_CAP }, (_, i) => `s${i}`);
     expect(toggleCompare(full, "extra")).toEqual(full);
+    // The same array back, so the screen can tell that nothing happened and store nothing.
+    expect(toggleCompare(full, "extra")).toBe(full);
     expect(toggleCompare(full, "s2")).toHaveLength(COMPARE_CAP - 1);
   });
 

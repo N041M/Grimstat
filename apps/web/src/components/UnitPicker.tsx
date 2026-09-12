@@ -130,25 +130,38 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
     }
   }, [api, snapshot, selected, count, attached]);
 
-  const build = (ds: Datasheet, n: number, att: string[]) => {
-    if (!snapshot) return;
-    onChange(api.unitFromDatasheet(ds, snapshot, { modelCount: n, attachedDatasheetIds: att }));
+  /**
+   * Build the unit from a datasheet and hand it up; false when the datasheet could not be built.
+   *
+   * Imported data does throw here, and an exception from a click handler does not reach the error
+   * boundary. Without this the button would do nothing and only the console would say why. The
+   * picker's own state follows the unit, so it is left alone when the build fails.
+   */
+  const build = (ds: Datasheet, n: number, att: string[]): boolean => {
+    if (!snapshot) return false;
+    try {
+      onChange(api.unitFromDatasheet(ds, snapshot, { modelCount: n, attachedDatasheetIds: att }));
+      return true;
+    } catch (err) {
+      notify(t("palette.unitFailed", { name: ds.name }), "error", [err instanceof Error ? err.message : String(err)]);
+      return false;
+    }
   };
 
   const pickDatasheet = (ds: Datasheet) => {
     const n = defaultCount(ds);
+    if (!build(ds, n, [])) return;
     setCount(n);
     setAttached([]);
-    build(ds, n, []);
   };
   const changeCount = (n: number) => {
+    if (selected && !build(selected, n, attached)) return;
     setCount(n);
-    if (selected) build(selected, n, attached);
   };
   const toggleAttached = (id: string, on: boolean) => {
     const next = on ? [...attached, id] : attached.filter((x) => x !== id);
+    if (selected && !build(selected, count, next)) return;
     setAttached(next);
-    if (selected) build(selected, count, next);
   };
 
   // Presets live in Dexie and any other picker can add one, so the list follows the store rather

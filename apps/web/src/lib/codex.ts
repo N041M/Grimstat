@@ -38,9 +38,9 @@ export const parseFlag = (raw: unknown): boolean | undefined => (typeof raw === 
  * Add a datasheet to the compare set or take it out again, in place order. A full set is left
  * as it is (the same array back, so callers can tell nothing happened).
  */
-export function toggleCompare(set: readonly string[], id: string): string[] {
+export function toggleCompare(set: string[], id: string): string[] {
   if (set.includes(id)) return set.filter((x) => x !== id);
-  if (set.length >= COMPARE_CAP) return [...set];
+  if (set.length >= COMPARE_CAP) return set;
   return [...set, id];
 }
 

@@ -12,7 +12,9 @@ const USAGE = `grimstat <command> [options]
 Commands:
   import   --system wh40k-11e --out data/snapshots [--source mfm|wahapedia|bsdata ...] [--from-dir data] [--label text] [--overrides file.json] [--refresh] [--quiet]
            Parse the sources (local files under --from-dir, downloaded there when missing), merge, and write a checksummed snapshot.
-  diff     <a.json> <b.json>            What changed between two snapshots (entities and points).
+  diff     <a.json> <b.json> [--limit n]
+           What changed between two snapshots (entities and points). Each list stops after --limit
+           rows and says how many more there are; 40 by default.
   show     <snapshot.json> <datasheet>  Print a datasheet (stats, weapons, abilities, points).
   synthetic [--check]                   Regenerate (or verify) the synthetic fixture snapshot.
   competitive --feed <url> | --dir <folder of saved articles> [--out data/competitive]
@@ -32,10 +34,12 @@ export async function main(argv: string[]): Promise<number> {
         return 0;
       }
       case "diff": {
-        const { positionals } = parseArgs({ args: rest, allowPositionals: true, options: { limit: { type: "string" } } });
+        const { positionals, values } = parseArgs({ args: rest, allowPositionals: true, options: { limit: { type: "string" } } });
         const [a, b] = positionals;
         if (!a || !b) throw new Error("diff needs two snapshot files");
-        runDiff(a, b);
+        const limit = values.limit !== undefined ? Number(values.limit) : undefined;
+        if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) throw new Error("--limit needs a positive whole number");
+        runDiff(a, b, undefined, limit);
         return 0;
       }
       case "show": {
