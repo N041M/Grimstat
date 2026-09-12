@@ -41,6 +41,12 @@ describe("parsePipeCsv", () => {
     expect(r.warnings).toHaveLength(2);
   });
 
+  it("reports the number of fields the surplus row arrived with", () => {
+    const r = parsePipeCsv("a|b|c|\n1|x|y|z|w|\n");
+    expect(r.rows[0]).toEqual({ a: "1", b: "x", c: "y|z|w" });
+    expect(r.warnings[0]).toBe("row 2: 5 fields, merged surplus into last column");
+  });
+
   it("also parses files without trailing delimiters", () => {
     const r = parsePipeCsv("a|b\n1|x\n2|y\n");
     expect(r.rows).toEqual([

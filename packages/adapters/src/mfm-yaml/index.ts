@@ -66,6 +66,11 @@ export interface MfmMetaFile {
 export const MFM_DEFAULT_URL = "https://raw.githubusercontent.com/BSData/wh40k-11e-mfm/main/data/";
 
 function isFactionFile(doc: unknown): doc is MfmFactionFile {
+  return !!doc && typeof doc === "object" && typeof (doc as MfmFactionFile).name === "string" && typeof (doc as MfmFactionFile).slug === "string" && Array.isArray((doc as MfmFactionFile).units);
+}
+
+/** Reads as a faction file but carries no `slug`, which the faction order is taken from. Reported and skipped. */
+function isSluglessFactionFile(doc: unknown): boolean {
   return !!doc && typeof doc === "object" && typeof (doc as MfmFactionFile).name === "string" && Array.isArray((doc as MfmFactionFile).units);
 }
 
@@ -94,6 +99,7 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
     }
     if (isFactionFile(doc)) factionDocs.push({ file, doc });
     else if (isMetaFile(doc)) meta = doc;
+    else if (isSluglessFactionFile(doc)) warnings.push(`${file}: faction file without a slug, ignored`);
     else warnings.push(`${file}: not an MFM faction or meta file, ignored`);
   }
   factionDocs.sort((a, b) => a.doc.slug.localeCompare(b.doc.slug));

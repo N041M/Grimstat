@@ -5,6 +5,7 @@ import {
   POINTS_BY_SIZE,
   RosterImportContext,
   SIZE_BY_LABEL,
+  defaultGroups,
   isWeaponOf,
   mergeGroup,
   profileGroups,
@@ -86,6 +87,21 @@ function splitOutsideParens(text: string): string[] {
     .filter(Boolean);
 }
 
+/** Where one `N with …` group ends and the next begins, and the count that opens one. */
+const WITH_SPLIT = /,\s*(?=\d+\s+with\s)/i;
+const WITH_COUNT = /^(\d+)\s+with\s+/i;
+
+/**
+ * Models a `N with …` list accounts for. Each prefix opens one group of N models that carries every item
+ * up to the next prefix, so a group counts once however much it is carrying.
+ */
+function withGroupModels(text: string): number {
+  return text
+    .trim()
+    .split(WITH_SPLIT)
+    .reduce((sum, seg) => sum + Number(WITH_COUNT.exec(seg.trim())?.[1] ?? 0), 0);
+}
+
 /**
  * "9 with Bolt pistol, Boltgun" → both items on 9 models; "2x Twin meltagun" → one item, two copies.
  * The `N with …` prefix is how the WTC-compact and New Recruit dialects say that only part of a unit carries
@@ -93,8 +109,8 @@ function splitOutsideParens(text: string): string[] {
  */
 export function parseWargearItems(text: string): WargearItem[] {
   const out: WargearItem[] = [];
-  for (const seg of text.trim().split(/,\s*(?=\d+\s+with\s)/i)) {
-    const withCount = /^(\d+)\s+with\s+/i.exec(seg.trim());
+  for (const seg of text.trim().split(WITH_SPLIT)) {
+    const withCount = WITH_COUNT.exec(seg.trim());
     const n = withCount ? Number(withCount[1]) : 0;
     for (const item of splitList(seg.trim().replace(/^\d+\s+with\s+/i, ""))) {
       const m = COUNT_ITEM.exec(item);
@@ -207,7 +223,10 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
   const wargearTarget = (t: TextUnit): RawGroup => {
     const last = t.groups.at(-1);
     if (last) return last;
-    const g: RawGroup = { count: Math.max(1, t.headerCount ?? 1), items: [] };
+    // A wargear line says what the unit carries and gives no unit size. With no count on the header the unit
+    // keeps the size it would have had without the line, which is the datasheet's minimum composition.
+    const size = t.headerCount ?? defaultGroups(t.u.ds).reduce((s, g) => s + g.count, 0);
+    const g: RawGroup = { count: Math.max(1, size), items: [] };
     t.groups.push(g);
     return g;
   };
@@ -250,11 +269,9 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     } else {
       // WTC-compact: wargear and flags share one comma-separated list ("Flux pistol, Enhancement: Ember Blade")
       const gear = splitOutsideParens(groupsPart).filter((seg) => !applyFlag(t, seg));
-      const items = parseWargearItems(gear.join(", "));
-      if (items.length) {
-        const partial = items.filter((i) => i.n > 0).reduce((s, i) => s + i.n, 0);
-        t.groups.push({ count: Math.max(1, count ?? partial), items });
-      }
+      const gearText = gear.join(", ");
+      const items = parseWargearItems(gearText);
+      if (items.length) t.groups.push({ count: Math.max(1, count ?? withGroupModels(gearText)), items });
     }
     for (const f of flagParts.join(" ").split(/;\s*/)) applyFlag(t, f.trim());
   };

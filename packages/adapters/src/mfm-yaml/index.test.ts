@@ -54,4 +54,11 @@ describe("mfm-yaml adapter (synthetic fixture)", () => {
     expect(bad.warnings.some((w) => w.includes("YAML parse error"))).toBe(true);
     expect(bad.datasheets).toEqual([]);
   });
+
+  it("warns instead of failing on a faction file without a slug", () => {
+    const withSlug = "name: Ashen Wardens\nslug: ashen-wardens\nunits: []\n";
+    const bad = parse({ "ashen-wardens.yaml": withSlug, "no-slug.yaml": "name: Verdant Swarm\nunits: []\n" });
+    expect(bad.warnings).toContain("no-slug.yaml: faction file without a slug, ignored");
+    expect(bad.factions!.map((f) => f.id)).toEqual(["faction:ashen-wardens"]);
+  });
 });

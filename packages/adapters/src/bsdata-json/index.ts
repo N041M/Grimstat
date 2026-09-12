@@ -760,15 +760,24 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
         const maxes = ds.composition.map((c) => c.max ?? c.min).filter((m): m is number => typeof m === "number" && m > 0);
         const minModels = mins.length ? mins.reduce((a, b) => a + b, 0) : 1;
         const maxModels = maxes.length ? maxes.reduce((a, b) => a + b, 0) : minModels;
-        const tiers = new Map<number, number>([[minModels, base]]);
+        // Each `set pts` modifier gated on `model atLeast N` opens a price band. A band ends where the next
+        // threshold begins, and the last one ends at the unit's maximum, so the thresholds are read together.
+        // The tier is keyed by the top of its band, the size the datasheet prints ("10 models … 180 pts").
+        const steps = new Map<number, number>();
         for (const m of modifiersOf(entry)) {
           if (m.type !== "set" || typeof m.value !== "number" || !ptsTypeId || m.field !== ptsTypeId) continue;
           for (const c of conditionsOf(m)) {
             if (c.childId !== "model" || c.type !== "atLeast" || typeof c.value !== "number") continue;
-            const models = c.value <= maxModels ? maxModels : c.value;
-            if (!tiers.has(models)) tiers.set(models, m.value);
+            if (!steps.has(c.value)) steps.set(c.value, m.value);
           }
         }
+        const thresholds = [...steps.keys()].sort((a, b) => a - b);
+        const tiers = new Map<number, number>([[minModels, base]]);
+        thresholds.forEach((at, i) => {
+          const next = thresholds[i + 1];
+          const models = Math.max(at, Math.min(next !== undefined ? next - 1 : maxModels, maxModels));
+          if (!tiers.has(models)) tiers.set(models, steps.get(at)!);
+        });
         const rule: PriceRule = {
           datasheetId: id,
           copyRange: { min: 1 },

@@ -123,10 +123,10 @@ function mapPhases(p: string): string[] {
   const s = p.trim();
   if (!s) return [];
   if (/^ability\s+"/i.test(s)) return [s];
-  const core = s.replace(/\s+phases?$/i, "");
-  return core
+  // "Movement phase, Charge phase" repeats the word on every part, so each part is stripped after the split.
+  return s
     .split(/\s+or\s+|,/)
-    .map((x) => x.trim())
+    .map((x) => x.trim().replace(/\s+phases?$/i, ""))
     .filter(Boolean);
 }
 
@@ -264,10 +264,14 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
   }
   const abilities: Ability[] = [];
   const abilityIds = new Set<string>();
+  const abilityById = new Map<string, Ability>();
+  /** Abilities.csv row id -> the ability id it was emitted under, so one row stays one ability. */
+  const abilityIdByRow = new Map<string, string>();
   const addAbility = (a: Ability): Ability => {
     if (!abilityIds.has(a.id)) {
       abilityIds.add(a.id);
       abilities.push(a);
+      abilityById.set(a.id, a);
     }
     return a;
   };
@@ -455,8 +459,21 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
         ability = addAbility(a);
       } else {
         const abilityFaction = factionOf(col(src, "faction_id"), `Abilities ${refId}`) ?? dsFaction.get(ds.id);
+        const baseId = abilityFaction ? factionAbilityId(abilityFaction.name, baseName) : coreAbilityId(baseName);
+        // Two Abilities.csv rows can carry the same name inside one faction. They are separate abilities, so a
+        // row whose text differs from the one already holding the id gets a suffixed id of its own.
+        let id = abilityIdByRow.get(refId);
+        if (id === undefined) {
+          id = baseId;
+          const held = abilityById.get(baseId);
+          if (held && held.text !== text) {
+            for (let n = 2; abilityIds.has(id); n++) id = `${baseId}-${n}`;
+            warnings.push(`Abilities: "${baseName}" appears more than once in ${abilityFaction?.name ?? "core"} with different text; kept as ${id}`);
+          }
+          abilityIdByRow.set(refId, id);
+        }
         const a: Ability = {
-          id: abilityFaction ? factionAbilityId(abilityFaction.name, baseName) : coreAbilityId(baseName),
+          id,
           name: baseName,
           scope: scope === "faction" ? "faction" : scope,
           text,

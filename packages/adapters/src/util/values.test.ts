@@ -28,6 +28,9 @@ describe("value parsers", () => {
     expect(parseDice("d6+1")).toBe("D6+1");
     expect(parseDice("2D6")).toBe("2D6");
     expect(parseDice("D3 + 3")).toBe("D3+3");
+    expect(parseDice("D6*")).toBe("D6");
+    expect(parseDice("2D6*")).toBe("2D6");
+    expect(parseDice("5*")).toBe(5);
     expect(parseDice("N/A")).toBeNull();
     expect(parseDice("x")).toBeNull();
     expect(parseInt0("5 ")).toBe(5);
