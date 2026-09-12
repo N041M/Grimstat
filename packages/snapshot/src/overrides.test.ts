@@ -26,6 +26,13 @@ describe("mergePatch (RFC 7396)", () => {
     mergePatch(target, { a: { c: 2 } });
     expect(target).toEqual({ a: { b: 1 } });
   });
+  it("copies the values it takes from the patch", () => {
+    const patch = { a: [{ b: 1 }] };
+    const result = mergePatch({}, patch) as typeof patch;
+    expect(result.a).toEqual(patch.a);
+    expect(result.a).not.toBe(patch.a);
+    expect(result.a[0]).not.toBe(patch.a[0]);
+  });
 });
 
 describe("applyOverrides", () => {
@@ -47,5 +54,18 @@ describe("applyOverrides", () => {
     expect(res.data.detachments.find((d) => d.id === "det:ashen-wardens:ember-vanguard")!.dp).toBe(3);
     // input untouched
     expect(data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-captain")!.fallbackPoints).toBe(80);
+  });
+
+  it("gives every patched entity its own copy of the patch", () => {
+    const patch = { tiers: [{ models: 1, points: 95 }] };
+    const res = applyOverrides(data, [{ entity: "priceRule", id: "ds:ashen-wardens:warden-squad", patch }]);
+    const rules = res.data.priceRules.filter((r) => r.datasheetId === "ds:ashen-wardens:warden-squad");
+    expect(rules).toHaveLength(2);
+    expect(rules[0]!.tiers).toEqual(patch.tiers);
+    expect(rules[0]!.tiers).not.toBe(patch.tiers);
+    expect(rules[0]!.tiers).not.toBe(rules[1]!.tiers);
+    rules[0]!.tiers[0]!.points = 1;
+    expect(rules[1]!.tiers[0]!.points).toBe(95);
+    expect(patch.tiers[0]!.points).toBe(95);
   });
 });

@@ -21,7 +21,7 @@ export interface MergePolicy {
   untrusted?: Record<string, string[]>;
   /** Also join datasheets by name across unrelated factions when the name is globally unique (default false). */
   matchAcrossFactions?: boolean;
-  /** Drop datasheets that end up without a model profile (default true). */
+  /** Drop datasheets that end up without a model profile (default true). When false they are kept with a placeholder profile. */
   dropStubs?: boolean;
   gameSystem?: GameSystem;
 }
@@ -337,6 +337,11 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     const name = firstDefined(textFirst, (i) => i["name"] as string) ?? c.members[0]!.item.name;
     const gameSystemId = (c.members[0]!.item.gameSystemId as string) ?? policy.gameSystem?.id ?? "wh40k-11e";
     const models = ((firstDefined(primary, (i) => i["models"]) as ModelProfile[] | undefined) ?? []).map((m) => ({ ...m, id: rekey(stats?.adapter ?? "", m.id, "mp") }));
+    if (!models.length) {
+      // `dropStubs: false` keeps points-only datasheets, and the schema requires one profile per datasheet.
+      models.push({ id: `mp:${id.replace(/^ds:/, "")}:unknown`, name, T: 1, Sv: 7, W: 1 });
+      warnings.push(`datasheet ${id} ("${name}") has no model profile in any source; a placeholder profile was added`);
+    }
     const weapons = ((firstDefined(primary, (i) => i["weapons"]) as WeaponProfile[] | undefined) ?? []).map((w) => ({ ...w, id: rekey(stats?.adapter ?? "", w.id, "wp") }));
     const abilityAdapter = primary.find((m) => nonEmpty(m.item["abilityIds"]));
     const abilityIds = [...new Set(((abilityAdapter?.item["abilityIds"] as string[] | undefined) ?? []).map((x) => rekey(abilityAdapter?.adapter ?? "", x, "ab")).filter((x) => abilityById.has(x)))];
@@ -495,7 +500,27 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
   for (const c of stratClusters.clusters) {
     const members = c.members as unknown as Member<Record<string, unknown>>[];
     const first = sortMembers(c.members, T)[0]!.item;
-    const s: Stratagem = { ...first, id: c.id, cpCost: pick("stratagem", c.id, "cpCost", members, P, (i) => i["cpCost"] as number | undefined) ?? first.cpCost };
+    const s: Stratagem = {
+      id: c.id,
+      name: first.name,
+      cpCost: pick("stratagem", c.id, "cpCost", members, P, (i) => i["cpCost"] as number | undefined) ?? first.cpCost,
+      phases: pick("stratagem", c.id, "phases", members, T, (i) => i["phases"] as string[] | undefined, { silent: true }) ?? [],
+    };
+    /** A source that carries the rules text often omits the attribution ids, and the other way round. */
+    const optional = <K extends keyof Stratagem>(key: K, order: string[]): void => {
+      const v = pick("stratagem", c.id, key, members, order, (i) => i[key] as Stratagem[K] | undefined, { silent: true });
+      if (v !== undefined) (s as Record<string, unknown>)[key] = v;
+    };
+    optional("factionId", P);
+    optional("detachmentId", P);
+    optional("type", T);
+    optional("turn", T);
+    optional("when", T);
+    optional("target", T);
+    optional("effect", T);
+    optional("restrictions", T);
+    optional("text", T);
+    optional("abilityId", T);
     if (s.factionId) s.factionId = canonFaction(s.factionId) ?? s.factionId;
     if (s.detachmentId) s.detachmentId = detIdMap.get(s.detachmentId) ?? s.detachmentId;
     if (s.abilityId) s.abilityId = rekey("", s.abilityId, "ab");

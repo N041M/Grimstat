@@ -1,4 +1,4 @@
-import type { Datasheet, Detachment, Diagnostic, Enhancement, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
+import type { Datasheet, Detachment, Diagnostic, Enhancement, PriceRule, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 
 /**
  * Roster legality and costing. ONE module shared by UI, CLI and tests.
@@ -41,6 +41,34 @@ export function modelCountOf(unit: RosterUnit): number {
   return unit.models.reduce((s, m) => s + m.count, 0);
 }
 
+/** Stands in for an open-ended `copyRange.max`. */
+const OPEN_ENDED = Number.MAX_SAFE_INTEGER;
+
+function covers(rule: PriceRule, copyIndex: number): boolean {
+  return rule.copyRange.min <= copyIndex && copyIndex <= (rule.copyRange.max ?? OPEN_ENDED);
+}
+
+function span(rule: PriceRule): number {
+  return (rule.copyRange.max ?? OPEN_ENDED) - rule.copyRange.min;
+}
+
+/** The band that starts latest wins; among equal starts the narrower one does. "Your 3rd Unit Costs" beats an open "Your Unit Costs". */
+function bySpecificity(a: PriceRule, b: PriceRule): number {
+  return b.copyRange.min - a.copyRange.min || span(a) - span(b);
+}
+
+/** How many copies this one falls outside the band; 0 when the band covers it. */
+function distanceTo(rule: PriceRule, copyIndex: number): number {
+  if (covers(rule, copyIndex)) return 0;
+  return copyIndex < rule.copyRange.min ? rule.copyRange.min - copyIndex : copyIndex - (rule.copyRange.max ?? OPEN_ENDED);
+}
+
+function bandText(rule: PriceRule): string {
+  const { min, max } = rule.copyRange;
+  if (max === undefined) return `${min}+`;
+  return min === max ? `${min}` : `${min}-${max}`;
+}
+
 export function createContext(roster: Roster, snapshot: Snapshot): RosterContext {
   const ds = new Map(snapshot.data.datasheets.map((d) => [d.id, d] as const));
   const det = new Map(snapshot.data.detachments.map((d) => [d.id, d] as const));
@@ -59,7 +87,12 @@ export function createContext(roster: Roster, snapshot: Snapshot): RosterContext
     const modelCount = modelCountOf(unit);
     let base = 0;
     const rules = snapshot.data.priceRules.filter((r) => r.datasheetId === unit.datasheetId);
-    const rule = rules.find((r) => r.copyRange.min <= copyIndex && (r.copyRange.max === undefined || copyIndex <= r.copyRange.max)) ?? rules[0];
+    let rule = rules.filter((r) => covers(r, copyIndex)).sort(bySpecificity)[0];
+    if (!rule && rules.length) {
+      // Every band is closed and this copy falls outside all of them, so the nearest band stands in for it.
+      rule = [...rules].sort((a, b) => distanceTo(a, copyIndex) - distanceTo(b, copyIndex) || bySpecificity(a, b))[0]!;
+      notes.push(`No price band covers copy ${copyIndex}; used the band for copies ${bandText(rule)}.`);
+    }
     if (rule) {
       const exact = rule.tiers.find((t) => t.models === modelCount);
       if (exact) base = exact.points;

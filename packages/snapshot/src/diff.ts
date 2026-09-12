@@ -1,5 +1,6 @@
 import type { Datasheet, PriceRule, Snapshot, SnapshotData } from "@grimstat/schema";
 import { canonicalJson } from "./checksum";
+import { normaliseName } from "./normalise";
 
 export type DiffEntity = "faction" | "publication" | "datasheet" | "ability" | "detachment" | "enhancement" | "stratagem" | "wargearPrice";
 
@@ -52,7 +53,7 @@ function same(a: unknown, b: unknown): boolean {
   return canonicalJson(a) === canonicalJson(b);
 }
 
-/** Field-level differences between two records; arrays of named objects (models, weapons) are compared per name. */
+/** Field-level differences between two records; arrays of named objects (models, weapons) are compared per profile. */
 export function fieldChanges(before: Record<string, unknown>, after: Record<string, unknown>, ignore: string[] = []): FieldChange[] {
   const out: FieldChange[] = [];
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
@@ -62,12 +63,16 @@ export function fieldChanges(before: Record<string, unknown>, after: Record<stri
     const b = after[key];
     if (same(a, b)) continue;
     if (Array.isArray(a) && Array.isArray(b) && a.every(isNamed) && b.every(isNamed)) {
-      const byName = (list: { name: string }[]): Map<string, unknown> => new Map(list.map((x) => [x.name, x]));
-      const ma = byName(a as { name: string }[]);
-      const mb = byName(b as { name: string }[]);
-      for (const n of new Set([...ma.keys(), ...mb.keys()])) {
-        const va = ma.get(n);
-        const vb = mb.get(n);
+      const la = a as Named[];
+      const lb = b as Named[];
+      const byProfile = (list: Named[]): Map<string, unknown> => new Map(list.map((x) => [profileKey(x), x]));
+      const ma = byProfile(la);
+      const mb = byProfile(lb);
+      const labels = profileLabels([...la, ...lb]);
+      for (const k of new Set([...ma.keys(), ...mb.keys()])) {
+        const n = labels.get(k) ?? k;
+        const va = ma.get(k);
+        const vb = mb.get(k);
         if (va === undefined) out.push({ field: `${key}[${n}]`, before: undefined, after: vb });
         else if (vb === undefined) out.push({ field: `${key}[${n}]`, before: va, after: undefined });
         else if (!same(va, vb)) for (const c of fieldChanges(va as Record<string, unknown>, vb as Record<string, unknown>, ["id"])) out.push({ field: `${key}[${n}].${c.field}`, before: c.before, after: c.after });
@@ -79,8 +84,43 @@ export function fieldChanges(before: Record<string, unknown>, after: Record<stri
   return out;
 }
 
-function isNamed(x: unknown): x is { name: string } {
+interface Named {
+  name: string;
+  kind?: string;
+  keyword?: string;
+}
+
+function isNamed(x: unknown): x is Named {
   return !!x && typeof x === "object" && typeof (x as { name?: unknown }).name === "string";
+}
+
+/** The part of an entry that tells two same-named ones apart: a weapon's kind, a keyword's target. */
+function qualifier(x: Named): string | undefined {
+  if (typeof x.kind === "string") return x.kind;
+  if (typeof x.keyword === "string") return x.keyword;
+  return undefined;
+}
+
+/**
+ * A datasheet can carry a ranged and a melee weapon of the same name, and a weapon can carry
+ * ANTI twice against different keywords, so the name alone does not identify an entry. Weapons are
+ * keyed the way `merge.ts` keys the same comparison.
+ */
+function profileKey(x: Named): string {
+  const q = qualifier(x);
+  return q === undefined ? normaliseName(x.name) : `${q}|${normaliseName(x.name)}`;
+}
+
+/** Reported label per key: the printed name, qualified when the name is shared by more than one. */
+function profileLabels(items: Named[]): Map<string, string> {
+  const keysPerName = new Map<string, Set<string>>();
+  for (const x of items) keysPerName.set(x.name, new Set([...(keysPerName.get(x.name) ?? []), profileKey(x)]));
+  const out = new Map<string, string>();
+  for (const x of items) {
+    const q = qualifier(x);
+    out.set(profileKey(x), (keysPerName.get(x.name)?.size ?? 1) > 1 && q ? `${x.name} (${q})` : x.name);
+  }
+  return out;
 }
 
 function firstCopyPoints(rules: PriceRule[]): number | undefined {

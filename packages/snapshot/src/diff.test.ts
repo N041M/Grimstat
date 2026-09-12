@@ -48,4 +48,47 @@ describe("diffSnapshots", () => {
     expect(fieldChanges({ models: [{ name: "a", T: 4 }] }, { models: [{ name: "a", T: 5 }] })).toEqual([{ field: "models[a].T", before: 4, after: 5 }]);
     expect(fieldChanges({ x: 1 }, { x: 1 })).toEqual([]);
   });
+
+  it("tells a ranged and a melee profile of the same name apart", () => {
+    const spear = (kind: string, S: number) => ({ id: `wp:${kind}`, name: "Guardian spear", kind, S });
+    const before = { weapons: [spear("ranged", 4), spear("melee", 7)] };
+    const after = { weapons: [spear("ranged", 9), spear("melee", 7)] };
+    expect(fieldChanges(before, after)).toEqual([{ field: "weapons[Guardian spear (ranged)].S", before: 4, after: 9 }]);
+  });
+
+  it("reports a change confined to one of two same-named weapon profiles", async () => {
+    const withPair = structuredClone(loadSyntheticSnapshot().data);
+    const captain = withPair.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-captain")!;
+    captain.weapons.push({ ...captain.weapons[0]!, id: "wp:ashen-wardens:warden-captain:flux-pistol-melee", kind: "melee" });
+    const a = await buildSnapshot({ data: withPair });
+    const bumped = structuredClone(withPair);
+    bumped.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-captain")!.weapons[0]!.S = 9;
+    const b = await buildSnapshot({ data: bumped });
+
+    const d = diffSnapshots(a, b);
+    expect(d.summary).toEqual({ added: 0, removed: 0, changed: 1, pointsChanged: 0 });
+    expect(d.changed[0]!.changes).toEqual([{ field: "weapons[Flux pistol (ranged)].S", before: 5, after: 9 }]);
+  });
+});
+
+describe("two keywords of the same name on one weapon", () => {
+  it("are compared apart, so a change to either is reported", () => {
+    const weapon = (antiVehicle: number, antiInfantry: number) => ({
+      name: "Fusion beamer",
+      kind: "ranged",
+      keywords: [
+        { name: "ANTI", keyword: "VEHICLE", value: antiVehicle, raw: `Anti-vehicle ${antiVehicle}+` },
+        { name: "ANTI", keyword: "INFANTRY", value: antiInfantry, raw: `Anti-infantry ${antiInfantry}+` },
+      ],
+    });
+    const changes = fieldChanges({ weapons: [weapon(4, 2)] }, { weapons: [weapon(4, 5)] });
+    // Both changed fields of the INFANTRY keyword, and nothing at all against the VEHICLE one.
+    expect(changes.map((c) => c.field).sort()).toEqual([
+      "weapons[Fusion beamer].keywords[ANTI (INFANTRY)].raw",
+      "weapons[Fusion beamer].keywords[ANTI (INFANTRY)].value",
+    ]);
+    const value = changes.find((c) => c.field.endsWith(".value"))!;
+    expect(value.before).toBe(2);
+    expect(value.after).toBe(5);
+  });
 });
