@@ -7,6 +7,7 @@ import { cloneUnit, defaultContext, newScenario } from "../../lib/scenario";
 import { fmt, pct } from "../../lib/format";
 import { PHASE_LABEL } from "./labels";
 import { t } from "../../i18n";
+import { unitLabel } from "../../lib/attachment";
 import type { PlayContext, PlayFoe, PlayUnit } from "./types";
 
 /**
@@ -135,7 +136,7 @@ export function OddsPanel({ ctx }: { ctx: PlayContext }) {
           <select value={attacker?.id ?? ""} onChange={(e) => setAttackerId(e.target.value)}>
             {mine.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.state.destroyed ? t("odds.optionGone", { name: u.unit.name }) : u.unit.name}
+                {u.state.destroyed ? t("odds.optionGone", { name: unitLabel(u.unit) }) : unitLabel(u.unit)}
               </option>
             ))}
           </select>

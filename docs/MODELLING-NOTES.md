@@ -30,6 +30,19 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - **Fight phase**: only melee weapons; **shooting phase**: only ranged weapons. Pistols/Close-Quarters are not special-cased.
 - **Damaged profiles, Deadly Demise, healing, "ignore first failed save"**: not modelled.
 
+## Play companion (the in-game tracker)
+- **Attached characters are folded into their host** everywhere the app resolves a roster unit, so a
+  led squad is one row, one wound bar and one target — which is how the rules treat it. Who is
+  attached is carried on `ScenarioUnit.attached` and named on screen beside the unit.
+- **Casualties take the attached character last.** `atStrength` hands survivors to character model
+  groups first, matching the engine's own `protect-character` allocation. Before this the Leader's
+  models, appended after the host's, were the first removed.
+- **The wound bar assumes one wounds characteristic for the whole unit**, taken from the most
+  numerous model group. A led squad of ten 2-wound models plus a 5-wound character therefore tracks
+  as 22 wounds rather than 25, and the damage/heal arithmetic spills at the bulk profile. Tracking
+  mixed wounds needs a per-model list the tracker deliberately does not keep; until it does, a
+  character whose wounds differ from its squad's has to be watched by hand.
+
 ## Loadout check (`loadout.ts`)
 A datasheet's wargear options are prose, and no snapshot carries a machine-readable option tree —
 the one the BattleScribe importer builds is dropped before the snapshot is written, and the other

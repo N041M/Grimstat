@@ -1,4 +1,4 @@
-import type { Ability, Archetype, CoverageReport, Datasheet, EffectRecord, ManualToggle, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
+import type { Ability, Archetype, AttachedCharacter, CoverageReport, Datasheet, EffectRecord, ManualToggle, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
 import { createContext } from "@grimstat/resolver";
 import { abilityEffects, applyFnpToModels } from "./patterns";
 import { CH } from "./channels";
@@ -180,9 +180,13 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
   let points = pointsFor(ds, snapshot, modelCount);
 
   // attached characters (Leader / Support)
+  const attached: AttachedCharacter[] = [];
   for (const id of opts.attachedDatasheetIds ?? []) {
     const cds = snapshot.data.datasheets.find((d) => d.id === id);
     if (!cds) continue;
+    // Which role it is comes from the character's own sheet: it names the units it can lead and the
+    // ones it can support. A sheet that claims neither is recorded as a leader, the common case.
+    attached.push({ name: cds.name, role: cds.supportTo.includes(ds.id) && !cds.leaderTo.includes(ds.id) ? "support" : "leader", datasheetId: cds.id });
     const cm = modelsFromDatasheet(cds, 1, true);
     let cfnp: number | undefined;
     for (const a of abilitiesOf(cds, snapshot)) {
@@ -205,11 +209,14 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
   }
 
   return {
-    name: opts.attachedDatasheetIds?.length ? `${ds.name} (+${opts.attachedDatasheetIds.length})` : ds.name,
+    // The unit's own name. Who is attached is `attached`, so a screen can lay the two out rather
+    // than read a suffix — and the suffix this used to carry said only "(+1)".
+    name: ds.name,
     ref: { snapshotId: snapshot.id, datasheetId: ds.id, attachedDatasheetIds: opts.attachedDatasheetIds ?? [] },
     keywords,
     models,
     weapons,
+    attached,
     effects,
     ...(points !== undefined ? { points } : {}),
   };
@@ -254,7 +261,12 @@ export function unitFromRosterUnit(unit: RosterUnit, roster: Roster, snapshot: S
   const ctx = createContext(roster, snapshot);
   const points = ctx.unitCost(unit).total + attached.reduce((s, a) => s + ctx.unitCost(a).total, 0);
   const name = unit.customName ?? ds.name;
-  return { ...base, name: attached.length ? `${name} (+${attached.map((a) => snapshot.data.datasheets.find((d) => d.id === a.datasheetId)?.name ?? "?").join(", ")})` : name, weapons, points };
+  // The roster states the role outright, which is better than inferring it from the sheet.
+  const attachedTo: AttachedCharacter[] = attached.map((a) => {
+    const cds = snapshot.data.datasheets.find((d) => d.id === a.datasheetId);
+    return { name: a.customName ?? cds?.name ?? "?", role: a.attachedTo?.role === "support" ? "support" : "leader", ...(cds ? { datasheetId: cds.id } : {}) };
+  });
+  return { ...base, name, attached: attachedTo, weapons, points };
 }
 
 export function resolveScenarioUnit(unit: ScenarioUnit, snapshot: Snapshot | undefined): ScenarioUnit {

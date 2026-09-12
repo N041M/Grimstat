@@ -237,6 +237,7 @@ describe("atStrength", () => {
       { name: "Trooper", count: 9, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] },
     ],
     weapons: [{ name: "Bolter", count: 10, kind: "ranged" as const, range: 24, A: "2", skill: 3, S: 4, AP: 0, D: "1", keywords: [], enabled: true }],
+    attached: [],
     effects: [],
   };
 
@@ -261,5 +262,21 @@ describe("atStrength", () => {
   it("keeps a surviving weapon line at one rather than rounding it away", () => {
     const nearlyGone = applyDamage(NEW_UNIT_STATE, 18, 2, 10);
     expect(atStrength(unit, nearlyGone, 10).weapons[0]?.count).toBe(1);
+  });
+
+  /**
+   * An attached Leader's models sit after the host's, so taking casualties strictly off the back
+   * removed the character before any of the squad — the reverse of the rule the solver itself
+   * applies when it allocates.
+   */
+  it("takes an attached character last, however few of the squad are left", () => {
+    const led = { ...unit, models: [...unit.models, { name: "Captain", count: 1, T: 4, Sv: 3, W: 2, isCharacter: true, keywords: [] }] };
+    const hurt = applyDamage(NEW_UNIT_STATE, 16, 2, 11);
+    const now = atStrength(led, hurt, 11);
+    expect(now.models.map((m) => `${m.name}x${m.count}`)).toEqual(["Sergeantx1", "Trooperx1", "Captainx1"]);
+
+    // Only when the squad is gone does the character start taking them.
+    const wiped = applyDamage(NEW_UNIT_STATE, 20, 2, 11);
+    expect(atStrength(led, wiped, 11).models.map((m) => m.count)).toEqual([0, 0, 1]);
   });
 });

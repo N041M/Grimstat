@@ -10,6 +10,7 @@ const unit = (name: string, models: number, weapons: ScenarioWeapon[]): Scenario
   keywords: [],
   models: [{ name: "m", count: models, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }],
   weapons,
+  attached: [],
   effects: [],
 });
 

@@ -189,7 +189,7 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
 
   /** Top-level units in section order, each followed by the characters attached to it. */
-  const rows = useMemo(() => {
+  const { rows, attachedNames } = useMemo(() => {
     const byId = new Map(roster.units.map((u) => [u.id, u] as const));
     const attachedByHost = new Map<string, RosterUnit[]>();
     const top: RosterUnit[] = [];
@@ -207,7 +207,12 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
         for (const c of attachedByHost.get(u.id) ?? []) out.push({ unit: c, nested: true, group: u.id });
       }
     }
-    return out;
+    // The host needs to say it is led too. The nested row under it names the character, but a
+    // filtered list can hide that row, and a player scanning the column should see which squads
+    // have someone in them without reading the line below each one.
+    const names = new Map<string, string[]>();
+    for (const [hostId, list] of attachedByHost) names.set(hostId, list.map((c) => unitDisplayName(c, datasheets.get(c.datasheetId))));
+    return { rows: out, attachedNames: names };
   }, [roster, datasheets]);
 
   /** Role text: the datasheet's own role when the data has one, else the section it is filed under. */
@@ -367,7 +372,18 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                 const status = statusOf(issues);
                 const models = modelCountOf(unit);
                 const isPicked = picked.has(unit.id);
-                const badges: ReactNode = unit.isWarlord ? <span className="ut-badge">{t("roster.badge.warlord")}</span> : null;
+                const attached = attachedNames.get(unit.id);
+                const badges: ReactNode = (
+                  <>
+                    {unit.isWarlord ? <span className="ut-badge">{t("roster.badge.warlord")}</span> : null}
+                    {attached?.length ? (
+                      <span className="ut-badge ut-attached" title={t("roster.badge.hasAttached", { names: attached.join(", ") })}>
+                        <UnitArt id="character" className="ut-attached-mark" />
+                        {attached.join(", ")}
+                      </span>
+                    ) : null}
+                  </>
+                );
                 const activate = () => (selecting ? togglePick(unit.id) : onSelect(unit.id));
                 return (
                   <GridRow key={unit.id} className={`ut-row ${unit.id === selectedId ? "current" : ""} ${nested ? "nested" : ""} ${isPicked ? "picked" : ""}`.trim()} onClick={activate}>

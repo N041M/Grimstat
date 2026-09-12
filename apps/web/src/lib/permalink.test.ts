@@ -15,6 +15,7 @@ const scenario: Scenario = {
     keywords: ["INFANTRY"],
     models: [{ name: "Trooper", count: 5, T: 4, Sv: 3, InvSv: null, W: 2, fnp: null, isCharacter: false, keywords: [] }],
     weapons: [{ name: "Test rifle", count: 5, kind: "ranged", range: 24, A: "2", skill: 3, S: 4, AP: 1, D: "1", keywords: [{ name: "RAPID FIRE", value: 1, raw: "Rapid Fire 1" }], enabled: true }],
+    attached: [],
     effects: [],
     points: 90,
   },
@@ -23,6 +24,7 @@ const scenario: Scenario = {
     keywords: ["VEHICLE"],
     models: [{ name: "Tank", count: 1, T: 11, Sv: 2, InvSv: null, W: 14, fnp: null, isCharacter: false, keywords: [] }],
     weapons: [],
+    attached: [],
     effects: [],
   },
   context: {

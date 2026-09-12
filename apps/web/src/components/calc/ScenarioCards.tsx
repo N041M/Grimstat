@@ -3,6 +3,7 @@ import { ap, dice, fmtInt, fmtRelative, skill } from "../../lib/format";
 import { modelCount } from "../../lib/scenario";
 import { hrefFor } from "../../router";
 import { t } from "../../i18n";
+import { Attached } from "../Attached";
 
 /** "18A · 3+ · S4 AP-1 D1" — the 10px mono line under a weapon name in the context column. */
 export function weaponStatline(w: ScenarioWeapon): string {
@@ -36,6 +37,7 @@ function UnitCard({ unit, side, showWeapons, onEdit }: { unit: ScenarioUnit; sid
             {t("calc.edit")}
           </button>
         </div>
+        <Attached unit={unit} className="unit-card-attached" />
         {side === "defender" && model ? (
           <div className="unit-stats">
             {[

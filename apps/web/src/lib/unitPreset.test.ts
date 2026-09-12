@@ -16,6 +16,7 @@ const unit = (over: Partial<ScenarioUnit> = {}): ScenarioUnit => ({
     { name: "Shock maul", count: 10, kind: "melee", range: null, A: "3", skill: 3, S: 5, AP: 1, D: "1", keywords: [], enabled: false },
     { name: "Ember lance", count: 0, kind: "ranged", range: 12, A: "1", skill: 3, S: 9, AP: 3, D: "3", keywords: [], enabled: true },
   ],
+  attached: [],
   effects: [],
   points: 180,
   ...over,

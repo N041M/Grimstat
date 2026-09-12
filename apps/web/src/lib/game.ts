@@ -417,6 +417,7 @@ export function opponentScenarioUnit(u: OpponentUnit, state?: UnitState): Scenar
       },
     ],
     weapons: [],
+    attached: [],
     effects: [],
     ...(u.points === undefined ? {} : { points: u.points }),
   };
@@ -436,13 +437,25 @@ export function atStrength(unit: ScenarioUnit, state: UnitState, startingModels:
   if (alive >= start) return unit;
   if (alive <= 0) return { ...unit, models: unit.models.map((m) => ({ ...m, count: 0 })), weapons: unit.weapons.map((w) => ({ ...w, count: 0 })) };
 
-  // Fill the groups from the front until the survivors run out.
+  /*
+   * Fill the groups from the front until the survivors run out, but keep any attached character
+   * alive longest.
+   *
+   * A Leader's models are appended after the host's, so filling strictly from the front removed the
+   * character first — the exact opposite of the rule, where the bodyguard is removed until none is
+   * left. The solver's own allocation already protects characters, so a `current` unit that had
+   * lost its captain first under-rated the unit every time the companion was asked for odds.
+   */
   let left = alive;
-  const models = unit.models.map((m) => {
-    const keep = Math.min(m.count, left);
+  // Survivors are handed out to the character first, so it is the last model still standing.
+  const order = [...unit.models.keys()].sort((a, b) => Number(unit.models[b]!.isCharacter) - Number(unit.models[a]!.isCharacter));
+  const kept = new Map<number, number>();
+  for (const i of order) {
+    const keep = Math.min(unit.models[i]!.count, left);
     left -= keep;
-    return { ...m, count: keep };
-  });
+    kept.set(i, keep);
+  }
+  const models = unit.models.map((m, i) => ({ ...m, count: kept.get(i) ?? 0 }));
   const ratio = alive / start;
   const weapons = unit.weapons.map((w) => ({ ...w, count: w.count === 0 ? 0 : Math.max(1, Math.round(w.count * ratio)) }));
   return { ...unit, models, weapons };

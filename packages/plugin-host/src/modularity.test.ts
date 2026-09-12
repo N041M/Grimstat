@@ -12,12 +12,12 @@ const thirdParty: PluginModule = {
   activate(ctx) {
     registerKeyword("WOBBLY", (kw, c) => c.mods.add({ channel: CH.hitRoll, op: "add", value: Number(kw.value ?? 1), source: "Wobbly" }));
     ctx.registerWidget({ id: "wobble-meter", title: "Wobble meter", inputs: ["result"], defaultSize: { w: 3, h: 2 }, render: () => null });
-    ctx.registerArchetype({ id: "wobbler", name: "Wobbler", unit: { name: "Wobbler", keywords: [], models: [{ name: "w", count: 3, T: 4, Sv: 4, W: 2, isCharacter: false, keywords: [] }], weapons: [], effects: [] } });
+    ctx.registerArchetype({ id: "wobbler", name: "Wobbler", unit: { name: "Wobbler", keywords: [], models: [{ name: "w", count: 3, T: 4, Sv: 4, W: 2, isCharacter: false, keywords: [] }], weapons: [], attached: [], effects: [] } });
   },
 };
 
-const marines: ScenarioUnit = { name: "m", keywords: [], models: [{ name: "m", count: 10, T: 4, Sv: 3, W: 1, isCharacter: false, keywords: [] }], weapons: [], effects: [] };
-const gun = (keywords: ScenarioUnit["weapons"][number]["keywords"]): ScenarioUnit => ({ name: "a", keywords: [], models: [], effects: [], weapons: [{ name: "gun", count: 10, kind: "ranged", range: 24, A: "1", skill: 4, S: 4, AP: 0, D: "1", keywords, enabled: true }] });
+const marines: ScenarioUnit = { name: "m", keywords: [], models: [{ name: "m", count: 10, T: 4, Sv: 3, W: 1, isCharacter: false, keywords: [] }], weapons: [], attached: [], effects: [] };
+const gun = (keywords: ScenarioUnit["weapons"][number]["keywords"]): ScenarioUnit => ({ name: "a", keywords: [], models: [], attached: [], effects: [], weapons: [{ name: "gun", count: 10, kind: "ranged", range: 24, A: "1", skill: 4, S: 4, AP: 0, D: "1", keywords, enabled: true }] });
 
 describe("plugin host modularity", () => {
   it("a keyword registered by a third-party plugin is modelled and counted as tier 1", async () => {

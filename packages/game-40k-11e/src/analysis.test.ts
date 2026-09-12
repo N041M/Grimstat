@@ -44,11 +44,11 @@ describe("effective wounds", () => {
     const p = pReferenceSticks({ ...naked, Sv: 7 });
     expect(p).toBeGreaterThan(0);
     // With Sv 7 the only save is the 11e "unmodified 6 always saves", so effective wounds sit above raw.
-    expect(effectiveWounds({ name: "u", keywords: [], models: [naked], weapons: [], effects: [] })).toBeGreaterThan(6);
+    expect(effectiveWounds({ name: "u", keywords: [], models: [naked], weapons: [], attached: [], effects: [] })).toBeGreaterThan(6);
   });
   it("an invulnerable save and Feel No Pain both raise it above raw wounds", () => {
     const base = { name: "M", count: 5, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] };
-    const unit = (m: Record<string, unknown>) => ({ name: "u", keywords: [], models: [{ ...base, ...m }], weapons: [], effects: [] });
+    const unit = (m: Record<string, unknown>) => ({ name: "u", keywords: [], models: [{ ...base, ...m }], weapons: [], attached: [], effects: [] });
     const plain = effectiveWounds(unit({}));
     const invuln = effectiveWounds(unit({ InvSv: 4 }));
     const fnp = effectiveWounds(unit({ fnp: 5 }));
@@ -63,8 +63,8 @@ describe("effective wounds", () => {
     expect(fnp / plain).toBeCloseTo(1.5, 6);
   });
   it("scales linearly in model count and wounds", () => {
-    const one = effectiveWounds({ name: "u", keywords: [], models: [{ name: "m", count: 1, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }], weapons: [], effects: [] });
-    const four = effectiveWounds({ name: "u", keywords: [], models: [{ name: "m", count: 4, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }], weapons: [], effects: [] });
+    const one = effectiveWounds({ name: "u", keywords: [], models: [{ name: "m", count: 1, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }], weapons: [], attached: [], effects: [] });
+    const four = effectiveWounds({ name: "u", keywords: [], models: [{ name: "m", count: 4, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }], weapons: [], attached: [], effects: [] });
     expect(four).toBeCloseTo(one * 4, 6);
   });
   it("the reference profile is the documented plain shot", () => {

@@ -19,7 +19,9 @@ const roster: Roster = {
 describe("unitFromRosterUnit", () => {
   it("applies model counts, wargear selection, attached characters and tiered points", () => {
     const u = unitFromRosterUnit(roster.units[0]!, roster, snapshot);
-    expect(u.name).toContain("Warden Squad (+Warden Captain)");
+    // The unit keeps its own name; who is attached is a field, so a screen can lay the two out.
+    expect(u.name).toBe("Warden Squad");
+    expect(u.attached).toEqual([{ name: "Warden Captain", role: "leader", datasheetId: "ds:ashen-wardens:warden-captain" }]);
     expect(u.models.map((m) => `${m.name}x${m.count}`)).toEqual(["Warden Sergeantx1", "Wardenx9", "Warden Captainx1"]);
     const on = u.weapons.filter((w) => w.enabled).map((w) => `${w.name}x${w.count}`);
     expect(on).toEqual(expect.arrayContaining(["Flux carbinex10", "Shock maulx9", "Power fistx1", "Warden Captain: Flux pistolx1", "Warden Captain: Relic bladex1"]));
@@ -33,6 +35,24 @@ describe("unitFromRosterUnit", () => {
     expect(byName["Twin hail gun"]!.enabled).toBe(false);
     expect(byName["Crusher fists"]!.enabled).toBe(true);
     expect(u.points).toBe(150 + 10);
+  });
+});
+
+describe("attached characters", () => {
+  it("takes the role from the roster rather than guessing it from the sheet", () => {
+    const supported: Roster = { ...roster, units: roster.units.map((u) => (u.id === "u2" ? { ...u, attachedTo: { unitId: "u1", role: "support" as const } } : u)) };
+    expect(unitFromRosterUnit(supported.units[0]!, supported, snapshot).attached[0]!.role).toBe("support");
+  });
+
+  it("is empty for a unit nobody is attached to", () => {
+    expect(unitFromRosterUnit(roster.units[2]!, roster, snapshot).attached).toEqual([]);
+  });
+
+  it("names the attached character when the calculator attaches one by datasheet", () => {
+    const squad = snapshot.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;
+    const u = unitFromDatasheet(squad, snapshot, { modelCount: 10, attachedDatasheetIds: ["ds:ashen-wardens:warden-captain"] });
+    expect(u.name).toBe("Warden Squad");
+    expect(u.attached).toEqual([{ name: "Warden Captain", role: "leader", datasheetId: "ds:ashen-wardens:warden-captain" }]);
   });
 });
 

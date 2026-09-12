@@ -9,6 +9,7 @@ const unit = (name: string, models: number, weapons: ScenarioWeapon[], points?: 
   keywords: [],
   models: [{ name: "m", count: models, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }],
   weapons,
+  attached: [],
   effects: [],
   ...(points === undefined ? {} : { points }),
 });
@@ -150,8 +151,8 @@ describe("damage tiers and the defensive profile", () => {
   });
 
   it("groups wounds by toughness, save and invulnerable", () => {
-    const a: ScenarioUnit = { name: "Squad", keywords: [], effects: [], weapons: [], models: [{ name: "m", count: 5, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }] };
-    const b: ScenarioUnit = { name: "Tank", keywords: [], effects: [], weapons: [], models: [{ name: "t", count: 1, T: 11, Sv: 2, InvSv: 5, W: 14, isCharacter: false, keywords: [] }] };
+    const a: ScenarioUnit = { name: "Squad", keywords: [], attached: [], effects: [], weapons: [], models: [{ name: "m", count: 5, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }] };
+    const b: ScenarioUnit = { name: "Tank", keywords: [], attached: [], effects: [], weapons: [], models: [{ name: "t", count: 1, T: 11, Sv: 2, InvSv: 5, W: 14, isCharacter: false, keywords: [] }] };
     const rows = defensiveProfile([a, b]);
     expect(rows.map((r) => [r.toughness, r.save, r.invuln, r.models, r.wounds])).toEqual([
       [11, 2, 5, 1, 14],
