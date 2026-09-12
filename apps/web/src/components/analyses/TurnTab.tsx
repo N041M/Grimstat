@@ -9,6 +9,8 @@ import { DEFAULT_TURN_OPTIONS, OPTION_AUTO, TURN_OBJECTIVES, type TurnAssignment
 import { modelCount } from "../../lib/scenario";
 import { UNIT_SET_KEYS, type UnitEntry } from "../../lib/unitSet";
 import { fmt, fmtInt, pct } from "../../lib/format";
+import { turnPlanToCsv } from "../../lib/matrixCsv";
+import { download } from "../../lib/download";
 import { UnitSetPicker } from "./UnitSetPicker";
 import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunActions, RunStatus, WarningList, parseAnalysisContext, useAnalysisHeader, type AnalysisContext } from "./shared";
 import { BarChart } from "../charts/BarChart";
@@ -265,15 +267,29 @@ export function TurnTab() {
     evaluate.reset();
   };
 
+  // What is exported is the plan on screen, so a hand-edited plan writes out as edited rather than
+  // as the optimiser's answer to it.
+  const exportCsv = () => {
+    if (!current || !ran) return;
+    download(`grimstat-turn-${new Date().toISOString().slice(0, 10)}.csv`, turnPlanToCsv(current, ran.view), "text/csv");
+  };
+
   // Header actions call through a ref so they never run against a stale closure.
-  const handlers = useRef({ run, cancel: optimise.cancel });
-  handlers.current = { run, cancel: optimise.cancel };
+  const handlers = useRef({ run, cancel: optimise.cancel, exportCsv });
+  handlers.current = { run, cancel: optimise.cancel, exportCsv };
+  const hasPlan = !!current;
   useAnalysisHeader(
     () => ({
       subtitle: t("analyses.turn.sub", { a: attackers.entries.length, t: targets.entries.length, cp: opts.cpBudget }),
-      actions: <RunActions canRun={canRun} running={optimise.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()} runLabel={t("analyses.turn.run")} />,
+      actions: (
+        <RunActions canRun={canRun} running={optimise.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()} runLabel={t("analyses.turn.run")}>
+          <button type="button" disabled={!hasPlan} onClick={() => handlers.current.exportCsv()}>
+            {t("analyses.exportCsv")}
+          </button>
+        </RunActions>
+      ),
     }),
-    [canRun, optimise.running, attackers.entries.length, targets.entries.length, opts.cpBudget],
+    [canRun, hasPlan, optimise.running, attackers.entries.length, targets.entries.length, opts.cpBudget],
   );
 
   return (

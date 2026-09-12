@@ -511,14 +511,17 @@ export function BattlePage() {
     if (plan.moves) {
       const hulls: ModelHull[] = [];
       const kinds: SilhouetteId[] = [];
+      const poses: number[] = [];
       for (const move of plan.moves) {
         const u = findUnit(state, move.unitId);
         const m = u && findModel(u, move.modelId);
         if (!u || !m) continue;
         hulls.push({ ...m.hull, pos: move.at });
         kinds.push(silhouetteFor(u.keywords));
+        // The stance belongs to the model, so the ghost of a squad matches the squad it left.
+        poses.push(u.models.indexOf(m));
       }
-      return { unitId: plan.unitId, modelId: plan.modelId, hulls, kind: kinds[0] ?? "infantry", kinds, moves: plan.moves, legal: true };
+      return { unitId: plan.unitId, modelId: plan.modelId, hulls, kind: kinds[0] ?? "infantry", kinds, poses, moves: plan.moves, legal: true };
     }
     const unit = findUnit(state, plan.unitId);
     if (!unit) return undefined;
@@ -526,7 +529,7 @@ export function BattlePage() {
     const kind = silhouetteFor(unit.keywords);
     if (plan.modelId) {
       const model = findModel(unit, plan.modelId);
-      return model ? { unitId: plan.unitId, modelId: plan.modelId, hulls: [{ ...model.hull, pos: plan.at }], kind, legal: true } : undefined;
+      return model ? { unitId: plan.unitId, modelId: plan.modelId, hulls: [{ ...model.hull, pos: plan.at }], kind, poses: [unit.models.indexOf(model)], legal: true } : undefined;
     }
     const anchor = anchorOf(unit);
     return { unitId: plan.unitId, hulls: unitHulls(translateUnit(unit, { x: plan.at.x - anchor.pos.x, y: plan.at.y - anchor.pos.y }, plan.at.z)), kind, legal: true };

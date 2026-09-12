@@ -259,12 +259,38 @@ function arm(shoulder: P3, elbow: P3, hand: P3): BufferGeometry[] {
   return [limb(shoulder, elbow, 0.1, 0.085), limb(elbow, hand, 0.085, 0.075), joint(0.09, elbow), joint(0.075, hand)];
 }
 
-/** A trooper: striding, a boxy bolt-gun held across the body, right hand at the fore grip. */
-function trooper(): Figure {
-  return merge(torso(), legs(), {
-    armour: [...arm([0.02, 1.52, 0.4], [0.2, 1.18, 0.4], [0.41, 1.28, 0.1]), ...arm([0.02, 1.52, -0.4], [0.12, 1.16, -0.36], [0.15, 1.27, -0.06])],
-    accent: [box(0.5, 0.16, 0.14, 0.28, 1.31, 0.02, 0, -0.5), box(0.1, 0.18, 0.1, 0.2, 1.18, -0.03, 0, -0.5), barrel(0.03, 0.16, 0.56, 1.34, 0.18, 6)],
-  });
+/**
+ * A trooper, in one of three poses.
+ *
+ * A squad is five or ten models, and ten copies of one pose facing one way is a row of toy
+ * soldiers rather than a unit. The poses differ only from the waist up — the same torso, the same
+ * legs, the same helmet at the same height — so every one of them still tops out at exactly the
+ * height the kernel measured with, and a squad reads as a squad without any of them lying about
+ * what a wall can hide.
+ *
+ * `0` carries the gun across the body at the ready, `1` has it shouldered and aimed, `2` has it
+ * lowered at the hip with the off hand raised.
+ */
+function trooper(pose = 0): Figure {
+  const held: Figure[] = [
+    {
+      armour: [...arm([0.02, 1.52, 0.4], [0.2, 1.18, 0.4], [0.41, 1.28, 0.1]), ...arm([0.02, 1.52, -0.4], [0.12, 1.16, -0.36], [0.15, 1.27, -0.06])],
+      accent: [box(0.5, 0.16, 0.14, 0.28, 1.31, 0.02, 0, -0.5), box(0.1, 0.18, 0.1, 0.2, 1.18, -0.03, 0, -0.5), barrel(0.03, 0.16, 0.56, 1.34, 0.18, 6)],
+    },
+    {
+      // Aimed: the right hand back at the grip, the left thrown forward under the barrel.
+      armour: [...arm([0.02, 1.52, -0.4], [-0.14, 1.22, -0.46], [0.2, 1.34, -0.2]), ...arm([0.02, 1.52, 0.4], [0.26, 1.3, 0.28], [0.46, 1.36, 0.08])],
+      accent: [box(0.5, 0.16, 0.14, 0.33, 1.38, -0.04, 0, -0.14), box(0.1, 0.2, 0.1, 0.26, 1.24, -0.02, 0, -0.14), barrel(0.03, 0.12, 0.6, 1.4, 0.02, 6)],
+    },
+    {
+      // Lowered: the gun carried at the hip, the free arm up as if calling the advance on.
+      armour: [...arm([0.02, 1.52, -0.4], [-0.02, 1.14, -0.46], [0.22, 1.0, -0.32]), ...arm([0.02, 1.52, 0.4], [0.16, 1.22, 0.48], [0.3, 1.48, 0.42])],
+      accent: [box(0.46, 0.15, 0.13, 0.28, 1.04, -0.3, 0.22, -0.26), box(0.1, 0.17, 0.1, 0.18, 0.94, -0.26, 0.22, -0.26), barrel(0.03, 0.12, 0.5, 1.13, -0.36, 6)],
+    },
+  ];
+  // A pose has to stay inside the same overhang as every other, or the enforcement at the end of
+  // this file scales that figure down to fit and the squad ends up with men of different sizes.
+  return merge(torso(), legs(), held[pose % held.length]!);
 }
 
 const FIGURES: Readonly<Record<SilhouetteId, () => Figure>> = {
@@ -576,9 +602,31 @@ const FIGURES: Readonly<Record<SilhouetteId, () => Figure>> = {
   },
 };
 
+/**
+ * Extra poses, for the classes that arrive several models to a unit.
+ *
+ * `FIGURES` holds the one figure every class has; a class listed here has alternatives to it, and
+ * the entry at index `0` must be that same figure. A class not listed simply has one pose — a tank
+ * is a tank, and there is nothing to vary.
+ */
+const POSES: Partial<Readonly<Record<SilhouetteId, readonly (() => Figure)[]>>> = {
+  infantry: [() => trooper(0), () => trooper(1), () => trooper(2)],
+};
+
+/** How many poses a class has. One, unless it is a class that turns up in numbers. */
+export const poseCount = (id: SilhouetteId): number => POSES[id]?.length ?? 1;
+
+/**
+ * Which pose the `n`th model of a unit stands in.
+ *
+ * By position rather than by name, so a unit's ghost and its tokens agree without either of them
+ * needing to know a model's id, and so a model keeps its pose for as long as it keeps its place.
+ */
+export const poseOf = (id: SilhouetteId, index: number): number => (index % poseCount(id) + poseCount(id)) % poseCount(id);
+
 /* ---- assembly ------------------------------------------------------------------------------- */
 
-const cache = new Map<SilhouetteId, BufferGeometry>();
+const cache = new Map<string, BufferGeometry>();
 
 const flat = (parts: readonly BufferGeometry[]): BufferGeometry => {
   const loose = parts.map((g) => (g.index ? g.toNonIndexed() : g));
@@ -593,13 +641,15 @@ const flat = (parts: readonly BufferGeometry[]): BufferGeometry => {
  * Two groups — armour then accent — so one mesh with two materials draws the whole figure. The
  * design rules are enforced here rather than trusted: feet on the ground, the top at exactly `y = 1`,
  * the base disc normalised to radius 1 with only the allowed overhang beyond it, whatever the
- * designer's arithmetic said. The result is never disposed — thirteen small geometries, kept for
- * the life of the page.
+ * designer's arithmetic said. The result is never disposed — a handful of small geometries, kept
+ * for the life of the page.
  */
-export function silhouetteGeometry(id: SilhouetteId): BufferGeometry {
-  let geometry = cache.get(id);
+export function silhouetteGeometry(id: SilhouetteId, pose = 0): BufferGeometry {
+  const chosen = poseOf(id, pose);
+  const key = `${id}:${chosen}`;
+  let geometry = cache.get(key);
   if (!geometry) {
-    const figure = FIGURES[id]();
+    const figure = (POSES[id]?.[chosen] ?? FIGURES[id])();
     const armour = flat(figure.armour);
     const accent = flat(figure.accent);
     const all = mergeGeometries([armour, accent], true) ?? new BufferGeometry();
@@ -617,7 +667,7 @@ export function silhouetteGeometry(id: SilhouetteId): BufferGeometry {
     if (reach > SILHOUETTE_OVERHANG) all.scale(SILHOUETTE_OVERHANG / reach, 1, SILHOUETTE_OVERHANG / reach);
     all.computeBoundingBox();
     geometry = all;
-    cache.set(id, geometry);
+    cache.set(key, geometry);
   }
   return geometry;
 }

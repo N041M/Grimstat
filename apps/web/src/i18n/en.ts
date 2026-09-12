@@ -419,12 +419,9 @@ export const en = {
 
   // dashboard
   "dashboard.hint": "Drag titles to move, corners to resize. Saved on this device.",
-  "dashboard.narrowHint": "Single-column layout on narrow screens.",
   "dashboard.autoFit": "Fit heights",
   "dashboard.autoFitHint": "Resize every panel to the height its content needs",
   "dashboard.reset": "Reset layout",
-  "dashboard.rearrange": "Rearrange",
-  "dashboard.fixedHint": "Default arrangement — press Rearrange to move or resize panels.",
   "dashboard.dragHint": "Drag to move this panel",
 
   // widgets
@@ -506,7 +503,6 @@ export const en = {
 
   // data page
   "data.intro": "Grimstat ships no game data. Fetch the community sources straight from this browser, import a snapshot produced by the CLI, or load the synthetic sample to try the app.",
-  "data.getData": "Get data",
   "data.loadSample": "Load sample data",
   "data.importSnapshot": "Import snapshot JSON…",
   "data.fetchAll": "Fetch everything",
@@ -601,7 +597,6 @@ export const en = {
 
   // armies (Phase 4 army builder)
   "nav.armies": "Armies",
-  "armies.intro": "Army lists live in this browser's local database and are validated against the active data snapshot.",
   "armies.newTitle": "New army",
   "armies.importTitle": "Import from text",
   "armies.importFormats": "Accepted formats",
@@ -1277,7 +1272,6 @@ export const en = {
   "battle.deploy.selectedDeployedTouch": "Drag it to reposition, or withdraw it with the × beside its name.",
 
   "analyses.title": "Analyses",
-  "analyses.intro": "Army-level statistics: many-vs-many matrices, durability against archetypes, points efficiency and a one-turn target allocation optimiser. Everything runs locally in a background worker.",
   "analyses.tabs": "Analysis views",
   "analyses.tab.matrix": "Matrix",
   "analyses.tab.durability": "Durability",

@@ -67,7 +67,7 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
 
 /**
  * The 56px icon rail: brand mark (opens the command palette, carries the solve-state dot),
- * eight single-letter route items, theme control pinned to the bottom. Below 900px the same
+ * one single-letter item per route, theme control pinned to the bottom. Below 900px the same
  * markup lays itself out as a bottom bar (see `.shell.narrow .rail` in styles.css).
  */
 export function IconRail({ route, theme, offline }: { route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean }) {

@@ -76,7 +76,10 @@ function material(colour: string, finish: "base" | "armour" | "accent" | "ghost"
   let m = materials.get(key);
   if (!m) {
     const ghost = finish === "ghost";
-    const tint = finish === "base" ? `#${new Color(colour).multiplyScalar(0.72).getHexString()}` : colour;
+    // The base is darkened well below the figure's own colour. Seen from straight down — the view
+    // people plan in — a model is mostly base, and a base in nearly the side's colour makes the
+    // whole thing one blue disc with a blue lump on it.
+    const tint = finish === "base" ? `#${new Color(colour).multiplyScalar(0.42).getHexString()}` : colour;
     m = new MeshStandardMaterial({
       color: tint,
       roughness: finish === "accent" ? 0.5 : 0.65,
@@ -110,16 +113,17 @@ function figureMaterial(colour: string, ghost: boolean): Material[] {
  * with, so the player can see why a wall does or does not hide it, and it is chosen by what the
  * unit is rather than who — see `silhouettes.ts`. An oval base is a disc stretched along its
  * facing; the figure is scaled to the base and the height separately, so a tank is as long as
- * its base and a trooper as tall as the kernel thinks. Drawn at the origin: whoever places it
- * decides where it stands.
+ * its base and a trooper as tall as the kernel thinks. `pose` is the model's place in its unit,
+ * which is what varies a squad's stances; classes with one pose ignore it. Drawn at the origin:
+ * whoever places it decides where it stands.
  */
-function TokenBody({ hull, kind, colour, ghost, selected, warn }: { hull: ModelHull; kind: SilhouetteId; colour: string; ghost?: boolean; selected?: boolean; warn?: boolean }) {
+function TokenBody({ hull, kind, pose = 0, colour, ghost, selected, warn }: { hull: ModelHull; kind: SilhouetteId; pose?: number; colour: string; ghost?: boolean; selected?: boolean; warn?: boolean }) {
   const r = hull.foot.r;
   const stretch = footReach(hull.foot) / r;
   return (
     <group rotation={[0, -hull.facing, 0]}>
       <group scale={[stretch, 1, 1]}>
-        <mesh position={[0, BASE_H / 2, 0]} material={material(colour, ghost ? "ghost" : "base")}>
+        <mesh castShadow receiveShadow position={[0, BASE_H / 2, 0]} material={material(colour, ghost ? "ghost" : "base")}>
           <cylinderGeometry args={[r, r, BASE_H, 22]} />
         </mesh>
         {selected || warn ? (
@@ -129,7 +133,7 @@ function TokenBody({ hull, kind, colour, ghost, selected, warn }: { hull: ModelH
           </mesh>
         ) : null}
       </group>
-      <mesh position={[0, BASE_H, 0]} scale={figureScale(kind, hull)} geometry={silhouetteGeometry(kind)} material={figureMaterial(colour, !!ghost)} />
+      <mesh castShadow receiveShadow position={[0, BASE_H, 0]} scale={figureScale(kind, hull)} geometry={silhouetteGeometry(kind, pose)} material={figureMaterial(colour, !!ghost)} />
     </group>
   );
 }
@@ -240,7 +244,7 @@ export const UnitTokens = memo(function UnitTokens({
                     document.body.style.cursor = "";
                   }}
                 >
-                  <TokenBody hull={m.hull} kind={kindOf(unit, i, all)} colour={SIDE_COLOURS[unit.side]} selected={m.id === activeModelId || (unit.id === selectedId && !activeModelId) || !!groupIds?.has(m.id)} warn={incoherent?.has(m.id)} />
+                  <TokenBody hull={m.hull} kind={kindOf(unit, i, all)} pose={i} colour={SIDE_COLOURS[unit.side]} selected={m.id === activeModelId || (unit.id === selectedId && !activeModelId) || !!groupIds?.has(m.id)} warn={incoherent?.has(m.id)} />
                 </group>
               </LiveToken>
             ))}
@@ -250,13 +254,19 @@ export const UnitTokens = memo(function UnitTokens({
   );
 });
 
-/** The translucent copy that follows the pointer during a drag, tinted by whether the move is legal. */
-export function Ghost({ hulls, kind = "infantry", kinds, legal }: { hulls: readonly ModelHull[]; kind?: SilhouetteId; kinds?: readonly SilhouetteId[]; legal: boolean }) {
+/**
+ * The translucent copy that follows the pointer during a drag, tinted by whether the move is legal.
+ *
+ * `poses` carries each ghost's stance from the model it stands for, so a squad does not change
+ * its stances the moment the drag is dropped. Without it the ghosts fall back to their place in
+ * the array, which is the right answer whenever the ghosts are a whole unit in order.
+ */
+export function Ghost({ hulls, kind = "infantry", kinds, poses, legal }: { hulls: readonly ModelHull[]; kind?: SilhouetteId; kinds?: readonly SilhouetteId[]; poses?: readonly number[]; legal: boolean }) {
   return (
     <group>
       {hulls.map((hull, i) => (
         <group key={i} position={toScene(hull.pos)}>
-          <TokenBody hull={hull} kind={kinds?.[i] ?? kind} colour={legal ? SCENE_COLOURS.rayClear : SCENE_COLOURS.rayBlocked} ghost />
+          <TokenBody hull={hull} kind={kinds?.[i] ?? kind} pose={poses?.[i] ?? i} colour={legal ? SCENE_COLOURS.rayClear : SCENE_COLOURS.rayBlocked} ghost />
         </group>
       ))}
     </group>

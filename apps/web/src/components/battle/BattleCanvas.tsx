@@ -63,7 +63,7 @@ export interface BattleCanvasProps {
   rays?: readonly { from: Vec3; to: Vec3; blockedBy?: string }[];
   path?: readonly Vec3[];
   /** A planned move not yet approved: the unit's ghost standing where it would go. */
-  planned?: { readonly unitId: string; readonly modelId?: string; readonly hulls: readonly ModelHull[]; readonly kind: SilhouetteId; readonly kinds?: readonly SilhouetteId[]; readonly moves?: readonly GroupMove[]; readonly legal: boolean };
+  planned?: { readonly unitId: string; readonly modelId?: string; readonly hulls: readonly ModelHull[]; readonly kind: SilhouetteId; readonly kinds?: readonly SilhouetteId[]; readonly poses?: readonly number[]; readonly moves?: readonly GroupMove[]; readonly legal: boolean };
   /** Models selected together. A drag on any of them moves them all. */
   groupIds?: ReadonlySet<string>;
   /** A Shift-drag on the table has boxed these models; `additive` when ⌘ or Ctrl was held too. */
@@ -126,7 +126,7 @@ export interface BattleCanvasProps {
  */
 export function BattleCanvas(props: BattleCanvasProps) {
   return (
-    <Canvas className="battle-canvas" dpr={[1, 2]} gl={{ antialias: true }}>
+    <Canvas className="battle-canvas" shadows dpr={[1, 2]} gl={{ antialias: true }}>
       <color attach="background" args={["#15161a"]} />
       <Scene {...props} />
     </Canvas>
@@ -315,6 +315,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       const by = { x: spot.x - lead.hull.pos.x, y: spot.y - lead.hull.pos.y };
       const hulls: ModelHull[] = [];
       const kinds: SilhouetteId[] = [];
+      const poses: number[] = [];
       for (const member of drag.members) {
         const u = findUnit(state, member.unitId);
         const m = u && findModel(u, member.modelId);
@@ -322,13 +323,16 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         const landed = drag.group?.find((g) => g.modelId === member.modelId);
         hulls.push({ ...m.hull, pos: { x: m.hull.pos.x + by.x, y: m.hull.pos.y + by.y, z: landed?.at.z ?? m.hull.pos.z } });
         kinds.push(silhouetteFor(u.keywords));
+        // A ghost stands in the stance of the model it was picked up from, which is that model's
+        // place in its own unit rather than its place in the selection.
+        poses.push(u.models.indexOf(m));
       }
-      return { hulls, kind, kinds };
+      return { hulls, kind, kinds, poses };
     }
     if (dragMode === "deploy") return { hulls: unitHulls(placeUnit(unit, spot)), kind };
     if (drag.modelId) {
       const model = findModel(unit, drag.modelId);
-      return model ? { hulls: [{ ...model.hull, pos: { x: spot.x, y: spot.y, z: drag.at?.z ?? model.hull.pos.z } }], kind } : undefined;
+      return model ? { hulls: [{ ...model.hull, pos: { x: spot.x, y: spot.y, z: drag.at?.z ?? model.hull.pos.z } }], kind, poses: [unit.models.indexOf(model)] } : undefined;
     }
     const anchor = anchorOf(unit);
     return { hulls: unitHulls(translateUnit(unit, { x: spot.x - anchor.pos.x, y: spot.y - anchor.pos.y }, drag.at?.z)), kind };
@@ -595,7 +599,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       ) : null}
       <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} groupIds={groupIds} incoherent={incoherent} draggable={canDrag} addToSelection={addToSelection} onSelect={onSelect} onGrab={grabModel} />
       {ghost && drag ? (
-        <Ghost hulls={ghost.hulls} kind={ghost.kind} kinds={ghost.kinds} legal={drag.legal} />
+        <Ghost hulls={ghost.hulls} kind={ghost.kind} kinds={ghost.kinds} poses={ghost.poses} legal={drag.legal} />
       ) : planned ? (
         <group
           onPointerDown={(e: ThreeEvent<PointerEvent>) => {
@@ -611,7 +615,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
             if (!held.current) document.body.style.cursor = "";
           }}
         >
-          <Ghost hulls={planned.hulls} kind={planned.kind} kinds={planned.kinds} legal={planned.legal} />
+          <Ghost hulls={planned.hulls} kind={planned.kind} kinds={planned.kinds} poses={planned.poses} legal={planned.legal} />
         </group>
       ) : null}
       {labelsRef ? <LabelProjector labelsRef={labelsRef} units={state.units} /> : null}

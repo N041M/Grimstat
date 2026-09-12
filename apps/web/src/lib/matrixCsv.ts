@@ -1,4 +1,4 @@
-import type { EfficiencyRow, MatrixResult, ReverseResult } from "@grimstat/game-40k-11e";
+import type { DurabilityEntry, EfficiencyRow, MatrixResult, ReverseResult, TurnPlanResult } from "@grimstat/game-40k-11e";
 
 /** RFC 4180-style escaping: quote when the value contains a comma, quote, CR or LF. */
 export function csvEscape(value: string | number | undefined): string {
@@ -59,5 +59,59 @@ export function reverseToCsv(result: ReverseResult): string {
   result.rows.forEach((r, i) => {
     lines.push(csvLine([i + 1, r.names.join(" + "), r.candidateIds.length, r.points || undefined, r.meets ? "yes" : "no", cheapest !== undefined && r.candidateIds.join("|") === cheapest ? "yes" : "no", round(r.pKill, 4), round(r.expectedDamage), round(r.expectedSlain)]));
   });
+  return `${lines.join("\r\n")}\r\n`;
+}
+
+export const DURABILITY_CSV_HEADER = ["defender", "attacker", "expected_damage", "p_kill", "damage_taken_per_100pts"] as const;
+
+/** One row per attacker archetype the defender was measured against, in the order it was run. */
+export function durabilityToCsv(defender: string, entries: readonly DurabilityEntry[]): string {
+  const lines = [csvLine([...DURABILITY_CSV_HEADER])];
+  for (const e of entries) lines.push(csvLine([defender, e.archetype, round(e.expectedDamage), round(e.pKill, 4), round(e.damageTakenPer100)]));
+  return `${lines.join("\r\n")}\r\n`;
+}
+
+/**
+ * What the turn CSV needs to turn the plan's ids back into the names the tab shows.
+ *
+ * Spelt out as the fields it reads rather than as the plugin's own types, so the tab can hand over
+ * whatever it already has on screen and this stays a formatter with nothing to know about rules.
+ */
+export interface TurnCsvNames {
+  attackers: ReadonlyArray<{ id: string; name: string; points?: number }>;
+  targets: ReadonlyArray<{ id: string; name: string; points?: number }>;
+  options: ReadonlyArray<{ id: string; label: string; cp: number }>;
+}
+
+export const TURN_PLAN_CSV_HEADER = ["order", "attacker", "attacker_points", "target", "target_points", "stratagem", "cp", "expected_damage", "expected_slain", "p_target_destroyed_after"] as const;
+export const TURN_TARGET_CSV_HEADER = ["target", "target_points", "expected_damage", "expected_slain", "p_kill", "expected_points_slain", "expected_wasted"] as const;
+export const TURN_TOTAL_CSV_HEADER = ["objective", "score", "cp_spent", "cp_budget", "expected_points_destroyed", "expected_models_slain", "expected_damage", "expected_wasted"] as const;
+
+/**
+ * A turn plan as three blocks in one file: what fires at what, how each target ends up, and the
+ * totals the tab puts at the top. A spreadsheet opens the lot as one sheet, which is how the plan
+ * is read — the assignment only means anything beside the target it was chosen for.
+ */
+export function turnPlanToCsv(result: TurnPlanResult, names: TurnCsvNames): string {
+  const attacker = (id: string) => names.attackers.find((a) => a.id === id);
+  const target = (id: string) => names.targets.find((t) => t.id === id);
+  const option = (id: string | undefined) => (id ? names.options.find((o) => o.id === id) : undefined);
+
+  const lines = [csvLine([...TURN_PLAN_CSV_HEADER])];
+  for (const a of [...result.assignments].sort((x, y) => x.order - y.order)) {
+    const o = option(a.optionId);
+    lines.push(csvLine([a.order + 1, attacker(a.attackerId)?.name ?? a.attackerId, attacker(a.attackerId)?.points, target(a.targetId)?.name ?? a.targetId, target(a.targetId)?.points, o?.label, o?.cp, round(a.expectedDamage), round(a.expectedSlain), round(a.pKillAfter, 4)]));
+  }
+
+  lines.push("");
+  lines.push(csvLine([...TURN_TARGET_CSV_HEADER]));
+  for (const o of result.targets) {
+    lines.push(csvLine([target(o.targetId)?.name ?? o.targetId, target(o.targetId)?.points, round(o.expectedDamage), round(o.expectedSlain), round(o.pKill, 4), round(o.expectedPointsSlain), round(o.expectedWasted)]));
+  }
+
+  lines.push("");
+  lines.push(csvLine([...TURN_TOTAL_CSV_HEADER]));
+  lines.push(csvLine([result.objective, round(result.score), result.cpSpent, result.cpBudget, round(result.totalExpectedPoints), round(result.totalExpectedSlain), round(result.totalExpectedDamage), round(result.totalExpectedWasted)]));
+
   return `${lines.join("\r\n")}\r\n`;
 }

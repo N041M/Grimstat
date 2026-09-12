@@ -1,6 +1,6 @@
-import { memo, useMemo } from "react";
-import type { ThreeEvent } from "@react-three/fiber";
-import { BufferAttribute, BufferGeometry, DoubleSide, EdgesGeometry, ExtrudeGeometry, Shape, ShapeGeometry } from "three";
+import { memo, useEffect, useMemo, useRef } from "react";
+import { useThree, type ThreeEvent } from "@react-three/fiber";
+import { BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, EdgesGeometry, EquirectangularReflectionMapping, ExtrudeGeometry, FloatType, PMREMGenerator, RGBAFormat, Shape, ShapeGeometry, Vector3, type DirectionalLight } from "three";
 import type { BoardSize, Objective, TerrainPiece, Vec2, Zone } from "@grimstat/board";
 import { OBJECTIVE_MARKER_RADIUS, OBJECTIVE_RANGE, hasTrait } from "@grimstat/board";
 import { SCENE_COLOURS, SIDE_COLOURS, fromScene, surfaceHeights, terrainAppearance, toScene } from "../../lib/battleScene";
@@ -28,6 +28,9 @@ function shapeOf(polygon: readonly Vec2[]): Shape {
 
 /** Lay a shape flat on the table: local (u, v, w) becomes world (u, w, −v). */
 const FLAT: [number, number, number] = [-Math.PI / 2, 0, 0];
+
+/** Height the shadow camera allows for above the table, so a three-storey ruin still casts. */
+const SHADOW_HEADROOM = 16;
 
 /** The board point under a pointer event. */
 function boardPoint(e: ThreeEvent<PointerEvent>): Vec2 {
@@ -61,7 +64,7 @@ export const Table = memo(function Table({ size, onDown }: { size: BoardSize; on
   }, [size.width, size.depth]);
   return (
     <group>
-      <mesh rotation={FLAT} position={[size.width / 2, -0.02, -size.depth / 2]} onPointerDown={onDown ? (e) => onDown(boardPoint(e), e.nativeEvent) : undefined}>
+      <mesh receiveShadow rotation={FLAT} position={[size.width / 2, -0.02, -size.depth / 2]} onPointerDown={onDown ? (e) => onDown(boardPoint(e), e.nativeEvent) : undefined}>
         <planeGeometry args={[size.width, size.depth]} />
         <meshStandardMaterial color={SCENE_COLOURS.table} roughness={0.95} />
       </mesh>
@@ -135,14 +138,20 @@ const TerrainSolid = memo(function TerrainSolid({ piece, selected, onPick }: { p
           }
         : {})}
     >
-      <mesh geometry={solid} rotation={FLAT} position={[0, piece.base, 0]}>
+      {/*
+        Only a piece drawn solid casts a shadow. A ruin is drawn see-through precisely so the models
+        inside it can be seen, and a solid shadow of its footprint would hide from above exactly
+        what the transparency was there to show — as well as being a lie about a building that is
+        mostly open walls. Low rubble and impassable blocks are drawn solid, so they do cast.
+      */}
+      <mesh castShadow={opacity > 0.85} receiveShadow geometry={solid} rotation={FLAT} position={[0, piece.base, 0]}>
         <meshStandardMaterial color={selected ? SCENE_COLOURS.selected : colour} transparent opacity={selected ? Math.min(0.8, opacity + 0.2) : opacity} roughness={0.9} depthWrite={opacity > 0.9} />
       </mesh>
       <lineSegments geometry={edges} position={[0, piece.base, 0]} rotation={FLAT}>
         <lineBasicMaterial color={selected ? SCENE_COLOURS.selected : SCENE_COLOURS.floorEdge} transparent opacity={selected ? 1 : 0.55} />
       </lineSegments>
       {surfaces.map((z) => (
-        <mesh key={z} geometry={flat} rotation={FLAT} position={[0, z + 0.02, 0]}>
+        <mesh key={z} receiveShadow geometry={flat} rotation={FLAT} position={[0, z + 0.02, 0]}>
           <meshStandardMaterial color={roof} side={DoubleSide} roughness={0.9} transparent opacity={0.9} />
         </mesh>
       ))}
@@ -234,13 +243,128 @@ const ObjectiveMarker = memo(function ObjectiveMarker({ objective: o, selected, 
   );
 });
 
-/** Enough light to read a table by: one key light, and ambient so nothing is a silhouette. */
+/** Sky, horizon and ground of the gradient the table stands under. */
+const SKY = "#9fb0c8";
+const HORIZON = "#4d5462";
+const GROUND = "#1a1d23";
+
+/**
+ * The sky the table stands under, as a tiny gradient environment.
+ *
+ * Every material on the table is a `MeshStandardMaterial`, and a standard material with no
+ * environment has nothing to reflect: the gunmetal on a tank's tracks and gun barrels is set
+ * `metalness: 0.4`, and metalness with no environment does not read as metal — it only removes the
+ * diffuse colour, which is why the accents came out as flat dark shapes. A gradient from an
+ * overcast sky down through a dull horizon to the table itself is enough to put a soft highlight
+ * along every top edge, and it costs one small gradient, blurred once at start-up.
+ *
+ * It is deliberately colourless and low-contrast. The table has to stay drab: this is an
+ * environment to give edges away, not a skybox to look at.
+ */
+function useTableEnvironment(): void {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+
+  useEffect(() => {
+    // A column of colour repeated across the width. The size is not arbitrary: the pre-filter takes
+    // a cube face a quarter of the source width, and below 128 the face is smaller than the tile the
+    // sampler assumes, which samples the wrong place and — small enough — writes a shader constant
+    // that will not even compile. The texture itself is thrown away as soon as it has been blurred.
+    const width = 128;
+    const height = 64;
+    const data = new Float32Array(width * height * 4);
+    const sky = new Color(SKY);
+    const horizon = new Color(HORIZON);
+    const ground = new Color(GROUND);
+    const band = new Color();
+    for (let y = 0; y < height; y++) {
+      // `y = 0` is the top of an equirectangular map, so the sky is first and the table last.
+      const t = y / (height - 1);
+      band.copy(t < 0.5 ? sky : horizon).lerp(t < 0.5 ? horizon : ground, (t < 0.5 ? t : t - 0.5) * 2);
+      for (let x = 0; x < width; x++) {
+        const at = (y * width + x) * 4;
+        data[at] = band.r;
+        data[at + 1] = band.g;
+        data[at + 2] = band.b;
+        data[at + 3] = 1;
+      }
+    }
+    const gradient = new DataTexture(data, width, height, RGBAFormat, FloatType);
+    gradient.mapping = EquirectangularReflectionMapping;
+    gradient.needsUpdate = true;
+
+    const pmrem = new PMREMGenerator(gl);
+    const target = pmrem.fromEquirectangular(gradient);
+    scene.environment = target.texture;
+    gradient.dispose();
+    pmrem.dispose();
+
+    return () => {
+      scene.environment = null;
+      target.dispose();
+    };
+  }, [gl, scene]);
+}
+
+/**
+ * Enough light to read a table by, and enough shadow to believe it.
+ *
+ * The previous rig was ambient light with a lamp on top of it, which lit every face of every solid
+ * equally: a ruin came out the colour of polystyrene and a tank was a flat blue shape. Form on this
+ * table is the whole point — a player has to see that a wall is a wall and that a model is standing
+ * in front of it — so the light is now a single key with the fill turned well down, and the key
+ * casts. Contact with the ground is what makes the table look like a table rather than a diagram.
+ *
+ * The key comes over the viewer's left shoulder in the default orbit, so shadows fall away from the
+ * camera and never across the thing that cast them. The hemisphere light is what keeps the shadowed
+ * side legible: it is sky above and table below, so an unlit face goes cool and dim rather than
+ * black, and nothing is ever a silhouette.
+ */
 export function Lighting({ size }: { size: BoardSize }) {
+  useTableEnvironment();
+  const centre = useMemo(() => new Vector3(size.width / 2, 0, -size.depth / 2), [size.width, size.depth]);
+  const key = useRef<DirectionalLight>(null);
+
+  /**
+   * The shadow camera is orthographic and has to hold the whole table whatever angle it is seen
+   * from, so it is sized by the table's half-diagonal plus headroom for the tallest ruin. At this
+   * extent a 2048 map is about twenty texels across a 32 mm base, which is enough for a base to
+   * cast a base-shaped shadow rather than a smudge.
+   */
+  const reach = Math.hypot(size.width, size.depth) / 2 + SHADOW_HEADROOM;
+  const distance = Math.max(size.width, size.depth) * 1.5;
+
+  useEffect(() => {
+    const light = key.current;
+    if (!light) return;
+    // The target is not in the scene, so nothing else will update its world matrix. It never moves.
+    light.target.position.copy(centre);
+    light.target.updateMatrixWorld();
+  }, [centre]);
+
   return (
     <>
-      <ambientLight intensity={1.5} />
-      <hemisphereLight args={["#cdd6e5", "#1b1e24", 1.1]} />
-      <directionalLight position={[size.width * 0.7, 60, -size.depth * 0.2]} intensity={1.6} />
+      <ambientLight intensity={0.16} />
+      <hemisphereLight args={["#b9c8dd", "#191c22", 0.55]} />
+      <directionalLight
+        ref={key}
+        position={[centre.x - distance * 0.36, distance * 1.34, centre.z + distance * 0.42]}
+        intensity={1.55}
+        color="#fff3e4"
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-left={-reach}
+        shadow-camera-right={reach}
+        shadow-camera-top={reach}
+        shadow-camera-bottom={-reach}
+        shadow-camera-near={1}
+        shadow-camera-far={distance * 3}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.03}
+      />
+      {/* A cool counter-light from the far side, so the unlit flank of a tank keeps its edges. */}
+      <directionalLight position={[centre.x + distance * 0.6, distance * 0.35, centre.z - distance * 0.5]} intensity={0.42} color="#93abcc" />
     </>
   );
 }

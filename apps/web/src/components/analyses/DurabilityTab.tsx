@@ -8,6 +8,8 @@ import { useUnitSet } from "../../hooks/useUnitSet";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { UNIT_SET_KEYS, attackerArchetypes, shortArchetypeName, type UnitEntry } from "../../lib/unitSet";
 import { fmt, pct } from "../../lib/format";
+import { durabilityToCsv } from "../../lib/matrixCsv";
+import { download } from "../../lib/download";
 import { UnitSetPicker } from "./UnitSetPicker";
 import { RunActions, RunStatus, useAnalysisHeader } from "./shared";
 import { HBarChart } from "../charts/HBarChart";
@@ -105,15 +107,28 @@ export function DurabilityTab() {
   };
   const toggleId = (id: string, on: boolean) => setOpts((o) => ({ ...o, attackerIds: on ? [...o.attackerIds.filter((x) => x !== id), id] : o.attackerIds.filter((x) => x !== id) }));
 
+  // The name is the one the run was made under, not whatever is in the picker now.
+  const exportCsv = () => {
+    if (!task.result || !ran) return;
+    download(`grimstat-durability-${new Date().toISOString().slice(0, 10)}.csv`, durabilityToCsv(ran.name, task.result), "text/csv");
+  };
+
   // Header actions call through a ref so they never run against a stale closure.
-  const handlers = useRef({ run, cancel: task.cancel });
-  handlers.current = { run, cancel: task.cancel };
+  const handlers = useRef({ run, cancel: task.cancel, exportCsv });
+  handlers.current = { run, cancel: task.cancel, exportCsv };
+  const hasResult = !!task.result;
   useAnalysisHeader(
     () => ({
       subtitle: unit ? t("analyses.durability.sub", { name: unit.unit.name, n: opts.attackerIds.length }) : t("analyses.durability.subIdle"),
-      actions: <RunActions canRun={canRun} running={task.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()} />,
+      actions: (
+        <RunActions canRun={canRun} running={task.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()}>
+          <button type="button" disabled={!hasResult} onClick={() => handlers.current.exportCsv()}>
+            {t("analyses.exportCsv")}
+          </button>
+        </RunActions>
+      ),
     }),
-    [canRun, task.running, unit?.unit.name, opts.attackerIds.length],
+    [canRun, hasResult, task.running, unit?.unit.name, opts.attackerIds.length],
   );
 
   return (

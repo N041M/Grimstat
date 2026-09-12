@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MatrixCell, MatrixResult } from "@grimstat/game-40k-11e";
 import type { SimResult } from "@grimstat/schema";
 import { HEAT_STEPS, ALPHA_BASE, ALPHA_SPAN, FLIP_AT, heatColour, heatRamp, heatT, heatmapModel, metricIsAverage, metricValue } from "./heatmap";
-import { MATRIX_CSV_HEADER, csvEscape, csvLine, matrixToCsv } from "./matrixCsv";
+import { DURABILITY_CSV_HEADER, MATRIX_CSV_HEADER, TURN_PLAN_CSV_HEADER, TURN_TARGET_CSV_HEADER, TURN_TOTAL_CSV_HEADER, csvEscape, csvLine, durabilityToCsv, matrixToCsv, turnPlanToCsv } from "./matrixCsv";
 
 function result(over: Partial<SimResult>): SimResult {
   return {
@@ -143,5 +143,75 @@ describe("matrix CSV", () => {
     expect(lines[1]).toBe('"Bolters, ""ten""",160,Marines,90,4,2,0.1,2.5,22.5,0.5,exact');
     expect(lines[4]).toBe("Lascannons,,Tank,,6,0.3,0.3,,,0,exact");
     expect(csv.endsWith("\r\n")).toBe(true);
+  });
+});
+
+describe("durability CSV", () => {
+  it("names the defender on every row and leaves the per-100 column empty when the unit has no points", () => {
+    const csv = durabilityToCsv("Intercessors", [
+      { archetype: "Bolter squad", expectedDamage: 3.21, pKill: 0.125, damageTakenPer100: 2.5 },
+      { archetype: "Lascannon team", expectedDamage: 6, pKill: 0.5 },
+    ]);
+    const lines = csv.split("\r\n").filter(Boolean);
+    expect(lines[0]).toBe(DURABILITY_CSV_HEADER.join(","));
+    expect(lines[1]).toBe("Intercessors,Bolter squad,3.21,0.125,2.5");
+    expect(lines[2]).toBe("Intercessors,Lascannon team,6,0.5,");
+    expect(csv.endsWith("\r\n")).toBe(true);
+  });
+});
+
+describe("turn plan CSV", () => {
+  const names = {
+    attackers: [
+      { id: "a1", name: "Devastators", points: 130 },
+      { id: "a2", name: "Assault squad" },
+    ],
+    targets: [{ id: "t1", name: "Rhino", points: 75 }],
+    options: [
+      { id: "none", label: "No stratagem", cp: 0 },
+      { id: "plus1-wound", label: "+1 to wound", cp: 1 },
+    ],
+  };
+  const plan = {
+    assignments: [
+      { attackerId: "a2", targetId: "t1", expectedDamage: 2, expectedSlain: 0, pKillAfter: 0.6, order: 1 },
+      { attackerId: "a1", targetId: "t1", optionId: "plus1-wound", expectedDamage: 7.5, expectedSlain: 0.75, pKillAfter: 0.25, order: 0 },
+    ],
+    targets: [{ targetId: "t1", expectedDamage: 9.5, expectedSlain: 0.9, pKill: 0.6, expectedPointsSlain: 67.5, expectedWasted: 1.5, slainPMF: [0.4, 0.6] }],
+    totalExpectedPoints: 67.5,
+    totalExpectedSlain: 0.9,
+    totalExpectedDamage: 9.5,
+    totalExpectedWasted: 1.5,
+    cpSpent: 1,
+    cpBudget: 3,
+    objective: "points" as const,
+    score: 67.5,
+    evaluations: 12,
+    slainPMF: [0.4, 0.6],
+    warnings: [],
+  };
+
+  it("writes the assignments in firing order, then each target, then the totals", () => {
+    const blocks = turnPlanToCsv(plan, names).split("\r\n\r\n");
+    expect(blocks).toHaveLength(3);
+
+    const assignments = blocks[0]!.split("\r\n");
+    expect(assignments[0]).toBe(TURN_PLAN_CSV_HEADER.join(","));
+    // Order 0 fires first even though it is second in the array.
+    expect(assignments[1]).toBe("1,Devastators,130,Rhino,75,+1 to wound,1,7.5,0.75,0.25");
+    expect(assignments[2]).toBe("2,Assault squad,,Rhino,75,,,2,0,0.6");
+
+    const targets = blocks[1]!.split("\r\n");
+    expect(targets[0]).toBe(TURN_TARGET_CSV_HEADER.join(","));
+    expect(targets[1]).toBe("Rhino,75,9.5,0.9,0.6,67.5,1.5");
+
+    const totals = blocks[2]!.split("\r\n");
+    expect(totals[0]).toBe(TURN_TOTAL_CSV_HEADER.join(","));
+    expect(totals[1]).toBe("points,67.5,1,3,67.5,0.9,9.5,1.5");
+  });
+
+  it("falls back to the id when a name is not in the view", () => {
+    const csv = turnPlanToCsv(plan, { ...names, attackers: [] });
+    expect(csv).toContain("1,a1,,Rhino,75,");
   });
 });
