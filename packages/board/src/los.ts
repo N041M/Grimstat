@@ -10,11 +10,11 @@
  */
 
 import type { ModelHull } from "./shapes";
-import { silhouettePoints, topZ } from "./shapes";
+import { coreSegment, footReach, silhouettePoints, topZ } from "./shapes";
 import type { TerrainPiece , TerrainIndex} from "./terrain";
 import { blocksSight, containsPoint, grantsCover, hasTrait, segmentHitsPrism, topOf } from "./terrain";
 import type { Vec2, Vec3 } from "./vec";
-import { EPS, bounds, expand, segInPolygonSpans } from "./vec";
+import { EPS, bounds, expand, segInPolygonSpans, segPolygonDistance } from "./vec";
 
 export interface SightRay {
   readonly from: Vec3;
@@ -176,22 +176,31 @@ export interface CoverResult {
  * Two ways to have it, in the order the rules check them: the target is within a cover-granting
  * footprint, or such a footprint lies between the two models. A piece the attacker is also standing
  * in intervenes in nothing.
+ *
+ * Both models are measured as their bases. A model is within a footprint when any part of its base
+ * is, which is what the rules ask and what a player reads off the table — a trooper with most of his
+ * base in a crater is in the crater however his centre point falls.
  */
 export function coverFor(target: ModelHull, attacker: ModelHull, index: TerrainIndex): CoverResult {
   const here: Vec2 = { x: target.pos.x, y: target.pos.y };
   const there: Vec2 = { x: attacker.pos.x, y: attacker.pos.y };
+  const mark = coreSegment(target);
+  const eye = coreSegment(attacker);
+  // Room for either base to overhang the line between the centres, so the broad phase keeps a piece
+  // the target is standing half in.
+  const region = expand(bounds([here, there]), Math.max(footReach(target.foot), footReach(attacker.foot)));
 
   let best: CoverResult = { level: "none", reason: "none" };
   const better = (a: CoverLevel, b: CoverLevel): boolean => (a === "heavy" && b !== "heavy") || (a === "light" && b === "none");
 
-  for (const piece of index.candidates(expand(bounds([here, there]), 0), grantsCover)) {
+  for (const piece of index.candidates(region, grantsCover)) {
     const level: CoverLevel = hasTrait(piece, "heavy-cover") ? "heavy" : "light";
     if (!better(level, best.level)) continue;
-    if (containsPoint(piece, here)) {
+    if (segPolygonDistance(mark, piece.polygon) <= target.foot.r) {
       best = { level, from: piece.id, reason: "within" };
       continue;
     }
-    if (containsPoint(piece, there)) continue; // the attacker is inside it; it is not in the way
+    if (segPolygonDistance(eye, piece.polygon) <= attacker.foot.r) continue; // the attacker is inside it; it is not in the way
     const spans = segInPolygonSpans({ a: there, b: here }, piece.polygon);
     if (spans.some(([t0, t1]) => t1 - t0 > EPS)) best = { level, from: piece.id, reason: "intervening" };
   }

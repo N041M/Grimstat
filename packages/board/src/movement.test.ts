@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   BREACHERS,
+  CLIMBERS,
   MAX_CHARGE,
+  RUINED_CITY,
   TerrainIndex,
   canStand,
   chargeGeometry,
   circleBase,
+  containsPoint,
+  ovalBase,
   reachable,
   ruin,
   segPolygonDistance,
@@ -133,6 +137,29 @@ describe("reachability with terrain", () => {
     expect(detour!).toBeGreaterThan(16);
   });
 
+  it("climbs onto a scalable piece's roof, which is a surface like any storey", () => {
+    // A Ruined City ruin: 9" tall with storeys at 0" and 4", so its roof is five inches above the
+    // highest floor the piece lists.
+    const a1 = RUINED_CITY.pieces.find((p) => p.id === "a1")!;
+    expect(a1.height).toBe(9);
+    expect(a1.floors).toEqual([0, 4]);
+    const idx = index(a1);
+    const climber = { keywords: [...CLIMBERS] };
+    expect(canStand(model(11, 33, 9), { x: 11, y: 33, z: 9 }, idx, climber)).toBe(true);
+    // And the search settles on that height too, so the roof a player sees drawn is one the move
+    // can be sent to.
+    const reach = reachable(model(4, 33), 30, idx, climber);
+    const heights = new Set(reach.nodes.filter((n) => containsPoint(a1, n.at)).map((n) => n.at.z));
+    expect([...heights].sort((a, b) => a - b)).toEqual([0, 4, 9]);
+  });
+
+  it("offers no roof on a piece that cannot be scaled", () => {
+    // Two floors make a staircase to the first floor; without `scalable` the top is still nowhere.
+    const sheer = index(terrain({ id: "sheer", polygon: rect(2, -4, 8, 4), height: 9, floors: [0, 4.5] }));
+    expect(costTo(reachable(model(0, 0), 24, sheer), 5, 0, 4.5)).toBeDefined();
+    expect(costTo(reachable(model(0, 0), 24, sheer), 5, 0, 9)).toBeUndefined();
+  });
+
   it("lets anyone climb when the terrain names nobody", () => {
     const ruin = index(terrain({ id: "ruin", polygon: rect(2, -4, 8, 4), height: 9, traits: ["scalable"], floors: [0, 4.5] }));
     expect(costTo(reachable(model(0, 0), 12, ruin, { keywords: ["VEHICLE"] }), 5, 0, 4.5)).toBeDefined();
@@ -157,6 +184,33 @@ describe("reachability with terrain", () => {
     const slowed = costTo(reachable(model(0, 0), 12, mire, { rules: { difficultMultiplier: 2 } }), 5, 0)!;
     expect(normal).toBeCloseTo(5, 1);
     expect(slowed).toBeCloseTo(10, 1);
+  });
+});
+
+describe("standing an oval base beside terrain", () => {
+  // A 120 x 92 mm tank: 1.811" across the base, 0.551" of extra length each way, and an enclosing
+  // circle of 2.362". The 0.551" between the last two is the ground the enclosing circle refuses it.
+  const walled = index(terrain({ id: "wall", polygon: rect(2, -10, 12, 10), height: 6, traits: ["impassable"] }));
+  const tank = (gap: number, facing: number): ModelHull => ({ pos: { x: 2 - gap, y: 0, z: 0 }, facing, foot: ovalBase(120, 92), height: 3.5 });
+  const stands = (gap: number, facing: number): boolean => canStand(tank(gap, facing), tank(gap, facing).pos, walled);
+  /** Long axis along the wall, so the base reaches only its half-width towards it. */
+  const BROADSIDE = Math.PI / 2;
+
+  it("measures the base rather than the circle that encloses it", () => {
+    expect(stands(2.5, BROADSIDE)).toBe(true);
+    expect(stands(2.2, BROADSIDE)).toBe(true); // 0.39" of clearance, and refused before the footprint test
+    expect(stands(2.0, BROADSIDE)).toBe(true); // 0.19" of clearance
+    expect(stands(1.8, BROADSIDE)).toBe(false); // inside the 1.811" half-width: the base is in the wall
+  });
+
+  it("takes the facing into account", () => {
+    expect(stands(2.0, BROADSIDE)).toBe(true);
+    expect(stands(2.0, 0)).toBe(false); // nose-on the base reaches 2.362" and does overlap
+  });
+
+  it("allows an oval the ground a circle of the same width is allowed", () => {
+    const round: ModelHull = { ...tank(2.0, 0), foot: circleBase(92) };
+    expect(canStand(round, round.pos, walled)).toBe(true);
   });
 });
 

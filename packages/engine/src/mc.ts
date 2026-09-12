@@ -89,6 +89,11 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
     startSlain += slainBefore;
     startDamage += dealt;
     startPts += ptsBefore;
+    // What this run is asked for is the damage it *adds*, so that is the quantity whose spread the
+    // confidence interval has to describe. `dealt` still carries whatever the initial state came in
+    // with, and squaring that against an incremental mean reported an interval about twice too wide
+    // on a chained run.
+    const dealtBefore = dealt;
     let wasted = 0;
     for (let wi = 0; wi < prepared.length; wi++) {
       const P = prepared[wi]!;
@@ -190,7 +195,7 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
     dmgHist[dealt] = (dmgHist[dealt] ?? 0) + 1;
     wastedSum += wasted;
     dmgSum += dealt;
-    dmgSq += dealt * dealt;
+    dmgSq += (dealt - dealtBefore) * (dealt - dealtBefore);
     if (allDead) killCount++;
   }
 

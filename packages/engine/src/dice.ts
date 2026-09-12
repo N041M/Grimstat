@@ -1,4 +1,4 @@
-import { type PMF, convolve, delta, mixture, trim } from "./pmf";
+import { type PMF, convolve, delta, mean, mixture, trim } from "./pmf";
 
 export interface DiceSpec {
   count: number; // number of dice (0 = flat)
@@ -43,9 +43,19 @@ export function dicePMF(expr: string | number): PMF {
   return p;
 }
 
+/**
+ * Mean of the same distribution `dicePMF` builds, floor included.
+ *
+ * A negative bonus is capped at zero roll by roll rather than on the total, which lifts the mean of
+ * "D6-2" from the 1.5 a plain sum gives to 1.667. The two closed forms cover every expression that
+ * can never reach the floor: a flat number, and any roll whose lowest result already clears it. That
+ * is all but a handful of weapon profiles, and the handful falls through to the distribution itself.
+ */
 export function diceMean(expr: string | number): number {
   const spec = parseDice(expr);
-  return spec.count * ((spec.sides + 1) / 2) + spec.bonus;
+  if (spec.count === 0 || spec.sides === 0) return Math.max(0, spec.bonus);
+  if (spec.count + spec.bonus >= 0) return spec.count * ((spec.sides + 1) / 2) + spec.bonus;
+  return mean(dicePMF(expr));
 }
 
 export function formatDice(spec: DiceSpec): string {

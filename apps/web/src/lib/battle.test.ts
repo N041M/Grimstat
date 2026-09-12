@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, bounds, canStand, coherency, coreSegment, distance, inZone, ovalBase, segPolygonDistance, terrain, type Vec2 } from "@grimstat/board";
+import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, TerrainIndex, bounds, canSee, canStand, circleBase, coherency, coreSegment, distance, inZone, ovalBase, segPolygonDistance, terrain, type Vec2 } from "@grimstat/board";
 import {
   anchorOf,
   applyGroupMove,
@@ -38,6 +38,7 @@ import {
   translateUnit,
   unitHulls,
   withdrawUnit,
+  moveOf,
   zoneOf,
   type BattleState,
   type BattleUnit,
@@ -641,5 +642,52 @@ describe("moving a selection together", () => {
     expect(turned.models[0]!.hull.facing).toBeCloseTo(Math.PI / 12);
     expect(turned.models[1]!.hull.facing).toBeCloseTo(Math.PI / 12);
     expect(turned.models[2]!.hull.facing).toBe(unit.models[2]!.hull.facing);
+  });
+});
+
+describe("the sight tool asks the whole unit", () => {
+  const squad = (id: string, side: "attacker" | "defender", xs: number[], y: number): BattleUnit => ({
+    id, side, name: id, move: 6, oc: 1, keywords: ["INFANTRY"],
+    models: xs.map((x, i) => ({ id: `${id}-${i}`, hull: { pos: { x, y, z: 0 }, facing: 0, foot: circleBase(32), height: 2 } })),
+  });
+
+  it("sees the target when a flank model does, even though the lead model is walled off", () => {
+    const shooter = squad("A", "attacker", [0, 2, 4, 18, 20], 0);
+    const target = squad("B", "defender", [0, 2, 4], 20);
+    const wall = terrain({ id: "wall", polygon: [{ x: -40, y: 9 }, { x: 9, y: 9 }, { x: 9, y: 11 }, { x: -40, y: 11 }], height: 9, traits: ["obscuring"] });
+    const index = new TerrainIndex([wall]);
+
+    expect(canSee(shooter.models[0]!.hull, target.models[0]!.hull, index)).toBe(false);
+    const readout = sightBetween(shooter, target, index);
+    expect(readout.visible).toBe(true);
+    expect(readout.exposure).toBeGreaterThan(0);
+  });
+});
+
+describe("dragging a whole unit", () => {
+  it("is limited by the model with the least movement left, and never spends more than a model has", () => {
+    const open = sampleBattle(OPEN_APPROACH);
+    const unit = placeUnit(deployedUnits(open).find((u) => u.side === "attacker" && u.models.length >= 5)!, { x: 30, y: 8 });
+    let world = replaceUnit(open, unit);
+    const index = indexOf(world);
+
+    // Move one model of the squad three inches on its own first.
+    const before = findUnit(world, unit.id)!;
+    const m = before.models[3]!;
+    const step = modelMoveVerdict(world, before, m, { x: m.hull.pos.x, y: m.hull.pos.y - 3 }, index);
+    expect(step.ok).toBe(true);
+    world = replaceUnit(world, applyModelMove(before, m.id, step.at!, step.cost!, step.path));
+
+    const moved = findUnit(world, unit.id)!;
+    const left = remainingMove(moved, moved.models[3]!);
+    const anchor = anchorOf(moved).pos;
+    const drag = dragVerdict(world, moved, { x: anchor.x, y: anchor.y + 5 }, index);
+    expect(drag.ok).toBe(false);
+
+    const short = dragVerdict(world, moved, { x: anchor.x, y: anchor.y + left }, index);
+    if (short.ok) {
+      const after = applyUnitMove(moved, short.at!, short.cost!, short.path);
+      for (const each of after.models) expect(each.spent ?? 0).toBeLessThanOrEqual(moveOf(after, each) + 1e-6);
+    }
   });
 });

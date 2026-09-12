@@ -241,11 +241,13 @@ export function applyModelMove(unit: BattleUnit, modelId: string, to: Vec3, cost
  */
 export function dragVerdict(state: BattleState, unit: BattleUnit, to: Vec2, index = indexOf(state)): MoveVerdict {
   const anchor = anchorOf(unit);
-  const lead = unit.models[0];
   const { enemies, blockers } = obstacles(state, unit);
   const problems: string[] = [];
 
-  const budget = lead ? remainingMove(unit, lead) : unit.move;
+  // Every model travels the lead model's distance and is charged it, so the drag is limited by
+  // whichever model has the least left. Budgeting against the lead alone took a model that had
+  // already moved on its own, or one carrying a lower Move, past its own allowance.
+  const budget = unit.models.length ? Math.min(...unit.models.map((m) => remainingMove(unit, m))) : unit.move;
   const reach = reachable(anchor, budget, index, {
     keywords: unit.keywords,
     enemies,
@@ -671,14 +673,21 @@ export interface SightReadout {
  * tell the player nothing about how exposed the target is, which is what the tool exists to show.
  */
 export function sightBetween(from: BattleUnit, to: BattleUnit, index: TerrainIndex): SightReadout {
-  const eye = anchorOf(from);
-  let best = sight(eye, anchorOf(to), index, { exhaustive: true });
+  // Every model of the firing unit, against every model of the target. A unit may shoot what any of
+  // its models can see, so taking only the first one reported a blocked shot whenever the lead
+  // model happened to be the one behind the wall.
+  let eye = anchorOf(from);
   let mark = anchorOf(to);
-  for (const model of to.models) {
-    const result = sight(eye, model.hull, index, { exhaustive: true });
-    if (result.exposure > best.exposure) {
-      best = result;
-      mark = model.hull;
+  let best = sight(eye, mark, index, { exhaustive: true });
+  search: for (const shooter of from.models) {
+    for (const model of to.models) {
+      const result = sight(shooter.hull, model.hull, index, { exhaustive: true });
+      if (result.exposure > best.exposure) {
+        best = result;
+        eye = shooter.hull;
+        mark = model.hull;
+        if (best.exposure >= 1) break search;
+      }
     }
   }
   return {
