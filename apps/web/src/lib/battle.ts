@@ -13,8 +13,8 @@
  * than enforced, because the rules only ask for it once the whole unit has finished moving.
  */
 
-import type { CoherencyReport, Footprint, ModelHull, ReachNode, TerrainLayout, Vec2, Vec3, Zone } from "@grimstat/board";
-import { LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, edgeZones, heightForKeywords, horizontalGap, inEngagementRange, inZone, onBoard, ovalBase, pointInPolygon, reachable, sight, unitDistance } from "@grimstat/board";
+import type { CoherencyReport, Footprint, ModelHull, ReachNode, ReachOptions, ReachResult, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
+import { COHERENCY_RANGE, LAYOUTS, MOVE_RULES, TOUCH, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coreSegment, coverFor, distance, edgeZones, footReach, heightForKeywords, horizontalGap, inEngagementRange, inZone, onBoard, ovalBase, pointInPolygon, reachable, segPolygonDistance, sight, unitDistance } from "@grimstat/board";
 import type { ModelProfile, Roster, Snapshot } from "@grimstat/schema";
 import { unitClassFor, type UnitClassId } from "./unitArt";
 
@@ -298,15 +298,82 @@ export interface GroupMove extends GroupMember {
   readonly path?: readonly Vec3[];
 }
 
+/** What would become of a selection sent somewhere. */
+export interface GroupVerdict {
+  readonly ok: boolean;
+  readonly moves: GroupMove[];
+  readonly problems: string[];
+  /** The selection could not cross as a body and was fitted into the ground instead. */
+  readonly spaced?: boolean;
+}
+
 /**
- * Move several models by one offset, each judged on its own from where it stands.
+ * Move several models together.
+ *
+ * A squad crossing open table goes as it stands: every model the same offset, keeping its place in
+ * the formation. Sent into a ruin, a gateway or a crowd, the formation is what fails — one model in
+ * five would land in a wall, and refusing the whole move on that account is not what anyone does
+ * with real models. They put the squad down in the space that is there. So a body move that will
+ * not go is followed by `fitGroup`, which looks for that space.
+ *
+ * A body move can also *succeed* and still be wrong. A ruin's footprint is its walls, and the
+ * keywords that may cross them may also stand inside, so a squad sent up to a building has a
+ * perfectly legal formation with its back rank standing in the ground floor and its front rank
+ * halfway through the wall. Nobody moves models that way: they put the squad along the face of the
+ * building. `aim` is where the player actually pointed, and a building they did not point into is
+ * something the unit goes round — see `fitGroup`. Pointing into it is how a unit is sent inside.
+ */
+export function groupMoveVerdict(state: BattleState, members: readonly GroupMember[], by: Vec2, index = indexOf(state), aim?: Vec2): GroupVerdict {
+  const body = slideGroup(state, members, by, index);
+  if (members.length < 2) return body;
+  const sentInto = aim ? new Set(index.at(aim, solid).map((p) => p.id)) : new Set<string>();
+  if (body.ok && !body.moves.some((m) => standsInside(hullOf(state, m), index, sentInto))) return body;
+  return fitGroup(state, members, by, index, sentInto) ?? body;
+}
+
+/**
+ * A piece a unit walks round rather than over: one too tall to be stepped across.
+ *
+ * The threshold is the movement search's own, so a crater is ground and a building is a building,
+ * with no second opinion about which is which.
+ */
+const solid = (piece: TerrainPiece): boolean => piece.height > MOVE_RULES.stepOver;
+
+/** Where a move would put a model, as a hull the geometry can be asked about. */
+function hullOf(state: BattleState, move: GroupMove): ModelHull | undefined {
+  const unit = findUnit(state, move.unitId);
+  const model = unit && findModel(unit, move.modelId);
+  return model ? { ...model.hull, pos: move.at } : undefined;
+}
+
+/**
+ * Is any part of this base inside one of these buildings?
+ *
+ * A base flush against a wall is not inside it. Standing against a building is how models take
+ * cover, and a rule that pushed them a hundredth of an inch off it would be a nuisance rather than
+ * a correction, so the test is overlap rather than contact.
+ */
+function overlaps(hull: ModelHull, pieces: readonly TerrainPiece[]): boolean {
+  if (!pieces.length) return false;
+  const core = coreSegment(hull);
+  return pieces.some((p) => segPolygonDistance(core, p.polygon) < hull.foot.r - TOUCH);
+}
+
+/** Would this move leave the model standing in a building the unit was not sent into? */
+function standsInside(hull: ModelHull | undefined, index: TerrainIndex, sentInto: ReadonlySet<string>): boolean {
+  if (!hull) return false;
+  return overlaps(hull, index.near({ x: hull.pos.x, y: hull.pos.y }, footReach(hull.foot), solid).filter((p) => !sentInto.has(p.id)));
+}
+
+/**
+ * The body move: every member by the same offset, each judged on its own from where it stands.
  *
  * The companions are taken off the table while a member's route is searched, since they are moving
  * too and would otherwise block each other's starting and finishing spots, and the members are then
  * checked against each other where they land. The group goes only if every model can; the problems
  * are the union of theirs.
  */
-export function groupMoveVerdict(state: BattleState, members: readonly GroupMember[], by: Vec2, index = indexOf(state)): { ok: boolean; moves: GroupMove[]; problems: string[] } {
+function slideGroup(state: BattleState, members: readonly GroupMember[], by: Vec2, index: TerrainIndex): GroupVerdict {
   const ids = new Set(members.map((m) => m.modelId));
   const without = (except: string): BattleState => ({
     ...state,
@@ -336,6 +403,146 @@ export function groupMoveVerdict(state: BattleState, members: readonly GroupMemb
     }
   }
   return { ok: problems.length === 0 && moves.length === members.length, moves, problems };
+}
+
+/** Daylight a fitted squad keeps between two bases, in inches, so two models never read as one. */
+const FIT_CLEARANCE = 0.1;
+
+/**
+ * How far short of where it was sent a unit may end up and still count as having gone there.
+ *
+ * This is about the order, not about the ground: a unit sent further than it can walk is told so
+ * rather than quietly advancing as far as it can. What is *in the way* is a different matter —
+ * a model that cannot reach its place in the formation because a building stands in it goes as far
+ * round as it can get, however far short of the formation that leaves it.
+ */
+const FIT_SLACK = COHERENCY_RANGE;
+
+/** One model looking for somewhere to stand, and everywhere it could. */
+interface Mover {
+  readonly member: GroupMember;
+  readonly hull: ModelHull;
+  /** Where the body move would have put it: the spot to stay as near to as the ground allows. */
+  readonly want: Vec2;
+  readonly reach: ReachResult;
+  /** Buildings within its reach that it is meant to stay out of. */
+  readonly walls: readonly TerrainPiece[];
+}
+
+/** A spot already spoken for by a member placed earlier. */
+interface Taken {
+  readonly unitId: string;
+  readonly hull: ModelHull;
+}
+
+/**
+ * Everywhere a model could end its move, remembered for as long as the table stands still.
+ *
+ * A drag asks this same question of the same models sixty times a second, and the answer does not
+ * depend on where the hand is: only on the model, the table and who else is moving. `BattleState`
+ * is immutable and is replaced whenever anything on the table changes, so a search made against one
+ * state object is still the answer for every later frame that is handed the same object. The map is
+ * weak, so a state nobody holds any more takes its searches with it. The `index` must be that
+ * state's own, which is what `indexOf` gives every caller here.
+ */
+const searched = new WeakMap<BattleState, Map<string, ReachResult>>();
+
+function everywhere(state: BattleState, model: BattleModel, budget: number, index: TerrainIndex, opts: ReachOptions, key: string): ReachResult {
+  let byModel = searched.get(state);
+  if (!byModel) searched.set(state, (byModel = new Map()));
+  const id = `${model.id}|${key}`;
+  let found = byModel.get(id);
+  if (!found) byModel.set(id, (found = reachable(model.hull, budget, index, opts)));
+  return found;
+}
+
+/**
+ * Fit a group into the ground around where it was sent.
+ *
+ * Every member's reach is searched once — the companions are left out of the blockers, since they
+ * are all moving — and the members then take their spots one at a time, each the position nearest
+ * where the formation wanted it that nobody has claimed. They go in order of distance from the
+ * middle of the group, so the centre of a squad claims its ground and the rest fit around it, which
+ * is the order a handful of models actually goes through a gap in.
+ *
+ * A model that cannot reach its place in the formation takes the nearest place it can, which is how
+ * a squad ends up strung along the face of a building rather than standing in it: each model gets as
+ * far round as its own Move takes it. Two things are preferred over being near the formation, in
+ * this order — staying out of a building the unit was not sent into, then keeping within coherency
+ * of the unit's models that already have their spot. Both give way rather than fail: coherency is
+ * advisory here, and a model with nowhere clear to stand is better placed somewhere than nowhere.
+ *
+ * Nothing here relaxes a rule. The spots come from the movement search, so each is within that
+ * model's own remaining Move and clear of terrain, the table's edge, enemies and everyone else.
+ * Undefined means some member had nowhere at all to go, and the body move stands in its place.
+ */
+function fitGroup(state: BattleState, members: readonly GroupMember[], by: Vec2, index: TerrainIndex, sentInto: ReadonlySet<string>): GroupVerdict | undefined {
+  const ids = new Set(members.map((m) => m.modelId));
+  const blockers = deployedUnits(state).flatMap((u) => u.models.filter((m) => !ids.has(m.id)).map((m) => m.hull));
+  // What the searches below depend on, beyond the model and the state: who else is moving.
+  const key = [...ids].sort().join(" ");
+
+  // A route is at least as long as the straight line it covers, so a model whose Move cannot bring
+  // it within the slack of its place in the formation cannot be fitted at all. Saying so here costs
+  // nothing; finding it out by searching costs a flood fill per model, on every frame of a drag
+  // that has simply gone too far — which is the commonest way for a move to fail.
+  const straight = Math.hypot(by.x, by.y);
+
+  const placed = new Map<string, GroupMove>();
+  const taken: Taken[] = [];
+  const movers: Mover[] = [];
+  for (const member of members) {
+    const unit = findUnit(state, member.unitId);
+    const model = unit && findModel(unit, member.modelId);
+    if (!unit || !model) return undefined;
+    const budget = remainingMove(unit, model);
+    if (budget + FIT_SLACK < straight) return undefined;
+    const reach = everywhere(state, model, budget, index, { keywords: unit.keywords, enemies: enemyHulls(state, unit.side), blockers, board: state.layout.size }, key);
+    // The buildings this model could reach, gathered once: the alternative is asking the index
+    // about every one of a few hundred candidate spots.
+    const walls = index.near({ x: model.hull.pos.x, y: model.hull.pos.y }, budget + footReach(model.hull.foot), solid).filter((p) => !sentInto.has(p.id));
+    movers.push({ member, hull: model.hull, want: { x: model.hull.pos.x + by.x, y: model.hull.pos.y + by.y }, reach, walls });
+  }
+  const cx = movers.reduce((sum, m) => sum + m.want.x, 0) / movers.length;
+  const cy = movers.reduce((sum, m) => sum + m.want.y, 0) / movers.length;
+  const inOut = [...movers].sort((a, b) => Math.hypot(a.want.x - cx, a.want.y - cy) - Math.hypot(b.want.x - cx, b.want.y - cy));
+
+  for (const mover of inOut) {
+    const kin = taken.filter((t) => t.unitId === mover.member.unitId).map((t) => t.hull);
+    // Clear of the buildings and in coherency; then clear of them; then in coherency; then anywhere.
+    const spot = nearestSpot(mover, taken, kin, mover.walls) ?? nearestSpot(mover, taken, [], mover.walls) ?? nearestSpot(mover, taken, kin, []) ?? nearestSpot(mover, taken, [], []);
+    if (!spot) return undefined;
+    placed.set(mover.member.modelId, { ...mover.member, at: spot.at, cost: spot.cost, path: spot.path });
+    taken.push({ unitId: mover.member.unitId, hull: { ...mover.hull, pos: spot.at } });
+  }
+
+  // Reported in the order they were asked for rather than the order they were fitted in.
+  return { ok: true, moves: members.flatMap((m) => placed.get(m.modelId) ?? []), problems: [], spaced: true };
+}
+
+/**
+ * The spot a mover takes: the reachable position nearest where the formation wanted it, clear of
+ * everything already claimed, out of the buildings in `walls`, and — while `kin` is given — within
+ * coherency of its own unit's models that already have theirs. Ties go to the shorter route.
+ */
+function nearestSpot(mover: Mover, taken: readonly Taken[], kin: readonly ModelHull[], walls: readonly TerrainPiece[]): { at: Vec3; cost: number; path: readonly Vec3[] } | undefined {
+  const nodes = mover.reach.nodes;
+  let best: number | undefined;
+  let bestGap = Infinity;
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]!;
+    const gap = Math.hypot(node.at.x - mover.want.x, node.at.y - mover.want.y);
+    if (gap > bestGap) continue;
+    if (best !== undefined && gap === bestGap && node.cost >= nodes[best]!.cost) continue;
+    const hull: ModelHull = { ...mover.hull, pos: node.at };
+    if (taken.some((t) => Math.abs(t.hull.pos.z - node.at.z) < 0.5 && horizontalGap(hull, t.hull) < FIT_CLEARANCE)) continue;
+    if (kin.length && !kin.some((k) => distance(hull, k) <= COHERENCY_RANGE)) continue;
+    if (overlaps(hull, walls)) continue;
+    best = i;
+    bestGap = gap;
+  }
+  if (best === undefined) return undefined;
+  return { at: nodes[best]!.at, cost: nodes[best]!.cost, path: mover.reach.pathTo(best) };
 }
 
 /** Make a group move: every member travels its own route and pays for it. */

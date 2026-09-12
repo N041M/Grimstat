@@ -4,7 +4,7 @@ import { Color, DoubleSide, MeshStandardMaterial, type Group, type Material } fr
 import type { ModelHull, Vec2, Vec3 } from "@grimstat/board";
 import { footReach } from "@grimstat/board";
 import type { BattleUnit } from "../../lib/battle";
-import { SCENE_COLOURS, SIDE_COLOURS, fromScene, toScene } from "../../lib/battleScene";
+import { SCENE_COLOURS, SIDE_COLOURS, facingRotation, fromScene, toScene } from "../../lib/battleScene";
 import { ACCENT, ARMOUR, figureScale, silhouetteFor, silhouetteGeometry, type SilhouetteId } from "../../lib/silhouettes";
 
 /**
@@ -121,7 +121,7 @@ function TokenBody({ hull, kind, pose = 0, colour, ghost, selected, warn }: { hu
   const r = hull.foot.r;
   const stretch = footReach(hull.foot) / r;
   return (
-    <group rotation={[0, -hull.facing, 0]}>
+    <group rotation={facingRotation(hull.facing)}>
       <group scale={[stretch, 1, 1]}>
         <mesh castShadow receiveShadow position={[0, BASE_H / 2, 0]} material={material(colour, ghost ? "ghost" : "base")}>
           <cylinderGeometry args={[r, r, BASE_H, 22]} />

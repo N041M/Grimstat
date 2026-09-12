@@ -5,6 +5,7 @@ import type { BoardSize, ModelHull, ReachNode, Vec2, Vec3 } from "@grimstat/boar
 import { footReach } from "@grimstat/board";
 import { SCENE_COLOURS, fromScene, toScene, writeScene } from "../../lib/battleScene";
 import { reachMask, type ReachMask } from "../../lib/reachMask";
+import { SILHOUETTE_FIT, SILHOUETTE_OVERHANG } from "../../lib/silhouettes";
 import { useDisposable } from "./useDisposable";
 
 /**
@@ -69,12 +70,21 @@ function textureOf(mask: ReachMask): CanvasTexture {
   return texture;
 }
 
-/** How far outside the base the turn ring's band starts and ends, in inches. */
-const RING_IN = 0.12;
-const RING_OUT = 0.42;
+/**
+ * Table between the model and the turn ring's band, and the band's own width, in inches.
+ *
+ * The gap is measured from the widest the *figure* gets rather than from the base, because a tank's
+ * gun overhangs its base and a band drawn to the base alone runs through the barrel. Held out here
+ * the band is also something a finger can find without landing on the model it belongs to.
+ */
+const RING_GAP = 0.4;
+const RING_BAND = 0.32;
+
+/** How far past its base a figure may reach: the base it is fitted to, times the overhang allowed. */
+const FIGURE_REACH = SILHOUETTE_FIT * SILHOUETTE_OVERHANG;
 
 /**
- * The turn ring: a band around the selected model's base with a knob at its facing.
+ * The turn ring: a band around the selected model with a knob at its facing.
  *
  * Dragging the band turns the model to follow the hand, which is how a player turns a miniature
  * on the table: by its base, not by a key. The knob shows which way the model faces, so a round
@@ -82,8 +92,9 @@ const RING_OUT = 0.42;
  */
 export function TurnRing({ hull, onGrab }: { hull: ModelHull; onGrab: (at: Vec2) => void }) {
   const [hot, setHot] = useState(false);
-  const r = footReach(hull.foot);
-  const reach = r + (RING_IN + RING_OUT) / 2;
+  const inner = footReach(hull.foot) * FIGURE_REACH + RING_GAP;
+  const outer = inner + RING_BAND;
+  const reach = (inner + outer) / 2;
   const knob = { x: hull.pos.x + reach * Math.cos(hull.facing), y: hull.pos.y + reach * Math.sin(hull.facing), z: hull.pos.z + 0.12 };
   return (
     <group>
@@ -105,7 +116,7 @@ export function TurnRing({ hull, onGrab }: { hull: ModelHull; onGrab: (at: Vec2)
           if (document.body.style.cursor === "grab") document.body.style.cursor = "";
         }}
       >
-        <ringGeometry args={[r + RING_IN, r + RING_OUT, 48]} />
+        <ringGeometry args={[inner, outer, 48]} />
         <meshBasicMaterial color={SCENE_COLOURS.selected} transparent opacity={hot ? 0.7 : 0.35} side={DoubleSide} depthWrite={false} />
       </mesh>
       <mesh position={toScene(knob)}>

@@ -31,6 +31,8 @@ export interface DragState {
   readonly members?: readonly GroupMember[];
   /** Each member's move, when the whole group can go. */
   readonly group?: readonly GroupMove[];
+  /** The group would not go across as a body and has been fitted into the ground it is over. */
+  readonly spaced?: boolean;
 }
 
 /**
@@ -321,7 +323,11 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         const m = u && findModel(u, member.modelId);
         if (!u || !m) continue;
         const landed = drag.group?.find((g) => g.modelId === member.modelId);
-        hulls.push({ ...m.hull, pos: { x: m.hull.pos.x + by.x, y: m.hull.pos.y + by.y, z: landed?.at.z ?? m.hull.pos.z } });
+        // A group that slides across follows the hand, which is what makes the drag feel direct.
+        // One that had to be fitted into the ground is drawn where it would actually land, since
+        // that arrangement is the whole of what the drop is offering.
+        const pos = drag.spaced && landed ? landed.at : { x: m.hull.pos.x + by.x, y: m.hull.pos.y + by.y, z: landed?.at.z ?? m.hull.pos.z };
+        hulls.push({ ...m.hull, pos });
         kinds.push(silhouetteFor(u.keywords));
         // A ghost stands in the stance of the model it was picked up from, which is that model's
         // place in its own unit rather than its place in the selection.
@@ -431,9 +437,9 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
         if (!at) return;
         const to = { x: at.x + what.offset.x, y: at.y + what.offset.y };
         const by = { x: to.x - lead.model.hull.pos.x, y: to.y - lead.model.hull.pos.y };
-        const verdict = groupMoveVerdict(now, what.members, by, idx);
+        const verdict = groupMoveVerdict(now, what.members, by, idx, to);
         const leadMove = verdict.moves.find((m) => m.modelId === what.lead);
-        const next: DragState = { unitId: lead.unit.id, modelId: what.lead, to, at: leadMove?.at, legal: verdict.ok, cost: leadMove?.cost, path: leadMove?.path, problems: verdict.problems, members: what.members, group: verdict.ok ? verdict.moves : undefined };
+        const next: DragState = { unitId: lead.unit.id, modelId: what.lead, to, at: leadMove?.at, legal: verdict.ok, cost: leadMove?.cost, path: leadMove?.path, problems: verdict.problems, members: what.members, group: verdict.ok ? verdict.moves : undefined, spaced: verdict.spaced };
         pending.current = next;
         setDrag(next);
         report?.(next);

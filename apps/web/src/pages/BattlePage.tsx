@@ -635,10 +635,10 @@ export function BattlePage() {
   /**
    * What a press on the table means, by tool.
    *
-   * Under Move, a selected unit goes where you click. Dragging shows the cost as you go and is the
-   * nicer gesture, but click-to-move is the one that works with a finger, with a trackpad, and for
-   * anyone who would rather not hold a button down while aiming — so both exist and they share the
-   * same verdict.
+   * Under Move, whatever is selected goes where you click — a squad as a squad, a single model on
+   * its own. Dragging shows the cost as you go and is the nicer gesture, but click-to-move is the
+   * one that works with a finger, with a trackpad, and for anyone who would rather not hold a
+   * button down while aiming — so both exist and they share the same verdict.
    *
    * The measuring tape takes two points; a third starts a new measurement.
    */
@@ -657,13 +657,26 @@ export function BattlePage() {
         return;
       }
       if (tool !== "select") return;
-      // A model is active: the click plans that model's move. Otherwise the whole unit travels as a body.
+      // Models moving together go together, wherever the click lands. A selection is led by the
+      // model in hand; a whole unit by the model the formation is measured from. Either way the
+      // rest keep their places when those places are free and are fitted round what is in them
+      // when they are not.
+      const lead = grouped && activeModel ? activeModel.hull : !activeModel && selected.models.length > 1 ? anchorOf(selected) : undefined;
+      if (lead) {
+        const members = grouped ? group : selected.models.map((m) => ({ unitId: selected.id, modelId: m.id }));
+        const verdict = groupMoveVerdict(state, members, { x: at.x - lead.pos.x, y: at.y - lead.pos.y }, index, at);
+        if (verdict.ok) proposeGroupMove(verdict.moves);
+        setDragging(false);
+        setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel?.id, to: at, legal: false, problems: verdict.problems });
+        return;
+      }
+      // One model, on its own: a single-model unit, or one model of a unit picked out to move.
       const verdict = activeModel ? modelMoveVerdict(state, selected, activeModel, at, index) : dragVerdict(state, selected, at, index);
       if (verdict.ok && verdict.at && verdict.cost !== undefined) proposeMove(selected.id, verdict.at, verdict.cost, activeModel?.id, verdict.path);
       setDragging(false);
       setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel?.id, to: at, legal: false, problems: verdict.problems });
     },
-    [tool, selected, activeModel, state, index, proposeMove, onDeploy, mark],
+    [tool, selected, activeModel, state, index, proposeMove, proposeGroupMove, onDeploy, mark, grouped, group],
   );
 
   const onDrag = useCallback((next: DragState | undefined) => {
@@ -777,7 +790,7 @@ export function BattlePage() {
         e.preventDefault();
         const leadNow = plan?.moves?.find((m) => m.modelId === activeModel.id)?.at ?? activeModel.hull.pos;
         const by = { x: leadNow.x - activeModel.hull.pos.x + arrow.x * EDIT_STEP, y: leadNow.y - activeModel.hull.pos.y + arrow.y * EDIT_STEP };
-        const verdict = groupMoveVerdict(state, group, by, index);
+        const verdict = groupMoveVerdict(state, group, by, index, { x: activeModel.hull.pos.x + by.x, y: activeModel.hull.pos.y + by.y });
         if (verdict.ok) proposeGroupMove(verdict.moves);
         setDragging(false);
         setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel.id, to: { x: activeModel.hull.pos.x + by.x, y: activeModel.hull.pos.y + by.y }, legal: false, problems: verdict.problems });
@@ -1177,7 +1190,7 @@ function MovePanel({
         </div>
       ) : (
         <>
-          <p className="muted small">{activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
+          <p className="muted small">{group.length >= 2 ? t("battle.group.moveHint") : activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
           {activeModel && coarse ? null : <p className="muted small">{activeModel ? t("battle.nudgeHint") : t("battle.pickModel")}</p>}
           <div className="battle-actions">
             <button type="button" className="ghost sm" onClick={() => onRotate(ROTATE_STEP)} title={t("battle.rotate.left")} aria-label={t("battle.rotate.left")}>

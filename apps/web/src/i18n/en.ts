@@ -1234,6 +1234,7 @@ export const en = {
   "battle.rotate.facing": "Facing {deg}°",
   "battle.rotate.hint": "Drag the ring under the selected model to turn it, holding Shift to snap to 15°; R turns it 15° right and Shift+R left. An oval base that would swing into a wall or off the table stays put.",
   "battle.group.count": "{n} models selected from {units} units",
+  "battle.group.moveHint": "Click or drag to plan where the selection goes; models that cannot keep their place in the formation are fitted into the space beside it.",
   "battle.group.clear": "Clear selection",
   "battle.group.hint": "Shift-click adds a model to the selection. Shift-drag on the table selects every model in the box; hold ⌘ or Ctrl as well to add them. Drag any selected model to move them all together.",
   "battle.target": "Target",

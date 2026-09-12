@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, coherency, inZone, ovalBase } from "@grimstat/board";
+import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, bounds, canStand, coherency, coreSegment, distance, inZone, ovalBase, segPolygonDistance, terrain, type Vec2 } from "@grimstat/board";
 import {
   anchorOf,
   applyGroupMove,
@@ -18,6 +18,7 @@ import {
   modelReach,
   remainingMove,
   groupMoveVerdict,
+  type GroupMove,
   resetMove,
   rotateUnit,
   rotateVerdict,
@@ -524,6 +525,105 @@ describe("moving a selection together", () => {
     expect(moved.models[0]!.spent).toBeCloseTo(verdict.moves[0]!.cost);
     expect(moved.models[2]!.spent ?? 0).toBe(0);
     expect(moved.models[2]!.hull.pos).toEqual(unit.models[2]!.hull.pos);
+  });
+
+  /**
+   * A squad sent at a wall it cannot cross in formation: one model's place in the block is inside
+   * an impassable solid. The squad should still go, fitted round it.
+   */
+  const squadAtAWall = () => {
+    const squad = placeUnit(attacker(0), { x: 20, y: 10 });
+    const by = { x: 0, y: 4 };
+    const blocked = squad.models[squad.models.length - 1]!.hull.pos;
+    const at = { x: blocked.x + by.x, y: blocked.y + by.y };
+    const half = 0.75;
+    const wall = terrain({
+      id: "wall",
+      polygon: [
+        { x: at.x - half, y: at.y - half },
+        { x: at.x + half, y: at.y - half },
+        { x: at.x + half, y: at.y + half },
+        { x: at.x - half, y: at.y + half },
+      ],
+      height: 5,
+      traits: ["impassable"],
+    });
+    const world: BattleState = { ...clear, layout: { ...clear.layout, pieces: [wall] }, units: [squad] };
+    return { squad, by, world, members: squad.models.map((m) => ({ unitId: squad.id, modelId: m.id })) };
+  };
+
+  it("fits the squad into the ground when it cannot cross in formation", () => {
+    const { squad, by, world, members } = squadAtAWall();
+    expect(groupMoveVerdict({ ...world, layout: { ...world.layout, pieces: [] } }, members, by).spaced).toBeFalsy();
+
+    const verdict = groupMoveVerdict(world, members, by);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.spaced).toBe(true);
+    expect(verdict.moves).toHaveLength(squad.models.length);
+
+    const index = indexOf(world);
+    const landed = verdict.moves.map((move) => {
+      const model = findModel(squad, move.modelId)!;
+      // Nobody is shuffled far from where the formation wanted them, and nobody overspends.
+      expect(Math.hypot(move.at.x - (model.hull.pos.x + by.x), move.at.y - (model.hull.pos.y + by.y))).toBeLessThanOrEqual(2 + 1e-9);
+      expect(move.cost).toBeLessThanOrEqual(squad.move + 1e-9);
+      expect(canStand({ ...model.hull, pos: move.at }, move.at, index)).toBe(true);
+      return { ...model.hull, pos: move.at };
+    });
+    for (let i = 0; i < landed.length; i++) {
+      for (let j = i + 1; j < landed.length; j++) expect(distance(landed[i]!, landed[j]!)).toBeGreaterThan(0);
+    }
+    expect(coherency(landed).ok).toBe(true);
+  });
+
+  it("keeps the fitted squad out of the solid it was fitted round", () => {
+    const { squad, by, world, members } = squadAtAWall();
+    const wall = world.layout.pieces[0]!;
+    for (const move of groupMoveVerdict(world, members, by).moves) {
+      const model = findModel(squad, move.modelId)!;
+      expect(segPolygonDistance({ a: move.at, b: move.at }, wall.polygon)).toBeGreaterThanOrEqual(model.hull.foot.r - 1e-9);
+    }
+  });
+
+  /**
+   * A squad sent up to a building. A ruin's footprint is its walls and infantry may cross them, so
+   * the formation standing half in the wall and half in the ground floor is a legal arrangement —
+   * and not one anybody makes with real models.
+   */
+  const squadAtARuin = (sideways = 0) => {
+    const world = sampleBattle(RUINED_CITY);
+    const unit = world.units.find((u) => u.side === "attacker" && u.models.length === 5)!;
+    const ruin = world.layout.pieces.find((p) => p.id === "b1")!;
+    const box = bounds(ruin.polygon);
+    const squad = placeUnit(unit, { x: (box.minX + box.maxX) / 2 + sideways, y: box.minY - 2.6 });
+    const state: BattleState = { ...world, units: world.units.map((u) => (u.id === unit.id ? squad : u)) };
+    const anchor = anchorOf(squad).pos;
+    const sent = (aim: Vec2) => groupMoveVerdict(state, squad.models.map((m) => ({ unitId: squad.id, modelId: m.id })), { x: aim.x - anchor.x, y: aim.y - anchor.y }, indexOf(state), aim);
+    const inside = (moves: readonly GroupMove[]) =>
+      moves.filter((move) => {
+        const hull = { ...findModel(squad, move.modelId)!.hull, pos: move.at };
+        return segPolygonDistance(coreSegment(hull), ruin.polygon) < hull.foot.r - 0.01;
+      });
+    return { ruin, box, squad, sent, inside };
+  };
+
+  it("puts a squad sent up to a building along its face rather than through the wall", () => {
+    const { box, squad, sent, inside } = squadAtARuin();
+    const verdict = sent({ x: (box.minX + box.maxX) / 2, y: box.minY - 1 });
+    expect(verdict.ok).toBe(true);
+    expect(verdict.spaced).toBe(true);
+    expect(verdict.moves).toHaveLength(squad.models.length);
+    expect(inside(verdict.moves)).toEqual([]);
+    // Every model still travelled, and no further than it may.
+    for (const move of verdict.moves) expect(move.cost).toBeLessThanOrEqual(squad.move + 1e-9);
+  });
+
+  it("sends the squad inside when that is where it was sent", () => {
+    const { box, squad, sent, inside } = squadAtARuin();
+    const verdict = sent({ x: (box.minX + box.maxX) / 2, y: box.minY + 0.5 });
+    expect(verdict.ok).toBe(true);
+    expect(verdict.moves).toHaveLength(squad.models.length);
+    expect(inside(verdict.moves).length).toBeGreaterThan(0);
   });
 
   it("refuses the whole group when any member cannot make it", () => {

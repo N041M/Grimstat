@@ -27,6 +27,17 @@ export function writeScene(out: Float32Array, at: number, p: Vec3): number {
 export const fromScene = (x: number, y: number, z: number): Vec3 => ({ x, y: -z, z: y });
 
 /**
+ * A model's facing as a rotation about the scene's up axis.
+ *
+ * Board angles turn counter-clockwise from `+x` towards `+y`. The scene's `z` is the board's `−y`,
+ * so a turn from the scene's `+x` towards its `−z` is that same turn, and a rotation about the
+ * scene's `+y` axis is exactly that. The angle crosses over unchanged. It has a name here because
+ * the negation it looks like it wants is wrong, and wrong in a way a round base hides: only an oval
+ * base or a figure with a front — a tank — shows that it turned the other way.
+ */
+export const facingRotation = (facing: number): [number, number, number] => [0, facing, 0];
+
+/**
  * Colours, as scene material inputs rather than CSS.
  *
  * The table is deliberately drab: terrain and models have to read at a glance from above, and they
