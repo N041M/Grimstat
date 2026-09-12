@@ -30,7 +30,7 @@ const abilities: Ability[] = [
   { id: "ab-regeneration", name: "Regeneration", scope: "datasheet", text: "At the start of your Command phase this model regains up to D3 lost wounds.", factionId: "f-test-swarm", isLegends: false },
 ];
 
-function ds(d: Omit<Datasheet, "gameSystemId" | "isLegends" | "isEpicHero" | "isBattleline" | "isSupport" | "isCharacter" | "factionKeywords" | "abilityIds" | "leaderTo" | "supportTo" | "composition" | "wargearOptions" | "keywords" | "weapons"> & Partial<Datasheet>): Datasheet {
+function ds(d: Omit<Datasheet, "gameSystemId" | "isLegends" | "isEpicHero" | "isBattleline" | "isSupport" | "isCharacter" | "factionKeywords" | "abilityIds" | "stratagemIds" | "leaderTo" | "supportTo" | "composition" | "wargearOptions" | "keywords" | "weapons"> & Partial<Datasheet>): Datasheet {
   return {
     gameSystemId: GS,
     isLegends: false,
@@ -42,6 +42,7 @@ function ds(d: Omit<Datasheet, "gameSystemId" | "isLegends" | "isEpicHero" | "is
     factionKeywords: [],
     weapons: [],
     abilityIds: [],
+    stratagemIds: [],
     leaderTo: [],
     supportTo: [],
     composition: [],

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ScenarioUnit, Snapshot } from "@grimstat/schema";
 import { archetypes, type EfficiencyRow } from "@grimstat/game-40k-11e";
 import { useApp } from "../../state/AppContext";
@@ -6,10 +6,12 @@ import { simClient } from "../../worker/client";
 import { useWorkerTask } from "../../hooks/useWorkerTask";
 import { useUnitSet } from "../../hooks/useUnitSet";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
-import type { UnitEntry } from "../../lib/unitSet";
+import { UNIT_SET_KEYS, type UnitEntry } from "../../lib/unitSet";
 import { fmt, fmtInt } from "../../lib/format";
+import { download } from "../../lib/download";
+import { efficiencyToCsv } from "../../lib/matrixCsv";
 import { UnitSetPicker } from "./UnitSetPicker";
-import { RunStatus, SortHeader } from "./shared";
+import { RunActions, RunStatus, SortHeader, useAnalysisHeader } from "./shared";
 import { HBarChart } from "../charts/HBarChart";
 import { Field } from "../ui";
 import { t } from "../../i18n";
@@ -112,7 +114,7 @@ export function EfficiencyTab() {
   const { snapshot } = useApp();
   const attackers = useUnitSet("analyses.efficiency.attackers");
   const [opts, setOpts] = usePersistedSetting<EfficiencyOptions>("analyses.efficiency.options", DEFAULT_OPTIONS, parseOptions);
-  const task = useWorkerTask(runEfficiency);
+  const task = useWorkerTask(runEfficiency, "analyses.efficiency");
   const [ran, setRan] = useState<string | undefined>(undefined);
   const canRun = attackers.entries.length > 0 && opts.targetIds.length > 0;
   const dirty = !!ran && ran !== fingerprint(attackers.entries, opts);
@@ -129,11 +131,34 @@ export function EfficiencyTab() {
   };
   const toggleId = (id: string, on: boolean) => setOpts((o) => ({ ...o, targetIds: on ? [...o.targetIds.filter((x) => x !== id), id] : o.targetIds.filter((x) => x !== id) }));
 
+  const exportCsv = () => {
+    if (!task.result) return;
+    download(`grimstat-efficiency-${new Date().toISOString().slice(0, 10)}.csv`, efficiencyToCsv(task.result), "text/csv");
+  };
+
+  // Header actions call through a ref so they never run against a stale closure.
+  const handlers = useRef({ run, cancel: task.cancel, exportCsv });
+  handlers.current = { run, cancel: task.cancel, exportCsv };
+  const hasResult = !!task.result;
+  useAnalysisHeader(
+    () => ({
+      subtitle: t("analyses.efficiency.sub", { a: attackers.entries.length, t: opts.targetIds.length }),
+      actions: (
+        <RunActions canRun={canRun} running={task.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()}>
+          <button type="button" disabled={!hasResult} onClick={() => handlers.current.exportCsv()}>
+            {t("analyses.exportCsv")}
+          </button>
+        </RunActions>
+      ),
+    }),
+    [canRun, hasResult, task.running, attackers.entries.length, opts.targetIds.length],
+  );
+
   return (
     <div className="analysis">
       <aside className="analysis-controls stack">
         <section className="panel">
-          <UnitSetPicker label={t("analyses.set.attackers")} entries={attackers.entries} onChange={attackers.setEntries} archetypeFilter="attackers" />
+          <UnitSetPicker label={t("analyses.set.attackers")} storageKey={UNIT_SET_KEYS.efficiencyAttackers} entries={attackers.entries} onChange={attackers.setEntries} archetypeFilter="attackers" />
         </section>
         <section className="panel stack" aria-labelledby="eff-t-h">
           <h3 id="eff-t-h" style={{ margin: 0 }}>
@@ -153,15 +178,10 @@ export function EfficiencyTab() {
               <option value="half">{t("ctx.rangeBand.half")}</option>
             </select>
           </Field>
-          <div className="row">
-            <button type="button" className="primary" disabled={!canRun || task.running} onClick={run}>
-              {t("analyses.run")}
-            </button>
-          </div>
         </section>
       </aside>
       <section className="analysis-results stack">
-        <RunStatus task={task} extra={dirty ? t("analyses.stale") : undefined} />
+        <RunStatus task={task} stale={dirty} />
         {task.result ? (
           <>
             <EfficiencyChart rows={task.result} />

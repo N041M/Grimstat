@@ -3,10 +3,10 @@
  * behaviour (substring match, group order, caps, keyboard wrap-around) is unit-testable.
  */
 
-export type PaletteGroupId = "goto" | "scenarios" | "units" | "actions";
+export type PaletteGroupId = "goto" | "scenarios" | "armies" | "units" | "actions";
 
 /** Fixed order the groups appear in; groups with no surviving item are dropped. */
-export const PALETTE_GROUP_ORDER: readonly PaletteGroupId[] = ["goto", "scenarios", "units", "actions"];
+export const PALETTE_GROUP_ORDER: readonly PaletteGroupId[] = ["goto", "scenarios", "armies", "units", "actions"];
 
 export interface PaletteItem {
   /** Unique across every group (used as the React key and for arrow-key selection). */
@@ -16,7 +16,7 @@ export interface PaletteItem {
   glyph: string;
   /** The only text the filter looks at. */
   label: string;
-  /** Right-aligned mono hint (`⌘C`, `14.7 dmg`, …). */
+  /** Right-aligned mono hint (`14.7 dmg`, `2,000 pts`, …). */
   hint?: string;
 }
 

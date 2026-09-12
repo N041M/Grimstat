@@ -8,12 +8,14 @@
  * the layout as it was *before* each edit, which only the place applying the edit can know. Both
  * belong to a pure function of (state, action), and that function is this file.
  *
- * Only the terrain has a history. Moving models is the game being played, not a document being edited,
- * and it has its own "undo" in `resetMove`.
+ * The terrain has a full history with redo. The units have a shorter one without: a bounded stack
+ * of the positions before each deployment, withdrawal, approved move or reset, so a slip of the
+ * finger can be taken back. Moving models is the game being played rather than a document being
+ * edited, and mid-move a model has its own "undo" in `resetMove`.
  */
 
 import type { TerrainLayout } from "@grimstat/board";
-import type { BattleState } from "./battle";
+import type { BattleState, BattleUnit } from "./battle";
 import { withLayout } from "./battle";
 import { copyLayout, isBuiltIn } from "./layoutEdit";
 
@@ -23,13 +25,20 @@ export interface EditorState {
   readonly past: readonly TerrainLayout[];
   /** Edits undone, most recently undone first. */
   readonly future: readonly TerrainLayout[];
+  /** The units as they stood before each recorded unit action, oldest first. */
+  readonly unitsPast: readonly (readonly BattleUnit[])[];
 }
 
 export type EditorAction =
   /** A different battle altogether: another layout, a reset. The history goes with the old one. */
   | { type: "replace"; battle: BattleState }
-  /** Something happened to the units. Not recorded. */
-  | { type: "units"; change: (battle: BattleState) => BattleState }
+  /**
+   * Something happened to the units. Recorded when asked, so ⌘Z can take it back: a deployment,
+   * a withdrawal, an approved move, a reset. A turn of the ring is not, since one drag is hundreds.
+   */
+  | { type: "units"; change: (battle: BattleState) => BattleState; record?: boolean }
+  /** Put the units back as they stood before the last recorded unit action. */
+  | { type: "undoUnits" }
   /**
    * An edit to the terrain. Recorded unless told otherwise — a drag records its first move and not
    * the hundreds that follow, so one gesture is one step back.
@@ -47,23 +56,38 @@ export type EditorAction =
 /** Steps kept. A layout is a few kilobytes, so this is generous without being unbounded. */
 export const HISTORY_CAP = 100;
 
+/** Unit positions kept. Every model of every unit is in each one, so the stack stays short. */
+export const UNIT_HISTORY_CAP = 30;
+
 /** What a shipped layout is called once it has been touched. The copy is the user's to rename. */
 export const FORK_SUFFIX = " (edited)";
 
-export const initialEditor = (battle: BattleState): EditorState => ({ battle, past: [], future: [] });
+export const initialEditor = (battle: BattleState): EditorState => ({ battle, past: [], future: [], unitsPast: [] });
 
 export const canUndo = (s: EditorState): boolean => s.past.length > 0;
 export const canRedo = (s: EditorState): boolean => s.future.length > 0;
+export const canUndoUnits = (s: EditorState): boolean => s.unitsPast.length > 0;
 
 const push = (stack: readonly TerrainLayout[], layout: TerrainLayout): TerrainLayout[] => [...stack.slice(Math.max(0, stack.length + 1 - HISTORY_CAP)), layout];
+const pushUnits = (stack: readonly (readonly BattleUnit[])[], units: readonly BattleUnit[]): (readonly BattleUnit[])[] => [...stack.slice(Math.max(0, stack.length + 1 - UNIT_HISTORY_CAP)), units];
 
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case "replace":
       return initialEditor(action.battle);
 
-    case "units":
-      return { ...state, battle: action.change(state.battle) };
+    case "units": {
+      const battle = action.change(state.battle);
+      if (battle === state.battle) return state;
+      if (!action.record || battle.units === state.battle.units) return { ...state, battle };
+      return { ...state, battle, unitsPast: pushUnits(state.unitsPast, state.battle.units) };
+    }
+
+    case "undoUnits": {
+      const previous = state.unitsPast[state.unitsPast.length - 1];
+      if (!previous) return state;
+      return { ...state, battle: { ...state.battle, units: previous }, unitsPast: state.unitsPast.slice(0, -1) };
+    }
 
     case "layout": {
       const current = state.battle.layout;
@@ -74,24 +98,24 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const layout = isBuiltIn(current.id) ? copyLayout(next, `${next.name}${FORK_SUFFIX}`) : next;
       const battle = withLayout(state.battle, layout);
       if (action.record === false) return { ...state, battle };
-      return { battle, past: push(state.past, current), future: [] };
+      return { ...state, battle, past: push(state.past, current), future: [] };
     }
 
     case "adopt": {
       const same = action.layout.id === state.battle.layout.id;
-      return { battle: withLayout(state.battle, action.layout), past: same ? state.past : [], future: same ? state.future : [] };
+      return { ...state, battle: withLayout(state.battle, action.layout), past: same ? state.past : [], future: same ? state.future : [] };
     }
 
     case "undo": {
       const previous = state.past[state.past.length - 1];
       if (!previous) return state;
-      return { battle: withLayout(state.battle, previous), past: state.past.slice(0, -1), future: [state.battle.layout, ...state.future] };
+      return { ...state, battle: withLayout(state.battle, previous), past: state.past.slice(0, -1), future: [state.battle.layout, ...state.future] };
     }
 
     case "redo": {
       const [next, ...rest] = state.future;
       if (!next) return state;
-      return { battle: withLayout(state.battle, next), past: push(state.past, state.battle.layout), future: rest };
+      return { ...state, battle: withLayout(state.battle, next), past: push(state.past, state.battle.layout), future: rest };
     }
   }
 }

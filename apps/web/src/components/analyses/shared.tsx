@@ -29,15 +29,36 @@ export function useAnalysisHeader(make: () => AnalysisHeader, deps: unknown[]): 
   }, [set, ...deps]);
 }
 
-/** Status line shared by every analysis: running indicator, elapsed time, error. */
-export function RunStatus({ task, extra }: { task: TaskState<unknown>; extra?: string }) {
+/** Status line shared by every analysis: running indicator, elapsed time, changed inputs, error. */
+export function RunStatus({ task, stale }: { task: TaskState<unknown>; stale?: boolean }) {
   return (
     <div className="results-bar" aria-live="polite">
-      {task.running ? <Spinner label={t("results.running")} /> : task.error ? <Badge tone="danger">{t("results.error")}</Badge> : task.result !== undefined ? <Badge tone="ok">{t("results.upToDate")}</Badge> : <Badge>{t("results.idle")}</Badge>}
+      {task.running ? <Spinner label={t("results.running")} /> : task.error ? <Badge tone="danger">{t("results.error")}</Badge> : task.result !== undefined ? <Badge tone="ok">{t("analyses.status.current")}</Badge> : <Badge>{t("analyses.status.idle")}</Badge>}
       {task.elapsedMs !== undefined && !task.running ? <span className="small muted">{t("results.elapsed", { ms: fmtInt(task.elapsedMs) })}</span> : null}
-      {extra ? <span className="small muted">{extra}</span> : null}
+      {stale && !task.running ? <Badge tone="warn">{t("analyses.stale")}</Badge> : null}
       {task.error ? <span className="small accent-text">{task.error}</span> : null}
     </div>
+  );
+}
+
+/**
+ * The header actions every tab publishes: anything tab-specific (an export) first, then Cancel
+ * while a run is in flight, then Run. Handlers are called through a ref by the tabs, so the node
+ * built inside `useAnalysisHeader` never captures a stale closure.
+ */
+export function RunActions({ canRun, running, onRun, onCancel, runLabel, children }: { canRun: boolean; running: boolean; onRun: () => void; onCancel: () => void; runLabel?: string; children?: ReactNode }) {
+  return (
+    <>
+      {children}
+      {running ? (
+        <button type="button" onClick={onCancel}>
+          {t("common.cancel")}
+        </button>
+      ) : null}
+      <button type="button" className="primary" disabled={!canRun || running} onClick={onRun}>
+        {runLabel ?? t("analyses.run")}
+      </button>
+    </>
   );
 }
 
@@ -104,12 +125,12 @@ export function WarningList({ warnings, tone = "warn" }: { warnings: string[]; t
   );
 }
 
-/** Sortable column header button for the ranking tables. */
-export function SortHeader<K extends string>({ col, label, sort, onSort, num }: { col: K; label: string; sort: { col: K; dir: "asc" | "desc" }; onSort: (col: K) => void; num?: boolean }) {
+/** Sortable column header button for the ranking tables. `title` carries the metric's notation. */
+export function SortHeader<K extends string>({ col, label, sort, onSort, num, title }: { col: K; label: string; sort: { col: K; dir: "asc" | "desc" }; onSort: (col: K) => void; num?: boolean; title?: string }) {
   const active = sort.col === col;
   return (
     <th className={num ? "num" : undefined} aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
-      <button type="button" className="ghost sm sort-btn" onClick={() => onSort(col)}>
+      <button type="button" className="ghost sm sort-btn" onClick={() => onSort(col)} title={title}>
         {label}
         {active ? <span aria-hidden="true">{sort.dir === "asc" ? " ▲" : " ▼"}</span> : null}
       </button>

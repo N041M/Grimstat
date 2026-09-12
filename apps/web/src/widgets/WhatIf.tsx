@@ -93,12 +93,21 @@ export function WhatIf({ scenario, result, snapshot, running }: WidgetProps) {
 
   const active = useMemo(() => new Set((task.result?.variants ?? []).filter((v) => variantActive(scenario, v.id, snapshot)).map((v) => v.id)), [task.result, scenario, snapshot]);
 
+  // Applying a variant edits the live scenario; the notice carries an Undo that puts the context
+  // and toggles back exactly as they were, whatever the variant touched.
   const select = (id: string) => {
     const v = task.result?.variants.find((x) => x.id === id);
     if (!v) return;
     const on = !active.has(id);
+    const before = { context: scenario.context, enabledToggles: scenario.enabledToggles };
     updateScenario((s) => applyVariant(s, id, on, snapshot));
-    notify(t(on ? "whatIf.applied" : "whatIf.removed", { label: v.label }), "success");
+    notify(t(on ? "whatIf.applied" : "whatIf.removed", { label: v.label }), "success", undefined, {
+      label: t("common.undo"),
+      run: () => {
+        updateScenario((s) => ({ ...s, context: before.context, enabledToggles: before.enabledToggles }));
+        notify(t("whatIf.undone", { label: v.label }), "info");
+      },
+    });
   };
 
   if (!result) return <Empty>{running ? t("results.running") : t("results.none")}</Empty>;
@@ -151,9 +160,15 @@ export function WhatIf({ scenario, result, snapshot, running }: WidgetProps) {
           <thead>
             <tr>
               <th>{t("whatIf.variant")}</th>
-              <th className="num">{t("whatIf.deltaDamage")}</th>
-              <th className="num">{t("whatIf.deltaSlain")}</th>
-              <th className="num">{t("whatIf.deltaPKill")}</th>
+              <th className="num" title={t("whatIf.deltaDamage.title")}>
+                {t("whatIf.deltaDamage")}
+              </th>
+              <th className="num" title={t("whatIf.deltaSlain.title")}>
+                {t("whatIf.deltaSlain")}
+              </th>
+              <th className="num" title={t("whatIf.deltaPKill.title")}>
+                {t("whatIf.deltaPKill")}
+              </th>
             </tr>
           </thead>
           <tbody>

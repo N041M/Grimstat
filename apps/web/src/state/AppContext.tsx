@@ -6,10 +6,17 @@ import { effectiveSnapshot } from "../lib/overrides";
 import { t } from "../i18n";
 
 export type NoticeKind = "info" | "success" | "error";
+/** One follow-up the user can take from a notice, e.g. undo a removal. */
+export interface NoticeAction {
+  label: string;
+  run(): void;
+}
 export interface Notice {
+  id: number;
   kind: NoticeKind;
   text: string;
   details?: string[];
+  action?: NoticeAction;
 }
 
 /** Whether the result on screen matches the current inputs. Drives the dot on the brand mark. */
@@ -33,13 +40,16 @@ export interface AppContextValue {
   scenario: Scenario;
   /** Increments whenever a whole scenario is loaded (permalink, storage) so pickers re-sync. */
   scenarioLoadKey: number;
-  notice: Notice | undefined;
+  /** Open notices, oldest first. Several may be on screen at once. */
+  notices: Notice[];
   updateScenario(fn: (s: Scenario) => Scenario): void;
   replaceScenario(s: Scenario, snapshotId?: string): Promise<void>;
   setActiveSnapshot(id: string | undefined): Promise<void>;
   refreshSnapshots(): Promise<void>;
-  notify(text: string, kind?: NoticeKind, details?: string[]): void;
-  dismissNotice(): void;
+  /** Show a notice; returns its id. Errors and notices with details stay until closed. */
+  notify(text: string, kind?: NoticeKind, details?: string[], action?: NoticeAction): number;
+  /** Close one notice by id, or every notice when no id is given. */
+  dismissNotice(id?: number): void;
   /** Solve state reported by whichever screen is running the worker (see `useReportSolveState`). */
   solveState: SolveState;
   setSolveState(s: SolveState): void;
@@ -50,6 +60,10 @@ export interface AppContextValue {
 }
 
 export const NOTICE_AUTO_DISMISS_MS = 4000;
+/** A notice that offers an action (undo) stays long enough to use it. */
+export const NOTICE_ACTION_DISMISS_MS = 9000;
+/** Older notices drop off the stack beyond this many. */
+export const NOTICE_STACK_MAX = 4;
 
 const Ctx = createContext<AppContextValue | undefined>(undefined);
 
@@ -61,8 +75,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeSnapshotId, setActiveId] = useState<string | undefined>(undefined);
   const [scenario, setScenario] = useState<Scenario>(() => newScenario());
   const [scenarioLoadKey, setLoadKey] = useState(0);
-  const [notice, setNotice] = useState<Notice | undefined>(undefined);
-  const noticeTimer = useRef<number | undefined>(undefined);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const noticeSeq = useRef(0);
+  const noticeTimers = useRef(new Map<number, number>());
   const [solveState, setSolveStateRaw] = useState<SolveState>("current");
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -70,13 +85,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
 
-  const notify = useCallback((text: string, kind: NoticeKind = "info", details?: string[]) => {
-    setNotice(details ? { kind, text, details } : { kind, text });
-    if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
-    // Info/success notices dismiss themselves; errors stay until closed.
-    if (kind !== "error") noticeTimer.current = window.setTimeout(() => setNotice(undefined), NOTICE_AUTO_DISMISS_MS);
+  const dismissNotice = useCallback((id?: number) => {
+    const timers = noticeTimers.current;
+    if (id === undefined) {
+      timers.forEach((tm) => window.clearTimeout(tm));
+      timers.clear();
+      setNotices([]);
+      return;
+    }
+    const tm = timers.get(id);
+    if (tm !== undefined) {
+      window.clearTimeout(tm);
+      timers.delete(id);
+    }
+    setNotices((list) => list.filter((n) => n.id !== id));
   }, []);
-  const dismissNotice = useCallback(() => setNotice(undefined), []);
+  const notify = useCallback(
+    (text: string, kind: NoticeKind = "info", details?: string[], action?: NoticeAction) => {
+      const id = ++noticeSeq.current;
+      const n: Notice = { id, kind, text, ...(details ? { details } : {}), ...(action ? { action } : {}) };
+      setNotices((list) => [...list, n].slice(-NOTICE_STACK_MAX));
+      // Errors and notices that carry details stay until closed. A notice with an action stays
+      // long enough to use it; plain info and success notices go by themselves.
+      const ttl = kind === "error" || details?.length ? undefined : action ? NOTICE_ACTION_DISMISS_MS : NOTICE_AUTO_DISMISS_MS;
+      if (ttl !== undefined) noticeTimers.current.set(id, window.setTimeout(() => dismissNotice(id), ttl));
+      return id;
+    },
+    [dismissNotice],
+  );
 
   const loadActive = useCallback(async (id: string | undefined) => {
     if (!id) {
@@ -165,8 +201,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AppContextValue>(
-    () => ({ ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette }),
-    [ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notice, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette],
+    () => ({ ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notices, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette }),
+    [ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notices, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

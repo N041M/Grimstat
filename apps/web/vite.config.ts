@@ -119,7 +119,7 @@ export default defineConfig({
     bundleSizePlugin(),
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       includeAssets: ["favicon.svg", "icon-192.png", "icon-512.png"],
       manifest: {
         name: "Grimstat",

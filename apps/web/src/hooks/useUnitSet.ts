@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
+import type { Scenario, Snapshot } from "@grimstat/schema";
 import { db, getSetting, setSetting } from "../db";
 import { useApp } from "../state/AppContext";
-import { isStoredEntry, resolveStored, toStored, type UnitEntry } from "../lib/unitSet";
+import { isStoredEntry, resolveStored, toStored, type StoredUnitEntry, type UnitEntry, type UnitSetDescriptor } from "../lib/unitSet";
 import { t } from "../i18n";
 
 const WRITE_DEBOUNCE_MS = 250;
@@ -16,6 +17,44 @@ let nextInstanceId = 1;
 
 function broadcast(key: string, entries: UnitEntry[], from: number): void {
   for (const l of mirrors.get(key) ?? []) l(entries, from);
+}
+
+/** What resolving persisted sources needs from the app state. */
+export interface UnitSetEnv {
+  snapshot: Snapshot | undefined;
+  scenario: Scenario;
+  withOverrides: (s: Snapshot) => Snapshot;
+}
+
+/** The persisted sources under `key`; malformed entries are dropped. */
+export async function readStoredSet(key: string): Promise<StoredUnitEntry[]> {
+  const raw = await getSetting<unknown>(key);
+  return Array.isArray(raw) ? raw.filter(isStoredEntry) : [];
+}
+
+/** Rebuild entries from persisted sources against the current rosters, snapshots and calculator scenario. */
+export async function resolveSet(stored: StoredUnitEntry[], { withOverrides, ...rest }: UnitSetEnv): Promise<UnitEntry[]> {
+  const env = {
+    ...rest,
+    getRoster: (id: string) => db.rosters.get(id),
+    getSnapshot: async (id: string) => {
+      const s = await db.snapshots.get(id);
+      return s ? withOverrides(s) : undefined;
+    },
+  };
+  const labels = { archetype: t("analyses.picker.originArchetype"), calculator: t("analyses.picker.originCalculator") };
+  const resolved = await Promise.all(stored.map((s) => resolveStored(s, env, labels)));
+  return resolved.filter((e): e is UnitEntry => !!e);
+}
+
+/** Read and resolve the set stored under `key` (what `useUnitSet` does on mount). */
+export async function loadUnitSet(key: string, env: UnitSetEnv): Promise<UnitEntry[]> {
+  return resolveSet(await readStoredSet(key), env);
+}
+
+/** "Matrix · Attackers (3)" */
+export function unitSetLabel(d: UnitSetDescriptor, n: number): string {
+  return t("analyses.picker.setLabel", { tab: t(d.tab), role: t(d.role), n });
 }
 
 export interface UnitSetState {
@@ -37,7 +76,7 @@ export function useUnitSet(key: string): UnitSetState {
   const timer = useRef<number | undefined>(undefined);
   const instance = useRef(0);
   if (!instance.current) instance.current = nextInstanceId++;
-  const envRef = useRef({ snapshot, scenario, withOverrides });
+  const envRef = useRef<UnitSetEnv>({ snapshot, scenario, withOverrides });
   envRef.current = { snapshot, scenario, withOverrides };
 
   useEffect(() => {
@@ -46,21 +85,9 @@ export function useUnitSet(key: string): UnitSetState {
     setEntriesState([]);
     void (async () => {
       try {
-        const raw = await getSetting<unknown>(key);
-        const stored = Array.isArray(raw) ? raw.filter(isStoredEntry) : [];
-        const { withOverrides: apply, ...rest } = envRef.current;
-        const env = {
-          ...rest,
-          getRoster: (id: string) => db.rosters.get(id),
-          getSnapshot: async (id: string) => {
-            const s = await db.snapshots.get(id);
-            return s ? apply(s) : undefined;
-          },
-        };
-        const labels = { archetype: t("analyses.picker.originArchetype"), calculator: t("analyses.picker.originCalculator") };
-        const resolved = await Promise.all(stored.map((s) => resolveStored(s, env, labels)));
+        const resolved = await loadUnitSet(key, envRef.current);
         if (!alive) return;
-        setEntriesState(resolved.filter((e): e is UnitEntry => !!e));
+        setEntriesState(resolved);
       } catch {
         // storage unavailable: start empty
       } finally {

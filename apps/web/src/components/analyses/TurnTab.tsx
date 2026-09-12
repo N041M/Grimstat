@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Snapshot } from "@grimstat/schema";
 import { useApp } from "../../state/AppContext";
 import { simClient } from "../../worker/client";
@@ -7,10 +7,10 @@ import { useUnitSet } from "../../hooks/useUnitSet";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { DEFAULT_TURN_OPTIONS, OPTION_AUTO, TURN_OBJECTIVES, type TurnAssignment, type TurnObjective, type TurnOption, type TurnPlanInput, type TurnPlanResult, type TurnPlanStep } from "../../lib/turn";
 import { modelCount } from "../../lib/scenario";
-import type { UnitEntry } from "../../lib/unitSet";
+import { UNIT_SET_KEYS, type UnitEntry } from "../../lib/unitSet";
 import { fmt, fmtInt, pct } from "../../lib/format";
 import { UnitSetPicker } from "./UnitSetPicker";
-import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunStatus, WarningList, parseAnalysisContext, type AnalysisContext } from "./shared";
+import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunActions, RunStatus, WarningList, parseAnalysisContext, useAnalysisHeader, type AnalysisContext } from "./shared";
 import { BarChart } from "../charts/BarChart";
 import { Badge, Field, Spinner } from "../ui";
 import { t } from "../../i18n";
@@ -227,8 +227,8 @@ export function TurnTab() {
   const attackers = useUnitSet("analyses.turn.attackers");
   const targets = useUnitSet("analyses.turn.targets");
   const [opts, setOpts] = usePersistedSetting<TurnOptions>("analyses.turn.options", DEFAULT_OPTIONS, parseOptions);
-  const optimise = useWorkerTask(runOptimise);
-  const evaluate = useWorkerTask(runEvaluate);
+  const optimise = useWorkerTask(runOptimise, "analyses.turn");
+  const evaluate = useWorkerTask(runEvaluate, "analyses.turn.evaluate");
   const [ran, setRan] = useState<{ evaluate: PlanInput; view: TurnPlanView; fp: string } | undefined>(undefined);
   const [plan, setPlan] = useState<TurnPlanStep[] | undefined>(undefined);
 
@@ -265,12 +265,24 @@ export function TurnTab() {
     evaluate.reset();
   };
 
+  // Header actions call through a ref so they never run against a stale closure.
+  const handlers = useRef({ run, cancel: optimise.cancel });
+  handlers.current = { run, cancel: optimise.cancel };
+  useAnalysisHeader(
+    () => ({
+      subtitle: t("analyses.turn.sub", { a: attackers.entries.length, t: targets.entries.length, cp: opts.cpBudget }),
+      actions: <RunActions canRun={canRun} running={optimise.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()} runLabel={t("analyses.turn.run")} />,
+    }),
+    [canRun, optimise.running, attackers.entries.length, targets.entries.length, opts.cpBudget],
+  );
+
   return (
     <div className="analysis">
       <aside className="analysis-controls stack">
         <section className="panel">
           <UnitSetPicker
             label={t("analyses.set.attackers")}
+            storageKey={UNIT_SET_KEYS.turnAttackers}
             entries={attackers.entries}
             onChange={attackers.setEntries}
             archetypeFilter="attackers"
@@ -292,6 +304,7 @@ export function TurnTab() {
         <section className="panel">
           <UnitSetPicker
             label={t("analyses.set.targets")}
+            storageKey={UNIT_SET_KEYS.turnTargets}
             entries={targets.entries}
             onChange={targets.setEntries}
             renderExtra={(e, update) => (
@@ -321,15 +334,10 @@ export function TurnTab() {
             </Field>
           </div>
           <AnalysisContextControls value={opts.context} onChange={(context) => setOpts((o) => ({ ...o, context }))} fields={["rangeBand", "phase"]} />
-          <div className="row">
-            <button type="button" className="primary" disabled={!canRun || optimise.running} onClick={run}>
-              {t("analyses.turn.run")}
-            </button>
-          </div>
         </section>
       </aside>
       <section className="analysis-results stack">
-        <RunStatus task={optimise} extra={dirty ? t("analyses.stale") : undefined} />
+        <RunStatus task={optimise} stale={dirty} />
         {current && ran && baseline ? (
           <>
             {isApproximate(current) ? <Badge tone="warn">{t("analyses.turn.approximate")}</Badge> : null}

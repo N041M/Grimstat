@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type DragEvent } from "react";
 import { guessListHeader } from "@grimstat/adapters";
 import type { PublishedListRecord } from "../../db";
 import { useApp } from "../../state/AppContext";
@@ -9,7 +9,7 @@ import { CORPUS_SETTING, CORPUS_URL_SETTING, DEFAULT_CORPUS_URL, fetchPublishedC
 import { metaClient } from "../../worker/metaClient";
 import { fmtDay, fmtInt } from "../../lib/format";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead } from "../kit";
-import { Dialog, Field } from "../ui";
+import { Dialog, Field, useConfirm } from "../ui";
 import { t, tn } from "../../i18n";
 
 /** Write-up | publication | lists | factions. */
@@ -38,15 +38,20 @@ type GuessedField = "faction" | "detachments" | "disposition";
 type Guessed = Record<GuessedField, boolean>;
 const ALL_GUESSED: Guessed = { faction: true, detachments: true, disposition: true };
 
+/** What the Data page's "Fetch everything" button drives: the corpus fetch, as the panel's own button runs it. */
+export interface PublishedListsHandle {
+  fetchCorpus: () => Promise<void>;
+}
+
 /**
  * Published tournament lists, imported onto this machine.
  *
- * The panel fetches nothing itself. A write-up page saved from the browser, or the corpus the CLI
- * writes, can be dropped or chosen; a single list can be pasted along with where it was seen; and a
- * saved copy of the write-ups feed becomes a checklist of what exists against what is stored. The
- * table is arranged by source, and every write-up links back to where it was published.
+ * Lists come in three ways. The published corpus is fetched from the relay. A write-up page saved
+ * from the browser can be dropped or chosen here. A single list can be pasted with where it was
+ * seen. A saved copy of the write-ups feed becomes a checklist of what exists against what is
+ * stored. The table is arranged by source, and every write-up links back to where it was published.
  */
-export function PublishedLists() {
+export const PublishedLists = forwardRef<PublishedListsHandle>(function PublishedLists(_props, ref) {
   const { notify, activeSnapshotId } = useApp();
   const version = useStoreVersion("publishedLists");
   const [records, setRecords] = useState<PublishedListRecord[]>([]);
@@ -56,6 +61,10 @@ export function PublishedLists() {
   const [corpus, setCorpus] = usePersistedSetting<CorpusRecord | null>(CORPUS_SETTING, null, parseCorpusRecord);
   const [corpusUrl, setCorpusUrl] = usePersistedSetting<string>(CORPUS_URL_SETTING, DEFAULT_CORPUS_URL, (raw) => (typeof raw === "string" && raw.trim() ? raw : undefined));
   const [fetching, setFetching] = useState(false);
+  /** Monthly files read of the files the index names, while a fetch is running. */
+  const [progress, setProgress] = useState<{ done: number; total: number } | undefined>(undefined);
+  const abort = useRef<AbortController | null>(null);
+  const { confirm, dialog } = useConfirm();
   const [pasteOpen, setPasteOpen] = useState(false);
   const [form, setForm] = useState<PasteForm>(EMPTY_FORM);
   /** Whether each prefilled field still holds a guess. Guessed fields follow the text as it changes; a field the user typed in keeps their value. */
@@ -115,18 +124,32 @@ export function PublishedLists() {
   };
 
   const fetchCorpus = async () => {
+    const controller = new AbortController();
+    abort.current = controller;
     setFetching(true);
+    setProgress(undefined);
     try {
-      const result = await fetchPublishedCorpus(corpusUrl);
+      const result = await fetchPublishedCorpus(corpusUrl, { signal: controller.signal, onProgress: (done, total) => setProgress({ done, total }) });
       setCorpus(result.record);
       notify(t("data.published.corpus.fetched", { added: result.added, found: result.found }), result.warnings.length ? "info" : "success", result.warnings.slice(0, 8));
       metaClient.warm(activeSnapshotId);
     } catch (e) {
-      notify(t("data.published.corpus.failed"), "error", [e instanceof Error ? e.message : String(e)]);
+      if (controller.signal.aborted) notify(t("data.published.corpus.cancelled"), "info");
+      else notify(t("data.published.corpus.failed"), "error", [e instanceof Error ? e.message : String(e)]);
     } finally {
+      abort.current = null;
       setFetching(false);
+      setProgress(undefined);
     }
   };
+
+  const clearAll = async () => {
+    if (!(await confirm({ title: t("data.published.confirmClear"), body: t("data.published.clearBody"), confirmLabel: t("common.remove"), danger: true }))) return;
+    await clearPublishedLists();
+    notify(t("data.published.cleared"), "success");
+  };
+
+  useImperativeHandle(ref, () => ({ fetchCorpus }));
 
   const onDrop = (e: DragEvent<HTMLElement>) => {
     e.preventDefault();
@@ -196,6 +219,16 @@ export function PublishedLists() {
             <button type="button" className="primary sm" disabled={busy || fetching} onClick={() => void fetchCorpus()}>
               {fetching ? t("data.published.corpus.fetching") : corpus ? t("data.published.corpus.refresh") : t("data.published.corpus")}
             </button>
+            {fetching ? (
+              <>
+                <span className="t-meta fetch-progress" role="status" aria-live="polite">
+                  {progress ? t("data.published.corpus.progress", { done: progress.done, total: progress.total }) : t("data.published.corpus.reading")}
+                </span>
+                <button type="button" className="sm" onClick={() => abort.current?.abort()}>
+                  {t("common.cancel")}
+                </button>
+              </>
+            ) : null}
             <button type="button" className="sm" disabled={busy} onClick={() => setPasteOpen(true)}>
               {t("data.published.paste")}
             </button>
@@ -206,14 +239,7 @@ export function PublishedLists() {
               {t("data.published.feed")}
             </button>
             {records.length ? (
-              <button
-                type="button"
-                className="ghost sm danger"
-                disabled={busy}
-                onClick={() => {
-                  if (window.confirm(t("data.published.confirmClear"))) void clearPublishedLists();
-                }}
-              >
+              <button type="button" className="ghost sm danger" disabled={busy} onClick={() => void clearAll()}>
                 {t("data.published.clear")}
               </button>
             ) : null}
@@ -355,7 +381,11 @@ export function PublishedLists() {
 
       <p className="data-note">{t("data.published.note")}</p>
       <p className="data-note">{t("data.published.feed.how")}</p>
-      <p className="data-note mono">{CLI_FEED_COMMAND}</p>
+      <details className="cli-details">
+        <summary>{t("data.cli")}</summary>
+        <p className="data-note">{t("data.published.feed.cli")}</p>
+        <p className="data-note mono">{CLI_FEED_COMMAND}</p>
+      </details>
 
       <Dialog open={pasteOpen} onClose={closePaste} title={t("data.published.paste.title")} wide>
         <div className="stack">
@@ -402,6 +432,7 @@ export function PublishedLists() {
           </div>
         </div>
       </Dialog>
+      {dialog}
     </section>
   );
-}
+});

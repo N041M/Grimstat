@@ -68,6 +68,10 @@ export interface BattleCanvasProps {
   groupIds?: ReadonlySet<string>;
   /** A Shift-drag on the table has boxed these models; `additive` when ⌘ or Ctrl was held too. */
   onBoxSelect?(ids: string[], additive: boolean): void;
+  /** Box mode is on from the toolbar: a plain drag on the table draws the box, with no Shift to hold. */
+  boxSelect?: boolean;
+  /** Add mode is on from the toolbar: boxing or pressing a model joins it to the selection, with no ⌘ to hold. */
+  addToSelection?: boolean;
   /** A group drag was released somewhere every member can reach. */
   onMoveGroup?(moves: readonly GroupMove[]): void;
   /** The selection box, drawn over the table by the page and placed by the canvas. */
@@ -165,7 +169,7 @@ type Held =
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, groupIds, onBoxSelect, onMoveGroup, marqueeRef, turnRing, onTurn, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, groupIds, onBoxSelect, boxSelect, addToSelection, onMoveGroup, marqueeRef, turnRing, onTurn, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
@@ -550,19 +554,20 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
   /**
    * A press on the table plans a move, unless Shift is down, when it starts a selection box: the
    * camera has the plain drag, so the box takes the modified one. ⌘ or Ctrl as well adds to the
-   * selection instead of replacing it.
+   * selection instead of replacing it. A finger has neither key, so the toolbar's two toggles say
+   * the same thing and are read here alongside the modifiers.
    */
   const onDown = useCallback(
     (at: Vec2, e: PointerEvent) => {
       if (held.current) return;
-      if (e.shiftKey && canDrag && dragMode === "move" && onBoxSelect) {
-        hold({ kind: "box", start: { x: e.clientX, y: e.clientY }, additive: e.metaKey || e.ctrlKey });
+      if ((e.shiftKey || boxSelect) && canDrag && dragMode === "move" && onBoxSelect) {
+        hold({ kind: "box", start: { x: e.clientX, y: e.clientY }, additive: e.metaKey || e.ctrlKey || !!addToSelection });
         document.body.style.cursor = "crosshair";
         return;
       }
       onTableDown?.(at);
     },
-    [onTableDown, canDrag, dragMode, onBoxSelect, hold],
+    [onTableDown, canDrag, dragMode, onBoxSelect, boxSelect, addToSelection, hold],
   );
 
   return (
@@ -588,7 +593,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
           {aim ? <MeasureLine from={measureFrom} to={{ x: aim.x, y: aim.y, z: measureFrom.z }} /> : null}
         </>
       ) : null}
-      <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} groupIds={groupIds} incoherent={incoherent} draggable={canDrag} onSelect={onSelect} onGrab={grabModel} />
+      <UnitTokens units={state.units} selectedId={selectedId} activeModelId={activeModelId} groupIds={groupIds} incoherent={incoherent} draggable={canDrag} addToSelection={addToSelection} onSelect={onSelect} onGrab={grabModel} />
       {ghost && drag ? (
         <Ghost hulls={ghost.hulls} kind={ghost.kind} kinds={ghost.kinds} legal={drag.legal} />
       ) : planned ? (

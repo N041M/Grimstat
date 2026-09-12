@@ -300,6 +300,11 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
 
   // ---- datasheets: merge ----------------------------------------------------------------------
   const datasheets: Datasheet[] = [];
+  /**
+   * Datasheet id -> the stratagem ids its members named. Stratagems are merged further down, so the
+   * refs are kept here and resolved once their id map exists (the same two-step the detachments use).
+   */
+  const dsStratRefs = new Map<string, string[]>();
   const priceRules: PriceRule[] = [];
   const wargearPrices: WargearPrice[] = [];
   const statFields: (keyof ModelProfile)[] = ["M", "T", "Sv", "InvSv", "W", "Ld", "OC"];
@@ -361,11 +366,13 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
       models,
       weapons,
       abilityIds,
+      stratagemIds: [],
       leaderTo: resolveList(leaderTo),
       supportTo: resolveList(supportTo),
       composition: (firstDefined(primary, (i) => i["composition"]) as Datasheet["composition"] | undefined) ?? [],
       wargearOptions: (firstDefined(primary, (i) => i["wargearOptions"]) as string[] | undefined) ?? [],
     };
+    dsStratRefs.set(id, [...new Set(c.members.flatMap((m) => (m.item["stratagemIds"] as string[] | undefined) ?? []))]);
     for (const ref of [...(leaderTo ?? []), ...(supportTo ?? [])]) {
       if (!resolveDsRef(ref)) warnings.push(`datasheet ${id}: leader/support reference "${ref}" does not resolve to a known datasheet`);
     }
@@ -493,6 +500,13 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     if (s.detachmentId) s.detachmentId = detIdMap.get(s.detachmentId) ?? s.detachmentId;
     if (s.abilityId) s.abilityId = rekey("", s.abilityId, "ab");
     stratagems.push(s);
+  }
+
+  // Datasheet -> stratagem links, now that the merged stratagem ids are known.
+  const stratagemIdSet = new Set(stratagems.map((s) => s.id));
+  for (const ds of datasheets) {
+    const refs = dsStratRefs.get(ds.id) ?? [];
+    ds.stratagemIds = [...new Set(refs.map((x) => stratIdMap.get(x) ?? x))].filter((x) => stratagemIdSet.has(x));
   }
 
   const detachments: Detachment[] = [];

@@ -14,6 +14,18 @@ import type { BoardSize, Objective, TerrainLayout, TerrainPiece, TerrainTrait, V
 import { CLIMBERS, LAYOUTS, bounds, defaultBreachers, isSymmetric, layoutIssues, opposite, terrain } from "@grimstat/board";
 import { newId } from "./ids";
 
+/**
+ * A piece or objective id the way a person reads it: `ruin-2` is Ruin 2, `area-l` is Area L.
+ *
+ * Ids are how pieces are identified in the data and in a layout file, so they stay as they are. This
+ * is what the panel prints when it is talking to the person editing the table.
+ */
+export function displayName(id: string): string {
+  const words = id.split(/[-_\s]+/).filter(Boolean);
+  if (!words.length) return id;
+  return words.map((w) => (/^\d+$/.test(w) ? w : w.length <= 2 ? w.toUpperCase() : w[0]!.toUpperCase() + w.slice(1))).join(" ");
+}
+
 /** A new id that does not collide with anything already in the layout. */
 export function freeId(layout: TerrainLayout, stem: string): string {
   const taken = new Set(layout.pieces.map((p) => p.id));

@@ -3,7 +3,7 @@ import { UnitArt } from "../UnitArt";
 import { Empty } from "../ui";
 import { COMPARE_CAP, representativeProfile, sizeBounds, unitFigures, type CodexFaction, type CodexGroup } from "../../lib/codex";
 import { hrefFor } from "../../router";
-import { CodexTools, GROUP_KEY, pointsText, sizeText } from "./shared";
+import { CodexTools, GROUP_KEY, NoMatch, pointsText, sizeText } from "./shared";
 import { t } from "../../i18n";
 
 function SheetCard({ ds, snapshot, inCompare, full, onToggle, onPick }: { ds: Datasheet; snapshot: Snapshot; inCompare: boolean; full: boolean; onToggle: () => void; onPick: () => void }) {
@@ -40,7 +40,7 @@ function SheetCard({ ds, snapshot, inCompare, full, onToggle, onPick }: { ds: Da
             </span>
             <span>
               <b>OC</b>
-              {rep.OC ?? "—"}
+              {rep.OC ?? "–"}
             </span>
           </span>
         ) : null}
@@ -81,7 +81,11 @@ export function CodexLanding({ snapshot, factions, factionId, onFaction, query, 
         <CodexTools factions={factions} factionId={factionId} onFaction={onFaction} query={query} onQuery={onQuery} />
         <span className="t-meta codex-landing-count">{t("codex.landing.count", { n: total })}</span>
       </div>
-      {groups.length === 0 ? <Empty>{t("codex.noMatch")}</Empty> : null}
+      {groups.length === 0 ? (
+        <Empty>
+          <NoMatch query={query} factions={factions} factionId={factionId} onFaction={onFaction} />
+        </Empty>
+      ) : null}
       {groups.map((g) => (
         <section key={g.group} className="codex-group">
           <h2 className="codex-group-title">

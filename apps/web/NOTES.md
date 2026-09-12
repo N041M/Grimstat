@@ -5,6 +5,159 @@ the Phase 5 army-level analyses ("Analyses" section), the Phase 6 additions (rev
 snapshot comparison, rules overrides) and the Phase 7 in-browser data import for the GitHub Pages deployment.
 `pnpm typecheck` clean, `pnpm vitest run apps/web` green.
 
+## UX pass (12 Sep 2026) — what changed across every screen
+
+A review of the whole app produced a list of bugs, friction and gaps; this section records what was
+built for it. `pnpm typecheck`, `pnpm lint` and `pnpm vitest run apps/web packages/board` are clean
+(528 tests).
+
+### Shell primitives the rest of the pass is built on
+- **Notices stack.** `AppContext` keeps `notices: Notice[]` instead of one slot, each with an id, so
+  the three fetches behind "Fetch everything" no longer overwrite each other's results. A notice may
+  carry `action: { label, run }`, which is how every undo in the app is offered. Errors and notices
+  carrying `details` stay until closed; a notice with an action stays 9 s; plain ones 4 s.
+  `notify(text, kind?, details?, action?)` returns the id, and `dismissNotice(id?)` closes one or all.
+- **`useConfirm()`** in `components/ui.tsx` replaces `window.confirm` everywhere. It returns
+  `{ confirm, dialog }`; the page renders `{dialog}` once and awaits `confirm({ title, body, danger })`.
+  No native confirm remains in `src/`.
+- **Focus and keyboard.** `Tabs` is a roving-tabindex strip with arrow keys, `Popover` restores focus
+  to its trigger and walks `role="menuitem"` children with the arrows, `Sheet` moves focus in, traps
+  Tab and restores it, and the command palette traps Tab, closes on a route change and restores focus.
+  `trapTab(e, root)` and `menuKeys(e, root)` are exported from `components/ui.tsx` for anything else.
+- **Service worker.** The build registers with `registerType: "prompt"` and `main.tsx` feeds
+  `lib/sw.ts`, a tiny store read with `useSyncExternalStore`. A waiting build shows a reload banner
+  instead of swapping code under a live session; `useOnline()` drives an "Offline" pill in the rail.
+- **`BarSlot`** (`components/shell/ContextSlot.tsx`) is a second portal, rendered only in the phone
+  context bar. The Calculator has no page header, so it puts Save, Share and New there; on a wide
+  screen the slot has no host and renders nothing.
+
+### Calculator
+Swap sides; pin a result as a baseline that every tile then shows a delta against
+(`lib/headline.ts`); export the weapon breakdown and the distribution as CSV (`lib/resultCsv.ts`);
+panels can be hidden and restored from a "Hidden (n)" menu (the `hidden` field on the layout record
+was written but never read before). The unit picker dialog gained Cancel and Done, Cancel restoring
+the unit as it was on opening, and an "All factions" option. The dock's flag chips are grouped under
+Attacker and Defender headings, the MC iterations box commits on blur instead of clamping per
+keystroke, and the dock says what is missing instead of "computing…" forever when nothing can run.
+"+" and loading another scenario ask before discarding unsaved work.
+
+### Wording
+Notation left the labels and moved into tooltips: "E[dmg]" reads "Avg damage", "P(kill)" reads
+"Kill chance", "ΔE[damage]" reads "Δ damage", "/100pts" reads "Dmg / 100 pts" everywhere. Coverage
+tiers read "Modelled exactly", "Approximated" and "Not modelled" on the Calculator, the Coverage
+widget and the override editor, with the tier number kept in the title. `fmtRelative` and a new
+`ordinal()` go through i18n rather than returning hard-coded English.
+
+### Armies
+One removal path for the row menu, the inspector and the Delete key, all of them undoable from the
+notice. Unit rows filter, reorder (`moveUnit`) and multi-select for a bulk remove. The add panel
+shows points spare and flags rows that do not fit. Diagnostics show a severity word plus count with
+the message in the title, and the dock reuses `DiagnosticItem` so it shows the fix; clicking one from
+any tab switches to Units first. The list page filters, confirms deletion (saying the history goes
+too) and offers undo, and has loading and failed-read states. "Export all (JSON)" round-trips: the
+importer detects the envelope and a single roster. Points read the same everywhere through `fmtInt`.
+Below 900px the unit row is two lines with no clipped columns.
+
+### Analyses
+Every set has a "Copy from…" menu listing the other stored sets (`UNIT_SETS` in `lib/unitSet.ts`).
+Run and Cancel are published through `useAnalysisHeader` on all six tabs, and results survive leaving
+the screen because `useWorkerTask` takes a cache key into a module-level map. Efficiency and Reverse
+export CSV. An empty threshold means auto again instead of 0.
+
+### Data, overrides, about
+The fetch block has a visible heading and the intro that was written but never rendered; the empty
+snapshot state offers the two actions. The corpus and layout fetches report progress and can be
+cancelled through an `AbortSignal`. CLI commands moved behind a "Using the CLI" disclosure. Deleting
+a snapshot names the row's label and then says which snapshot is active. The ability search has a
+legend and says when its list is truncated. The error boundary hides the stack behind a `<details>`
+with a "Copy details" button, and `StartupError` handles the failed-boot screen.
+
+### Battle table
+Traits and layout problems are translated and named rather than shown as ids (`layoutProblems()` in
+`packages/board`, `displayName()` in `lib/layoutEdit.ts`). Unit moves have their own bounded undo
+stack next to the terrain one, reachable with ⌘Z and from a toolbar over the table that also carries
+Approve, Discard, rotate, Clear selection and Box select / Add toggles, so nothing needs a modifier
+key on touch; key hints hide under `(pointer: coarse)`. "Reset deployment" asks first, clears the
+pending plan and keeps the layout history. Refusals report in the table instead of the global notice.
+A "Units from" select per side puts a stored army on the table (`unitsFromRoster`). The layout name
+field edits a draft that Save commits.
+
+## Play — the companion for a game in progress (12 Sep 2026)
+
+Route `#/play`, rail glyph `P`. The first code in the project that owns round, phase, score and
+command points; the engine only ever knew about one attack at a time. Nothing here enforces a rule.
+The players at the table are the authority, so the screen does the arithmetic, remembers what
+happened and answers "what are my odds here" without anyone leaving the table.
+
+- **Pure model + tests**: `src/lib/game.ts` / `game.test.ts` (34 tests). `GameState` holds round,
+  active side, phase, both sides' command points and score entries, per-unit state keyed by roster
+  unit id, the opponent's ad-hoc units and the user's secondaries. `applyAction` is the one
+  transition; `advance` walks the phases, hands the turn over after the end phase, starts the next
+  round when both players have had one, clears that player's per-turn flags and pays the command
+  phase point. `applyDamage` fills the wounded model before removing whole ones. `atStrength` scales
+  a unit's models and weapon counts to the models still alive, so a mauled squad solves as it stands
+  rather than at full strength. `summarise` reads a finished game back out of the log.
+- **Storage**: Dexie **v7** adds `games` (`id, rosterId, updatedAt`), one record holding the state
+  and the log whole. `src/hooks/useGame.ts` reads it once, keeps it in React state and writes back on
+  a 400 ms debounce with a flush on `pagehide`. Undo is a bounded stack of previous states
+  (`UNDO_CAP` 40) rather than an inverse per action, the same shape the terrain editor uses. The
+  stack lives in a ref with its depth mirrored into state, and writes work off the record in hand
+  rather than a state updater, so the Undo control enables in the same tick as the change.
+- **Screen**: `src/pages/PlayPage.tsx` resolves the roster through `rosterHostEntries`, builds a
+  `PlayContext` (`src/components/play/types.ts`) carrying each unit at full strength and as it
+  stands, and hosts a sticky scoreboard, the phase strip and five views. Panels live in
+  `src/components/play/`: `Scoreboard`, `PhaseStrip`, `UnitRoll` (wound tracking, per-turn flags,
+  adding enemy units), `OddsPanel`, `PlayStratagems`, `SecondariesPanel`, `GameSummary`, `GameSetup`
+  and `GameSidebar`.
+- **The odds panel is the differentiator.** Pick one of your units and one of theirs and the existing
+  solver answers in tens of milliseconds: expected damage, models slain, the chance it finishes what
+  the target has left, and the chance the unit is wiped. Accepting the figure applies it to the
+  target's wounds and records both the estimate and what was applied, which is what lets the summary
+  say how the dice ran against the maths.
+- **The opponent** is entered as met: a name plus the few stats readable off their sheet, or one of
+  the app's archetypes as a stand-in. Their list is rarely available in a pickup game.
+- **No Games Workshop mission data**, in keeping with the project's rule. Phases are the generic
+  sequence every edition shares; primaries are typed in per round and secondaries are defined by the
+  user with an optional cap.
+- **Phone first.** `useWakeLock` keeps the screen on while a game is open and re-takes the lock when
+  the tab comes back. `BarSlot` puts Next phase, Undo and Focus in the phone bar. **Focus mode**
+  (`play.focus`) hides the shell's rail through a `body.play-focused` class and tries full screen, so
+  the thumb tapping "next phase" all game cannot leave the screen by accident; the only way out is
+  the control that says so, in the bar and at the foot of the screen.
+- **`Datasheet.stratagemIds`** feeds the stratagem view here as well: it is filtered to the tracked
+  phase and whose turn it is, and marks what the player can actually pay for.
+
+## Stratagems in the army builder (12 Sep 2026)
+
+The army builder had no stratagems anywhere. Imported ones only reached the printable reference
+pack, which opens in a new tab, so they were invisible in the app itself.
+
+- **New tab** `Stratagems`, between Arsenal and Meta (`EDITOR_TABS` in `components/roster/RosterHeader.tsx`,
+  rendered by `components/roster/StratagemsTab.tsx`). It shows what the list may spend CP on, grouped
+  by where each one reaches it from: one group per detachment the list took, then the faction's own,
+  then core. A filter box searches the name and the rule text, phase chips come from the data rather
+  than a fixed list, and "Named by a unit" narrows to the ones a datasheet in the list names.
+- **Pure model + tests**: `lib/stratagems.ts` / `stratagems.test.ts` (`stratagemsForRoster`,
+  `stratagemPhases`, `filterStratagems`, `groupStratagems`, `cpRange`, `stratagemParts`). The reach
+  is the same rule `exportRosterPrintHtml` applies, so the tab and the print-out never disagree.
+- **`Datasheet.stratagemIds` is new** (`packages/schema`). The Wahapedia adapter already built a
+  datasheet-to-stratagem map into its staging layer and threw it away; it now writes the ids onto the
+  datasheet as well, `mergeSources` resolves them once the merged stratagem ids exist (the same
+  two-step the detachments use), and the tab prints "For <units>" under each stratagem. The field
+  defaults to `[]`, so snapshots written before it still parse. Snapshots are read back from Dexie
+  without re-parsing, so `stratagemsForRoster` treats a missing list as empty rather than trusting
+  the default; there is a test for that.
+- **The synthetic fixture was regenerated** (`pnpm cli synthetic`). Its Wahapedia input already had
+  `Datasheets_stratagems.csv`, so the sample data now demonstrates the tab: an Ashen Wardens list on
+  Ember Vanguard gets COVERING VOLLEY and HOLD FAST with their unit links, plus core RE-ROLL DICE.
+  The fixture's id and checksum changed, so a roster built against the previous sample keeps pointing
+  at the older snapshot and simply shows no unit links.
+- **Where stratagems still are not**: the calculator's toggles and the turn optimiser's CP options are
+  the engine's own generic stand-ins (`GENERIC_TOGGLES`, `DEFAULT_TURN_OPTIONS`), not the imported
+  ones, and nothing validates CP spend against a list. The Codex has no stratagem view either.
+- **Worth knowing**: only the Wahapedia export carries stratagem text and a browser cannot fetch it,
+  so for browser-built snapshots the tab shows an empty state saying where the data comes from.
+
 ## Codex — the datasheet viewer and the compare view — what is where
 
 - Route `#/codex` and `#/codex/<datasheetId>` (`src/pages/CodexPage.tsx`), rail glyph `X` between Armies and Analyses
@@ -51,6 +204,14 @@ snapshot comparison, rules overrides) and the Phase 7 in-browser data import for
   warning count and a `<details>` sample of the first 5 warnings / failed), then merge counts, build, and a result box
   with id, counts and the source refs (MFM version, BSData git SHA). Errors show a kind-specific hint (GitHub API quota
   for `api.github.com` 403/429, connectivity, other) with Retry and the CLI command.
+- **Data page header → "Fetch everything"**: runs the page's three fetches in turn — community sources, published
+  corpus, published layouts — through `forwardRef` handles (`FetchSourcesHandle.run`, `PublishedListsHandle.fetchCorpus`,
+  `PublishedLayoutsHandle.fetch`), each with the settings its section shows. The snapshot goes first so the corpus is
+  resolved against it; each fetch reports its own result, and one failing does not stop the next.
+- **Data page → "Published terrain layouts"** (`src/components/data/PublishedLayouts.tsx`): the one button that fetches
+  the 40kdc-data Event Companion cards (`src/lib/layoutFetch.ts`, credited to `FORTYKDC`) and a count of the stored
+  ones, read through `listLayouts` + `useStoreVersion("terrainLayouts")`. The Battle table's Layouts section only
+  saves, loads, imports and exports; it picks the fetched set up through the same store event.
 - **Worker** `src/worker/import.worker.ts` (Comlink, `run(request, onEvent)` + `cancel()`), a mirror of
   `apps/cli/src/commands/import.ts`: `fetchSource` for every selected source (concurrently, one `AbortController`
   injected through the `fetchImpl` wrapper) → `adapter.parse(files, { gameSystemId, fetchedAt, ref, url })` →

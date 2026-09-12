@@ -7,10 +7,10 @@ import { hrefFor, useRouteInfo } from "../router";
 import { download } from "../lib/download";
 import { nowIso } from "../lib/ids";
 import { abilityOverride, describeEffect, effectToForm, fnpOverride, mergeOverrides, noEffectOverride, overrideKey, parseOverridePack, toPack, toRecord, type EffectForm as EffectFormState } from "../lib/overrides";
-import { AbilitySearch, useAbilitySearch, tierLabel, type AbilityHit } from "../components/overrides/AbilitySearch";
+import { AbilitySearch, useAbilitySearch, tierLabel, tierTitle, type AbilityHit } from "../components/overrides/AbilitySearch";
 import { EffectForm } from "../components/overrides/EffectForm";
 import { OverridesList, RawPatchEditor } from "../components/overrides/OverridesList";
-import { Badge, Empty, Field } from "../components/ui";
+import { Badge, Empty, Field, useConfirm } from "../components/ui";
 import { PageHeader } from "../components/shell";
 import { t } from "../i18n";
 
@@ -42,7 +42,8 @@ export function OverridesPage() {
   const [rawEdit, setRawEdit] = useState<OverrideRecord | undefined>(undefined);
   const [fnpX, setFnpX] = useState(5);
   const packInput = useRef<HTMLInputElement>(null);
-  const hits = useAbilitySearch(rawSnapshot, snapshot, overrides, query);
+  const { hits, total } = useAbilitySearch(rawSnapshot, snapshot, overrides, query);
+  const { confirm, dialog } = useConfirm();
 
   // A `?q=` from the coverage widget pre-selects the exact match.
   useEffect(() => {
@@ -79,7 +80,7 @@ export function OverridesPage() {
   const quickFnp = async () => {
     if (!editor) return;
     await persist(fnpOverride({ id: editor.abilityId, name: editor.abilityName }, fnpX), editor.abilityName);
-    setEditor({ ...editor, effects: [], note: `Feel No Pain ${fnpX}+` });
+    setEditor({ ...editor, effects: [], note: t("overrides.note.fnp", { x: fnpX }) });
   };
   const quickNone = async () => {
     if (!editor) return;
@@ -140,13 +141,19 @@ export function OverridesPage() {
     setRawEdit(undefined);
   };
 
+  const restore = async (r: OverrideRecord, label: string) => {
+    await db.overrides.put(r);
+    await refreshOverrides();
+    notify(t("overrides.restored", { name: label }), "success");
+  };
+
   const remove = async (r: OverrideRecord) => {
     const label = nameOf(r.entity, r.id) ?? r.id;
-    if (!window.confirm(t("overrides.confirmDelete", { name: label }))) return;
+    if (!(await confirm({ title: t("overrides.confirmDelete", { name: label }), body: t("overrides.deleteBody"), confirmLabel: t("common.delete"), danger: true }))) return;
     await db.overrides.delete(r.key);
     await refreshOverrides();
     if (editor?.abilityId === r.id && r.entity === "ability") setEditor({ ...editor, effects: [], note: "" });
-    notify(t("overrides.deleted", { name: label }), "success");
+    notify(t("overrides.deleted", { name: label }), "success", undefined, { label: t("common.undo"), run: () => void restore(r, label) });
   };
 
   const exportPack = () => download(`grimstat-overrides-${new Date().toISOString().slice(0, 10)}.json`, toPack(overrides));
@@ -194,7 +201,7 @@ export function OverridesPage() {
 
       <div className="analysis overrides-layout">
         <aside className="analysis-controls stack">
-          <section className="panel">{rawSnapshot ? <AbilitySearch query={query} onQuery={setQuery} hits={hits} selectedId={editor?.abilityId} onSelect={select} /> : <Empty>{t("overrides.noSnapshot")}</Empty>}</section>
+          <section className="panel">{rawSnapshot ? <AbilitySearch query={query} onQuery={setQuery} hits={hits} total={total} selectedId={editor?.abilityId} onSelect={select} /> : <Empty>{t("overrides.noSnapshot")}</Empty>}</section>
         </aside>
         <section className="analysis-results stack">
           <section className="panel stack" aria-labelledby="ov-editor-h">
@@ -207,7 +214,11 @@ export function OverridesPage() {
             ) : (
               <>
                 <div className="row">
-                  {selectedHit ? <Badge tone={selectedHit.tier === "tier3" ? "danger" : selectedHit.tier === "tier2" ? "warn" : "ok"}>{tierLabel(selectedHit.tier)}</Badge> : null}
+                  {selectedHit ? (
+                    <span className="tier-badge" title={tierTitle(selectedHit.tier)}>
+                      <Badge tone={selectedHit.tier === "tier3" ? "danger" : selectedHit.tier === "tier2" ? "warn" : "ok"}>{tierLabel(selectedHit.tier)}</Badge>
+                    </span>
+                  ) : null}
                   {rawAbility?.scope ? <Badge>{rawAbility.scope}</Badge> : null}
                   {rawAbility?.coreKeyword ? <Badge>{`${rawAbility.coreKeyword}${rawAbility.coreValue !== undefined ? ` ${rawAbility.coreValue}` : ""}`}</Badge> : null}
                   <span className="mono muted small">{editor.abilityId}</span>
@@ -300,6 +311,7 @@ export function OverridesPage() {
         </section>
       </div>
       </div>
+      {dialog}
     </>
   );
 }

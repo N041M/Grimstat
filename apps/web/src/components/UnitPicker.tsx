@@ -3,6 +3,7 @@ import { UnitArt } from "./UnitArt";
 import type { Datasheet, ScenarioUnit, Snapshot } from "@grimstat/schema";
 import { gameApi, host } from "../plugin";
 import { cloneUnit, modelCount } from "../lib/scenario";
+import { ALL_FACTIONS } from "../lib/codex";
 import { fmtInt } from "../lib/format";
 import { CustomUnitEditor } from "./CustomUnitEditor";
 import { WeaponRows } from "./WeaponRows";
@@ -71,13 +72,15 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
     if (!factionId && factions.length) setFactionId(factions[0]!.id);
   }, [factions, factionId]);
 
+  const everyFaction = factionId === ALL_FACTIONS;
+  const factionNames = useMemo(() => new Map(factions.map((f) => [f.id, f.name] as const)), [factions]);
   const datasheets = useMemo(() => {
     if (!snapshot) return [];
     const q = search.trim().toLowerCase();
     return snapshot.data.datasheets
-      .filter((d) => (!factionId || d.factionId === factionId) && (!q || d.name.toLowerCase().includes(q)))
+      .filter((d) => (!factionId || everyFaction || d.factionId === factionId) && (!q || d.name.toLowerCase().includes(q)))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [snapshot, factionId, search]);
+  }, [snapshot, factionId, everyFaction, search]);
 
   const selected = useMemo(() => (snapshot && datasheetId ? snapshot.data.datasheets.find((d) => d.id === datasheetId) : undefined), [snapshot, datasheetId]);
 
@@ -152,6 +155,7 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
             <div className="field-row">
               <Field label={t("picker.faction")}>
                 <select value={factionId} onChange={(e) => setFactionId(e.target.value)}>
+                  <option value={ALL_FACTIONS}>{t("codex.allFactions")}</option>
                   {factions.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.name}
@@ -171,7 +175,8 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
                       <UnitArt of={d} />
                       {d.name}
                     </span>
-                    <span className="muted small">{d.role ?? ""}</span>
+                    {/* Across every faction the role alone does not place a sheet, so its faction is named too. */}
+                    <span className="muted small">{[everyFaction ? (factionNames.get(d.factionId) ?? d.factionId) : "", d.role ?? ""].filter(Boolean).join(" · ")}</span>
                   </button>
                 ))
               ) : (

@@ -8,10 +8,13 @@ import { LayoutLibrary } from "../components/battle/LayoutLibrary";
 import { LayoutPicker } from "../components/battle/LayoutPicker";
 import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import { usePersistedSetting } from "../hooks/usePersistedSetting";
+import { db } from "../db";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
-import { canRedo, canUndo, editorReducer, initialEditor } from "../lib/battleEditor";
-import { Badge, Tabs } from "../components/ui";
+import { canRedo, canUndo, canUndoUnits, editorReducer, initialEditor } from "../lib/battleEditor";
+import { Badge, Tabs, useConfirm } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
 import { silhouetteFor, type SilhouetteId } from "../lib/silhouettes";
 import {
@@ -20,6 +23,7 @@ import {
   applyModelMove,
   applyUnitMove,
   autoDeploy,
+  battleWith,
   chargeBetween,
   clearDeployment,
   deployUnit,
@@ -29,6 +33,7 @@ import {
   endMove,
   findModel,
   findUnit,
+  freshDeployment,
   hasMoved,
   incoherentModels,
   indexOf,
@@ -44,13 +49,16 @@ import {
   resetMove,
   rotateVerdict,
   sampleBattle,
+  sampleForce,
   dropMark,
   sightBetween,
   tapeDistance,
   translateUnit,
   unitCoherency,
   unitHulls,
+  unitsFromRoster,
   unitsOf,
+  withForce,
   withdrawUnit,
   type BattleModel,
   type BattleState,
@@ -111,6 +119,23 @@ interface Plan {
 /** A turn of the selection per press: fifteen degrees. */
 const ROTATE_STEP = Math.PI / 12;
 
+/** The two sides, in the order the panels list them. */
+const SIDES = ["attacker", "defender"] as const;
+
+/** What the army select calls the sample force. Every other option is a stored army's id. */
+const SAMPLE_FORCE = "sample";
+const parseForceId = (raw: unknown): string | undefined => (typeof raw === "string" && raw ? raw : undefined);
+
+/** A refusal the table reported, shown over the table until the next thing happens. */
+interface Refusal {
+  readonly text: string;
+  /** Bumped on every refusal, so the same message twice restarts the timer. */
+  readonly n: number;
+}
+
+/** How long a refusal stays over the table. */
+const REFUSAL_MS = 4000;
+
 /** Keys typed into a field belong to the field. */
 const inField = (target: EventTarget | null): boolean => {
   const el = target as HTMLElement | null;
@@ -124,7 +149,10 @@ const inField = (target: EventTarget | null): boolean => {
  * resolved and nothing is enforced: the table explains what it thinks and lets the player decide.
  */
 export function BattlePage() {
-  const { notify } = useApp();
+  const { notify, snapshot, activeSnapshotId, withOverrides } = useApp();
+  const { confirm, dialog } = useConfirm();
+  /** A finger has no Shift, no ⌘ and no arrow keys, so the table offers those as buttons instead. */
+  const coarse = useMediaQuery("(pointer: coarse)");
   const [editor, dispatch] = useReducer(editorReducer, undefined, () => initialEditor(sampleBattle()));
   const state = editor.battle;
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -153,6 +181,11 @@ export function BattlePage() {
   const [terrainId, setTerrainId] = useState<string | undefined>();
   const [objectiveId, setObjectiveId] = useState<string | undefined>();
   const [snapOn, setSnapOn] = useState(true);
+  /** Box mode and add mode, the toolbar's standing stand-ins for holding Shift and ⌘. */
+  const [boxSelect, setBoxSelect] = useState(false);
+  const [addSelect, setAddSelect] = useState(false);
+  /** What the table last refused, reported over the table rather than in the app's notice slot. */
+  const [refusal, setRefusal] = useState<Refusal | undefined>();
   const [library, setLibrary] = useState<StoredLayout[]>(() => [...BUILT_IN]);
   const labelsRef = useRef<HTMLDivElement>(null);
   const tapesRef = useRef<HTMLDivElement>(null);
@@ -160,8 +193,14 @@ export function BattlePage() {
   const marqueeRef = useRef<HTMLDivElement>(null);
   const [webgl] = useState(webglAvailable);
   const layoutsVersion = useStoreVersion("terrainLayouts");
+  const rostersVersion = useStoreVersion("rosters");
+  /** The armies the force select offers. Names only; the roster itself is read when one is picked. */
+  const [armies, setArmies] = useState<{ id: string; name: string }[]>([]);
+  const [attackerForce, setAttackerForce, attackerForceLoaded] = usePersistedSetting("battle.force.attacker", SAMPLE_FORCE, parseForceId);
+  const [defenderForce, setDefenderForce, defenderForceLoaded] = usePersistedSetting("battle.force.defender", SAMPLE_FORCE, parseForceId);
+  const forceOf = (side: Side) => (side === "attacker" ? attackerForce : defenderForce);
 
-  const { layout } = state;
+  const { layout, units } = state;
   const index = useMemo(() => indexOf(state), [state]);
   const editable = !isBuiltIn(layout.id);
   const selected = findUnit(state, selectedId);
@@ -191,43 +230,171 @@ export function BattlePage() {
     setDrag(undefined);
     setDragging(false);
     setPlan(undefined);
+    setRefusal(undefined);
   }, [tool, selectedId, activeModelId, setPendingMark]);
   useEffect(() => setTargetId(undefined), [selectedId]);
+  // Box and add mode belong to the Move tool. Neither means anything under the others, and a toggle
+  // left on under a tool that ignores it is a trap on the way back.
+  useEffect(() => {
+    if (tool === "select") return;
+    setBoxSelect(false);
+    setAddSelect(false);
+  }, [tool]);
+
+  // A refusal is about one attempt. It says its piece and goes, rather than sitting there until
+  // something else happens to clear it.
+  useEffect(() => {
+    if (!refusal) return;
+    const timer = window.setTimeout(() => setRefusal(undefined), REFUSAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [refusal]);
+  const refuse = useCallback((text: string) => setRefusal((r) => ({ text, n: (r?.n ?? 0) + 1 })), []);
   const refreshLibrary = useCallback(async () => setLibrary(await listLayouts()), []);
   useEffect(() => {
     void refreshLibrary();
   }, [refreshLibrary, layoutsVersion]);
 
   const editLayout = useCallback((change: (layout: TerrainLayout) => TerrainLayout, record = true) => dispatch({ type: "layout", change, record }), []);
-  const editUnit = useCallback((unitId: string, change: (u: BattleUnit) => BattleUnit) => {
+  /**
+   * Change one unit. `record` puts the positions as they stand on the unit history, for the things a
+   * player would expect to be able to take back: a deployment, a withdrawal, an approved move. A turn
+   * of the ring is not one of them, since one drag of it is hundreds of these.
+   */
+  const editUnit = useCallback((unitId: string, change: (u: BattleUnit) => BattleUnit, record = false) => {
     dispatch({
       type: "units",
+      record,
       change: (b) => {
         const unit = findUnit(b, unitId);
         return unit ? replaceUnit(b, change(unit)) : b;
       },
     });
   }, []);
+  /** Take back the last recorded unit action. Whatever was being planned was planned against the new positions. */
+  const undoUnits = useCallback(() => {
+    dispatch({ type: "undoUnits" });
+    setPlan(undefined);
+    setDrag(undefined);
+    setDragging(false);
+  }, []);
 
-  /** Put another layout on the table with a fresh deployment. Tapes measured the old table. */
-  const loadBattle = useCallback((next: TerrainLayout) => {
-    dispatch({ type: "replace", battle: sampleBattle(next) });
-    setSelectedId(undefined);
-    setActiveModelId(undefined);
-    setTerrainId(undefined);
-    setObjectiveId(undefined);
-    setTapes([]);
-    setPendingMark(undefined);
-  }, [setTapes, setPendingMark]);
+  /**
+   * Put another layout on the table. The forces stay as they are and are set down again in the new
+   * table's zones, so changing the table does not throw away the armies chosen for it. Tapes and the
+   * terrain history belonged to the old table and go with it.
+   */
+  const loadBattle = useCallback(
+    (next: TerrainLayout) => {
+      dispatch({ type: "replace", battle: freshDeployment(battleWith(next, units)) });
+      setSelectedId(undefined);
+      setActiveModelId(undefined);
+      setTerrainId(undefined);
+      setObjectiveId(undefined);
+      setTapes([]);
+      setPendingMark(undefined);
+    },
+    [units, setTapes, setPendingMark],
+  );
 
   /** Run something that would discard unsaved terrain edits, after asking. */
   const guard = useCallback(
-    (run: () => void) => {
-      if (dirty && !window.confirm(t("battle.library.discard", { name: layout.name }))) return;
+    async (run: () => void) => {
+      if (dirty && !(await confirm({ title: t("battle.library.discard", { name: layout.name }), confirmLabel: t("battle.library.discardConfirm"), danger: true }))) return;
       run();
     },
-    [dirty, layout.name],
+    [dirty, layout.name, confirm],
   );
+
+  /**
+   * Set every unit down again in its own zone. The layout and its history are not touched, and
+   * anything measured or planned against the old positions goes, since it was about them.
+   */
+  const resetDeployment = useCallback(async () => {
+    if (!(await confirm({ title: t("battle.reset.title"), body: t("battle.reset.body"), confirmLabel: t("battle.reset"), danger: true }))) return;
+    setPlan(undefined);
+    setDrag(undefined);
+    setDragging(false);
+    setTapes([]);
+    setPendingMark(undefined);
+    setRefusal(undefined);
+    dispatch({ type: "units", change: freshDeployment, record: true });
+  }, [confirm, setTapes, setPendingMark]);
+
+  /**
+   * Put a force on one side: the sample one, or a stored army.
+   *
+   * The army is read against the snapshot it was built with, falling back to the active one when
+   * that snapshot is gone, which is what the army editor does. The other side is left alone and the
+   * new units arrive in reserve, to be deployed.
+   */
+  const applyForce = useCallback(
+    async (side: Side, id: string, quiet = false) => {
+      // A force put back from the settings on the way in is not something the player just did, so it
+      // does not go on the undo stack; a force they picked does.
+      const record = !quiet;
+      if (id === SAMPLE_FORCE) {
+        dispatch({ type: "units", change: (b) => withForce(b, side, sampleForce(side)), record });
+        return;
+      }
+      const roster = await db.rosters.get(id);
+      if (!roster) {
+        notify(t("battle.force.missing"), "error");
+        return;
+      }
+      const own = roster.snapshotId === activeSnapshotId ? undefined : await db.snapshots.get(roster.snapshotId);
+      const snap = own ? withOverrides(own) : snapshot;
+      if (!snap) {
+        notify(t("battle.force.noSnapshot"), "error");
+        return;
+      }
+      const force = unitsFromRoster(roster, snap, side);
+      if (!force.length) {
+        notify(t("battle.force.empty", { name: roster.name }), "error");
+        return;
+      }
+      dispatch({ type: "units", change: (b) => withForce(b, side, force), record });
+      if (!quiet) notify(t("battle.force.loaded", { name: roster.name, n: force.length }), "success");
+    },
+    [notify, snapshot, activeSnapshotId, withOverrides],
+  );
+
+  const chooseForce = useCallback(
+    (side: Side, id: string) => {
+      (side === "attacker" ? setAttackerForce : setDefenderForce)(id);
+      setSelectedId(undefined);
+      setActiveModelId(undefined);
+      setGroupIds(new Set());
+      void applyForce(side, id);
+    },
+    [applyForce, setAttackerForce, setDefenderForce],
+  );
+
+  useEffect(() => {
+    let alive = true;
+    void db.rosters
+      .toArray()
+      .then((all) => {
+        if (!alive) return;
+        setArmies(all.map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [rostersVersion]);
+
+  // The army each side was last given, put back on the table once the setting and the data are in.
+  const restoredForces = useRef(false);
+  useEffect(() => {
+    if (restoredForces.current || !attackerForceLoaded || !defenderForceLoaded) return;
+    const wanted = [attackerForce, defenderForce].filter((id) => id !== SAMPLE_FORCE);
+    if (wanted.length && !snapshot) return;
+    restoredForces.current = true;
+    for (const side of SIDES) {
+      const id = side === "attacker" ? attackerForce : defenderForce;
+      if (id !== SAMPLE_FORCE) void applyForce(side, id, true);
+    }
+  }, [attackerForceLoaded, defenderForceLoaded, attackerForce, defenderForce, snapshot, applyForce]);
 
   const storeLayout = useCallback(
     (next: TerrainLayout, asNew = false) => {
@@ -269,7 +436,7 @@ export function BattlePage() {
 
   /** Make a move. The unit travels along the route the search found and pays for it. */
   const applyMove = useCallback(
-    (unitId: string, to: Vec3, cost: number, modelId?: string, path?: readonly Vec3[]) => editUnit(unitId, (unit) => (modelId ? applyModelMove(unit, modelId, to, cost, path) : applyUnitMove(unit, to, cost, path))),
+    (unitId: string, to: Vec3, cost: number, modelId?: string, path?: readonly Vec3[]) => editUnit(unitId, (unit) => (modelId ? applyModelMove(unit, modelId, to, cost, path) : applyUnitMove(unit, to, cost, path)), true),
     [editUnit],
   );
   /**
@@ -289,13 +456,18 @@ export function BattlePage() {
   const approvePlan = useCallback(() => {
     if (!plan) return;
     const moves = plan.moves;
-    if (moves) dispatch({ type: "units", change: (b) => applyGroupMove(b, moves) });
+    if (moves) dispatch({ type: "units", change: (b) => applyGroupMove(b, moves), record: true });
     else applyMove(plan.unitId, plan.at, plan.cost, plan.modelId, plan.path);
     setPlan(undefined);
   }, [plan, applyMove]);
-  const onDeploy = useCallback((unitId: string, at: Vec2) => editUnit(unitId, (unit) => deployUnit(unit, at)), [editUnit]);
+  const onDeploy = useCallback((unitId: string, at: Vec2) => editUnit(unitId, (unit) => deployUnit(unit, at), true), [editUnit]);
+  const onWithdraw = useCallback((unitId: string) => editUnit(unitId, withdrawUnit, true), [editUnit]);
 
-  /** Turn the active model, or the whole unit, in place; a turn the table refuses is reported, not applied. */
+  /**
+   * Turn the active model, or the whole unit, in place. A turn the table refuses is reported over the
+   * table, where the turn was asked for, rather than in the app's notice slot: it is about this one
+   * attempt and stops being true the moment the model moves.
+   */
   const rotateSelection = useCallback(
     (by: number, quiet = false) => {
       if (grouped) {
@@ -308,7 +480,7 @@ export function BattlePage() {
           if (!unit) continue;
           const verdict = rotateVerdict(state, unit, by, ids, index);
           if (!verdict.ok) {
-            if (!quiet) notify(t(verdict.problems[0] as I18nKey), "error");
+            if (!quiet) refuse(t((verdict.problems[0] ?? "battle.problem.blocked") as I18nKey));
             return;
           }
           turned.set(unitId, verdict.unit);
@@ -319,9 +491,9 @@ export function BattlePage() {
       if (!selected || selected.reserve) return;
       const verdict = rotateVerdict(state, selected, by, activeModel?.id, index);
       if (verdict.ok) editUnit(selected.id, () => verdict.unit);
-      else if (!quiet) notify(t(verdict.problems[0] as I18nKey), "error");
+      else if (!quiet) refuse(t((verdict.problems[0] ?? "battle.problem.blocked") as I18nKey));
     },
-    [selected, activeModel, state, index, editUnit, notify, grouped, group],
+    [selected, activeModel, state, index, editUnit, refuse, grouped, group],
   );
   /** The ring is dragged: the same turn as R, applied as the hand goes round, with refusals kept quiet. */
   const turnSelection = useCallback((by: number) => rotateSelection(by, true), [rotateSelection]);
@@ -331,7 +503,7 @@ export function BattlePage() {
     const model = activeModel ?? selected.models[0];
     return model ? { unitId: selected.id, modelId: model.id, hull: model.hull } : undefined;
   }, [selected, activeModel, tool]);
-  const deployAll = useCallback(() => dispatch({ type: "units", change: (b) => autoDeploy(autoDeploy(b, "attacker"), "defender") }), []);
+  const deployAll = useCallback(() => dispatch({ type: "units", change: (b) => autoDeploy(autoDeploy(b, "attacker"), "defender"), record: true }), []);
 
   /** The planned move's ghost: the model, or the whole formation, standing where it would land. */
   const planned = useMemo(() => {
@@ -539,9 +711,11 @@ export function BattlePage() {
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 
       if ((e.metaKey || e.ctrlKey) && key === "z") {
-        if (tool !== "terrain") return;
         e.preventDefault();
-        dispatch({ type: e.shiftKey ? "redo" : "undo" });
+        // The terrain tool undoes terrain edits; everywhere else the chord takes back the last thing
+        // that happened to the units, which is what the player was doing when they pressed it.
+        if (tool === "terrain") dispatch({ type: e.shiftKey ? "redo" : "undo" });
+        else undoUnits();
         return;
       }
       if (key === "Escape") {
@@ -561,7 +735,7 @@ export function BattlePage() {
       }
       if (tool === "deploy" && (key === "Delete" || key === "Backspace") && selected && !selected.reserve) {
         e.preventDefault();
-        editUnit(selected.id, withdrawUnit);
+        onWithdraw(selected.id);
         return;
       }
 
@@ -619,10 +793,18 @@ export function BattlePage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, proposeMove, proposeGroupMove, approvePlan, rotateSelection, plan, editUnit, pickUnit, setPendingMark, grouped, group]);
+  }, [tool, terrainId, objectiveId, selected, activeModel, state, index, editLayout, proposeMove, proposeGroupMove, approvePlan, rotateSelection, plan, onWithdraw, undoUnits, pickUnit, setPendingMark, grouped, group]);
 
   const measureFrom = tool === "measure" ? pendingMark : undefined;
   const live = measureFrom && aim ? tapeDistance(measureFrom, aim) : undefined;
+  /** Is there anything on the table for the toolbar's two turn buttons to turn? */
+  const canTurn = !!selected && !selected.reserve;
+  const clearSelection = useCallback(() => {
+    setGroupIds(new Set());
+    setSelectedId(undefined);
+    setActiveModelId(undefined);
+    setPlan(undefined);
+  }, []);
 
   /**
    * What sits beside the pointer: a drag's verdict, or the tape's live reading. The canvas moves
@@ -652,7 +834,7 @@ export function BattlePage() {
               onChange={setView}
               label={t("battle.view")}
             />
-            <button type="button" className="ghost sm" onClick={() => dispatch({ type: "replace", battle: sampleBattle(layout) })}>
+            <button type="button" className="ghost sm" onClick={() => void resetDeployment()}>
               {t("battle.reset")}
             </button>
           </>
@@ -661,6 +843,57 @@ export function BattlePage() {
 
       <div className="battle-body">
         <div className="battle-stage">
+          {/* Everything the keys do to the table, as buttons over it: a finger has no ⌘ and no arrows,
+              and a mouse user should not have to learn a chord to approve a move. */}
+          <div className="battle-toolbar" role="group" aria-label={t("battle.table.actions")} hidden={!webgl}>
+            {tool === "terrain" ? (
+              <div className="battle-hist" role="group" aria-label={t("battle.terrain.history")}>
+                <button type="button" className="ghost sm" disabled={!canUndo(editor)} onClick={() => dispatch({ type: "undo" })} title={t("battle.terrain.undo")} aria-label={t("battle.terrain.undo")}>
+                  ↶
+                </button>
+                <button type="button" className="ghost sm" disabled={!canRedo(editor)} onClick={() => dispatch({ type: "redo" })} title={t("battle.terrain.redo")} aria-label={t("battle.terrain.redo")}>
+                  ↷
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="ghost sm" disabled={!canUndoUnits(editor)} onClick={undoUnits} title={t("battle.undoMove.title")}>
+                {t("battle.undoMove")}
+              </button>
+            )}
+            {tool === "select" ? (
+              <>
+                <button type="button" className="sm" disabled={!plan} onClick={approvePlan}>
+                  {t("battle.plan.approve")}
+                </button>
+                <button type="button" className="ghost sm" disabled={!plan} onClick={() => setPlan(undefined)}>
+                  {t("battle.plan.discard")}
+                </button>
+              </>
+            ) : null}
+            {tool === "select" || tool === "deploy" ? (
+              <>
+                <button type="button" className="ghost sm" disabled={!canTurn} onClick={() => rotateSelection(ROTATE_STEP)} title={t("battle.rotate.left")} aria-label={t("battle.rotate.left")}>
+                  ⟲
+                </button>
+                <button type="button" className="ghost sm" disabled={!canTurn} onClick={() => rotateSelection(-ROTATE_STEP)} title={t("battle.rotate.right")} aria-label={t("battle.rotate.right")}>
+                  ⟳
+                </button>
+              </>
+            ) : null}
+            {tool === "select" ? (
+              <>
+                <button type="button" className={`sm ${boxSelect ? "" : "ghost"}`.trim()} aria-pressed={boxSelect} onClick={() => setBoxSelect((on) => !on)} title={t("battle.boxSelect.title")}>
+                  {t("battle.boxSelect")}
+                </button>
+                <button type="button" className={`sm ${addSelect ? "" : "ghost"}`.trim()} aria-pressed={addSelect} onClick={() => setAddSelect((on) => !on)} title={t("battle.addToSelection.title")}>
+                  {t("battle.addToSelection")}
+                </button>
+              </>
+            ) : null}
+            <button type="button" className="ghost sm" disabled={!selectedId && !grouped} onClick={clearSelection}>
+              {t("battle.group.clear")}
+            </button>
+          </div>
           {webgl ? (
             <ErrorBoundary compact resetKey={layout.id}>
               <Suspense fallback={<p className="muted battle-loading">{t("battle.loading")}</p>}>
@@ -690,6 +923,8 @@ export function BattlePage() {
                   onSelect={pickUnit}
                   groupIds={groupIds}
                   onBoxSelect={onBoxSelect}
+                  boxSelect={boxSelect}
+                  addToSelection={addSelect}
                   onMoveGroup={proposeGroupMove}
                   marqueeRef={marqueeRef}
                   turnRing={turnRing}
@@ -722,13 +957,31 @@ export function BattlePage() {
           <div ref={readoutRef} className={`battle-drag-readout ${readout ? "is-on" : ""} ${readout?.bad ? "bad" : ""}`.trim()} aria-hidden="true">
             {readout?.text}
           </div>
+          {refusal ? (
+            <p key={refusal.n} className="battle-refusal" role="status">
+              {refusal.text}
+            </p>
+          ) : null}
         </div>
 
         <aside className="battle-panel">
-          <LayoutPicker options={options} current={layout} dirty={dirty} onPick={(next) => guard(() => loadBattle(next))} />
+          <LayoutPicker options={options} current={layout} dirty={dirty} onPick={(next) => void guard(() => loadBattle(next))} />
           {tool === "terrain" ? (
             <>
-              <LayoutLibrary key={layout.id} layout={layout} library={library} editable={editable} dirty={dirty} onStore={storeLayout} onLoad={(next, force) => (force ? loadBattle(next) : guard(() => loadBattle(next)))} onRefresh={refreshLibrary} notify={notify} />
+              <LayoutLibrary
+                key={layout.id}
+                layout={layout}
+                library={library}
+                editable={editable}
+                dirty={dirty}
+                onStore={storeLayout}
+                onLoad={(next, force) => {
+                  if (force) loadBattle(next);
+                  else void guard(() => loadBattle(next));
+                }}
+                onRefresh={refreshLibrary}
+                notify={notify}
+              />
               <TerrainPanel
                 layout={layout}
                 pieceId={terrainId}
@@ -736,6 +989,7 @@ export function BattlePage() {
                 canUndo={canUndo(editor)}
                 canRedo={canRedo(editor)}
                 snap={snapOn}
+                coarse={coarse}
                 onSnap={setSnapOn}
                 onChange={editLayout}
                 onSelectPiece={(id) => {
@@ -765,22 +1019,28 @@ export function BattlePage() {
               charge={charge}
               tapes={tapes}
               live={live}
+              coarse={coarse}
+              armies={armies}
+              forceOf={forceOf}
+              onChooseForce={chooseForce}
               onPick={pickUnit}
               onEdit={editUnit}
+              onWithdraw={onWithdraw}
               onApprove={approvePlan}
               onRotate={rotateSelection}
               group={group}
               onClearGroup={() => setGroupIds(new Set())}
               onDiscard={() => setPlan(undefined)}
               onDeployAll={deployAll}
-              onAutoDeploy={(side) => dispatch({ type: "units", change: (b) => autoDeploy(b, side) })}
-              onClearDeployment={() => dispatch({ type: "units", change: clearDeployment })}
+              onAutoDeploy={(side) => dispatch({ type: "units", change: (b) => autoDeploy(b, side), record: true })}
+              onClearDeployment={() => dispatch({ type: "units", change: clearDeployment, record: true })}
               onRemoveTape={removeTape}
               onClearTapes={() => setTapes([])}
             />
           )}
         </aside>
       </div>
+      {dialog}
     </div>
   );
 }
@@ -802,6 +1062,7 @@ function MovePanel({
   plan,
   reach,
   upperFloor,
+  coarse,
   onPick,
   onEdit,
   onApprove,
@@ -816,6 +1077,8 @@ function MovePanel({
   plan?: Plan;
   reach: readonly ReachNode[];
   upperFloor: number;
+  /** A touch screen: the lines about arrow keys, Shift and R have nothing to say there. */
+  coarse?: boolean;
   onPick: (id: string | undefined, modelId?: string) => void;
   onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
   onApprove: () => void;
@@ -907,12 +1170,12 @@ function MovePanel({
               {t("battle.plan.discard")}
             </button>
           </div>
-          <p className="muted small">{t("battle.plan.hint")}</p>
+          {coarse ? null : <p className="muted small">{t("battle.plan.hint")}</p>}
         </div>
       ) : (
         <>
           <p className="muted small">{activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
-          <p className="muted small">{activeModel ? t("battle.nudgeHint") : t("battle.pickModel")}</p>
+          {activeModel && coarse ? null : <p className="muted small">{activeModel ? t("battle.nudgeHint") : t("battle.pickModel")}</p>}
           <div className="battle-actions">
             <button type="button" className="ghost sm" onClick={() => onRotate(ROTATE_STEP)} title={t("battle.rotate.left")} aria-label={t("battle.rotate.left")}>
               ⟲
@@ -922,8 +1185,12 @@ function MovePanel({
               ⟳
             </button>
           </div>
-          <p className="muted small">{t("battle.rotate.hint")}</p>
-          <p className="muted small">{t("battle.group.hint")}</p>
+          {coarse ? null : (
+            <>
+              <p className="muted small">{t("battle.rotate.hint")}</p>
+              <p className="muted small">{t("battle.group.hint")}</p>
+            </>
+          )}
         </>
       )}
 
@@ -955,8 +1222,13 @@ function BattlePanel({
   charge,
   tapes,
   live,
+  coarse,
+  armies,
+  forceOf,
+  onChooseForce,
   onPick,
   onEdit,
+  onWithdraw,
   onApprove,
   onDiscard,
   onRotate,
@@ -982,8 +1254,16 @@ function BattlePanel({
   tapes: readonly Tape[];
   /** The tape's reading to the pointer while its second mark is not yet set. */
   live?: number;
+  /** A touch screen: the lines about keys have nothing to say there. */
+  coarse?: boolean;
+  /** The stored armies a side's force can be taken from. */
+  armies: readonly { id: string; name: string }[];
+  /** Which force a side is showing: an army's id, or the sample force. */
+  forceOf: (side: Side) => string;
+  onChooseForce: (side: Side, id: string) => void;
   onPick: (id: string | undefined, modelId?: string) => void;
   onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
+  onWithdraw: (unitId: string) => void;
   onApprove: () => void;
   onDiscard: () => void;
   onRotate: (by: number) => void;
@@ -1019,6 +1299,17 @@ function BattlePanel({
                   {t("battle.deploy.auto")}
                 </button>
               </div>
+              <label className="battle-force">
+                <span>{t("battle.force.label")}</span>
+                <select className="sm" value={forceOf(side)} onChange={(e) => onChooseForce(side, e.target.value)}>
+                  <option value={SAMPLE_FORCE}>{t("battle.force.sample")}</option>
+                  {armies.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <ul className={`battle-unit-list ${side}`}>
                 {unitsOf(state, side).map((u) => (
                   <li key={u.id} className="battle-unit-row">
@@ -1028,7 +1319,7 @@ function BattlePanel({
                       <span className="battle-unit-meta">{u.reserve ? t("battle.deploy.reserve") : t("battle.deploy.deployed")}</span>
                     </button>
                     {u.reserve ? null : (
-                      <button type="button" className="ghost sm battle-unit-x" title={t("battle.deploy.withdraw")} aria-label={t("battle.deploy.withdraw")} onClick={() => onEdit(u.id, withdrawUnit)}>
+                      <button type="button" className="ghost sm battle-unit-x" title={t("battle.deploy.withdraw")} aria-label={t("battle.deploy.withdraw")} onClick={() => onWithdraw(u.id)}>
                         ×
                       </button>
                     )}
@@ -1037,7 +1328,7 @@ function BattlePanel({
               </ul>
             </div>
           ))}
-          {selected ? <p className="muted small">{selected.reserve ? t("battle.deploy.armed", { name: t(selected.name as I18nKey) }) : t("battle.deploy.selectedDeployed")}</p> : null}
+          {selected ? <p className="muted small">{selected.reserve ? t("battle.deploy.armed", { name: t(selected.name as I18nKey) }) : t(coarse ? "battle.deploy.selectedDeployedTouch" : "battle.deploy.selectedDeployed")}</p> : null}
           {drag && !drag.legal ? (
             <ul className="battle-problems left">
               {drag.problems.map((p) => (
@@ -1071,7 +1362,7 @@ function BattlePanel({
         </section>
       )}
 
-      {tool === "select" ? <MovePanel selected={selected} activeModel={activeModel} drag={drag} plan={plan} reach={reach} upperFloor={upperFloor} onPick={onPick} onEdit={onEdit} onApprove={onApprove} onDiscard={onDiscard} onRotate={onRotate} group={group} onClearGroup={onClearGroup} /> : null}
+      {tool === "select" ? <MovePanel selected={selected} activeModel={activeModel} drag={drag} plan={plan} reach={reach} upperFloor={upperFloor} coarse={coarse} onPick={onPick} onEdit={onEdit} onApprove={onApprove} onDiscard={onDiscard} onRotate={onRotate} group={group} onClearGroup={onClearGroup} /> : null}
 
       {tool === "sight" ? (
         <section className="battle-section">

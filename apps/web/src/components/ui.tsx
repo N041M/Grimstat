@@ -1,5 +1,51 @@
-import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { t } from "../i18n";
+
+const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+function focusable(root: HTMLElement): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => !el.hasAttribute("aria-hidden") && el.offsetParent !== null);
+}
+
+/** Keep Tab inside `root` (modal layers that are not a native `<dialog>`). Call from a keydown handler. */
+export function trapTab(e: KeyboardEvent | ReactKeyboardEvent, root: HTMLElement): void {
+  if (e.key !== "Tab") return;
+  const items = focusable(root);
+  if (items.length === 0) {
+    e.preventDefault();
+    root.focus({ preventScroll: true });
+    return;
+  }
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (!first || !last) return;
+  if (e.shiftKey && (active === first || active === root || !root.contains(active))) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && (active === last || !root.contains(active))) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+/** Arrow keys walk the `role="menuitem*"` buttons inside `root`; Home and End jump. */
+export function menuKeys(e: ReactKeyboardEvent, root: HTMLElement | null): void {
+  if (!root) return;
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") return;
+  const items = [...root.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]')].filter((el) => !el.hasAttribute("disabled"));
+  if (items.length === 0) return;
+  e.preventDefault();
+  const i = items.indexOf(document.activeElement as HTMLElement);
+  const next = e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : e.key === "ArrowDown" ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+  items[next]?.focus();
+}
+
+/** Remember what had focus and give it back when a layer closes and left focus on the body. */
+function restoreFocus(opener: HTMLElement | null): void {
+  const active = document.activeElement;
+  if (opener && opener.isConnected && (!active || active === document.body)) opener.focus({ preventScroll: true });
+}
 
 /** Labelled form field; the label wraps the control so it is always associated. */
 export function Field({ label, children, hint, className }: { label: string; children: ReactNode; hint?: string; className?: string }) {
@@ -25,12 +71,27 @@ export function Switch({ checked, onChange, label, description, disabled }: { ch
   );
 }
 
+/** Roving-tabindex tab strip: the selected tab is in the Tab order, the arrow keys move between tabs. */
 export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: Array<{ id: T; label: string }>; value: T; onChange: (v: T) => void; label: string }) {
   const id = useId();
+  const list = useRef<HTMLDivElement>(null);
+  const onKeyDown = (e: ReactKeyboardEvent) => {
+    const i = tabs.findIndex((tb) => tb.id === value);
+    let next: number | undefined;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (i + 1) % tabs.length;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = tabs.length - 1;
+    const target = next === undefined ? undefined : tabs[next];
+    if (!target) return;
+    e.preventDefault();
+    onChange(target.id);
+    list.current?.querySelector<HTMLElement>(`[data-tab="${CSS.escape(target.id)}"]`)?.focus();
+  };
   return (
-    <div className="tabs" role="tablist" aria-label={label}>
+    <div className="tabs" role="tablist" aria-label={label} ref={list} onKeyDown={onKeyDown}>
       {tabs.map((tab) => (
-        <button key={tab.id} type="button" role="tab" id={`${id}-${tab.id}`} aria-selected={value === tab.id} tabIndex={value === tab.id ? 0 : -1} onClick={() => onChange(tab.id)}>
+        <button key={tab.id} type="button" role="tab" id={`${id}-${tab.id}`} data-tab={tab.id} aria-selected={value === tab.id} tabIndex={value === tab.id ? 0 : -1} onClick={() => onChange(tab.id)}>
           {tab.label}
         </button>
       ))}
@@ -174,7 +235,8 @@ export function useDismiss(ref: RefObject<HTMLElement>, active: boolean, onDismi
 
 /**
  * Small anchored layer under its trigger. Render the trigger as `trigger`; `children` appear while `open`.
- * Escape and outside clicks call `onClose`; focus moves into the layer when it opens.
+ * Escape and outside clicks call `onClose`; focus moves into the layer when it opens and goes back
+ * to the trigger when it closes. Arrow keys walk any `role="menuitem"` buttons inside.
  */
 export function Popover({ open, onClose, trigger, children, label, align = "start", className }: { open: boolean; onClose: () => void; trigger: ReactNode; children: ReactNode; label: string; align?: "start" | "end"; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -182,21 +244,78 @@ export function Popover({ open, onClose, trigger, children, label, align = "star
   useDismiss(ref, open, onClose);
   useEffect(() => {
     if (!open) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const el = layer.current;
-    if (!el) return;
-    const first = el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]:not([tabindex='-1'])");
-    (first ?? el).focus({ preventScroll: true });
+    if (el) {
+      const first = el.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]:not([tabindex='-1'])");
+      (first ?? el).focus({ preventScroll: true });
+    }
+    return () => restoreFocus(opener);
   }, [open]);
   return (
     <div className={`pop-wrap ${className ?? ""}`.trim()} ref={ref}>
       {trigger}
       {open ? (
-        <div className={`popover align-${align}`} role="dialog" aria-label={label} ref={layer} tabIndex={-1}>
+        <div className={`popover align-${align}`} role="dialog" aria-label={label} ref={layer} tabIndex={-1} onKeyDown={(e) => menuKeys(e, layer.current)}>
           {children}
         </div>
       ) : null}
     </div>
   );
+}
+
+// ---------- confirmation ----------
+
+export interface ConfirmOptions {
+  title: string;
+  /** What will happen, in one or two sentences. */
+  body?: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  /** Paint the confirm button as destructive. */
+  danger?: boolean;
+}
+
+function ConfirmDialog({ pending, onSettle }: { pending: ConfirmOptions | undefined; onSettle: (v: boolean) => void }) {
+  return (
+    <Dialog open={pending !== undefined} onClose={() => onSettle(false)} title={pending?.title ?? ""} className="confirm-dialog">
+      {pending?.body ? <div className="confirm-body">{pending.body}</div> : null}
+      <div className="dialog-actions">
+        <button type="button" autoFocus onClick={() => onSettle(false)}>
+          {pending?.cancelLabel ?? t("common.cancel")}
+        </button>
+        <button type="button" className={pending?.danger ? "danger" : "primary"} onClick={() => onSettle(true)}>
+          {pending?.confirmLabel ?? t("common.confirm")}
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * In-app replacement for `window.confirm`: `const { confirm, dialog } = useConfirm()`, render
+ * `{dialog}` once, then `if (await confirm({ title, body, danger: true })) …`.
+ */
+export function useConfirm(): { confirm: (opts: ConfirmOptions) => Promise<boolean>; dialog: ReactNode } {
+  const [pending, setPending] = useState<{ opts: ConfirmOptions; resolve: (v: boolean) => void } | undefined>(undefined);
+  const confirm = useCallback(
+    (opts: ConfirmOptions) =>
+      new Promise<boolean>((resolve) => {
+        setPending((prev) => {
+          prev?.resolve(false);
+          return { opts, resolve };
+        });
+      }),
+    [],
+  );
+  const onSettle = useCallback((v: boolean) => {
+    setPending((prev) => {
+      prev?.resolve(v);
+      return undefined;
+    });
+  }, []);
+  const dialog = <ConfirmDialog pending={pending?.opts} onSettle={onSettle} />;
+  return { confirm, dialog };
 }
 
 /** Modal dialog on the native `<dialog>` element (Escape and backdrop click close it). */
@@ -244,21 +363,26 @@ export function Sheet({ open, onClose, label, children, className }: { open: boo
   const drag = useRef<{ y: number } | undefined>(undefined);
   useEffect(() => {
     if (!open) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const root = ref.current;
+    root?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      else if (root) trapTab(e, root);
     };
     document.addEventListener("keydown", onKey);
     document.body.classList.add("sheet-open");
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.classList.remove("sheet-open");
+      restoreFocus(opener);
     };
   }, [open, onClose]);
   if (!open) return null;
   return (
     <>
       <div className="sheet-backdrop" onClick={onClose} aria-hidden="true" />
-      <div className={`sheet ${className ?? ""}`.trim()} role="dialog" aria-modal="true" aria-label={label} ref={ref}>
+      <div className={`sheet ${className ?? ""}`.trim()} role="dialog" aria-modal="true" aria-label={label} ref={ref} tabIndex={-1}>
         <button
           type="button"
           className="sheet-handle"

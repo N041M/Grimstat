@@ -652,6 +652,7 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
         models: [],
         weapons: [],
         abilityIds: [],
+        stratagemIds: [],
         leaderTo: [],
         supportTo: [],
         composition: col.composition,

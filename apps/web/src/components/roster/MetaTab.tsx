@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { Roster, Snapshot } from "@grimstat/schema";
 import { usePublishedField } from "../../hooks/usePublishedField";
 import { closest, detachmentField, dispositionField, fieldRows, peersFor, sideBySide, tallyOf, type DetachmentFilter, type FieldCount, type FieldNote, type PlacingFilter } from "../../lib/meta";
-import { fmt, fmtInt } from "../../lib/format";
+import { fmt, fmtInt, ordinal } from "../../lib/format";
 import { hrefFor } from "../../router";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead, ProportionBar, SelectBox } from "../kit";
 import { Badge, Empty } from "../ui";
@@ -29,7 +29,6 @@ const NOTE_KEY: Record<FieldNote, I18nKey | undefined> = {
 const NOTE_TONE: Record<FieldNote, "ok" | "warn" | "danger" | "accent" | "brass" | undefined> = { missing: "warn", rare: "brass", more: "accent", fewer: "accent", match: "ok", none: undefined };
 
 const percent = (x: number) => `${Math.round(x * 100)}%`;
-const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th"}`;
 
 /** A 10px mono uppercase label over a 24px mono value — the Statistics tab's tile, verbatim. */
 function Tile({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
@@ -73,15 +72,26 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
   }, [records, fresh, faction]);
   const writeUps = useMemo(() => new Set(peers.map((p) => p.record.source.url ?? p.record.source.title ?? p.record.id)).size, [peers]);
 
-  if (records === undefined) return null;
+  if (records === undefined) {
+    return (
+      <div className="meta-tab">
+        <PanelHead title={t("roster.meta.title", { faction: faction?.name ?? roster.factionId })} />
+        <p className="data-note" role="status" aria-live="polite">
+          {t("roster.meta.loading")}
+        </p>
+      </div>
+    );
+  }
   if (records.length === 0) {
     return (
-      <Empty>
-        <p>{t("roster.meta.empty")}</p>
-        <p>
-          <a href={hrefFor("data")}>{t("roster.meta.emptyLink")}</a>
-        </p>
-      </Empty>
+      <div className="meta-tab">
+        <Empty>
+          <p>{t("roster.meta.empty")}</p>
+          <p>
+            <a href={hrefFor("data")}>{t("roster.meta.emptyLink")}</a>
+          </p>
+        </Empty>
+      </div>
     );
   }
 
@@ -174,7 +184,19 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
                 const r = n.peer.record;
                 return (
                   <GridRow key={r.id} className={`meta-row ${chosen?.peer.record.id === r.id ? "current" : ""}`.trim()} onClick={() => setNearId(r.id)} title={r.heading}>
-                    <GridCell>{r.player ?? "—"}</GridCell>
+                    <GridCell className="meta-near">
+                      <button
+                        type="button"
+                        className="meta-near-btn"
+                        aria-pressed={chosen?.peer.record.id === r.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setNearId(r.id);
+                        }}
+                      >
+                        {r.player ?? "—"}
+                      </button>
+                    </GridCell>
                     <GridCell align="end" mono>
                       {r.placing ? ordinal(r.placing) : "—"}
                     </GridCell>

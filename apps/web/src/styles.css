@@ -3117,11 +3117,18 @@ a.btn:hover {
   gap: 6px;
   margin-top: 10px;
 }
-.slain-row {
+.slain-row,
+.slain-head {
   display: grid;
-  grid-template-columns: 18px 1fr 46px;
+  grid-template-columns: 18px 1fr 46px 62px;
   align-items: center;
   gap: 8px;
+}
+.slain-h {
+  font: 400 9px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
 }
 .slain-n {
   font: 400 11px/1 var(--mono);
@@ -5950,6 +5957,23 @@ button.battle-scope-btn:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding: 16px 0 4px;
+}
+/* Same inset as the Statistics sections: heads and notes sit 22px in, tables bleed to the edges and pad their cells. */
+.meta-tab > .panel-head-row,
+.meta-section > .panel-head-row {
+  padding: 0 22px 10px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.meta-tab > .data-note,
+.meta-section > .data-note,
+.meta-section > .data-empty {
+  margin-left: 22px;
+  margin-right: 22px;
+}
+.meta-tab > .empty {
+  margin: 0 22px;
 }
 .meta-filters {
   display: flex;
@@ -6844,4 +6868,1623 @@ button.battle-scope-btn:hover {
   .codex-landing-tools .codex-tools {
     flex-direction: column;
   }
+}
+
+/* ===== Shell: stacked notices, update banner, offline state, rail labels, confirm dialog ===== */
+.notice-layer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.notice-body {
+  flex: 1;
+  min-width: 0;
+}
+.notice-action {
+  flex: none;
+}
+.update-banner {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 46;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 12px 32px var(--shadow);
+  font-size: 13px;
+  max-width: calc(100vw - 24px);
+}
+.rail-offline {
+  flex: none;
+  margin-bottom: 6px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font: 600 8px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: help;
+}
+.rail-item {
+  position: relative;
+}
+.rail-label {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font: 500 11px/1.2 var(--font);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 30;
+}
+.rail-item:hover .rail-label,
+.rail-item:focus-visible .rail-label {
+  opacity: 1;
+}
+@media (max-width: 899px) {
+  .rail-item {
+    flex-direction: column;
+    gap: 3px;
+    width: auto;
+    min-width: 34px;
+    height: 44px;
+    padding: 0 3px;
+  }
+  .rail-label {
+    position: static;
+    transform: none;
+    opacity: 1;
+    padding: 0;
+    background: none;
+    color: inherit;
+    font: 500 7px/1 var(--mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transition: none;
+  }
+  .rail-offline {
+    margin-bottom: 0;
+    margin-right: 6px;
+  }
+}
+.ctx-row.inert {
+  cursor: default;
+}
+.ctx-row.inert:hover {
+  background: transparent;
+}
+.confirm-dialog .dialog-inner {
+  width: min(94vw, 420px);
+}
+.confirm-body {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ===== Armies list: filter row and the failed-read state ===== */
+.army-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.army-filter input {
+  flex: 1;
+  min-width: 0;
+  max-width: 320px;
+}
+.army-load-error {
+  padding: 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.army-load-error p {
+  margin: 0;
+}
+
+/* ===== Roster units table on phones =====
+   The five-column grid needs about 640px, and the narrow editor hides horizontal overflow, so the
+   row is rebuilt as two lines: name and role on the first, models, points and status on the second.
+   Each numeric cell carries a bare `.ut-num` for the table and a worded `.ut-phrase` for this
+   layout, so the second line reads as a sentence rather than as three loose figures. */
+.ut-num {
+  display: inline;
+}
+.ut-phrase {
+  display: none;
+}
+@media (max-width: 899px) {
+  .ut-table .gtable-head {
+    display: none;
+  }
+  .ut-table .gtable-row {
+    grid-template-columns: auto auto 1fr;
+    grid-template-areas:
+      "unit unit role"
+      "models points status"
+      "actions actions actions";
+    column-gap: 14px;
+    row-gap: 4px;
+    align-items: baseline;
+  }
+  .ut-table .gtable-row > .ut-unit {
+    grid-area: unit;
+    min-width: 0;
+  }
+  .ut-table .gtable-row > .ut-role {
+    grid-area: role;
+    justify-self: end;
+    text-align: right;
+  }
+  .ut-table .gtable-row > .ut-models {
+    grid-area: models;
+  }
+  .ut-table .gtable-row > .ut-points {
+    grid-area: points;
+  }
+  .ut-table .gtable-row > .ut-status {
+    grid-area: status;
+    justify-self: start;
+  }
+  .ut-table .gtable-row > .ut-models,
+  .ut-table .gtable-row > .ut-points,
+  .ut-table .gtable-row > .ut-status {
+    text-align: left;
+  }
+  .ut-table .gtable-row > .ut-role,
+  .ut-table .gtable-row > .ut-models,
+  .ut-table .gtable-row > .ut-points,
+  .ut-table .gtable-row > .ut-status {
+    font: 400 10px/1.6 var(--mono);
+    color: var(--muted);
+  }
+  .ut-table .ut-num {
+    display: none;
+  }
+  .ut-table .ut-phrase {
+    display: inline;
+  }
+  .ut-table .ut-actions {
+    grid-area: actions;
+    position: static;
+    transform: none;
+    visibility: visible;
+    padding: 6px 0 0;
+    background: none;
+  }
+  /* In selection mode the checkbox keeps its own leading column. */
+  .ut-table.selecting .gtable-row {
+    grid-template-columns: 28px auto 1fr;
+    grid-template-areas:
+      "pick unit role"
+      "pick models points"
+      "actions actions actions";
+  }
+  .ut-table.selecting .gtable-row > .ut-check {
+    grid-area: pick;
+  }
+  .ut-table.selecting .gtable-row > .ut-status {
+    display: none;
+  }
+}
+
+/* ---------- UX pass: fetch progress, CLI disclosures, tier legend, error details ---------- */
+
+/* Progress line beside a running fetch (published corpus, published layouts). */
+.fetch-progress {
+  font-variant-numeric: tabular-nums;
+}
+/* Actions offered by an empty stored-snapshots list. */
+.data-empty-actions {
+  margin-top: 12px;
+}
+/* The intro under the fetch panel's heading. */
+.src-intro {
+  max-width: 78ch;
+}
+/* "Using the CLI": the shell commands, folded away until asked for. */
+.cli-details {
+  margin-top: 10px;
+  font: 400 12px/1.6 var(--font);
+  color: var(--faint);
+}
+.cli-details > summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.cli-details > summary:hover {
+  color: var(--ink);
+}
+.cli-details p {
+  margin: 6px 0 0;
+}
+.cli-details p.mono,
+.cli-details .data-note.mono {
+  font-family: var(--mono);
+  word-break: break-all;
+}
+/* Tier vocabulary under the ability search, and the cut-list line beneath the results. */
+.tier-legend,
+.ability-truncated {
+  margin: 0;
+  text-wrap: pretty;
+}
+.tier-badge {
+  display: inline-flex;
+}
+/* About: what each stat tile counts, visible rather than only in a tooltip. */
+.about-stat-note {
+  margin: 4px 0 0;
+  font: 400 11px/1.5 var(--font);
+  color: var(--faint);
+  text-wrap: pretty;
+}
+.about-details {
+  margin-top: 12px;
+  font: 400 12px/1.6 var(--font);
+}
+.about-details > summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.about-details > summary:hover {
+  color: var(--ink);
+}
+.about-details .about-kv {
+  margin-top: 8px;
+}
+/* Error boxes: actions on one row, the stack folded away. */
+.error-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.error-details {
+  margin-top: 8px;
+}
+.error-details > summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.startup-error {
+  max-width: 720px;
+  margin: 40px auto;
+}
+
+/* ===== Dashboard: per-panel hide control =====
+   A quiet corner button that only shows on hover or keyboard focus, so the panel chrome stays
+   clean while the control is still reachable. */
+.widget {
+  position: relative;
+}
+.widget-hide-corner {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 3;
+}
+.widget-hide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.widget:hover .widget-hide,
+.widget-hide:focus-visible {
+  opacity: 1;
+}
+.widget-hide:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+@media (hover: none) {
+  .widget-hide {
+    opacity: 1;
+  }
+}
+
+/* ===== Battle table: the toolbar over the table, refusals, trait help and the force select ===== */
+
+/* The table's own controls, over the near edge of the board. Everything a keyboard does to the
+   selection has a button here, so a finger can play the table too. */
+.battle-toolbar {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  width: fit-content;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-input);
+  background: rgba(21, 22, 26, 0.72);
+}
+/* `display: flex` above would otherwise win against the browser's rule for the hidden attribute. */
+.battle-toolbar[hidden] {
+  display: none;
+}
+.battle-toolbar button[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+.battle-toolbar .battle-hist {
+  gap: 2px;
+}
+
+/* What the table refused, where the table is. It clears itself after a few seconds. */
+.battle-refusal {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(201, 70, 75, 0.9);
+  background: rgba(21, 22, 26, 0.92);
+  color: #f0b2b4;
+  font: 500 11px/1.4 var(--mono);
+  text-align: center;
+}
+
+/* A terrain trait and the line that says what it does. */
+.battle-traits label.battle-trait {
+  align-items: flex-start;
+  gap: 6px;
+}
+.battle-trait-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.battle-trait-name {
+  line-height: 1.4;
+}
+.battle-trait-help {
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Which army a side is playing. */
+.battle-force {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font: 400 11px/1.6 var(--mono);
+  color: var(--muted);
+}
+.battle-force select {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+/* ===== Statistics tiles on phones =====
+   Points now carry thousands separators ("410 / 2,000"), which no longer fit the 24px metric type
+   inside a half-width tile, so the type and the padding step down below 900px. */
+@media (max-width: 899px) {
+  .stat-tile {
+    padding: 10px 14px 11px;
+  }
+  .stat-tile-value {
+    font-size: 19px;
+  }
+}
+
+/* ===== Phone context bar: page actions =====
+   The Calculator has no page header, so its Save, Share and New actions are portalled here on
+   phones. The bar keeps the context button on the left and lets the actions scroll if they
+   outgrow the width. */
+.ctx-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ctx-bar-actions::-webkit-scrollbar {
+  display: none;
+}
+.ctx-bar-action {
+  flex: none;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  background: var(--panel);
+  color: var(--ink);
+  font: 500 12px/1.3 var(--font);
+  cursor: pointer;
+}
+.ctx-bar-action:hover {
+  background: var(--hover);
+}
+
+/* ===== Dashboard: hide control inside a panel head =====
+   Flush panels carry the control in an absolutely placed corner; panels with a head put it beside
+   the title instead, so the head becomes a row. */
+.widget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.widget-head-tools {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ===== Armies → Stratagems =====
+   One card per stratagem, grouped by where it reaches the list from. The rule is printed as its
+   WHEN / TARGET / EFFECT / RESTRICTIONS parts when the source decomposed it, and as one block of
+   text when it did not. */
+.army-strats {
+  padding: 16px 22px 24px;
+}
+.army-strats .data-note {
+  margin: 0 0 12px;
+}
+.strat-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.strat-search {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 320px;
+}
+.strat-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.strat-phases .pill-chip {
+  text-transform: capitalize;
+}
+.strat-group {
+  margin-bottom: 20px;
+}
+.strat-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+  font: 600 13px/1.3 var(--font);
+}
+.strat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.strat-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 10px 12px 11px;
+}
+.strat-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.strat-name {
+  margin: 0;
+  font: 600 13px/1.3 var(--font);
+  color: var(--ink);
+}
+.strat-cp {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  font: 600 10px/1.4 var(--mono);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.strat-meta {
+  margin-top: 3px;
+  font: 400 10px/1.5 var(--mono);
+  color: var(--faint);
+  text-transform: capitalize;
+}
+.strat-parts {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 5px;
+}
+.strat-parts > div {
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 8px;
+}
+.strat-parts dt {
+  font: 600 9px/1.6 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--faint);
+}
+.strat-parts dd {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.strat-text {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.strat-units {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 11px;
+  color: var(--muted);
+}
+.strat-none {
+  color: var(--muted);
+  font-size: 13px;
+}
+@media (max-width: 899px) {
+  .army-strats {
+    padding: 14px;
+  }
+  .strat-cards {
+    grid-template-columns: 1fr;
+  }
+  .strat-parts > div {
+    grid-template-columns: 1fr;
+    gap: 1px;
+  }
+}
+
+/* ===== Play: the companion used at the table =====
+   Phone-first and thumb-sized. The scoreboard and phase strip stay put while the body scrolls, so
+   the score, the round and the next-phase control are always one glance and one tap away. */
+/* The main region scrolls its own content elsewhere, but this screen keeps a fixed scoreboard and
+   phase strip with only the body scrolling, so it takes the region's height and manages the rest. */
+.main-region:has(> .play-screen) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.play-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.play-scoreboard {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "rounds cp"
+    "scores cp";
+  gap: 6px 14px;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--rail);
+  border-bottom: 1px solid var(--line);
+}
+.sb-rounds {
+  grid-area: rounds;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.sb-pip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font: 600 11px/1 var(--mono);
+  color: var(--faint);
+}
+.sb-pip.past {
+  color: var(--muted);
+  background: var(--fill);
+}
+.sb-pip.on {
+  background: var(--btn-bg);
+  border-color: var(--btn-bg);
+  color: var(--btn-fg);
+}
+.sb-turn {
+  margin-left: 4px;
+  font: 500 11px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.sb-scores {
+  grid-area: scores;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.sb-score-k {
+  font: 500 9px/1.3 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+.sb-score-v {
+  font: 600 26px/1 var(--mono);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.sb-score.ahead .sb-score-v {
+  color: var(--accent);
+}
+.sb-dash {
+  color: var(--dim);
+  font: 600 20px/1 var(--mono);
+}
+.sb-cp {
+  grid-area: cp;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sb-cp-btn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  background: var(--panel);
+  font: 600 18px/1 var(--mono);
+  color: var(--ink);
+  cursor: pointer;
+}
+.sb-cp-btn:disabled {
+  color: var(--dim);
+  cursor: default;
+}
+.sb-cp-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 34px;
+}
+.sb-cp-n {
+  font: 600 20px/1 var(--mono);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.sb-cp-k {
+  font: 500 9px/1.4 var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+.play-phases {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.ph-list {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+}
+.ph-list::-webkit-scrollbar {
+  display: none;
+}
+.ph-step {
+  flex: none;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font: 500 12px/1.2 var(--font);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ph-step.on {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+}
+.ph-next {
+  flex: none;
+}
+.play-views {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.play-view-tab {
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font: 500 13px/1.3 var(--font);
+  color: var(--muted);
+  cursor: pointer;
+}
+.play-view-tab.on {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+.play-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px 24px;
+}
+.play-over {
+  flex: none;
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--fill);
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (min-width: 900px) {
+  .play-scoreboard {
+    padding: 14px 22px;
+  }
+  .play-phases,
+  .play-views {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  .play-body {
+    padding: 18px 22px 28px;
+  }
+}
+
+/* ===== Play: the end-of-game summary ===== */
+.play-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sum-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.sum-tile {
+  background: var(--bg);
+  padding: 10px 14px 11px;
+  min-width: 0;
+}
+.sum-tile-k {
+  font: 500 9px/1.4 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--faint);
+  margin-bottom: 5px;
+}
+.sum-tile-v {
+  font: 600 22px/1.1 var(--mono);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.sum-est-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sum-est-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.sum-est-name {
+  font-size: 12px;
+  color: var(--ink-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sum-est-v {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---------- Play: unit roll and odds panel ----------
+   Phone-first: one column, 44px tap targets, no hover-only affordances. The wound bar carries its
+   own tone tokens so a damaged unit reads at arm's length across both themes. */
+.play-roll {
+  --roll-ok: #3f9e6c;
+  --roll-hurt: #b8842a;
+  --roll-low: #c8352b;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+:root[data-theme="dark"] .play-roll {
+  --roll-ok: #4fb37c;
+  --roll-hurt: #d1a04a;
+  --roll-low: #e05a4f;
+}
+.roll-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.roll-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.roll-title {
+  margin: 0;
+  font: 600 13px/1.3 var(--font);
+}
+.roll-tally {
+  font: 600 11px/1.4 var(--mono);
+  color: var(--muted);
+}
+.roll-empty {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed var(--dash);
+  border-radius: var(--radius);
+}
+.roll-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.roll-row {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.roll-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.roll-name {
+  font: 600 15px/1.25 var(--font);
+  color: var(--ink);
+}
+.roll-count {
+  font: 600 15px/1.2 var(--mono);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.roll-bar {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--track);
+  overflow: hidden;
+}
+.roll-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--roll-ok);
+  transition: width 120ms linear;
+}
+.roll-row[data-tone="hurt"] .roll-bar > span {
+  background: var(--roll-hurt);
+}
+.roll-row[data-tone="low"] .roll-bar > span {
+  background: var(--roll-low);
+}
+.roll-row[data-tone="low"] .roll-count {
+  color: var(--roll-low);
+}
+.roll-sub {
+  font-family: var(--mono);
+}
+.roll-hits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.roll-hit {
+  min-width: 52px;
+  min-height: 44px;
+  justify-content: center;
+  font: 600 15px/1 var(--mono);
+}
+.roll-back {
+  color: var(--roll-ok);
+}
+.roll-more {
+  min-height: 44px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+.roll-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.roll-flag {
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font: 500 12px/1 var(--font);
+  color: var(--ink-2);
+}
+.roll-flag.on {
+  background: var(--btn-bg);
+  border-color: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: 600;
+}
+.roll-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.roll-custom {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.roll-custom button {
+  min-height: 44px;
+}
+.roll-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.roll-field.wide {
+  flex: 1;
+}
+.roll-field input,
+.roll-field select {
+  min-height: 44px;
+  width: 100%;
+}
+.roll-field input[type="number"] {
+  width: 5.5em;
+}
+.roll-label {
+  font: 600 9px/1.6 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--faint);
+}
+.roll-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.roll-gone {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  background: var(--rail);
+  border-style: dashed;
+}
+.roll-gone-name {
+  font: 500 14px/1.25 var(--font);
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.roll-gone-tag {
+  color: var(--faint);
+  margin-right: auto;
+}
+.roll-gone button {
+  min-height: 36px;
+}
+.roll-add-open {
+  min-height: 44px;
+  justify-content: center;
+  border-style: dashed;
+  color: var(--ink-2);
+}
+.roll-add {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.roll-add-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 8px;
+}
+.roll-add-stats .roll-field input[type="number"] {
+  width: 100%;
+}
+.roll-add-actions {
+  display: flex;
+  gap: 8px;
+}
+.roll-add-actions button {
+  flex: 1;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.play-odds {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.odds-empty,
+.odds-idle,
+.odds-tracked,
+.odds-read {
+  margin: 0;
+}
+.odds-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.odds-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.odds-field select,
+.odds-field input {
+  min-height: 44px;
+  width: 100%;
+}
+.odds-label {
+  font: 600 9px/1.6 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--faint);
+}
+.odds-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.odds-chip {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  font: 500 12px/1 var(--font);
+  color: var(--ink-2);
+}
+.odds-chip.on {
+  background: var(--btn-bg);
+  border-color: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: 600;
+}
+.odds-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.odds-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.odds-metric-label {
+  font: 600 9px/1.6 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--faint);
+}
+.odds-metric-value {
+  font: 600 22px/1.1 var(--mono);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.odds-metric-note {
+  font-family: var(--mono);
+}
+.odds-read {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.odds-apply {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.odds-apply .odds-field {
+  flex: none;
+  width: 6.5em;
+}
+.odds-apply button {
+  flex: 1;
+  min-height: 44px;
+  justify-content: center;
+}
+@media (max-width: 899px) {
+  .odds-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .roll-row {
+    padding: 12px;
+  }
+}
+
+/* ===== Play: the setup screen, the game column, the stratagem list and the score grid =====
+   Phone-first. One column, every control at least a thumb high, and no affordance that only
+   appears on hover, because at the table the finger is the only pointer. */
+.setup-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px 16px;
+}
+.setup-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  max-width: 460px;
+}
+.setup-form input,
+.setup-form select {
+  min-height: 44px;
+}
+.setup-start {
+  min-height: 44px;
+  justify-content: center;
+}
+.setup-none {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.setup-games {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.setup-game {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.setup-game-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-height: 58px;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--rail);
+  border-color: var(--line);
+}
+.setup-game-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.setup-game-name {
+  font: 600 14px/1.3 var(--font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.setup-game-score {
+  flex: none;
+  font: 500 14px/1.2 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.setup-game-meta {
+  font: 400 11px/1.3 var(--mono);
+  color: var(--faint);
+}
+.setup-game-del {
+  flex: none;
+  width: 44px;
+  justify-content: center;
+}
+
+.play-gs {
+  display: flex;
+  flex-direction: column;
+}
+.play-gs-name {
+  width: 100%;
+  margin: 0 0 2px -5px;
+  padding: 2px 4px;
+  font: 600 15px/1.25 var(--font);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-input);
+}
+.play-gs-name:focus {
+  background: var(--panel);
+  border-color: var(--dash);
+}
+.play-gs-finish {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.play-gs-finish button {
+  width: 100%;
+  min-height: 40px;
+  justify-content: center;
+}
+.play-gs-sec {
+  border-bottom: 1px solid var(--line);
+}
+.play-gs-head {
+  display: block;
+  padding: 12px 16px 4px;
+}
+.play-gs-log {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 10px;
+  max-height: 44vh;
+  overflow: auto;
+}
+.play-gs-log-row {
+  display: grid;
+  gap: 1px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.play-gs-log-row:first-child {
+  border-top: 0;
+}
+.play-gs-log-when {
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+.play-gs-log-text {
+  font: 400 12px/1.45 var(--font);
+  color: var(--ink-2);
+}
+
+.pstrat-now {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pstrat-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 2px;
+}
+.pstrat-search {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+}
+.pstrat-tools .pill-chip {
+  min-height: 40px;
+}
+.pstrat-group {
+  margin-top: 16px;
+}
+.pstrat-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  font: 600 12px/1.3 var(--font);
+}
+.pstrat-cards {
+  display: grid;
+  gap: 8px;
+}
+.pstrat-card {
+  padding: 12px 13px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.pstrat-card.short {
+  opacity: 0.5;
+}
+.pstrat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pstrat-name {
+  margin: 0;
+  font: 600 14px/1.3 var(--font);
+}
+.pstrat-use {
+  flex: none;
+  min-height: 40px;
+  white-space: nowrap;
+}
+.pstrat-meta {
+  margin-top: 4px;
+  font: 400 11px/1.4 var(--mono);
+  color: var(--faint);
+}
+.pstrat-none {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.pstrat-showall {
+  min-height: 36px;
+}
+@media (min-width: 900px) {
+  .pstrat-cards {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+}
+
+.sec {
+  display: grid;
+  gap: 12px;
+}
+.sec-totals {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 12px;
+  background: var(--rail);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.sec-total {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+}
+.sec-total-k {
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+}
+.sec-total-v {
+  font: 600 38px/1.05 var(--font);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.sec-total.ahead .sec-total-v {
+  color: var(--ink);
+}
+.sec-total-m {
+  font: 400 10px/1.3 var(--mono);
+  color: var(--faint);
+}
+.sec-total-dash {
+  font: 400 22px/1 var(--font);
+  color: var(--dim);
+}
+.sec-scroll {
+  overflow-x: auto;
+}
+.sec-grid {
+  min-width: 340px;
+}
+.sec-grid .gtable-head,
+.sec-grid .gtable-row {
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: default;
+}
+.sec-grid .gtable-row:hover {
+  background: transparent;
+}
+.sec-grid .gtable-row .gtable-cell:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  overflow: visible;
+}
+input.sec-in {
+  width: 100%;
+  min-height: 40px;
+  padding: 4px 6px;
+  text-align: right;
+  font: 500 14px/1.2 var(--mono);
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+input.sec-in::-webkit-outer-spin-button,
+input.sec-in::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.sec-line {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.sec-line-name {
+  font: 500 12px/1.3 var(--font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sec-cap {
+  font: 400 10px/1.2 var(--mono);
+  color: var(--faint);
+}
+.sec-del {
+  flex: none;
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  justify-content: center;
+}
+.sec-foot {
+  background: var(--fill);
+  font-weight: 600;
+}
+.sec-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sec-add-name {
+  flex: 1 1 160px;
+  min-width: 0;
+  min-height: 44px;
+}
+input.sec-add-cap {
+  width: 84px;
+  min-height: 44px;
+}
+.sec-add button {
+  min-height: 44px;
+}
+.sec-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ===== Play: focus mode =====
+   On a phone the navigation bar sits right under the thumb that taps "next phase" all game. While
+   focus is on the rail is hidden, so the only way off the screen is the control that says so. The
+   class is on the body because the rail belongs to the shell rather than to the page. */
+body.play-focused .shell.narrow .rail {
+  display: none;
+}
+body.play-focused .shell.narrow {
+  grid-template-rows: minmax(0, 1fr);
+}
+.ctx-bar-action.on {
+  background: var(--btn-bg);
+  border-color: var(--btn-bg);
+  color: var(--btn-fg);
+}
+.play-focus-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--rail);
+  font: 400 11px/1.4 var(--mono);
+  color: var(--muted);
 }

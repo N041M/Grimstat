@@ -118,7 +118,7 @@ function WeaponTable({ kind, groups }: { kind: WeaponProfile["kind"]; groups: We
                     {dice(p.profile.D)}
                   </GridCell>
                   <GridCell tone="muted" className="codex-wrap">
-                    {keywordsToText(p.profile.keywords) || "—"}
+                    {keywordsToText(p.profile.keywords) || "–"}
                   </GridCell>
                 </GridRow>
               ))}
@@ -304,7 +304,7 @@ function Keywords({ ds }: { ds: Datasheet }) {
               </span>
             ))
           ) : (
-            <span className="t-meta">—</span>
+            <span className="t-meta">–</span>
           )}
         </div>
       </div>
@@ -318,7 +318,7 @@ function Keywords({ ds }: { ds: Datasheet }) {
               </span>
             ))
           ) : (
-            <span className="t-meta">—</span>
+            <span className="t-meta">–</span>
           )}
         </div>
       </div>

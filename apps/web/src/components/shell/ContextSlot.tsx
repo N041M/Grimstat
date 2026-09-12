@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
  * re-renders the whole shell.
  */
 
-const store: { host: HTMLElement | null; fills: number } = { host: null, fills: 0 };
+const store: { host: HTMLElement | null; fills: number; bar: HTMLElement | null } = { host: null, fills: 0, bar: null };
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -35,6 +35,17 @@ export function registerContextHost(el: HTMLElement | null): void {
   emit();
 }
 
+/**
+ * The phone bar's action area. The shell only renders it below 900px, so a page may always fill
+ * this slot: on a wide screen there is no host and the portal renders nothing.
+ */
+export function registerBarHost(el: HTMLElement | null): void {
+  if (store.bar === el) return;
+  store.bar = el;
+  emit();
+}
+
+const getBar = () => store.bar;
 const getHost = () => store.host;
 const getFills = () => store.fills > 0;
 const serverFalse = () => false;
@@ -59,14 +70,26 @@ export function ContextSlot({ children }: { children: ReactNode }) {
   return host ? createPortal(children, host) : null;
 }
 
+/** A page's primary actions, shown beside the context button on phones. */
+export function BarSlot({ children }: { children: ReactNode }) {
+  const host = useSyncExternalStore(subscribe, getBar, serverNull);
+  return host ? createPortal(children, host) : null;
+}
+
 /** Test/StrictMode escape hatch: forget the registered host. */
 export function resetContextSlot(): void {
   store.host = null;
   store.fills = 0;
+  store.bar = null;
   emit();
 }
 
 /** Ref callback for the shell's slot element. */
 export function useContextHostRef(): (el: HTMLElement | null) => void {
   return useCallback((el: HTMLElement | null) => registerContextHost(el), []);
+}
+
+/** Ref callback for the phone bar's action element. */
+export function useBarHostRef(): (el: HTMLElement | null) => void {
+  return useCallback((el: HTMLElement | null) => registerBarHost(el), []);
 }

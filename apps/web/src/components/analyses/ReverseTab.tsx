@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ScenarioUnit, Snapshot } from "@grimstat/schema";
 import { useApp } from "../../state/AppContext";
 import { navigate } from "../../router";
@@ -7,11 +7,13 @@ import { useWorkerTask } from "../../hooks/useWorkerTask";
 import { useUnitSet } from "../../hooks/useUnitSet";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { cloneUnit, modelCount } from "../../lib/scenario";
-import type { UnitEntry } from "../../lib/unitSet";
+import { UNIT_SET_KEYS, type UnitEntry } from "../../lib/unitSet";
 import type { ReverseInput, ReverseResult, ReverseRow } from "../../lib/gameExtras";
 import { fmt, fmtInt, pct } from "../../lib/format";
+import { download } from "../../lib/download";
+import { reverseToCsv } from "../../lib/matrixCsv";
 import { UnitSetPicker } from "./UnitSetPicker";
-import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunStatus, WarningList, parseAnalysisContext, type AnalysisContext } from "./shared";
+import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunActions, RunStatus, WarningList, parseAnalysisContext, useAnalysisHeader, type AnalysisContext } from "./shared";
 import { Badge, Field } from "../ui";
 import { t } from "../../i18n";
 
@@ -137,7 +139,7 @@ export function ReverseTab() {
   const target = useUnitSet("analyses.reverse.target");
   const candidates = useUnitSet("analyses.reverse.candidates");
   const [opts, setOpts] = usePersistedSetting<ReverseOptions>("analyses.reverse.options", DEFAULT_OPTIONS, parseOptions);
-  const task = useWorkerTask(runReverse);
+  const task = useWorkerTask(runReverse, "analyses.reverse");
   const [ran, setRan] = useState<{ target: UnitEntry; candidates: UnitEntry[]; metric: Metric; threshold: number; fp: string } | undefined>(undefined);
 
   const unit = target.entries[0];
@@ -168,14 +170,37 @@ export function ReverseTab() {
 
   const meeting = task.result ? task.result.rows.filter((r) => r.meets).length : 0;
 
+  const exportCsv = () => {
+    if (!task.result) return;
+    download(`grimstat-reverse-${new Date().toISOString().slice(0, 10)}.csv`, reverseToCsv(task.result), "text/csv");
+  };
+
+  // Header actions call through a ref so they never run against a stale closure.
+  const handlers = useRef({ run, cancel: task.cancel, exportCsv });
+  handlers.current = { run, cancel: task.cancel, exportCsv };
+  const hasResult = !!task.result;
+  useAnalysisHeader(
+    () => ({
+      subtitle: unit ? t("analyses.reverse.sub", { name: unit.unit.name, n: candidates.entries.length }) : t("analyses.reverse.subIdle"),
+      actions: (
+        <RunActions canRun={canRun} running={task.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()} runLabel={t("analyses.reverse.run")}>
+          <button type="button" disabled={!hasResult} onClick={() => handlers.current.exportCsv()}>
+            {t("analyses.exportCsv")}
+          </button>
+        </RunActions>
+      ),
+    }),
+    [canRun, hasResult, task.running, unit?.unit.name, candidates.entries.length],
+  );
+
   return (
     <div className="analysis">
       <aside className="analysis-controls stack">
         <section className="panel">
-          <UnitSetPicker label={t("analyses.reverse.target")} entries={target.entries} onChange={target.setEntries} single />
+          <UnitSetPicker label={t("analyses.reverse.target")} storageKey={UNIT_SET_KEYS.reverseTarget} entries={target.entries} onChange={target.setEntries} single />
         </section>
         <section className="panel">
-          <UnitSetPicker label={t("analyses.reverse.candidates")} entries={candidates.entries} onChange={candidates.setEntries} archetypeFilter="attackers" />
+          <UnitSetPicker label={t("analyses.reverse.candidates")} storageKey={UNIT_SET_KEYS.reverseCandidates} entries={candidates.entries} onChange={candidates.setEntries} archetypeFilter="attackers" />
         </section>
         <section className="panel stack" aria-labelledby="rev-opt-h">
           <h3 id="rev-opt-h" style={{ margin: 0 }}>
@@ -193,7 +218,7 @@ export function ReverseTab() {
             </Field>
             <Field label={t("analyses.reverse.threshold")} hint={thresholdHint}>
               <span className="row" style={{ gap: "0.3rem" }}>
-                <input type="number" min={0} step={opts.metric === "pKill" ? 0.05 : 1} max={opts.metric === "pKill" ? 1 : undefined} value={threshold} onChange={(e) => setOpts((o) => ({ ...o, threshold: Number.isFinite(Number(e.target.value)) ? Number(e.target.value) : null }))} />
+                <input type="number" min={0} step={opts.metric === "pKill" ? 0.05 : 1} max={opts.metric === "pKill" ? 1 : undefined} value={threshold} onChange={(e) => setOpts((o) => ({ ...o, threshold: e.target.value.trim() === "" || !Number.isFinite(Number(e.target.value)) ? null : Number(e.target.value) }))} />
                 {opts.threshold !== null ? (
                   <button type="button" className="ghost sm" onClick={() => setOpts((o) => ({ ...o, threshold: null }))}>
                     {t("analyses.reverse.thresholdReset")}
@@ -214,15 +239,10 @@ export function ReverseTab() {
             </Field>
           </div>
           <AnalysisContextControls value={opts.context} onChange={(context) => setOpts((o) => ({ ...o, context }))} />
-          <div className="row">
-            <button type="button" className="primary" disabled={!canRun || task.running} onClick={run}>
-              {t("analyses.reverse.run")}
-            </button>
-          </div>
         </section>
       </aside>
       <section className="analysis-results stack">
-        <RunStatus task={task} extra={dirty ? t("analyses.stale") : undefined} />
+        <RunStatus task={task} stale={dirty} />
         {task.result && ran ? (
           <>
             <h3 style={{ margin: 0 }}>{t("analyses.reverse.title", { name: ran.target.unit.name })}</h3>

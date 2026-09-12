@@ -31,6 +31,22 @@ export function metricLabel(metric: MatrixMetric): string {
   }
 }
 
+/** The notation behind a metric label ("E[damage]"), shown as a title only. */
+export function metricNotation(metric: MatrixMetric): string {
+  switch (metric) {
+    case "damage":
+      return t("analyses.metric.damage.notation");
+    case "slain":
+      return t("analyses.metric.slain.notation");
+    case "pKill":
+      return t("analyses.metric.pKill.notation");
+    case "damagePer100":
+      return t("analyses.metric.damagePer100.notation");
+    case "pointsPer100":
+      return t("analyses.metric.pointsPer100.notation");
+  }
+}
+
 export function formatMetric(metric: MatrixMetric, v: number | undefined): string {
   if (v === undefined) return "–";
   return metric === "pKill" ? pct(v, 0) : fmt(v, 1);
@@ -103,7 +119,9 @@ export function HeatLegend({ matrix, metric }: { matrix: MatrixResult; metric: M
   const swatches = useMemo(() => heatRamp(model.min, model.max), [model.min, model.max]);
   return (
     <div className="mx-legend">
-      <span className="t-micro mx-legend-label">{metricLabel(metric)}</span>
+      <span className="t-micro mx-legend-label" title={metricNotation(metric)}>
+        {metricLabel(metric)}
+      </span>
       <span className="mx-legend-strip" aria-hidden="true">
         {swatches.map((s, i) => (
           <span key={i} style={{ background: s.background }} />

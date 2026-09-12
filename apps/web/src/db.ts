@@ -3,6 +3,7 @@ import type { Roster, Scenario, Snapshot } from "@grimstat/schema";
 import type { StoredPublishedList } from "@grimstat/adapters";
 import type { OverrideRecord } from "./lib/overrides";
 import type { ResolvedSummary } from "./lib/meta";
+import type { GameState, LogEntry } from "./lib/game";
 import type { Layout } from "react-grid-layout";
 
 /** Persisted dashboard layout for one dashboard id (e.g. "calculator"). */
@@ -77,6 +78,26 @@ export interface ResolvedListRecord extends ResolvedSummary {
   stamp: string;
 }
 
+/**
+ * A game being played, or one that has been. The state and its log are stored whole: a game is
+ * small, it is written a few times a minute at most, and keeping it in one record means a reload at
+ * the table restores exactly what was on screen.
+ */
+export interface GameRecord {
+  id: string;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+  /** Name of the opponent or the event, whatever the player typed. */
+  name: string;
+  /** The army being played, when it came from the builder. */
+  rosterId?: string;
+  snapshotId?: string;
+  state: GameState;
+  log: LogEntry[];
+}
+
 export type { OverrideRecord } from "./lib/overrides";
 export { overrideKey } from "./lib/overrides";
 
@@ -91,6 +112,7 @@ export class GrimstatDb extends Dexie {
   terrainLayouts!: Table<TerrainLayoutRecord, string>;
   publishedLists!: Table<PublishedListRecord, string>;
   publishedResolved!: Table<ResolvedListRecord, string>;
+  games!: Table<GameRecord, string>;
 
   constructor(name = "grimstat") {
     super(name);
@@ -155,6 +177,20 @@ export class GrimstatDb extends Dexie {
       publishedLists: "id, faction, placing, importedAt",
       publishedResolved: "&key, snapshotId, recordId",
     });
+    // v7: games in progress for the play assistant.
+    this.version(7).stores({
+      snapshots: "id, gameSystemId, updatedAt",
+      scenarios: "id, name, updatedAt, snapshotId",
+      layouts: "id",
+      settings: "key",
+      rosters: "id, name, factionId, snapshotId, updatedAt",
+      rosterVersions: "id, rosterId, updatedAt",
+      overrides: "&key, entity, id, updatedAt",
+      terrainLayouts: "id, name, updatedAt",
+      publishedLists: "id, faction, placing, importedAt",
+      publishedResolved: "&key, snapshotId, recordId",
+      games: "id, rosterId, updatedAt",
+    });
   }
 }
 
@@ -175,7 +211,7 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
  */
 export const STORE_CHANGED = "grimstat:store-changed";
 
-export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts" | "publishedLists" | "publishedResolved";
+export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts" | "publishedLists" | "publishedResolved" | "games";
 
 export function notifyStoreChanged(store: StoreName): void {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORE_CHANGED, { detail: store }));
@@ -299,4 +335,22 @@ export async function importAll(bundle: ExportBundle): Promise<{ snapshots: numb
 /** Every stored override, oldest first. */
 export async function listOverrides(): Promise<OverrideRecord[]> {
   return db.overrides.orderBy("updatedAt").toArray();
+}
+
+// ---------- games ----------
+
+/** Games newest first. */
+export async function listGames(): Promise<GameRecord[]> {
+  const all = await db.games.toArray();
+  return all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+}
+
+export async function saveGame(game: GameRecord): Promise<void> {
+  await db.games.put(game);
+  notifyStoreChanged("games");
+}
+
+export async function deleteGame(id: string): Promise<void> {
+  await db.games.delete(id);
+  notifyStoreChanged("games");
 }

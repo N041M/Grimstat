@@ -76,3 +76,26 @@ export function touch(s: Scenario): Scenario {
 export function forStorage(s: Scenario): Scenario {
   return Scenario.parse(s);
 }
+
+/** Same scenario content after normalisation: name, units, context, toggles and timestamps alike. */
+export function sameScenario(a: Scenario | undefined, b: Scenario): boolean {
+  if (!a) return false;
+  try {
+    return JSON.stringify(forStorage(a)) === JSON.stringify(forStorage(b));
+  } catch {
+    return false;
+  }
+}
+
+/** A scenario nobody has touched yet: what `newScenario()` produces, with this one's id and stamps. */
+export function isDefaultScenario(s: Scenario): boolean {
+  return sameScenario(newScenario({ id: s.id, createdAt: s.createdAt, updatedAt: s.updatedAt, revision: s.revision }), s);
+}
+
+/**
+ * Would replacing `current` lose work? With a stored copy the answer is whether the two differ;
+ * without one, whether the scenario has been edited away from the defaults.
+ */
+export function hasUnsavedEdits(current: Scenario, stored: Scenario | undefined): boolean {
+  return stored ? !sameScenario(stored, current) : !isDefaultScenario(current);
+}

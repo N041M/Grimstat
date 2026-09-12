@@ -1,14 +1,14 @@
 import type { CoverageReport, ScenarioUnit, ScenarioWeapon } from "@grimstat/schema";
-import { dice, fmtInt, fmtRelative, skill } from "../../lib/format";
+import { ap, dice, fmtInt, fmtRelative, skill } from "../../lib/format";
 import { modelCount } from "../../lib/scenario";
 import { hrefFor } from "../../router";
 import { t } from "../../i18n";
 
-/** "18A · 3+ · S4 AP1 D1" — the 10px mono line under a weapon name in the context column. */
+/** "18A · 3+ · S4 AP-1 D1" — the 10px mono line under a weapon name in the context column. */
 export function weaponStatline(w: ScenarioWeapon): string {
   const a = String(w.A).trim();
   const attacks = /^\d+$/.test(a) ? `${Number(a) * Math.max(1, w.count)}A` : w.count > 1 ? `${w.count}×${dice(a)}A` : `${dice(a)}A`;
-  return `${attacks} · ${skill(w.skill)} · S${w.S} AP${w.AP} D${dice(w.D)}`;
+  return `${attacks} · ${skill(w.skill)} · S${w.S} AP${ap(w.AP)} D${dice(w.D)}`;
 }
 
 /** The model line that carries the unit's defensive profile: the one most models share. */
@@ -94,6 +94,21 @@ function CoverageBlock({ coverage }: { coverage: CoverageReport }) {
         <span className="t2" style={{ width: pct(coverage.tier2) }} />
         <span className="t3" style={{ width: pct(coverage.tier3) }} />
       </div>
+      {/* The same three words the Coverage widget uses; the tier numbers stay in the tooltips. */}
+      <ul className="calc-ctx-cov-legend" aria-hidden="true">
+        <li title={t("coverage.tier1.title")}>
+          <span className="sw t1" />
+          {t("coverage.tier1", { n: coverage.tier1 })}
+        </li>
+        <li title={t("coverage.tier2.title")}>
+          <span className="sw t2" />
+          {t("coverage.tier2", { n: coverage.tier2 })}
+        </li>
+        <li title={t("coverage.tier3.title")}>
+          <span className="sw t3" />
+          {t("coverage.tier3", { n: coverage.tier3 })}
+        </li>
+      </ul>
       {coverage.unmodelled.length ? (
         <>
           <div className="calc-ctx-cov-label t-micro">{t("calc.coverage.notModelled")}</div>
@@ -125,6 +140,7 @@ export function ScenarioCards({
   coverage,
   onRename,
   onEdit,
+  onSwap,
   onSave,
   onShare,
   onNew,
@@ -141,6 +157,8 @@ export function ScenarioCards({
   coverage?: CoverageReport | undefined;
   onRename: (name: string) => void;
   onEdit: (side: "attacker" | "defender") => void;
+  /** Attacker and defender trade places. */
+  onSwap: () => void;
   onSave: () => void;
   onShare: () => void;
   onNew: () => void;
@@ -156,6 +174,11 @@ export function ScenarioCards({
         <div className="calc-ctx-status">{status}</div>
       </div>
       <UnitCard unit={attacker} side="attacker" showWeapons onEdit={() => onEdit("attacker")} />
+      <div className="calc-swap-row">
+        <button type="button" className="calc-swap" onClick={onSwap} title={t("calc.swap.title")}>
+          <span aria-hidden="true">⇅</span> {t("calc.swap")}
+        </button>
+      </div>
       <UnitCard unit={defender} side="defender" showWeapons={fightPhase} onEdit={() => onEdit("defender")} />
       {coverage ? <CoverageBlock coverage={coverage} /> : <div className="calc-ctx-filler" />}
       <div className="calc-ctx-actions">

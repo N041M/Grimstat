@@ -3,32 +3,12 @@ import type { Snapshot } from "@grimstat/schema";
 import { diffSnapshots, type DiffEntity, type EntityChange, type EntityRef, type PointsChange, type SnapshotDiff } from "@grimstat/snapshot";
 import { db, type SnapshotMeta } from "../../db";
 import { fmtInt } from "../../lib/format";
+import { entityLabel } from "../../lib/overrides";
 import { Badge, Empty, Field, Spinner } from "../ui";
 import { t } from "../../i18n";
 
 const ENTITIES: DiffEntity[] = ["faction", "publication", "datasheet", "ability", "detachment", "enhancement", "stratagem", "wargearPrice"];
 const LIST_CAP = 40;
-
-function entityLabel(e: DiffEntity): string {
-  switch (e) {
-    case "faction":
-      return t("entity.faction");
-    case "publication":
-      return t("entity.publication");
-    case "datasheet":
-      return t("entity.datasheet");
-    case "ability":
-      return t("entity.ability");
-    case "detachment":
-      return t("entity.detachment");
-    case "enhancement":
-      return t("entity.enhancement");
-    case "stratagem":
-      return t("entity.stratagem");
-    case "wargearPrice":
-      return t("entity.wargearPrice");
-  }
-}
 
 /** Faction lookup across both snapshots: entity kind + id → faction id (undefined when unknown / faction-less). */
 export function factionIndex(a: Snapshot, b: Snapshot): (entity: DiffEntity | "points", id: string) => string | undefined {

@@ -1,11 +1,12 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
 import type { Roster, ScenarioUnit, Snapshot } from "@grimstat/schema";
 import { unitFromRosterUnit } from "@grimstat/game-40k-11e";
 import { arsenalFor, bySkill, damageTiers, defensiveProfile, perModel, saveForced, woundTable } from "../../lib/arsenal";
 import { deploymentCensus, threatProfile } from "../../lib/rosterProfile";
-import { ARSENAL_PHASES, attacksLabel, peak, phaseView, saveLabel, shareOf, type ArsenalPhase } from "../../lib/arsenalView";
+import { ARSENAL_PHASES, attacksLabel, parseArsenalPhase, peak, phaseView, saveLabel, shareOf, type ArsenalPhase } from "../../lib/arsenalView";
 import { heatColour } from "../../lib/heatmap";
 import { fmt, fmtInt } from "../../lib/format";
+import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead, PillChip, ProportionBar } from "../kit";
 import { Empty } from "../ui";
 import { t, tn, type I18nKey } from "../../i18n";
@@ -127,7 +128,8 @@ interface Props {
  * says out loud: conditional keywords are counted separately rather than folded in silently.
  */
 export function ArsenalTab({ roster, snapshot }: Props) {
-  const [phase, setPhase] = useState<ArsenalPhase>("both");
+  // The phase switch is a reading preference, so it is remembered across armies.
+  const [phase, setPhase] = usePersistedSetting<ArsenalPhase>("roster.arsenal.phase", "both", parseArsenalPhase);
 
   const units = useMemo(() => scenarioUnits(roster, snapshot), [roster, snapshot]);
   const summary = useMemo(() => arsenalFor(units), [units]);

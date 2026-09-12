@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildGroups, filterItems, flattenGroups, matchesQuery, PALETTE_GROUP_ORDER, stepIndex, type PaletteItem } from "./palette";
 
-const LABELS = { goto: "Go to", scenarios: "Scenarios", units: "Units", actions: "Actions" };
+const LABELS = { goto: "Go to", scenarios: "Scenarios", armies: "Armies", units: "Units", actions: "Actions" };
 
 const items: PaletteItem[] = [
   { id: "go:calculator", group: "goto", glyph: "C", label: "Calculator", hint: "⌘C" },
@@ -9,6 +9,7 @@ const items: PaletteItem[] = [
   { id: "go:armies", group: "goto", glyph: "A", label: "Armies", hint: "⌘A" },
   { id: "sc:1", group: "scenarios", glyph: "›", label: "Walker screen clear", hint: "14.7 dmg" },
   { id: "sc:2", group: "scenarios", glyph: "›", label: "Anti-tank efficiency" },
+  { id: "army:1", group: "armies", glyph: "›", label: "Ashen strike force", hint: "2,000 pts" },
   { id: "u:1", group: "units", glyph: "›", label: "Assault Infantry" },
   { id: "u:2", group: "units", glyph: "›", label: "Armoured Walker" },
   { id: "u:3", group: "units", glyph: "›", label: "Light Transport" },
@@ -39,7 +40,7 @@ describe("matchesQuery", () => {
 
 describe("filterItems", () => {
   it("keeps input order", () => {
-    expect(filterItems(items, "a").map((i) => i.id)).toEqual(["go:calculator", "go:scenarios", "go:armies", "sc:1", "sc:2", "u:1", "u:2", "u:3", "ac:new", "ac:theme"]);
+    expect(filterItems(items, "a").map((i) => i.id)).toEqual(["go:calculator", "go:scenarios", "go:armies", "sc:1", "sc:2", "army:1", "u:1", "u:2", "u:3", "ac:new", "ac:theme"]);
   });
 
   it("filters on the label only, never the hint or glyph", () => {
@@ -52,7 +53,7 @@ describe("buildGroups", () => {
   it("returns every group in the fixed order for a blank query", () => {
     const groups = buildGroups(items, "", LABELS);
     expect(groups.map((g) => g.id)).toEqual([...PALETTE_GROUP_ORDER]);
-    expect(groups.map((g) => g.label)).toEqual(["Go to", "Scenarios", "Units", "Actions"]);
+    expect(groups.map((g) => g.label)).toEqual(["Go to", "Scenarios", "Armies", "Units", "Actions"]);
   });
 
   it("drops groups whose items all filtered out", () => {
@@ -75,7 +76,7 @@ describe("buildGroups", () => {
   });
 
   it("treats a cap of 0 as hiding the group entirely", () => {
-    expect(buildGroups(items, "", LABELS, { units: 0 }).map((g) => g.id)).toEqual(["goto", "scenarios", "actions"]);
+    expect(buildGroups(items, "", LABELS, { units: 0 }).map((g) => g.id)).toEqual(["goto", "scenarios", "armies", "actions"]);
   });
 });
 

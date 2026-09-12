@@ -6,9 +6,15 @@ import type { RowMetrics } from "../lib/scenarioTable";
 /** Stored scenarios carry no cached result, so the table's numbers are solved on demand. */
 export interface ScenarioMetricsState {
   get(s: Scenario): RowMetrics | undefined;
+  /** The message of a failed solve; an empty string when the worker returned nothing at all. */
+  error(s: Scenario): string | undefined;
   /** How many rows are still waiting for the worker. */
   pending: number;
 }
+
+type Cached = RowMetrics | { error: string };
+
+const failed = (c: Cached | undefined): c is { error: string } => c !== undefined && "error" in c;
 
 /** Cache key: a scenario only needs re-solving when its content changes. */
 function keyOf(s: Scenario): string {
@@ -26,11 +32,11 @@ const START_DELAY_MS = 60;
 /**
  * Solve every listed scenario in the simulation worker, one at a time, and hand the results back by
  * scenario. The batch is cancellable — unmounting or a changed list stops it — and never blocks the
- * render: rows show "—" until their number arrives.
+ * render: rows show "–" until their number arrives.
  */
 export function useScenarioMetrics(items: Scenario[] | undefined, snapshot: Snapshot | undefined, activeSnapshotId: string | undefined): ScenarioMetricsState {
-  // null marks "tried and failed" so a broken scenario is not retried on every render.
-  const cache = useRef(new Map<string, RowMetrics | null>());
+  // A failure is cached too, so a broken scenario is not retried on every render.
+  const cache = useRef(new Map<string, Cached>());
   const [version, bump] = useState(0);
   const [pending, setPending] = useState(0);
 
@@ -52,10 +58,10 @@ export function useScenarioMetrics(items: Scenario[] | undefined, snapshot: Snap
             const snap = s.snapshotId && s.snapshotId === activeSnapshotId ? snapshot : undefined;
             const { outcome } = await simClient().run(s, snap);
             if (cancelled) return;
-            cache.current.set(key, outcome ? metricsFrom(outcome.result) : null);
-          } catch {
+            cache.current.set(key, outcome ? metricsFrom(outcome.result) : { error: "" });
+          } catch (e) {
             if (cancelled) return;
-            cache.current.set(key, null);
+            cache.current.set(key, { error: e instanceof Error ? e.message : String(e) });
           }
           setPending((n) => Math.max(0, n - 1));
           bump((n) => n + 1);
@@ -73,7 +79,14 @@ export function useScenarioMetrics(items: Scenario[] | undefined, snapshot: Snap
   // Identity only changes when a result lands, so the table's sort/filter memo can depend on it.
   return useMemo(
     () => ({
-      get: (s: Scenario) => cache.current.get(keyOf(s)) ?? undefined,
+      get: (s: Scenario) => {
+        const c = cache.current.get(keyOf(s));
+        return failed(c) ? undefined : c;
+      },
+      error: (s: Scenario) => {
+        const c = cache.current.get(keyOf(s));
+        return failed(c) ? c.error : undefined;
+      },
       pending,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` is the memo-buster: it is bumped when a result lands in the ref cache.

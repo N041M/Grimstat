@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import type { BattleSizeId, TerrainLayout, TerrainPiece, TerrainTrait } from "@grimstat/board";
-import { BATTLE_SIZES, BREACHERS, CLIMBERS, TERRAIN_AREA_PRESETS, box, crater, ruin, wedge } from "@grimstat/board";
+import type { BattleSizeId, LayoutIssue, TerrainLayout, TerrainPiece, TerrainTrait } from "@grimstat/board";
+import { BATTLE_SIZES, BREACHERS, CLIMBERS, TERRAIN_AREA_PRESETS, box, crater, layoutProblems, ruin, wedge } from "@grimstat/board";
 import { Badge } from "../ui";
 import {
   EDIT_STEP,
   addObjective,
   addPiece,
   centre,
+  displayName,
   duplicatePiece,
   edgeOffsetsOf,
   extent,
   freeId,
   isSymmetric,
-  layoutIssues,
   mirror,
   moveObjective,
   placeByEdges,
@@ -66,6 +66,7 @@ export function TerrainPanel({
   canUndo,
   canRedo,
   snap,
+  coarse,
   onSnap,
   onChange,
   onSelectPiece,
@@ -79,6 +80,8 @@ export function TerrainPanel({
   canUndo: boolean;
   canRedo: boolean;
   snap: boolean;
+  /** A touch screen: the keyboard line below the editor has nothing to say there. */
+  coarse?: boolean;
   onSnap: (on: boolean) => void;
   onChange: LayoutChange;
   onSelectPiece: (id: string | undefined) => void;
@@ -88,7 +91,7 @@ export function TerrainPanel({
 }) {
   const piece = layout.pieces.find((p) => p.id === pieceId);
   const objective = layout.objectives.find((o) => o.id === objectiveId);
-  const issues = layoutIssues(layout);
+  const issues = layoutProblems(layout);
   const symmetric = isSymmetric(layout);
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -150,8 +153,8 @@ export function TerrainPanel({
               const size = extent(p);
               return (
                 <li key={p.id}>
-                  <button type="button" className={`battle-piece-row ${p.id === pieceId ? "is-selected" : ""}`.trim()} onClick={() => onSelectPiece(p.id === pieceId ? undefined : p.id)}>
-                    <span className="id">{p.id}</span>
+                  <button type="button" className={`battle-piece-row ${p.id === pieceId ? "is-selected" : ""}`.trim()} onClick={() => onSelectPiece(p.id === pieceId ? undefined : p.id)} title={p.id}>
+                    <span className="id">{displayName(p.id)}</span>
                     <span className="meta">
                       {fmt(size.width)}×{fmt(size.depth)} · {fmt(p.height)}"{p.floors.length > 1 ? ` · ${p.floors.length}F` : ""}
                     </span>
@@ -165,7 +168,9 @@ export function TerrainPanel({
         {piece ? (
           <div className="battle-piece-editor" ref={editorRef}>
             <div className="battle-piece-head">
-              <span className="battle-piece-id">{piece.id}</span>
+              <span className="battle-piece-id" title={piece.id}>
+                {displayName(piece.id)}
+              </span>
               <span className="muted small">
                 {fmt(centre(piece).x)}, {fmt(centre(piece).y)}
               </span>
@@ -189,12 +194,18 @@ export function TerrainPanel({
 
             <fieldset className="battle-traits">
               <legend>{t("battle.terrain.traits")}</legend>
-              {EDITABLE_TRAITS.map((trait) => (
-                <label key={trait}>
-                  <input type="checkbox" checked={piece.traits.includes(trait)} onChange={(e) => onChange((l) => setTrait(l, piece.id, trait, e.target.checked))} />
-                  <span>{trait}</span>
-                </label>
-              ))}
+              {EDITABLE_TRAITS.map((trait) => {
+                const help = t(`battle.trait.${trait}.help` as I18nKey);
+                return (
+                  <label key={trait} className="battle-trait" title={help}>
+                    <input type="checkbox" checked={piece.traits.includes(trait)} onChange={(e) => onChange((l) => setTrait(l, piece.id, trait, e.target.checked))} />
+                    <span className="battle-trait-text">
+                      <span className="battle-trait-name">{t(`battle.trait.${trait}` as I18nKey)}</span>
+                      <span className="battle-trait-help">{help}</span>
+                    </span>
+                  </label>
+                );
+              })}
               {/* Who the walls and the upper floors admit decides what a tank can do here, so it is
                   shown rather than left to be inferred from a checkbox. */}
               {piece.traits.includes("breachable") || piece.traits.includes("impassable") ? <p className="muted small">{t("battle.terrain.passableBy", { who: piece.passableBy.join(", ") || t("battle.terrain.nobody") })}</p> : null}
@@ -231,7 +242,7 @@ export function TerrainPanel({
             <p className="muted small">{t("battle.terrain.edgesHint")}</p>
           </div>
         ) : null}
-        <p className="battle-keys">{t("battle.terrain.keys", { mod: MOD })}</p>
+        {coarse ? null : <p className="battle-keys">{t("battle.terrain.keys", { mod: MOD })}</p>}
       </section>
 
       <section className="battle-section">
@@ -283,8 +294,8 @@ export function TerrainPanel({
           <ul className="battle-piece-list" aria-label={t("battle.terrain.objectives")}>
             {layout.objectives.map((o) => (
               <li key={o.id}>
-                <button type="button" className={`battle-piece-row ${o.id === objectiveId ? "is-selected" : ""}`.trim()} onClick={() => onSelectObjective(o.id === objectiveId ? undefined : o.id)}>
-                  <span className="id">{o.id}</span>
+                <button type="button" className={`battle-piece-row ${o.id === objectiveId ? "is-selected" : ""}`.trim()} onClick={() => onSelectObjective(o.id === objectiveId ? undefined : o.id)} title={o.id}>
+                  <span className="id">{displayName(o.id)}</span>
                   <span className="meta">
                     {fmt(o.at.x)}, {fmt(o.at.y)}
                   </span>
@@ -336,8 +347,8 @@ export function TerrainPanel({
         </div>
         {issues.length ? (
           <ul className="battle-problems left">
-            {issues.slice(0, 6).map((i) => (
-              <li key={i}>{i}</li>
+            {issues.slice(0, 6).map((issue, i) => (
+              <li key={`${issue.kind}-${issue.subject}-${i}`}>{issueText(issue)}</li>
             ))}
           </ul>
         ) : null}
@@ -348,6 +359,11 @@ export function TerrainPanel({
 
 /** Inches to two decimals, with the trailing zeros gone: 11.5, not 11.50; 7, not 7.00. */
 const fmt = (v: number): string => String(Math.round(v * 100) / 100);
+
+/** One problem with the layout, in the panel's words, naming the piece as the lists above name it. */
+function issueText(issue: LayoutIssue): string {
+  return t(`battle.issue.${issue.kind}` as I18nKey, { name: displayName(issue.subject), floor: fmt(issue.floor ?? 0), piece: displayName(issue.piece ?? "") });
+}
 
 /** The key that undoes, named the way the platform names it. */
 const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl+";

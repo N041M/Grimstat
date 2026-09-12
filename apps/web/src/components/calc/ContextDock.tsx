@@ -7,12 +7,19 @@ import { Dock, DockSection, NumberBox, PillChip, SelectBox, SwitchRow } from "..
 import { fmtInt } from "../../lib/format";
 import { t, type I18nKey } from "../../i18n";
 
-/** The four booleans of `scenario.context` that are drawn as pill chips. */
-const FLAGS: Array<{ key: "charged" | "stationary" | "inCover" | "snapShooting"; label: I18nKey; title: I18nKey }> = [
-  { key: "charged", label: "dock.flag.charged", title: "ctx.charged" },
-  { key: "stationary", label: "dock.flag.stationary", title: "ctx.stationary" },
-  { key: "inCover", label: "dock.flag.inCover", title: "ctx.inCover" },
-  { key: "snapShooting", label: "dock.flag.snapShot", title: "ctx.snapShooting" },
+type Flag = { key: "charged" | "stationary" | "inCover" | "snapShooting"; label: I18nKey; title: I18nKey };
+
+/** The four booleans of `scenario.context` that are drawn as pill chips, grouped by the side they describe. */
+const FLAG_GROUPS: Array<{ side: I18nKey; flags: Flag[] }> = [
+  {
+    side: "side.attacker",
+    flags: [
+      { key: "charged", label: "dock.flag.charged", title: "ctx.charged" },
+      { key: "stationary", label: "dock.flag.stationary", title: "ctx.stationary" },
+      { key: "snapShooting", label: "dock.flag.snapShot", title: "ctx.snapShooting" },
+    ],
+  },
+  { side: "side.defender", flags: [{ key: "inCover", label: "dock.flag.inCover", title: "ctx.inCover" }] },
 ];
 
 /** Short, dock-width labels for the select boxes; the full wording stays in the control's `title`. */
@@ -48,8 +55,9 @@ function fields(context: ScenarioContext) {
   };
 }
 
-/** "exact · 4 ms", or the pending state while the worker is busy. */
+/** "exact · 4 ms", the pending state while the worker is busy, or what the scenario still lacks. */
 function statusLine(sim: SimulationState): string {
+  if (sim.idle) return t(sim.idle === "no-weapons" ? "dock.idle.noWeapons" : "dock.idle.noModels");
   if (sim.error) return t("results.error");
   if (sim.stale || !sim.result) return t("dock.computing");
   const backend = sim.result.backend === "exact" ? t("results.backend.exact") : t("dock.backend.mcWith", { n: fmtInt(sim.result.iterations) });
@@ -74,9 +82,16 @@ export function ContextDock({ scenario, snapshot, sim, onContext, onToggles }: {
         {opts.showIterations ? <NumberBox label={t("dock.iterations")} title={t("ctx.mcIterations")} value={ctx.mcIterations} min={1000} step={1000} onChange={(v) => onContext({ mcIterations: Math.max(1000, Math.floor(v)) })} /> : null}
       </DockSection>
 
-      <DockSection className="dock-chips">
-        {FLAGS.map((f) => (
-          <PillChip key={f.key} label={t(f.label)} title={t(f.title)} on={ctx[f.key]} onChange={(v) => onContext({ [f.key]: v } as Partial<ScenarioContext>)} />
+      <DockSection className="dock-chip-groups">
+        {FLAG_GROUPS.map((g) => (
+          <div className="dock-chip-group" key={g.side}>
+            <span className="dock-chip-group-title">{t(g.side)}</span>
+            <div className="dock-chips">
+              {g.flags.map((f) => (
+                <PillChip key={f.key} label={t(f.label)} title={t(f.title)} on={ctx[f.key]} onChange={(v) => onContext({ [f.key]: v } as Partial<ScenarioContext>)} />
+              ))}
+            </div>
+          </div>
         ))}
       </DockSection>
 

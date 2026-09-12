@@ -5,6 +5,7 @@ import type { DurabilityEntry, EfficiencyRow, MatrixResult } from "@grimstat/gam
 import type { MatrixMetric } from "../lib/heatmap";
 import type { TurnPlanResult } from "../lib/turn";
 import type { TurnPlanView } from "../components/analyses/TurnTab";
+import type { Headline } from "../lib/headline";
 
 /** Army-level analysis results a dashboard may provide; each key unlocks the widgets that `require` it. */
 export interface AnalysisInputs {
@@ -23,6 +24,8 @@ export interface WidgetProps {
   error: string | undefined;
   /** Present only on dashboards that host army-level analyses. */
   analyses?: AnalysisInputs;
+  /** The headline numbers the user pinned as a baseline, when they did. */
+  pinned?: Headline | undefined;
 }
 
 export type WidgetComponent = ComponentType<WidgetProps>;

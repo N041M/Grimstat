@@ -15,11 +15,21 @@ export function WeaponBreakdown({ result, running }: WidgetProps) {
           <tr>
             <th>{t("weapons.name")}</th>
             <th className="num">{t("weapons.count")}</th>
-            <th className="num">{t("weapons.attacks")}</th>
-            <th className="num">{t("weapons.hits")}</th>
-            <th className="num">{t("weapons.wounds")}</th>
-            <th className="num">{t("weapons.unsaved")}</th>
-            <th className="num">{t("weapons.damage")}</th>
+            <th className="num" title={t("weapons.attacks.title")}>
+              {t("weapons.attacks")}
+            </th>
+            <th className="num" title={t("weapons.hits.title")}>
+              {t("weapons.hits")}
+            </th>
+            <th className="num" title={t("weapons.wounds.title")}>
+              {t("weapons.wounds")}
+            </th>
+            <th className="num" title={t("weapons.unsaved.title")}>
+              {t("weapons.unsaved")}
+            </th>
+            <th className="num" title={t("weapons.damage.title")}>
+              {t("weapons.damage")}
+            </th>
             <th />
           </tr>
         </thead>

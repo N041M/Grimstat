@@ -120,6 +120,8 @@ export const Datasheet = z.object({
   models: z.array(ModelProfile).min(1),
   weapons: z.array(WeaponProfile).default([]),
   abilityIds: z.array(Id).default([]),
+  /** Stratagems this datasheet may be the target of, when the source records the link. */
+  stratagemIds: z.array(Id).default([]),
   /** Datasheet ids this character can lead / support. */
   leaderTo: z.array(Id).default([]),
   supportTo: z.array(Id).default([]),

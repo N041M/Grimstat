@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Datasheet, Roster, Snapshot } from "@grimstat/schema";
-import { canAddCopy, compositionBounds, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, groupBounds, groupsFromDatasheet, loadoutWargear, newRoster, newRosterUnit, pickerGroupOf, pointsTone, sectionOf, unitDisplayName, unitIndexFromPath, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
+import { canAddCopy, compositionBounds, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
 import { decodeRosterPermalink, encodeRosterPermalink, rosterPermalinkUrl, rosterTokenFromHash } from "./rosterPermalink";
 
 const NOW = "2026-09-09T10:00:00.000Z";
@@ -18,6 +18,7 @@ function sheet(over: Partial<Datasheet> & Pick<Datasheet, "id" | "name" | "model
     factionKeywords: [],
     weapons: [],
     abilityIds: [],
+    stratagemIds: [],
     leaderTo: [],
     supportTo: [],
     composition: [],
@@ -208,6 +209,102 @@ describe("diffRosters", () => {
     const u1 = { ...newRosterUnit(squad), id: "u1" };
     const next: Roster = { ...base, units: [{ ...u1, models: u1.models.map((g) => ({ ...g, wargear: [] })) }] };
     expect(diffRosters({ ...base, units: [u1] }, next, snapshot).changed).toHaveLength(1);
+  });
+});
+
+describe("describeRevisionChange", () => {
+  const base = newRoster({ snapshot, factionId: "f1", battleSize: "strike-force" });
+  const u1 = { ...newRosterUnit(squad), id: "u1" };
+  const u2 = { ...newRosterUnit(captain), id: "u2" };
+  const prev: Roster = { ...base, units: [u1, u2] };
+
+  it("names the first revision and single unit changes", () => {
+    expect(describeRevisionChange(undefined, prev, snapshot)).toEqual({ kind: "created" });
+    expect(describeRevisionChange(prev, { ...prev, units: [u1] }, snapshot)).toEqual({ kind: "removed", name: "Warden Captain" });
+    expect(describeRevisionChange(prev, { ...prev, units: [u1, u2, { ...newRosterUnit(squad), id: "u3" }] }, snapshot)).toEqual({ kind: "added", name: "Warden Squad" });
+    expect(describeRevisionChange(prev, { ...prev, units: [{ ...u1, models: groupsFromDatasheet(squad, 10) }, u2] }, snapshot)).toEqual({ kind: "changed", name: "Warden Squad" });
+    expect(describeRevisionChange(prev, { ...prev, units: [] }, snapshot)).toEqual({ kind: "multi", n: 2 });
+  });
+
+  it("tells a rename, a settings change and a reorder apart from unit edits", () => {
+    expect(describeRevisionChange(prev, { ...prev, name: "Second wave" }, snapshot)).toEqual({ kind: "renamed", name: "Second wave" });
+    expect(describeRevisionChange(prev, { ...prev, pointsLimit: 1500 }, snapshot)).toEqual({ kind: "settings" });
+    expect(describeRevisionChange(prev, { ...prev, battleSize: "incursion" }, snapshot)).toEqual({ kind: "settings" });
+    expect(describeRevisionChange(prev, { ...prev, units: [u2, u1] }, snapshot)).toEqual({ kind: "reordered" });
+    expect(describeRevisionChange(prev, { ...prev, detachments: [{ id: "d1", detachmentId: "det-1" }] }, snapshot)).toEqual({ kind: "detachments" });
+    expect(describeRevisionChange(prev, { ...prev, notes: "bring glue" }, snapshot)).toEqual({ kind: "other" });
+  });
+
+  it("never reports zero changes", () => {
+    expect(describeRevisionChange(prev, { ...prev }, snapshot)).toEqual({ kind: "other" });
+  });
+});
+
+describe("moveUnit", () => {
+  const base = newRoster({ snapshot, factionId: "f1", battleSize: "strike-force" });
+  const ids = (r: Roster) => r.units.map((u) => u.id);
+  const roster: Roster = { ...base, units: ["a", "b", "c", "d"].map((id) => ({ ...newRosterUnit(squad), id })) };
+
+  it("moves by a signed number of places", () => {
+    expect(ids(moveUnit(roster, "c", -1))).toEqual(["a", "c", "b", "d"]);
+    expect(ids(moveUnit(roster, "a", 2))).toEqual(["b", "c", "a", "d"]);
+    expect(ids(moveUnit(roster, "b", -5))).toEqual(["b", "a", "c", "d"]);
+    expect(ids(moveUnit(roster, "b", 9))).toEqual(["a", "c", "d", "b"]);
+  });
+
+  it("returns the same roster when nothing moves", () => {
+    expect(moveUnit(roster, "a", -1)).toBe(roster);
+    expect(moveUnit(roster, "d", 1)).toBe(roster);
+    expect(moveUnit(roster, "b", 0)).toBe(roster);
+    expect(moveUnit(roster, "nope", 1)).toBe(roster);
+    expect(moveUnit(roster, "b", Number.NaN)).toBe(roster);
+    expect(ids(roster)).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+describe("removeUnits / restoreUnits", () => {
+  const base = newRoster({ snapshot, factionId: "f1", battleSize: "strike-force" });
+  const squadA = { ...newRosterUnit(squad), id: "sqA" };
+  const squadB = { ...newRosterUnit(squad), id: "sqB" };
+  const leader = { ...newRosterUnit(captain), id: "cap", attachedTo: { unitId: "sqA", role: "leader" as const } };
+  const roster: Roster = { ...base, units: [squadA, leader, squadB] };
+
+  it("takes the units out and frees the characters attached to them", () => {
+    const { roster: next, removed } = removeUnits(roster, ["sqA"]);
+    expect(next.units.map((u) => u.id)).toEqual(["cap", "sqB"]);
+    expect(next.units[0]!.attachedTo).toBeUndefined();
+    expect(removed).toEqual([{ unit: squadA, index: 0, detached: [{ id: "cap", attachedTo: { unitId: "sqA", role: "leader" } }] }]);
+    expect(roster.units).toHaveLength(3);
+  });
+
+  it("removes several at once and reports each former index", () => {
+    const { roster: next, removed } = removeUnits(roster, ["cap", "sqB"]);
+    expect(next.units.map((u) => u.id)).toEqual(["sqA"]);
+    expect(removed.map((r) => [r.unit.id, r.index])).toEqual([
+      ["cap", 1],
+      ["sqB", 2],
+    ]);
+    expect(removeUnits(roster, ["nope"]).roster).toBe(roster);
+  });
+
+  it("puts them back where they were, attachments included", () => {
+    const { roster: next, removed } = removeUnits(roster, ["sqA", "sqB"]);
+    expect(restoreUnits(next, removed)).toEqual(roster);
+    const one = removeUnits(roster, ["sqA"]);
+    expect(restoreUnits(one.roster, one.removed)).toEqual(roster);
+  });
+
+  it("copes with edits made in between", () => {
+    const { roster: next, removed } = removeUnits(roster, ["sqA"]);
+    // the list shrank: the former index is clamped
+    const shorter = { ...next, units: next.units.filter((u) => u.id !== "sqB") };
+    expect(restoreUnits(shorter, removed).units.map((u) => u.id)).toEqual(["sqA", "cap"]);
+    // the character attached elsewhere meanwhile: it keeps that attachment
+    const moved = { ...next, units: next.units.map((u) => (u.id === "cap" ? { ...u, attachedTo: { unitId: "sqB", role: "leader" as const } } : u)) };
+    expect(restoreUnits(moved, removed).units.find((u) => u.id === "cap")?.attachedTo).toEqual({ unitId: "sqB", role: "leader" });
+    // the unit is already back: nothing is duplicated
+    const back = restoreUnits(next, removed);
+    expect(restoreUnits(back, removed).units).toHaveLength(3);
   });
 });
 

@@ -7,7 +7,7 @@ import { useRosterEditor, useRosterSnapshot } from "../hooks/useRosterEditor";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
 import { hrefFor, navigate } from "../router";
-import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, enhancementsFor, newRosterUnit, pointsLimitFor, sectionOf } from "../lib/roster";
+import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, enhancementsFor, moveUnit, newRosterUnit, pointsLimitFor, sectionOf, unitDisplayName } from "../lib/roster";
 import { pointsBarModel } from "../lib/pointsBar";
 import { RosterHeader, parseEditorTab, type EditorMode, type EditorTab } from "../components/roster/RosterHeader";
 import { DetachmentStrip } from "../components/roster/DetachmentsBlock";
@@ -15,6 +15,7 @@ import { UnitTable, type CalcSide } from "../components/roster/UnitTable";
 import { UnitInspector } from "../components/roster/UnitInspector";
 import { StatisticsTab } from "../components/roster/StatisticsTab";
 import { ArsenalTab } from "../components/roster/ArsenalTab";
+import { StratagemsTab } from "../components/roster/StratagemsTab";
 import { MetaTab } from "../components/roster/MetaTab";
 import { RosterDock, type DockBudget } from "../components/roster/RosterDock";
 import { ExportDrawer } from "../components/roster/ExportDrawer";
@@ -103,19 +104,32 @@ export function RosterEditorPage({ id }: { id: string }) {
     });
     selectUnit(copy.id);
   };
-  const remove = (unit: RosterUnit) => {
+  /**
+   * Removing a unit also detaches whatever was attached to it. The units and their positions are
+   * captured first so the notice can put them back exactly where they were.
+   */
+  const removeUnits = (units: RosterUnit[]) => {
+    if (!roster || units.length === 0) return;
+    const ids = new Set(units.map((u) => u.id));
+    const before = roster.units;
     update((r) => ({
       ...r,
       units: r.units
-        .filter((u) => u.id !== unit.id)
+        .filter((u) => !ids.has(u.id))
         .map((u) => {
-          if (u.attachedTo?.unitId !== unit.id) return u;
+          if (!u.attachedTo || !ids.has(u.attachedTo.unitId)) return u;
           const { attachedTo: _a, ...rest } = u;
           return rest;
         }),
     }));
-    if (selectedId === unit.id) setSelectedId(undefined);
+    if (selectedId && ids.has(selectedId)) setSelectedId(undefined);
+    const restore = () => update((r) => ({ ...r, units: before.map((u) => r.units.find((x) => x.id === u.id) ?? u) }));
+    const first = units[0]!;
+    const text = units.length === 1 ? t("roster.units.removed", { name: unitDisplayName(first, datasheets.get(first.datasheetId)) }) : t("roster.units.removedMany", { n: units.length });
+    notify(text, "info", undefined, { label: t("common.undo"), run: restore });
   };
+  const remove = (unit: RosterUnit) => removeUnits([unit]);
+  const move = (unit: RosterUnit, delta: number) => update((r) => moveUnit(r, unit.id, delta));
 
   const setBattleSize = (size: BattleSize) => update((r) => ({ ...r, battleSize: size, pointsLimit: pointsLimitFor(size, r.pointsLimit) }));
 
@@ -229,6 +243,7 @@ export function RosterEditorPage({ id }: { id: string }) {
               datasheets={datasheets}
               costById={costById}
               diagnostics={diagnostics}
+              points={points}
               selectedId={selectedId}
               adding={adding}
               onAdding={setAdding}
@@ -236,6 +251,8 @@ export function RosterEditorPage({ id }: { id: string }) {
               onAdd={addUnit}
               onDuplicate={duplicate}
               onRemove={remove}
+              onRemoveMany={removeUnits}
+              onMove={move}
               onOpenInCalculator={(u, side) => void openInCalculator(u, side)}
               onOpenDetachmentPicker={() => setDetPicker(true)}
               onExport={() => setMode("export")}
@@ -244,6 +261,8 @@ export function RosterEditorPage({ id }: { id: string }) {
             <StatisticsTab roster={roster} snapshot={snapshot} datasheets={datasheets} costById={costById} onSelectUnit={selectFromStats} />
           ) : tab === "arsenal" ? (
             <ArsenalTab roster={roster} snapshot={snapshot} />
+          ) : tab === "strats" ? (
+            <StratagemsTab roster={roster} snapshot={snapshot} />
           ) : (
             <MetaTab roster={roster} snapshot={snapshot} />
           )}
@@ -257,7 +276,7 @@ export function RosterEditorPage({ id }: { id: string }) {
         budgets={budgets}
         onSelectUnit={(i) => {
           const u = roster.units[i];
-          if (u) selectUnit(u.id);
+          if (u) selectFromStats(u.id);
         }}
         onOpenHistory={() => setMode("history")}
       />

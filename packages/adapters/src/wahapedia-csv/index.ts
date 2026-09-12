@@ -309,6 +309,7 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
       models: [],
       weapons: [],
       abilityIds: [],
+      stratagemIds: [],
       leaderTo: [],
       supportTo: [],
       composition: [],
@@ -680,6 +681,8 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
     const s = stratByWahId.get(col(r, "stratagem_id"));
     if (!ds || !s) continue;
     (staging.datasheetStratagems[ds.id] ??= []).push(s.id);
+    // Also on the datasheet itself, so a snapshot can say which units a stratagem is for.
+    if (!ds.stratagemIds.includes(s.id)) ds.stratagemIds.push(s.id);
   }
   for (const r of rows("Datasheets_enhancements")) {
     const ds = dsByWahId.get(col(r, "datasheet_id"));

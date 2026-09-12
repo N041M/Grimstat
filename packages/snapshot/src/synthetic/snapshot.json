@@ -3,7 +3,7 @@
   "createdAt": "2026-01-01T00:00:00.000Z",
   "updatedAt": "2026-01-01T00:00:00.000Z",
   "revision": 0,
-  "id": "snap_20260101_78a75cfe",
+  "id": "snap_20260101_48f751e3",
   "gameSystemId": "wh40k-11e",
   "label": "synthetic fixture",
   "sources": [
@@ -29,7 +29,7 @@
       "notes": "Powered by Wahapedia (https://wahapedia.ru); text (c) Games Workshop"
     }
   ],
-  "checksum": "78a75cfe837ae6247c06ac2442a8bc5365651000302919c3928604dfc31dccbc",
+  "checksum": "48f751e3c244a6a15ffb55455fd89bee5c246cd681b0263e313e39123987b414",
   "conflicts": [
     {
       "entity": "datasheet",
@@ -273,6 +273,7 @@
           "ab:ashen-wardens:ashen-crusher:siege-protocols",
           "ab:ashen-wardens:ashen-crusher:ablative-plating"
         ],
+        "stratagemIds": [],
         "leaderTo": [],
         "supportTo": [],
         "composition": [
@@ -284,7 +285,7 @@
         ],
         "loadout": "This model is equipped with: vortex cannon; twin hail gun; crusher fists.",
         "wargearOptions": [
-          "This model’s twin hail gun can be replaced with one of the following:\n- 1 fusion beamer\n- 1 vortex cannon"
+          "This model’s twin hail gun can be replaced with one of the following:\n\n- 1 fusion beamer\n- 1 vortex cannon"
         ],
         "damagedProfile": {
           "threshold": "1-4",
@@ -371,6 +372,9 @@
           "ab:core:deep-strike",
           "ab:ashen-wardens:ember-resolve",
           "ab:ashen-wardens:warden-captain:rally-the-line"
+        ],
+        "stratagemIds": [
+          "strat:ashen-wardens:ember-vanguard:hold-fast"
         ],
         "leaderTo": [
           "ds:ashen-wardens:warden-squad"
@@ -492,6 +496,10 @@
           "ab:ashen-wardens:ember-resolve",
           "ab:ashen-wardens:warden-squad:shield-wall-once-per-battle"
         ],
+        "stratagemIds": [
+          "strat:ashen-wardens:ember-vanguard:hold-fast",
+          "strat:ashen-wardens:ember-vanguard:covering-volley"
+        ],
         "leaderTo": [],
         "supportTo": [],
         "composition": [
@@ -612,6 +620,7 @@
           "ab:core:deadly-demise:d6",
           "ab:verdant-swarm:spine-drake:regenerating-hide"
         ],
+        "stratagemIds": [],
         "leaderTo": [],
         "supportTo": [],
         "composition": [
@@ -704,6 +713,7 @@
           "ab:core:lone-operative",
           "ab:verdant-swarm:swarm-seer:swarm-link"
         ],
+        "stratagemIds": [],
         "leaderTo": [
           "ds:verdant-swarm:thornlings"
         ],
@@ -792,6 +802,9 @@
         ],
         "abilityIds": [
           "ab:core:feel-no-pain:5"
+        ],
+        "stratagemIds": [
+          "strat:verdant-swarm:thorn-tide:surge-of-thorns"
         ],
         "leaderTo": [],
         "supportTo": [],

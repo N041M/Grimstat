@@ -4,7 +4,7 @@ import { coverageFor } from "@grimstat/game-40k-11e";
 import { defineWidget, type WidgetProps } from "./registry";
 import { useApp } from "../state/AppContext";
 import { hrefFor } from "../router";
-import { t } from "../i18n";
+import { t, tn } from "../i18n";
 
 function Meter({ c, label }: { c: CoverageReport; label: string }) {
   const total = c.tier1 + c.tier2 + c.tier3;
@@ -21,15 +21,15 @@ function Meter({ c, label }: { c: CoverageReport; label: string }) {
         <span className="t3" style={{ width: w(c.tier3) }} />
       </div>
       <div className="chart-legend">
-        <span>
+        <span title={t("coverage.tier1.title")}>
           <span className="sw" style={{ background: "var(--good)" }} />
           {t("coverage.tier1", { n: c.tier1 })}
         </span>
-        <span>
+        <span title={t("coverage.tier2.title")}>
           <span className="sw" style={{ background: "var(--mid)" }} />
           {t("coverage.tier2", { n: c.tier2 })}
         </span>
-        <span>
+        <span title={t("coverage.tier3.title")}>
           <span className="sw" style={{ background: "var(--accent)" }} />
           {t("coverage.tier3", { n: c.tier3 })}
         </span>
@@ -78,7 +78,7 @@ export function CoverageMeter({ scenario, snapshot, result }: WidgetProps) {
     <div className="stack">
       {overrides.length ? (
         <div className="row small">
-          <span className="badge accent">{t("coverage.overridesApplied", { n: overrideStatus.applied })}</span>
+          <span className="badge accent">{tn(overrideStatus.applied, "coverage.overridesApplied.one", "coverage.overridesApplied.many")}</span>
           {marked ? <span className="muted">{t("coverage.markedNone", { n: marked })}</span> : null}
         </div>
       ) : null}
@@ -106,7 +106,7 @@ export function CoverageMeter({ scenario, snapshot, result }: WidgetProps) {
         </div>
       ) : null}
       <p className="small muted" style={{ margin: 0 }}>
-        {all === 0 ? t("coverage.hint.none") : total.tier3 > 0 ? t("coverage.hint.some", { n: total.tier3 }) : t("coverage.hint.full")}
+        {all === 0 ? t("coverage.hint.none") : total.tier3 > 0 ? tn(total.tier3, "coverage.hint.some.one", "coverage.hint.some.many") : t("coverage.hint.full")}
       </p>
     </div>
   );

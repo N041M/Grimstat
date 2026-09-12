@@ -1,4 +1,4 @@
-import type { MatrixResult } from "@grimstat/game-40k-11e";
+import type { EfficiencyRow, MatrixResult, ReverseResult } from "@grimstat/game-40k-11e";
 
 /** RFC 4180-style escaping: quote when the value contains a comma, quote, CR or LF. */
 export function csvEscape(value: string | number | undefined): string {
@@ -29,4 +29,35 @@ function round(n: number | undefined, digits = 3): number | undefined {
   if (n === undefined || !Number.isFinite(n)) return undefined;
   const f = 10 ** digits;
   return Math.round(n * f) / f;
+}
+
+export const EFFICIENCY_CSV_HEADER = ["rank", "unit", "points", "damage_per_100pts"] as const;
+
+/** Target names in first-seen order; the ranking keys `byTarget` by target name. */
+export function efficiencyTargets(rows: EfficiencyRow[]): string[] {
+  const out: string[] = [];
+  for (const r of rows) for (const k of Object.keys(r.byTarget)) if (!out.includes(k)) out.push(k);
+  return out;
+}
+
+/** One row per ranked attacker; after the fixed columns, expected damage and target points destroyed per target. */
+export function efficiencyToCsv(rows: EfficiencyRow[]): string {
+  const targets = efficiencyTargets(rows);
+  const lines = [csvLine([...EFFICIENCY_CSV_HEADER, ...targets.map((n) => `damage_vs_${n}`), ...targets.map((n) => `points_vs_${n}`)])];
+  rows.forEach((r, i) => {
+    lines.push(csvLine([i + 1, r.unit, r.points, round(r.damagePer100), ...targets.map((n) => round(r.byTarget[n])), ...targets.map((n) => round(r.pointsByTarget[n]))]));
+  });
+  return `${lines.join("\r\n")}\r\n`;
+}
+
+export const REVERSE_CSV_HEADER = ["rank", "units", "unit_count", "points", "meets_threshold", "cheapest", "p_kill", "expected_damage", "expected_slain"] as const;
+
+/** One row per candidate combination in ranking order; `points` is blank when no unit in it has a cost. */
+export function reverseToCsv(result: ReverseResult): string {
+  const cheapest = result.cheapest?.candidateIds.join("|");
+  const lines = [csvLine([...REVERSE_CSV_HEADER])];
+  result.rows.forEach((r, i) => {
+    lines.push(csvLine([i + 1, r.names.join(" + "), r.candidateIds.length, r.points || undefined, r.meets ? "yes" : "no", cheapest !== undefined && r.candidateIds.join("|") === cheapest ? "yes" : "no", round(r.pKill, 4), round(r.expectedDamage), round(r.expectedSlain)]));
+  });
+  return `${lines.join("\r\n")}\r\n`;
 }

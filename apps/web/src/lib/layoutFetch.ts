@@ -7,7 +7,7 @@
  * the on-top scenery composed from its template catalogue.
  */
 
-import { FORTYKDC, convertFortykdc, fetchFortykdc } from "@grimstat/adapters";
+import { FORTYKDC, convertFortykdc, fetchFortykdc, type FetchLike } from "@grimstat/adapters";
 import { saveLayouts, type StoredLayout } from "./layoutStore";
 
 export interface PublishedLayoutsFetch {
@@ -21,8 +21,34 @@ export const isPublished = (id: string): boolean => id.startsWith(FORTYKDC.idPre
 
 export const publishedIn = (library: readonly StoredLayout[]): number => library.filter((l) => isPublished(l.layout.id)).length;
 
-export async function fetchPublishedLayouts(): Promise<PublishedLayoutsFetch> {
-  const { files, ref, url } = await fetchFortykdc();
+/** Thrown when the signal a caller passed in is aborted while the fetch is running. */
+export const CANCELLED = "cancelled";
+
+/** How many files the fetch reads. Known before it starts, so the panel can count them down. */
+export const LAYOUT_FILE_COUNT = FORTYKDC.files.length;
+
+export interface PublishedLayoutsOptions {
+  /** Aborting it stops the fetch before the next file and before anything is stored. */
+  readonly signal?: AbortSignal;
+  readonly onProgress?: (done: number, total: number) => void;
+}
+
+export async function fetchPublishedLayouts(opts: PublishedLayoutsOptions = {}): Promise<PublishedLayoutsFetch> {
+  const { signal, onProgress } = opts;
+  let done = 0;
+  onProgress?.(done, LAYOUT_FILE_COUNT);
+  // The dataset's own fetch takes the files one at a time, so wrapping it counts them and carries the signal.
+  const fetchImpl: FetchLike = async (target, init) => {
+    if (signal?.aborted) throw new Error(CANCELLED);
+    const res = await fetch(target, { ...(init?.headers ? { headers: init.headers } : {}), ...(signal ? { signal } : {}) });
+    if (target.startsWith(FORTYKDC.rawBase)) {
+      done += 1;
+      onProgress?.(done, LAYOUT_FILE_COUNT);
+    }
+    return res;
+  };
+  const { files, ref, url } = await fetchFortykdc(fetchImpl);
+  if (signal?.aborted) throw new Error(CANCELLED);
   const { layouts, warnings } = convertFortykdc(files, { importedFrom: url, ...(ref ? { ref } : {}) });
   if (layouts.length) await saveLayouts(layouts, ref ? `${FORTYKDC.name} @ ${ref}` : FORTYKDC.name);
   return { stored: layouts.length, warnings, ...(ref ? { ref } : {}) };

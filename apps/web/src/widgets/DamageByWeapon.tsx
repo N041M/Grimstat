@@ -5,9 +5,9 @@ import { fmt, pct } from "../lib/format";
 import { t } from "../i18n";
 
 /**
- * Where the damage came from: rows of `1fr | 56px | 40px` (weapon name, 6px bar, contribution),
- * bars scaled against the biggest contributor. The full per-stage breakdown stays in the
- * "Weapon breakdown" widget below.
+ * Where the damage came from: rows of `1fr | 56px | 40px | 40px` (weapon name, 6px bar,
+ * contribution, share of the total), bars scaled against the biggest contributor. The full
+ * per-stage breakdown stays in the "Weapon breakdown" widget below.
  */
 export function DamageByWeapon({ result, running }: WidgetProps) {
   if (!result || !result.weapons.length)
@@ -24,13 +24,17 @@ export function DamageByWeapon({ result, running }: WidgetProps) {
     <div className="w-pad byw">
       <PanelHead title={t("widget.byWeapon")} />
       <div className="byw-rows">
-        {rows.map((w, i) => (
-          <div className="byw-row" key={`${w.name}#${i}`} title={t("byWeapon.rowTitle", { name: w.name, v: fmt(w.expectedDamage), share: pct(total > 0 ? w.expectedDamage / total : 0, 0) })}>
-            <span className="byw-name">{w.count > 1 ? t("byWeapon.name", { name: w.name, n: w.count }) : w.name}</span>
-            <ProportionBar value={peak > 0 ? w.expectedDamage / peak : 0} height={6} />
-            <span className="byw-v">{fmt(w.expectedDamage, 1)}</span>
-          </div>
-        ))}
+        {rows.map((w, i) => {
+          const share = pct(total > 0 ? w.expectedDamage / total : 0, 0);
+          return (
+            <div className="byw-row" key={`${w.name}#${i}`} title={t("byWeapon.rowTitle", { name: w.name, v: fmt(w.expectedDamage), share })}>
+              <span className="byw-name">{w.count > 1 ? t("byWeapon.name", { name: w.name, n: w.count }) : w.name}</span>
+              <ProportionBar value={peak > 0 ? w.expectedDamage / peak : 0} height={6} />
+              <span className="byw-v">{fmt(w.expectedDamage, 1)}</span>
+              <span className="byw-share">{share}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

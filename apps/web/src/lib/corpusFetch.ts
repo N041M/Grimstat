@@ -44,15 +44,31 @@ export interface CorpusRead {
   readonly warnings: readonly string[];
 }
 
+/** Thrown when the signal a caller passed in is aborted while the fetch is running. */
+export const CANCELLED = "cancelled";
+
+export interface CorpusFetchOptions {
+  /** Aborting it stops the fetch before the next file and before anything is stored. */
+  readonly signal?: AbortSignal;
+  /** Monthly files read so far, of the number the index names. Called once with 0 when the total becomes known. */
+  readonly onProgress?: (done: number, total: number) => void;
+}
+
 /** The index and every monthly file it names. A file that fails costs a warning rather than the fetch. */
-export async function readCorpus(base: string, fetchImpl: FetchText): Promise<CorpusRead> {
+export async function readCorpus(base: string, fetchImpl: FetchText, opts: CorpusFetchOptions = {}): Promise<CorpusRead> {
+  const { signal, onProgress } = opts;
+  if (signal?.aborted) throw new Error(CANCELLED);
   const indexUrl = `${base}${CORPUS_INDEX_FILE}`;
   const res = await fetchImpl(indexUrl);
   if (!res.ok) throw new Error(`GET ${indexUrl} -> HTTP ${res.status}`);
   const index = parseCorpusIndex(await res.text());
   const lists: StoredPublishedList[] = [];
   const warnings: string[] = [];
+  const total = index.files.length;
+  let done = 0;
+  onProgress?.(done, total);
   for (const file of index.files) {
+    if (signal?.aborted) throw new Error(CANCELLED);
     const url = `${base}${file.name}`;
     try {
       const r = await fetchImpl(url);
@@ -62,7 +78,12 @@ export async function readCorpus(base: string, fetchImpl: FetchText): Promise<Co
       }
       lists.push(...parsePublishedListsFile(await r.text()));
     } catch (e) {
+      // A cancelled fetch ends the run; anything else costs this file a warning.
+      if (signal?.aborted) throw e;
       warnings.push(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      done += 1;
+      onProgress?.(done, total);
     }
   }
   return { index, lists, warnings };
@@ -75,9 +96,10 @@ export interface CorpusFetch {
   readonly warnings: readonly string[];
 }
 
-export async function fetchPublishedCorpus(url: string = DEFAULT_CORPUS_URL, fetchImpl: FetchText = (u) => fetch(u, { headers: { Accept: "application/json, text/plain, */*" } })): Promise<CorpusFetch> {
+export async function fetchPublishedCorpus(url: string = DEFAULT_CORPUS_URL, opts: CorpusFetchOptions = {}, fetchImpl: FetchText = (u) => fetch(u, { headers: { Accept: "application/json, text/plain, */*" }, ...(opts.signal ? { signal: opts.signal } : {}) })): Promise<CorpusFetch> {
   const base = corpusBase(url);
-  const { index, lists, warnings } = await readCorpus(base, fetchImpl);
+  const { index, lists, warnings } = await readCorpus(base, fetchImpl, opts);
+  if (opts.signal?.aborted) throw new Error(CANCELLED);
   const { added } = await replacePublishedLists(index.source.publication, lists);
   const record: CorpusRecord = {
     url: base,

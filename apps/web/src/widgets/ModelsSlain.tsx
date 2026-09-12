@@ -6,8 +6,9 @@ import { fmt, pct } from "../lib/format";
 import { t } from "../i18n";
 
 /**
- * Rows of `18px | 1fr | 46px`: the model count, a proportional bar in a `--fill` trough and the
- * probability. Outcomes at the mode are drawn in `--ink`, the rest in `--dim`.
+ * Rows of `18px | 1fr | 52px | 52px`: the model count, a proportional bar in a `--fill` trough,
+ * the chance of exactly that many and the chance of at least that many. Outcomes at the mode are
+ * drawn in `--ink`, the rest in `--dim`.
  */
 export function ModelsSlain({ result, running }: WidgetProps) {
   if (!result)
@@ -23,11 +24,18 @@ export function ModelsSlain({ result, running }: WidgetProps) {
     <div className="w-pad slain">
       <PanelHead title={t("widget.slain")} />
       <div className="slain-rows">
+        <div className="slain-head" aria-hidden="true">
+          <span />
+          <span />
+          <span className="slain-h">{t("slain.exactly")}</span>
+          <span className="slain-h">{t("slain.atLeast")}</span>
+        </div>
         {rows.map((r) => (
           <div className="slain-row" key={r.n} title={t("slain.rowTitle", { n: r.n, p: pct(r.p, 1), atLeast: pct(result.pAtLeastSlain[r.n] ?? 0, 1) })}>
             <span className="slain-n">{r.n}</span>
             <ProportionBar value={r.width} tone={r.modal ? "ink" : "dim"} height={11} />
-            <span className="slain-p">{fmt(r.p, 2)}</span>
+            <span className="slain-p">{pct(r.p, 1)}</span>
+            <span className="slain-p slain-atleast">{pct(result.pAtLeastSlain[r.n] ?? 0, 1)}</span>
           </div>
         ))}
       </div>

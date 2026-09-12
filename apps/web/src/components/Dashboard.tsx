@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactGridLayout, { WidthProvider, type Layout } from "react-grid-layout";
 import { db, type DashboardLayoutRecord } from "../db";
 import { analysisKeys, widgetAvailable, widgetsFrom, type ReactWidgetDef, type WidgetProps } from "../widgets/registry";
 import { host } from "../plugin";
+import { useApp } from "../state/AppContext";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { Icon, Popover, useConfirm } from "./ui";
 import { t } from "../i18n";
 import { nowIso } from "../lib/ids";
 
@@ -86,6 +88,21 @@ function reconcile(stored: Layout[] | undefined, widgets: ReactWidgetDef[]): Lay
   });
 }
 
+/**
+ * The grid only reports positions for the panels it shows. Hidden panels keep the position they
+ * had, so bringing one back puts it where it was.
+ */
+export function mergeLayout(prev: Layout[], shown: Layout[]): Layout[] {
+  const byId = new Map(shown.map((l) => [l.i, l] as const));
+  return prev.map((l) => byId.get(l.i) ?? l);
+}
+
+/** The hidden list a dashboard starts with, limited to widgets it actually has. */
+export function initialHidden(stored: string[] | undefined, fallback: readonly string[], widgets: ReactWidgetDef[]): string[] {
+  const known = new Set(widgets.map((w) => w.id));
+  return (stored ?? [...fallback]).filter((id) => known.has(id));
+}
+
 function useMedia(query: string): boolean {
   const [m, setM] = useState(() => (typeof window !== "undefined" ? window.matchMedia(query).matches : false));
   useEffect(() => {
@@ -97,14 +114,21 @@ function useMedia(query: string): boolean {
   return m;
 }
 
-export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
+export function Dashboard({ id, inputs, defaultHidden = [], actions }: { id: string; inputs: WidgetProps; /** Widget ids a fresh layout (no stored record) starts without. */ defaultHidden?: readonly string[]; /** Extra controls for the dashboard bar, before the layout buttons. */ actions?: ReactNode }) {
+  const { notify } = useApp();
+  const { confirm, dialog } = useConfirm();
   const provided = analysisKeys(inputs.analyses);
   // Analysis widgets are gated on the inputs this dashboard provides (see widgetAvailable).
   const widgets = useMemo(() => widgetsFrom(host).filter((w) => widgetAvailable(w, inputs.analyses)), [provided]); // eslint-disable-line react-hooks/exhaustive-deps
   const gridRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<Layout[] | undefined>(undefined);
+  const [hidden, setHidden] = useState<string[] | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
+  const [menu, setMenu] = useState(false);
   const narrow = useMedia("(max-width: 899px)");
+  // Event handlers from the grid and the fit button read the latest state through these, not a closure.
+  const latest = useRef({ layout, hidden });
+  latest.current = { layout, hidden };
 
   useEffect(() => {
     let alive = true;
@@ -113,17 +137,23 @@ export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
       .then((rec) => {
         if (!alive) return;
         setLayout(reconcile(rec?.layout, widgets));
+        setHidden(initialHidden(rec ? (rec.hidden ?? []) : undefined, defaultHidden, widgets));
       })
-      .catch(() => setLayout(defaultLayout(widgets)))
+      .catch(() => {
+        setLayout(defaultLayout(widgets));
+        setHidden(initialHidden(undefined, defaultHidden, widgets));
+      })
       .finally(() => alive && setLoaded(true));
     return () => {
       alive = false;
     };
+    // defaultHidden only matters on first load; a changing array identity must not re-read the record.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, widgets]);
 
   const persist = useCallback(
-    (l: Layout[]) => {
-      const rec: DashboardLayoutRecord = { id, layout: l.map(({ i, x, y, w, h, minW, minH }) => ({ i, x, y, w, h, minW, minH })), hidden: [], updatedAt: nowIso() };
+    (l: Layout[], h: string[]) => {
+      const rec: DashboardLayoutRecord = { id, layout: l.map(({ i, x, y, w, h: hh, minW, minH }) => ({ i, x, y, w, h: hh, minW, minH })), hidden: h, updatedAt: nowIso() };
       void db.layouts.put(rec);
     },
     [id],
@@ -132,8 +162,10 @@ export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
   const onLayoutChange = useCallback(
     (l: Layout[]) => {
       if (narrow) return; // never overwrite the desktop layout from the single-column view
-      setLayout(l);
-      persist(l);
+      const cur = latest.current;
+      const next = mergeLayout(cur.layout ?? [], l);
+      setLayout(next);
+      persist(next, cur.hidden ?? []);
     },
     [narrow, persist],
   );
@@ -168,43 +200,99 @@ export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
         const rows = Math.min(capRows, rowsForHeight(px));
         return { ...l, h: Math.max(minH.get(l.i) ?? l.minH ?? 3, rows) };
       });
-      persist(next);
+      persist(next, latest.current.hidden ?? []);
       return next;
     });
   }, [layout, persist, widgets]);
 
-  const reset = useCallback(() => {
-    const l = defaultLayout(widgets);
-    setLayout(l);
+  const reset = useCallback(async () => {
+    if (!(await confirm({ title: t("dashboard.resetTitle"), body: t("dashboard.resetBody"), confirmLabel: t("dashboard.reset") }))) return;
+    setLayout(defaultLayout(widgets));
+    setHidden(initialHidden(undefined, defaultHidden, widgets));
     void db.layouts.delete(id);
-  }, [id, widgets]);
+    notify(t("dashboard.resetDone"), "success");
+  }, [confirm, defaultHidden, id, notify, widgets]);
 
-  if (!loaded || !layout) return null;
+  const show = useCallback(
+    (widgetId: string) => {
+      const cur = latest.current;
+      const h = (cur.hidden ?? []).filter((x) => x !== widgetId);
+      setHidden(h);
+      persist(cur.layout ?? [], h);
+    },
+    [persist],
+  );
 
-  const order = [...layout].sort((a, b) => a.y - b.y || a.x - b.x).map((l) => l.i);
+  const hide = useCallback(
+    (w: ReactWidgetDef) => {
+      const cur = latest.current;
+      if ((cur.hidden ?? []).includes(w.id)) return;
+      const h = [...(cur.hidden ?? []), w.id];
+      setHidden(h);
+      persist(cur.layout ?? [], h);
+      notify(t("dashboard.panelHidden", { name: w.title }), "info", undefined, { label: t("common.undo"), run: () => show(w.id) });
+    },
+    [notify, persist, show],
+  );
 
-  const panel = (w: ReactWidgetDef) => {
+  if (!loaded || !layout || !hidden) {
+    return (
+      <div className="dashboard">
+        <div className="dash-bar">
+          <span className="dash-hint" role="status">
+            {t("dashboard.loading")}
+          </span>
+        </div>
+        <div className="dash-placeholder" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  const hiddenSet = new Set(hidden);
+  const byId = new Map(widgets.map((w) => [w.id, w] as const));
+  const shownWidgets = widgets.filter((w) => !hiddenSet.has(w.id));
+  const shownLayout = layout.filter((l) => !hiddenSet.has(l.i));
+  const order = [...shownLayout].sort((a, b) => a.y - b.y || a.x - b.x).map((l) => l.i);
+
+  const hideButton = (w: ReactWidgetDef) => (
+    <button type="button" className="widget-hide" onClick={() => hide(w)} aria-label={t("dashboard.hidePanel", { name: w.title })} title={t("dashboard.hide")}>
+      <Icon name="close" />
+    </button>
+  );
+
+  const panel = (w: ReactWidgetDef, draggable: boolean) => {
     const Render = w.render;
     const headless = HEADLESS.has(w.id);
+    let head: ReactNode;
+    if (headless) {
+      // These panels draw their own heading; on the grid the handle is a slim grip rather than a second title.
+      head = draggable ? (
+        <div className="widget-drag bare" title={`${w.title} — ${t("dashboard.dragHint")}`} aria-label={`${w.title} — ${t("dashboard.dragHint")}`}>
+          <span aria-hidden="true">⠿</span>
+        </div>
+      ) : null;
+    } else {
+      head = (
+        <div className={`widget-head ${draggable ? "widget-drag" : ""}`.trim()} title={draggable ? t("dashboard.dragHint") : undefined}>
+          <h2 className="panel-title" title={w.description}>
+            {w.title}
+          </h2>
+          <span className="widget-head-tools">
+            {draggable ? (
+              <span className="drag-dots" aria-hidden="true">
+                ⠿
+              </span>
+            ) : null}
+            {hideButton(w)}
+          </span>
+        </div>
+      );
+    }
     return (
       <section className={`widget ${headless ? "flush" : ""}`.trim()} aria-label={w.title}>
-        {/* Every panel has exactly one draggable title area: the slim strip for panels that draw
-            their own heading, otherwise the panel header itself. */}
-        {headless ? (
-          // These panels draw their own heading, so the handle is a slim grip rather than a second title.
-          <div className="widget-drag bare" title={`${w.title} — ${t("dashboard.dragHint")}`} aria-label={`${w.title} — ${t("dashboard.dragHint")}`}>
-            <span aria-hidden="true">⠿</span>
-          </div>
-        ) : (
-          <div className="widget-head widget-drag" title={t("dashboard.dragHint")}>
-            <h2 className="panel-title" title={w.description}>
-              {w.title}
-            </h2>
-            <span className="drag-dots" aria-hidden="true">
-              ⠿
-            </span>
-          </div>
-        )}
+        {head}
+        {/* Headless panels carry the hide control in their corner, over their own heading. */}
+        {headless ? <span className="widget-hide-corner">{hideButton(w)}</span> : null}
         <div className="widget-body">
           <ErrorBoundary compact resetKey={inputs.result}>
             <Render {...inputs} />
@@ -214,19 +302,55 @@ export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
     );
   };
 
+  const hiddenMenu = hidden.length ? (
+    <Popover
+      open={menu}
+      onClose={() => setMenu(false)}
+      align="end"
+      label={t("dashboard.hiddenList")}
+      trigger={
+        <button type="button" className="dash-btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>
+          {t("dashboard.hidden", { n: hidden.length })}
+        </button>
+      }
+    >
+      <div className="menu" role="menu">
+        {hidden.map((widgetId) => {
+          const w = byId.get(widgetId);
+          return w ? (
+            <button
+              key={widgetId}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                show(widgetId);
+                setMenu(false);
+              }}
+            >
+              {t("dashboard.show", { name: w.title })}
+            </button>
+          ) : null;
+        })}
+      </div>
+    </Popover>
+  ) : null;
+
   // Phones drop the grid entirely: one column, panels sized by their own content. Positions stay
   // untouched, so the desktop arrangement survives a trip through a narrow window.
   if (narrow) {
-    const byId = new Map(widgets.map((w) => [w.id, w] as const));
     return (
       <div className="dashboard narrow">
+        {dialog}
         <div className="dash-bar">
-          <span className="dash-hint">{t("dashboard.narrowHint")}</span>
+          <span className="dash-actions">
+            {actions}
+            {hiddenMenu}
+          </span>
         </div>
         <div className="dash-stack">
           {order.map((widgetId) => {
             const w = byId.get(widgetId);
-            return w ? <div key={widgetId}>{panel(w)}</div> : null;
+            return w ? <div key={widgetId}>{panel(w, false)}</div> : null;
           })}
         </div>
       </div>
@@ -235,21 +359,24 @@ export function Dashboard({ id, inputs }: { id: string; inputs: WidgetProps }) {
 
   return (
     <div className="dashboard" ref={gridRef}>
+      {dialog}
       <div className="dash-bar">
         <span className="dash-hint">{t("dashboard.hint")}</span>
         <span className="dash-actions">
+          {actions}
+          {hiddenMenu}
           <button type="button" className="dash-btn" onClick={autoFit} title={t("dashboard.autoFitHint")}>
             {t("dashboard.autoFit")}
           </button>
-          <button type="button" className="dash-btn" onClick={reset}>
+          <button type="button" className="dash-btn" onClick={() => void reset()}>
             {t("dashboard.reset")}
           </button>
         </span>
       </div>
-      <Grid className="layout" layout={layout} cols={COLS} rowHeight={ROW_HEIGHT} margin={[GUTTER, GUTTER]} containerPadding={[GUTTER, GUTTER]} draggableHandle=".widget-drag" onLayoutChange={onLayoutChange} isDraggable isResizable compactType="vertical">
-        {widgets.map((w) => (
+      <Grid className="layout" layout={shownLayout} cols={COLS} rowHeight={ROW_HEIGHT} margin={[GUTTER, GUTTER]} containerPadding={[GUTTER, GUTTER]} draggableHandle=".widget-drag" draggableCancel=".widget-hide" onLayoutChange={onLayoutChange} isDraggable isResizable compactType="vertical">
+        {shownWidgets.map((w) => (
           <div key={w.id} data-widget-id={w.id}>
-            {panel(w)}
+            {panel(w, true)}
           </div>
         ))}
       </Grid>

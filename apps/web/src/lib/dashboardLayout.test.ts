@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultLayout, minSizeOf, rowsForHeight } from "../components/Dashboard";
+import { defaultLayout, initialHidden, mergeLayout, minSizeOf, rowsForHeight } from "../components/Dashboard";
 import type { ReactWidgetDef } from "../widgets/registry";
 
 const w = (id: string, size: { w: number; h: number }, minSize?: { w: number; h: number }): ReactWidgetDef => ({ id, title: id, inputs: ["result"], defaultSize: size, render: () => null, ...(minSize ? { minSize } : {}) });
@@ -50,5 +50,31 @@ describe("fitting a panel to its content", () => {
   it("never returns less than one row, whatever it is given", () => {
     expect(rowsForHeight(0)).toBe(1);
     expect(rowsForHeight(-40)).toBe(1);
+  });
+});
+
+describe("hidden panels", () => {
+  it("keeps a hidden panel's position when the grid reports only the shown ones", () => {
+    const prev = [
+      { i: "a", x: 0, y: 0, w: 6, h: 3 },
+      { i: "b", x: 6, y: 0, w: 6, h: 3 },
+      { i: "c", x: 0, y: 3, w: 12, h: 4 },
+    ];
+    const merged = mergeLayout(prev, [
+      { i: "a", x: 0, y: 0, w: 12, h: 3 },
+      { i: "c", x: 0, y: 3, w: 12, h: 5 },
+    ]);
+    expect(merged.map((l) => [l.i, l.w, l.h])).toEqual([
+      ["a", 12, 3],
+      ["b", 6, 3],
+      ["c", 12, 5],
+    ]);
+  });
+
+  it("starts from the fallback list only when nothing is stored, and drops unknown ids", () => {
+    const widgets = [w("hero", { w: 12, h: 3 }), w("cov", { w: 6, h: 6 })];
+    expect(initialHidden(undefined, ["cov", "gone"], widgets)).toEqual(["cov"]);
+    expect(initialHidden([], ["cov"], widgets)).toEqual([]);
+    expect(initialHidden(["hero", "gone"], ["cov"], widgets)).toEqual(["hero"]);
   });
 });

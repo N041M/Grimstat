@@ -47,6 +47,27 @@ describe("reading the corpus", () => {
   });
 });
 
+describe("a fetch in progress", () => {
+  it("counts the monthly files as they are read", async () => {
+    const seen: Array<[number, number]> = [];
+    await readCorpus("https://example.invalid/corpus/", fetchImpl, { onProgress: (done, total) => seen.push([done, total]) });
+    expect(seen).toEqual([
+      [0, 2],
+      [1, 2],
+      [2, 2],
+    ]);
+  });
+
+  it("stops on an aborted signal rather than turning the cancellation into a warning", async () => {
+    const controller = new AbortController();
+    const cancelling: FetchText = async (url) => {
+      controller.abort();
+      return fetchImpl(url);
+    };
+    await expect(readCorpus("https://example.invalid/corpus/", cancelling, { signal: controller.signal })).rejects.toThrow(/cancelled/);
+  });
+});
+
 describe("the stored record", () => {
   it("comes back whole, null stays null, and junk is rejected", () => {
     const record = { url: "https://example.invalid/corpus/", generatedAt: "2026-09-11T01:00:00.000Z", fetchedAt: "2026-09-11T02:00:00.000Z", lists: 1, tournaments: 1, sourceName: "MiniHeadQuarters", sourceUrl: "https://miniheadquarters.com", publication: "miniheadquarters.com", attribution: "x", months: ["2026-09"] };

@@ -2,15 +2,21 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { UnitArt } from "../UnitArt";
 import type { Datasheet, Roster, Snapshot } from "@grimstat/schema";
 import { pointsFor } from "@grimstat/game-40k-11e";
+import type { PointsBarModel } from "../../lib/pointsBar";
 import { compositionBounds, duplicateCap, PICKER_GROUP_ORDER, pickerGroupOf, type PickerGroup } from "../../lib/roster";
 import { fmtInt } from "../../lib/format";
 import { battleSizeKey } from "../../pages/ArmiesPage";
 import { Icon } from "../ui";
-import { t, type I18nKey } from "../../i18n";
+import { t, tn, type I18nKey } from "../../i18n";
+
+/** How long the "Added …" line stays in the live region after the last add. */
+const ADDED_NOTE_MS = 4000;
 
 interface Props {
   roster: Roster;
   snapshot: Snapshot;
+  /** Points spent and spare, shown in the head and used to flag rows the budget cannot take. */
+  points: PointsBarModel;
   /** `edit` = "Add & edit": the page selects the new unit and closes the picker. */
   onAdd: (ds: Datasheet, edit: boolean) => void;
   onClose: () => void;
@@ -26,8 +32,8 @@ const GROUP_KEY: Record<PickerGroup, I18nKey> = {
 
 function sizeLabel(ds: Datasheet): string {
   const b = compositionBounds(ds);
-  if (b.max === undefined) return b.min === 1 ? t("roster.units.models", { n: 1 }) : t("roster.units.modelsMin", { min: b.min });
-  return b.min === b.max ? t("roster.units.models", { n: b.min }) : t("roster.units.modelsRange", { min: b.min, max: b.max });
+  if (b.max === undefined) return b.min === 1 ? tn(1, "roster.units.model", "roster.units.models") : t("roster.units.modelsMin", { min: b.min });
+  return b.min === b.max ? tn(b.min, "roster.units.model", "roster.units.models") : t("roster.units.modelsRange", { min: b.min, max: b.max });
 }
 
 interface Row {
@@ -39,17 +45,30 @@ interface Row {
   blocked: string | undefined;
 }
 
-/** Searchable, role-grouped datasheet picker with keyboard navigation and a duplication cap per battle size. */
-export function AddUnitPanel({ roster, snapshot, onAdd, onClose }: Props) {
+/**
+ * Searchable, role-grouped datasheet picker with keyboard navigation and a duplication cap per
+ * battle size. The head shows the points budget; rows whose cheapest cost exceeds the spare
+ * points are flagged but stay addable, since the list is often built over the limit and trimmed.
+ */
+export function AddUnitPanel({ roster, snapshot, points, onAdd, onClose }: Props) {
   const [search, setSearch] = useState("");
   const [hl, setHl] = useState(0);
-  const [added, setAdded] = useState<string | undefined>(undefined);
+  // `at` makes two adds of the same datasheet distinct, so the clearing timer restarts each time.
+  const [added, setAdded] = useState<{ name: string; at: number } | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     input.current?.focus();
   }, []);
+
+  // The live region announces an add, then empties a few seconds later so it does not read as a
+  // standing status of the panel.
+  useEffect(() => {
+    if (!added) return;
+    const timer = window.setTimeout(() => setAdded(undefined), ADDED_NOTE_MS);
+    return () => window.clearTimeout(timer);
+  }, [added]);
 
   const copies = useMemo(() => {
     const m = new Map<string, number>();
@@ -86,9 +105,12 @@ export function AddUnitPanel({ roster, snapshot, onAdd, onClose }: Props) {
   const add = (row: Row, edit: boolean) => {
     if (row.blocked) return;
     onAdd(row.ds, edit);
-    setAdded(row.ds.name);
+    setAdded({ name: row.ds.name, at: Date.now() });
     if (!edit) input.current?.focus();
   };
+
+  const over = points.over > 0;
+  const budget = over ? t("roster.units.budgetOver", { used: fmtInt(points.total), limit: fmtInt(points.limit), over: fmtInt(points.over) }) : t("roster.units.budget", { used: fmtInt(points.total), limit: fmtInt(points.limit), spare: fmtInt(points.spare) });
 
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -114,6 +136,7 @@ export function AddUnitPanel({ roster, snapshot, onAdd, onClose }: Props) {
     <div className="add-unit" onKeyDown={onKey} role="region" aria-label={t("roster.units.pickerTitle")}>
       <div className="add-unit-head">
         <strong>{t("roster.units.pickerTitle")}</strong>
+        <span className={`small tabular add-unit-budget ${over ? "danger-text" : "muted"}`}>{budget}</span>
         <span className="small muted keys-hint">{t("roster.units.pickerKeys")}</span>
         <button type="button" className="ghost sm icon-btn" onClick={onClose} aria-label={t("roster.units.close")}>
           <Icon name="close" />
@@ -130,6 +153,7 @@ export function AddUnitPanel({ roster, snapshot, onAdd, onClose }: Props) {
           onChange={(e) => {
             setSearch(e.target.value);
             setHl(0);
+            setAdded(undefined);
           }}
         />
       </div>
@@ -137,7 +161,7 @@ export function AddUnitPanel({ roster, snapshot, onAdd, onClose }: Props) {
         {added ? (
           <>
             <Icon name="check" />
-            {t("roster.units.added", { name: added })}
+            {t("roster.units.added", { name: added.name })}
           </>
         ) : null}
       </div>
@@ -150,9 +174,11 @@ export function AddUnitPanel({ roster, snapshot, onAdd, onClose }: Props) {
                 {g.rows.map((row) => {
                   index += 1;
                   const i = index;
+                  // Its cheapest size would push the army past the limit; still addable, but said so.
+                  const short = row.points !== undefined && row.points > points.spare ? row.points - points.spare : 0;
                   return (
-                    <li key={row.ds.id} className={`ds-row ${i === hl ? "hl" : ""} ${row.blocked ? "blocked" : ""}`.trim()} data-i={i} onMouseEnter={() => setHl(i)}>
-                      <button type="button" className="ds-main" disabled={!!row.blocked} onClick={() => add(row, false)} aria-label={`${t("roster.units.addOne")} ${row.ds.name}`} title={row.blocked}>
+                    <li key={row.ds.id} className={`ds-row ${i === hl ? "hl" : ""} ${row.blocked ? "blocked" : ""} ${short > 0 ? "over-budget" : ""}`.trim()} data-i={i} onMouseEnter={() => setHl(i)}>
+                      <button type="button" className="ds-main" disabled={!!row.blocked} onClick={() => add(row, false)} aria-label={`${t("roster.units.addOne")} ${row.ds.name}`} title={row.blocked ?? (short > 0 ? t("roster.units.overBudget", { n: fmtInt(short) }) : undefined)}>
                         <span className="ds-name">
                           <UnitArt of={row.ds} />
                           {row.ds.name}
@@ -163,6 +189,7 @@ export function AddUnitPanel({ roster, snapshot, onAdd, onClose }: Props) {
                           {row.size}
                           {row.points !== undefined ? ` · ${t("roster.units.from", { v: fmtInt(row.points) })}` : ""}
                           {row.blocked ? <span className="danger-text"> · {row.blocked}</span> : null}
+                          {!row.blocked && short > 0 ? <span className="warn-text ds-over"> · {t("roster.units.overBudget", { n: fmtInt(short) })}</span> : null}
                         </span>
                       </button>
                       <span className="ds-actions">

@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Scenario } from "@grimstat/schema";
+import type { Roster, Scenario } from "@grimstat/schema";
 import { unitFromDatasheet } from "@grimstat/game-40k-11e";
 import { db } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { navigate } from "../../router";
 import type { useTheme } from "../../theme";
 import { newScenario } from "../../lib/scenario";
-import { fmt, fmtRelative } from "../../lib/format";
+import { loadSampleSnapshot } from "../../lib/snapshotSource";
+import { fmt, fmtInt, fmtRelative } from "../../lib/format";
 import { buildGroups, flattenGroups, stepIndex, type PaletteGroupId, type PaletteItem } from "../../lib/palette";
+import { trapTab } from "../ui";
 import { RAIL_ENTRIES } from "./IconRail";
+import { requestNew } from "./ContextColumn";
 import { t } from "../../i18n";
 
-/** Scenarios and units are long lists; the palette shows the most recent / first few. */
+/** Scenarios, armies and units are long lists; the palette shows the most recent / first few. */
 const SCENARIO_CAP = 6;
+const ARMY_CAP = 6;
 const UNIT_CAP = 12;
 
 interface Command extends PaletteItem {
@@ -26,12 +30,26 @@ function storedExpectedDamage(s: Scenario): number | undefined {
 }
 
 export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }) {
-  const { paletteOpen, openPalette, closePalette, snapshot, replaceScenario, updateScenario, notify } = useApp();
+  const { paletteOpen, openPalette, closePalette, snapshot, replaceScenario, updateScenario, notify, refreshSnapshots, setActiveSnapshot } = useApp();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [rosters, setRosters] = useState<Roster[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Whatever opened the palette gets focus back when it closes; a route change closes it.
+  useEffect(() => {
+    if (!paletteOpen) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onRoute = () => closePalette();
+    window.addEventListener("hashchange", onRoute);
+    return () => {
+      window.removeEventListener("hashchange", onRoute);
+      if (opener?.isConnected && (!document.activeElement || document.activeElement === document.body)) opener.focus({ preventScroll: true });
+    };
+  }, [paletteOpen, closePalette]);
 
   // ⌘K / Ctrl+K anywhere; Escape closes.
   useEffect(() => {
@@ -46,16 +64,23 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
     return () => window.removeEventListener("keydown", onKey);
   }, [paletteOpen, openPalette, closePalette]);
 
-  // Recent scenarios are read once per opening so the list is never stale.
+  // Recent scenarios and armies are read once per opening so the lists are never stale.
   useEffect(() => {
     if (!paletteOpen) return;
     setQuery("");
     setActive(0);
     let alive = true;
+    const byRecent = <T extends { updatedAt: string }>(all: T[]) => all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, 40);
     void db.scenarios
       .toArray()
       .then((all) => {
-        if (alive) setScenarios(all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, 40));
+        if (alive) setScenarios(byRecent(all));
+      })
+      .catch(() => undefined);
+    void db.rosters
+      .toArray()
+      .then((all) => {
+        if (alive) setRosters(byRecent(all));
       })
       .catch(() => undefined);
     return () => {
@@ -73,7 +98,6 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
         group: "goto",
         glyph: e.glyph,
         label: t(e.labelKey),
-        hint: `⌘${e.glyph}`,
         run: () => {
           close();
           navigate(e.route);
@@ -91,6 +115,19 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
         run: () => {
           close();
           void replaceScenario(s, s.snapshotId).then(() => navigate("calculator"));
+        },
+      });
+    }
+    for (const r of rosters) {
+      out.push({
+        id: `army:${r.id}`,
+        group: "armies",
+        glyph: "›",
+        label: r.name,
+        hint: t("ctxcol.pointsLimit", { limit: fmtInt(r.pointsLimit) }),
+        run: () => {
+          close();
+          navigate("armies", false, r.id);
         },
       });
     }
@@ -127,6 +164,16 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
       },
     });
     out.push({
+      id: "act:newArmy",
+      group: "actions",
+      glyph: "+",
+      label: t("palette.newArmy"),
+      run: () => {
+        close();
+        requestNew("armies");
+      },
+    });
+    out.push({
       id: "act:resolve",
       group: "actions",
       glyph: "↻",
@@ -148,6 +195,36 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
       },
     });
     out.push({
+      id: "act:sample",
+      group: "actions",
+      glyph: "↓",
+      label: t("palette.loadSample"),
+      run: () => {
+        close();
+        void (async () => {
+          try {
+            const s = loadSampleSnapshot();
+            await db.snapshots.put(s);
+            await refreshSnapshots();
+            await setActiveSnapshot(s.id);
+            notify(t("data.sampleLoaded", { label: s.label ?? s.id }), "success");
+          } catch (err) {
+            notify(err instanceof Error ? err.message : String(err), "error");
+          }
+        })();
+      },
+    });
+    out.push({
+      id: "act:overrides",
+      group: "actions",
+      glyph: "›",
+      label: t("palette.openOverrides"),
+      run: () => {
+        close();
+        navigate("data", false, "overrides");
+      },
+    });
+    out.push({
       id: "act:theme",
       group: "actions",
       glyph: theme.resolved === "dark" ? "☀" : "☾",
@@ -158,10 +235,10 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
       },
     });
     return out;
-  }, [scenarios, snapshot, theme, close, replaceScenario, updateScenario, notify]);
+  }, [scenarios, rosters, snapshot, theme, close, replaceScenario, updateScenario, notify, refreshSnapshots, setActiveSnapshot]);
 
-  const labels = useMemo<Record<PaletteGroupId, string>>(() => ({ goto: t("palette.group.goto"), scenarios: t("palette.group.scenarios"), units: t("palette.group.units"), actions: t("palette.group.actions") }), []);
-  const groups = useMemo(() => buildGroups(commands, query, labels, { scenarios: SCENARIO_CAP, units: UNIT_CAP }), [commands, query, labels]);
+  const labels = useMemo<Record<PaletteGroupId, string>>(() => ({ goto: t("palette.group.goto"), scenarios: t("palette.group.scenarios"), armies: t("palette.group.armies"), units: t("palette.group.units"), actions: t("palette.group.actions") }), []);
+  const groups = useMemo(() => buildGroups(commands, query, labels, { scenarios: SCENARIO_CAP, armies: ARMY_CAP, units: UNIT_CAP }), [commands, query, labels]);
   const flat = useMemo(() => flattenGroups(groups), [groups]);
   const activeId = flat[Math.min(active, flat.length - 1)]?.id;
 
@@ -173,7 +250,9 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
   if (!paletteOpen) return null;
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
+    if (e.key === "Tab") {
+      if (panelRef.current) trapTab(e, panelRef.current);
+    } else if (e.key === "Escape") {
       e.preventDefault();
       close();
     } else if (e.key === "ArrowDown") {
@@ -190,7 +269,7 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
 
   return (
     <div className="pal-backdrop" onClick={close} role="presentation">
-      <div className="pal-panel" role="dialog" aria-modal="true" aria-label={t("palette.open")} onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
+      <div className="pal-panel" role="dialog" aria-modal="true" aria-label={t("palette.open")} ref={panelRef} onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
         <div className="pal-search">
           <span className="pal-diamond" aria-hidden="true" />
           <input

@@ -23,7 +23,7 @@ const DOC_URL = `${REPO_URL}/blob/main/docs`;
  *
  * Renders as an `<a>` when given `href`, otherwise a `<button>`; either way one row, one action.
  */
-export function ContextRow({ name, value, meta, selected, href, onClick, title }: { name: ReactNode; value?: ReactNode; meta?: ReactNode; selected?: boolean; href?: string; onClick?: () => void; title?: string }) {
+export function ContextRow({ name, value, meta, selected, href, onClick, title, inert }: { name: ReactNode; value?: ReactNode; meta?: ReactNode; selected?: boolean; href?: string; onClick?: () => void; title?: string; inert?: boolean }) {
   const inner = (
     <>
       <span className="ctx-row-top">
@@ -34,6 +34,14 @@ export function ContextRow({ name, value, meta, selected, href, onClick, title }
     </>
   );
   const cls = `ctx-row ${selected ? "selected" : ""}`.trim();
+  // A row that only states a fact is plain text, not a control.
+  if (inert || (!href && !onClick)) {
+    return (
+      <div className={`${cls} inert`} title={title}>
+        {inner}
+      </div>
+    );
+  }
   if (href) {
     return (
       <a className={cls} href={href} title={title} aria-current={selected ? "true" : undefined} onClick={onClick} {...(href.startsWith("http") ? { target: "_blank", rel: "noreferrer" } : {})}>
@@ -80,7 +88,7 @@ export function ContextEmpty({ children }: { children: ReactNode }) {
  */
 export const CONTEXT_NEW_EVENT = "grimstat:context-new";
 
-function requestNew(route: Route): void {
+export function requestNew(route: Route): void {
   navigate(route);
   // Let the route mount before it is asked to open its dialog.
   window.setTimeout(() => window.dispatchEvent(new CustomEvent(CONTEXT_NEW_EVENT, { detail: { route } })), 0);
@@ -328,6 +336,17 @@ function BattleBody({ inSheet }: BodyProps) {
   );
 }
 
+/**
+ * Placeholder until a game is open; the Play screen fills the slot with the game's log and score.
+ */
+function PlayBody({ inSheet }: BodyProps) {
+  return (
+    <ContextFrame eyebrow={t("ctxcol.play")} inSheet={inSheet}>
+      <ContextEmpty>{t("ctxcol.playHint")}</ContextEmpty>
+    </ContextFrame>
+  );
+}
+
 /** The 240–264px context column. On phones the same component is rendered inside a sheet. */
 export function ContextColumn({ route, param, inSheet }: { route: Route; param?: string | undefined; inSheet?: boolean }) {
   const props: BodyProps = { param, ...(inSheet === undefined ? {} : { inSheet }) };
@@ -344,6 +363,8 @@ export function ContextColumn({ route, param, inSheet }: { route: Route; param?:
       return <AnalysesBody {...props} />;
     case "battle":
       return <BattleBody {...props} />;
+    case "play":
+      return <PlayBody {...props} />;
     case "data":
       return <DataBody {...props} />;
     case "about":
@@ -366,6 +387,8 @@ export function contextEyebrow(route: Route): string {
       return t("ctxcol.unitSet");
     case "battle":
       return t("ctxcol.battle");
+    case "play":
+      return t("ctxcol.play");
     case "data":
       return t("ctxcol.sources");
     case "about":

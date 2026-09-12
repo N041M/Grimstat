@@ -14,20 +14,25 @@ import { RosterEditorPage } from "./pages/RosterEditorPage";
 import { CodexPage } from "./pages/CodexPage";
 import { AnalysesPage } from "./pages/AnalysesPage";
 import { BattlePage } from "./pages/BattlePage";
+import { PlayPage } from "./pages/PlayPage";
 import { DataPage } from "./pages/DataPage";
 import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sheet } from "./components/ui";
-import { CommandPalette, ContextColumn, contextEyebrow, IconRail } from "./components/shell";
+import { CommandPalette, ContextColumn, contextEyebrow, IconRail, useBarHostRef } from "./components/shell";
+import { swStore, useOnline, useServiceWorker } from "./lib/sw";
 import { t } from "./i18n";
 
 export function App() {
   const { route, param } = useRouteInfo();
   const theme = useTheme();
-  const { ready, notice, dismissNotice, replaceScenario, notify } = useApp();
+  const { ready, notices, dismissNotice, replaceScenario, notify } = useApp();
+  const sw = useServiceWorker();
+  const online = useOnline();
   const narrow = useMediaQuery(NARROW_QUERY);
   const [sheet, setSheet] = useState(false);
+  const barHostRef = useBarHostRef();
 
   // The context sheet is per-screen; leaving the screen closes it.
   useEffect(() => setSheet(false), [route, param]);
@@ -85,13 +90,13 @@ export function App() {
     <p className="muted shell-loading">{t("shell.loading")}</p>
   ) : (
     <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
-      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "codex" ? <CodexPage id={param} /> : route === "analyses" ? <AnalysesPage /> : route === "battle" ? <BattlePage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
+      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "codex" ? <CodexPage id={param} /> : route === "analyses" ? <AnalysesPage /> : route === "battle" ? <BattlePage /> : route === "play" ? <PlayPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
     </ErrorBoundary>
   );
 
   return (
     <div className={`shell ${narrow ? "narrow" : ""}`.trim()}>
-      <IconRail route={route} theme={theme} />
+      <IconRail route={route} theme={theme} offline={!online} />
       {narrow ? null : <ContextColumn route={route} param={param} />}
       <main className="main-region">
         {narrow ? (
@@ -100,6 +105,8 @@ export function App() {
               <span aria-hidden="true">☰</span>
               {contextEyebrow(route)}
             </button>
+            {/* A screen with no page header of its own puts its primary actions here. */}
+            <div className="ctx-bar-actions" ref={barHostRef} />
           </div>
         ) : null}
         {page}
@@ -109,23 +116,48 @@ export function App() {
           <ContextColumn route={route} param={param} inSheet />
         </Sheet>
       ) : null}
-      {notice ? (
+      {sw.needRefresh ? (
+        <div className="update-banner" role="status">
+          <span>{t("shell.updateReady")}</span>
+          <button type="button" className="primary sm" onClick={() => void swStore.update()}>
+            {t("shell.updateReload")}
+          </button>
+          <button type="button" className="ghost sm" onClick={() => swStore.dismiss()}>
+            {t("shell.updateLater")}
+          </button>
+        </div>
+      ) : null}
+      {notices.length ? (
         <div className="notice-layer">
-          <div className={`notice ${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}>
-            <div>
-              <div>{notice.text}</div>
-              {notice.details?.length ? (
-                <ul className="error-list">
-                  {notice.details.map((d, i) => (
-                    <li key={i}>{d}</li>
-                  ))}
-                </ul>
+          {notices.map((n) => (
+            <div key={n.id} className={`notice ${n.kind}`} role={n.kind === "error" ? "alert" : "status"}>
+              <div className="notice-body">
+                <div>{n.text}</div>
+                {n.details?.length ? (
+                  <ul className="error-list">
+                    {n.details.map((d, i) => (
+                      <li key={i}>{d}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+              {n.action ? (
+                <button
+                  type="button"
+                  className="sm notice-action"
+                  onClick={() => {
+                    n.action?.run();
+                    dismissNotice(n.id);
+                  }}
+                >
+                  {n.action.label}
+                </button>
               ) : null}
+              <button type="button" className="ghost sm close" onClick={() => dismissNotice(n.id)} aria-label={t("common.close")}>
+                ×
+              </button>
             </div>
-            <button type="button" className="ghost sm close" onClick={dismissNotice} aria-label={t("common.close")}>
-              ×
-            </button>
-          </div>
+          ))}
         </div>
       ) : null}
       <CommandPalette theme={theme} />

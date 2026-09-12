@@ -196,6 +196,7 @@ export const UnitTokens = memo(function UnitTokens({
   incoherent,
   groupIds,
   draggable = true,
+  addToSelection,
   onSelect,
   onGrab,
 }: {
@@ -208,6 +209,8 @@ export const UnitTokens = memo(function UnitTokens({
   incoherent?: ReadonlySet<string>;
   /** Only the cursor: whether the press actually picks the model up is the scene's decision. */
   draggable?: boolean;
+  /** Add mode is on from the toolbar: a press joins the model to the selection, with no key to hold. */
+  addToSelection?: boolean;
   onSelect?: (unitId: string, modelId: string, additive?: boolean) => void;
   onGrab?: (unitId: string, modelId: string, at: Vec2) => void;
 }) {
@@ -224,7 +227,8 @@ export const UnitTokens = memo(function UnitTokens({
                     e.stopPropagation();
                     const p = fromScene(e.point.x, e.point.y, e.point.z);
                     // A press with Shift, Ctrl or ⌘ adds to the selection rather than picking the model up.
-                    const additive = e.nativeEvent.shiftKey || e.nativeEvent.ctrlKey || e.nativeEvent.metaKey;
+                    // The toolbar's Add toggle says the same thing for a finger, which has no modifiers.
+                    const additive = e.nativeEvent.shiftKey || e.nativeEvent.ctrlKey || e.nativeEvent.metaKey || !!addToSelection;
                     onSelect?.(unit.id, m.id, additive);
                     if (!additive) onGrab?.(unit.id, m.id, { x: p.x, y: p.y });
                   }}

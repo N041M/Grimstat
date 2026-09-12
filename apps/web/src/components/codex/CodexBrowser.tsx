@@ -1,11 +1,11 @@
 import { Fragment } from "react";
 import type { Snapshot } from "@grimstat/schema";
 import { UnitArt } from "../UnitArt";
-import { ContextEmpty, ContextList, ContextNewRow, ContextRow } from "../shell";
+import { ContextEmpty, ContextList, ContextRow } from "../shell";
 import { minPoints, sizeBounds, type CodexFaction, type CodexGroup } from "../../lib/codex";
 import { fmtInt } from "../../lib/format";
 import { hrefFor } from "../../router";
-import { CodexTools, GROUP_KEY, sizeText } from "./shared";
+import { CodexTools, ColumnAction, GROUP_KEY, NoMatch, sizeText } from "./shared";
 import { t } from "../../i18n";
 
 interface Props {
@@ -32,7 +32,11 @@ export function CodexBrowser({ snapshot, factions, factionId, onFaction, query, 
   return (
     <div className="codex-ctx">
       <CodexTools factions={factions} factionId={factionId} onFaction={onFaction} query={query} onQuery={onQuery} className="codex-ctx-tools" />
-      {groups.length === 0 ? <ContextEmpty>{t("codex.noMatch")}</ContextEmpty> : null}
+      {groups.length === 0 ? (
+        <ContextEmpty>
+          <NoMatch query={query} factions={factions} factionId={factionId} onFaction={onFaction} />
+        </ContextEmpty>
+      ) : null}
       {groups.map((g) => (
         <Fragment key={g.group}>
           <div className="codex-group-label">{t(GROUP_KEY[g.group])}</div>
@@ -64,7 +68,7 @@ export function CodexBrowser({ snapshot, factions, factionId, onFaction, query, 
           </ContextList>
         </Fragment>
       ))}
-      <ContextNewRow label={t("ctxcol.openCompare", { n: compare.length })} onClick={onOpenCompare} />
+      <ColumnAction label={t("ctxcol.openCompare", { n: compare.length })} onClick={onOpenCompare} />
     </div>
   );
 }

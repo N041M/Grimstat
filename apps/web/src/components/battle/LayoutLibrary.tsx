@@ -2,13 +2,12 @@ import { useRef, useState } from "react";
 import type { TerrainLayout } from "@grimstat/board";
 import { BATTLE_SIZES } from "@grimstat/board";
 import { parseLayoutFile, stringifyLayoutFile } from "@grimstat/adapters";
-import { FORTYKDC } from "@grimstat/adapters";
 import { copyLayout, emptyLayout, isBuiltIn, rename } from "../../lib/layoutEdit";
-import { fetchPublishedLayouts, isPublished, publishedIn } from "../../lib/layoutFetch";
+import { isPublished } from "../../lib/layoutFetch";
 import { deleteLayout, saveLayouts, type StoredLayout } from "../../lib/layoutStore";
 import { download } from "../../lib/download";
 import { newId } from "../../lib/ids";
-import { Badge } from "../ui";
+import { Badge, useConfirm } from "../ui";
 import { t } from "../../i18n";
 
 /**
@@ -44,24 +43,11 @@ export function LayoutLibrary({
   notify: (text: string, kind?: "info" | "success" | "error", details?: string[]) => void;
 }) {
   const [name, setName] = useState(layout.name);
-  const [fetching, setFetching] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  const { confirm, dialog } = useConfirm();
   const typed = name.trim() || layout.name;
-  const published = publishedIn(library);
-
-  /** The Event Companion layouts, from the community dataset, onto this machine. */
-  const fetchPublished = async () => {
-    setFetching(true);
-    try {
-      const result = await fetchPublishedLayouts();
-      onRefresh();
-      notify(t("battle.library.fetched", { n: result.stored, ref: result.ref ?? "main" }), "success", result.warnings.slice(0, 8));
-    } catch (e) {
-      notify(t("battle.library.fetchFailed"), "error", [e instanceof Error ? e.message : String(e)]);
-    } finally {
-      setFetching(false);
-    }
-  };
+  /** The field is a draft: nothing is stored until one of the save buttons is pressed. */
+  const renamed = typed !== layout.name;
 
   const importFile = async (chosen: File | undefined) => {
     if (!chosen) return;
@@ -91,11 +77,11 @@ export function LayoutLibrary({
       </div>
       <label className="battle-dim wide">
         <span>{t("battle.library.name")}</span>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name.trim() !== layout.name && onStore(rename(layout, name.trim()), !editable)} />
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
       </label>
 
       <div className="battle-actions wrap">
-        <button type="button" className={`sm ${dirty && editable ? "primary" : "ghost"}`} disabled={!editable} onClick={() => onStore(rename(layout, typed))}>
+        <button type="button" className={`sm ${(dirty || renamed) && editable ? "primary" : "ghost"}`} disabled={!editable} onClick={() => onStore(rename(layout, typed))}>
           {t("battle.library.save")}
         </button>
         <button type="button" className="ghost sm" onClick={() => onStore(rename(layout, typed), true)}>
@@ -134,37 +120,22 @@ export function LayoutLibrary({
           className="ghost sm danger"
           disabled={!editable}
           onClick={() => {
-            if (!window.confirm(t("battle.library.confirmDelete", { name: layout.name }))) return;
-            void deleteLayout(layout.id).then(() => {
+            void (async () => {
+              if (!(await confirm({ title: t("battle.library.confirmDelete", { name: layout.name }), confirmLabel: t("common.delete"), danger: true }))) return;
+              await deleteLayout(layout.id);
               onRefresh();
               const fallback = library.find((l) => l.builtIn);
               if (fallback) onLoad(fallback.layout, true);
-            });
+            })();
           }}
         >
           {t("battle.library.delete")}
         </button>
       </div>
 
-      <div className="battle-actions wrap">
-        <button type="button" className={`sm ${published ? "ghost" : ""}`.trim()} disabled={fetching} onClick={() => void fetchPublished()}>
-          {fetching ? t("battle.library.fetching") : published ? t("battle.library.refetch", { n: published }) : t("battle.library.fetch")}
-        </button>
-      </div>
-      <p className="muted small">
-        {t("battle.library.fetchHint")}{" "}
-        <a href={FORTYKDC.repo} target="_blank" rel="noreferrer">
-          {FORTYKDC.name}
-        </a>
-        {", "}
-        <a href={FORTYKDC.licenceUrl} target="_blank" rel="noreferrer">
-          {FORTYKDC.licence}
-        </a>
-        .
-      </p>
-
       {isBuiltIn(layout.id) ? <p className="muted small">{t("battle.library.builtIn")}</p> : null}
       {isPublished(layout.id) ? <p className="muted small">{t("battle.library.publishedNote")}</p> : null}
+      {dialog}
     </section>
   );
 }

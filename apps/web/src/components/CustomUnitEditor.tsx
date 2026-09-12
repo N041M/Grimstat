@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ScenarioModel, ScenarioUnit, ScenarioWeapon } from "@grimstat/schema";
 import { keywordsToText, parseKeywordText } from "../lib/keywordParser";
 import { defaultModel, defaultWeapon } from "../lib/scenario";
-import { num, numOrNull } from "./ui";
+import { numOrNull } from "./ui";
 import { t } from "../i18n";
 
 const DICE_RE = /^\s*(\d+)?[dD]?(3|6)?\s*([+-]\s*\d+)?\s*$/;
@@ -39,6 +39,68 @@ function TextCell({ value, onCommit, validate, normalize, className, label }: { 
     />
   );
 }
+
+/**
+ * Number input with a range. Valid values commit as they are typed; anything else waits for blur or
+ * Enter, when the value is clamped into range (or, for an optional field, cleared to null). So a
+ * field can be emptied to type a new number without snapping to the minimum on each keystroke.
+ */
+function NumCell({ value, min, max, nullable, normalize, onCommit, label, disabled }: { value: number | null | undefined; min?: number; max?: number; nullable?: boolean; /** Applied before the range check, e.g. AP typed as "-1" is stored as 1. */ normalize?: (n: number) => number; onCommit: (v: number | null) => void; label: string; disabled?: boolean }) {
+  const asText = (v: number | null | undefined) => (v === null || v === undefined ? "" : String(v));
+  const [text, setText] = useState(asText(value));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setText(asText(value));
+  }, [value, editing]);
+  const norm = normalize ?? ((n: number) => n);
+  const lo = min ?? -Infinity;
+  const hi = max ?? Infinity;
+  const inRange = (n: number) => n >= lo && n <= hi;
+  const commit = () => {
+    const n = Number(text);
+    if (text.trim() === "") {
+      if (nullable) onCommit(null);
+      else setText(asText(value));
+      return;
+    }
+    if (!Number.isFinite(n)) {
+      setText(asText(value));
+      return;
+    }
+    const next = Math.min(hi, Math.max(lo, norm(n)));
+    setText(String(next));
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <input
+      type="number"
+      aria-label={label}
+      min={min}
+      max={max}
+      value={text}
+      disabled={disabled}
+      onFocus={() => setEditing(true)}
+      onChange={(e) => {
+        const v = e.target.value;
+        setText(v);
+        const n = Number(v);
+        if (v.trim() === "") {
+          if (nullable) onCommit(null);
+        } else if (Number.isFinite(n) && inRange(norm(n))) onCommit(norm(n));
+      }}
+      onBlur={() => {
+        commit();
+        setEditing(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+      }}
+    />
+  );
+}
+
+const whole = (n: number) => Math.floor(n);
+const absWhole = (n: number) => Math.floor(Math.abs(n));
 
 export function CustomUnitEditor({ unit, onChange }: { unit: ScenarioUnit; onChange: (u: ScenarioUnit) => void }) {
   const setModels = (models: ScenarioModel[]) => onChange({ ...unit, models });
@@ -92,22 +154,22 @@ export function CustomUnitEditor({ unit, onChange }: { unit: ScenarioUnit; onCha
                     <input type="text" aria-label={t("model.name")} value={m.name} onChange={(e) => um(i, { name: e.target.value })} />
                   </td>
                   <td className="num">
-                    <input type="number" min={1} aria-label={t("model.count")} value={m.count} onChange={(e) => um(i, { count: Math.max(1, Math.floor(num(e.target.value, 1))) })} />
+                    <NumCell label={t("model.count")} value={m.count} min={1} normalize={whole} onCommit={(v) => um(i, { count: v ?? m.count })} />
                   </td>
                   <td className="num">
-                    <input type="number" min={1} aria-label="T" value={m.T} onChange={(e) => um(i, { T: num(e.target.value, m.T) })} />
+                    <NumCell label="T" value={m.T} min={1} normalize={whole} onCommit={(v) => um(i, { T: v ?? m.T })} />
                   </td>
                   <td className="num">
-                    <input type="number" min={2} max={7} aria-label="Sv" value={m.Sv} onChange={(e) => um(i, { Sv: num(e.target.value, m.Sv) })} />
+                    <NumCell label="Sv" value={m.Sv} min={2} max={7} normalize={whole} onCommit={(v) => um(i, { Sv: v ?? m.Sv })} />
                   </td>
                   <td className="num">
-                    <input type="number" min={2} max={6} aria-label={t("model.invAria")} value={m.InvSv ?? ""} onChange={(e) => um(i, { InvSv: numOrNull(e.target.value) })} />
+                    <NumCell label={t("model.invAria")} value={m.InvSv} min={2} max={6} nullable normalize={whole} onCommit={(v) => um(i, { InvSv: v })} />
                   </td>
                   <td className="num">
-                    <input type="number" min={1} aria-label="W" value={m.W} onChange={(e) => um(i, { W: Math.max(1, Math.floor(num(e.target.value, m.W))) })} />
+                    <NumCell label="W" value={m.W} min={1} normalize={whole} onCommit={(v) => um(i, { W: v ?? m.W })} />
                   </td>
                   <td className="num">
-                    <input type="number" min={2} max={6} aria-label={t("model.fnpAria")} value={m.fnp ?? ""} onChange={(e) => um(i, { fnp: numOrNull(e.target.value) })} />
+                    <NumCell label={t("model.fnpAria")} value={m.fnp} min={2} max={6} nullable normalize={whole} onCommit={(v) => um(i, { fnp: v })} />
                   </td>
                   <td>
                     <input type="checkbox" aria-label={t("model.character")} checked={m.isCharacter} onChange={(e) => um(i, { isCharacter: e.target.checked })} />
@@ -136,8 +198,9 @@ export function CustomUnitEditor({ unit, onChange }: { unit: ScenarioUnit; onCha
             </button>
           </span>
         </div>
+        {/* Under 900px the CSS turns each row into a card; the data-label on every cell becomes its caption. */}
         <div className="table-wrap">
-          <table className="data editor-table">
+          <table className="data editor-table editor-weapons">
             <thead>
               <tr>
                 <th>{t("weapon.on")}</th>
@@ -157,43 +220,43 @@ export function CustomUnitEditor({ unit, onChange }: { unit: ScenarioUnit; onCha
             <tbody>
               {unit.weapons.map((w, i) => (
                 <tr key={i}>
-                  <td>
+                  <td className="cell-on" data-label={t("weapon.on")}>
                     <input type="checkbox" aria-label={t("weapon.enableAria", { name: w.name })} checked={w.enabled} onChange={(e) => uw(i, { enabled: e.target.checked })} />
                   </td>
-                  <td>
+                  <td className="cell-name" data-label={t("weapon.name")}>
                     <input type="text" aria-label={t("weapon.name")} value={w.name} onChange={(e) => uw(i, { name: e.target.value })} />
                   </td>
-                  <td className="num">
-                    <input type="number" min={0} aria-label={t("weapon.countAria", { name: w.name })} value={w.count} onChange={(e) => uw(i, { count: Math.max(0, Math.floor(num(e.target.value, 0))) })} />
+                  <td className="num" data-label="#">
+                    <NumCell label={t("weapon.countAria", { name: w.name })} value={w.count} min={0} normalize={whole} onCommit={(v) => uw(i, { count: v ?? w.count })} />
                   </td>
-                  <td>
+                  <td data-label={t("weapon.kind")}>
                     <select aria-label={t("weapon.kind")} value={w.kind} onChange={(e) => uw(i, { kind: e.target.value as ScenarioWeapon["kind"], range: e.target.value === "melee" ? null : (w.range ?? 24) })}>
                       <option value="ranged">{t("weapon.ranged")}</option>
                       <option value="melee">{t("weapon.melee")}</option>
                     </select>
                   </td>
-                  <td className="num">
-                    <input type="number" min={0} aria-label={t("weapon.range")} disabled={w.kind === "melee"} value={w.range ?? ""} onChange={(e) => uw(i, { range: numOrNull(e.target.value) })} />
+                  <td className="num" data-label={t("weapon.range")}>
+                    <NumCell label={t("weapon.range")} value={w.range} min={0} nullable normalize={whole} disabled={w.kind === "melee"} onCommit={(v) => uw(i, { range: v })} />
                   </td>
-                  <td className="num">
+                  <td className="num" data-label="A">
                     <TextCell label="A" className="dice" value={String(w.A)} validate={isDice} onCommit={(v) => uw(i, { A: v.trim().toUpperCase() })} />
                   </td>
-                  <td className="num">
-                    <input type="number" min={2} max={6} aria-label={t("weapon.skillAria")} value={w.skill ?? ""} onChange={(e) => uw(i, { skill: numOrNull(e.target.value) })} />
+                  <td className="num" data-label={t("weapon.skill")}>
+                    <NumCell label={t("weapon.skillAria")} value={w.skill} min={2} max={6} nullable normalize={whole} onCommit={(v) => uw(i, { skill: v })} />
                   </td>
-                  <td className="num">
-                    <input type="number" min={1} aria-label="S" value={w.S} onChange={(e) => uw(i, { S: num(e.target.value, w.S) })} />
+                  <td className="num" data-label="S">
+                    <NumCell label="S" value={w.S} min={1} normalize={whole} onCommit={(v) => uw(i, { S: v ?? w.S })} />
                   </td>
-                  <td className="num">
-                    <input type="number" min={0} max={6} aria-label="AP" value={w.AP} onChange={(e) => uw(i, { AP: Math.abs(num(e.target.value, w.AP)) })} />
+                  <td className="num" data-label="AP">
+                    <NumCell label="AP" value={w.AP} min={0} max={6} normalize={absWhole} onCommit={(v) => uw(i, { AP: v ?? w.AP })} />
                   </td>
-                  <td className="num">
+                  <td className="num" data-label="D">
                     <TextCell label="D" className="dice" value={String(w.D)} validate={isDice} onCommit={(v) => uw(i, { D: v.trim().toUpperCase() })} />
                   </td>
-                  <td>
+                  <td className="cell-keywords" data-label={t("weapon.keywords")}>
                     <TextCell label={t("weapon.keywords")} value={keywordsToText(w.keywords)} normalize={normKeywords} onCommit={(v) => uw(i, { keywords: parseKeywordText(v) })} />
                   </td>
-                  <td>
+                  <td className="cell-remove">
                     <button type="button" className="sm ghost danger" aria-label={t("editor.removeWeaponAria", { name: w.name })} onClick={() => setWeapons(unit.weapons.filter((_, j) => j !== i))}>
                       ×
                     </button>

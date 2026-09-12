@@ -26,11 +26,12 @@ const APP_VERSION = "0.1.0";
 
 export function AboutPage() {
   const plugins = [...host.registries.manifests.values()];
-  const stats: Array<{ key: I18nKey; value: string; title: string }> = [
-    { key: "about.stat.tests", value: TESTS ?? "—", title: t("about.stat.testsTitle") },
-    { key: "about.stat.packages", value: PACKAGES ?? "—", title: t("about.stat.packagesTitle") },
-    { key: "about.stat.bundle", value: bundleLabel(), title: t("about.stat.bundleTitle") },
-    { key: "about.stat.dataShipped", value: t("about.stat.zero"), title: t("about.stat.dataShippedTitle") },
+  // `note` is shown under the value as well as in the tooltip, which a touch screen never opens.
+  const stats: Array<{ key: I18nKey; value: string; note: string }> = [
+    { key: "about.stat.tests", value: TESTS ?? "—", note: t("about.stat.testsTitle") },
+    { key: "about.stat.packages", value: PACKAGES ?? "—", note: t("about.stat.packagesTitle") },
+    { key: "about.stat.bundle", value: bundleLabel(), note: t("about.stat.bundleTitle") },
+    { key: "about.stat.dataShipped", value: t("about.stat.zero"), note: t("about.stat.dataShippedTitle") },
   ];
 
   return (
@@ -97,9 +98,10 @@ export function AboutPage() {
 
         <div className="about-stats">
           {stats.map((s) => (
-            <div key={s.key} className="about-stat" title={s.title}>
+            <div key={s.key} className="about-stat" title={s.note}>
               <div className="about-stat-k">{t(s.key)}</div>
               <div className="about-stat-v">{s.value}</div>
+              <p className="about-stat-note">{s.note}</p>
             </div>
           ))}
         </div>
@@ -130,11 +132,16 @@ export function AboutPage() {
             <dd>
               {gameSystem.name} — {t("about.edition", { e: gameSystem.edition })} ({manifest.id}@{manifest.version})
             </dd>
-            <dt>{t("about.plugins")}</dt>
-            <dd>{plugins.map((p) => `${p.id}@${p.version} (${p.kind})`).join(", ")}</dd>
-            <dt>{t("about.plan")}</dt>
-            <dd>{currentPlan()}</dd>
           </dl>
+          <details className="about-details">
+            <summary>{t("about.buildDetails")}</summary>
+            <dl className="about-kv">
+              <dt>{t("about.plugins")}</dt>
+              <dd>{plugins.map((p) => `${p.id}@${p.version} (${p.kind})`).join(", ")}</dd>
+              <dt>{t("about.plan")}</dt>
+              <dd>{currentPlan()}</dd>
+            </dl>
+          </details>
         </section>
 
         <p className="about-legal prose">{t("footer.disclaimer")}</p>

@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+
 /** Number formatting helpers used by widgets and tables. */
 export function fmt(n: number | undefined | null, digits = 2): string {
   if (n === undefined || n === null || !Number.isFinite(n)) return "–";
@@ -36,18 +38,27 @@ export function fmtRelative(iso: string | undefined, now = Date.now()): string {
   const ms = d.getTime();
   if (Number.isNaN(ms)) return iso;
   const secs = Math.max(0, Math.round((now - ms) / 1000));
-  if (secs < 45) return "just now";
+  if (secs < 45) return t("time.justNow");
   const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return t("time.minutesAgo", { n: mins });
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("time.hoursAgo", { n: hours });
   const days = Math.round(hours / 24);
-  if (days < 14) return `${days}d ago`;
+  if (days < 14) return t("time.daysAgo", { n: days });
   return d.toISOString().slice(0, 10);
 }
 
+const ORDINALS = typeof Intl !== "undefined" && "PluralRules" in Intl ? new Intl.PluralRules("en", { type: "ordinal" }) : undefined;
+
+/** "1st", "2nd", "3rd", "11th": placings in the published-list tables. */
+export function ordinal(n: number): string {
+  const cat = ORDINALS?.select(n) ?? "other";
+  return t(cat === "one" ? "ordinal.one" : cat === "two" ? "ordinal.two" : cat === "few" ? "ordinal.few" : "ordinal.other", { n });
+}
+
+/** "3+", or the en dash every table uses for a missing value (Torrent weapons have no skill). */
 export function skill(n: number | null | undefined): string {
-  return n === null || n === undefined ? "N/A" : `${n}+`;
+  return n === null || n === undefined ? "–" : `${n}+`;
 }
 
 export function ap(n: number): string {

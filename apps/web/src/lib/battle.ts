@@ -13,8 +13,10 @@
  * than enforced, because the rules only ask for it once the whole unit has finished moving.
  */
 
-import type { CoherencyReport, ModelHull, ReachNode, TerrainLayout, Vec2, Vec3, Zone } from "@grimstat/board";
-import { LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, edgeZones, heightForKeywords, horizontalGap, inEngagementRange, inZone, onBoard, pointInPolygon, reachable, sight, unitDistance } from "@grimstat/board";
+import type { CoherencyReport, Footprint, ModelHull, ReachNode, TerrainLayout, Vec2, Vec3, Zone } from "@grimstat/board";
+import { LAYOUTS, MOVE_RULES, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coverFor, edgeZones, heightForKeywords, horizontalGap, inEngagementRange, inZone, onBoard, ovalBase, pointInPolygon, reachable, sight, unitDistance } from "@grimstat/board";
+import type { ModelProfile, Roster, Snapshot } from "@grimstat/schema";
+import { unitClassFor, type UnitClassId } from "./unitArt";
 
 export type Side = "attacker" | "defender";
 export type BattleTool = "deploy" | "select" | "measure" | "sight" | "terrain";
@@ -534,10 +536,10 @@ const SAMPLE: readonly { name: string; move: number; oc: number; count: number; 
   { name: "battle.sample.walker", move: 8, oc: 3, count: 1, baseMm: 90, keywords: ["MONSTER", "WALKER"] },
 ];
 
-function sampleUnit(side: Side, i: number, at: Vec2): BattleUnit {
+function sampleUnit(side: Side, i: number): BattleUnit {
   const spec = SAMPLE[i % SAMPLE.length]!;
   const height = heightForKeywords(spec.keywords);
-  const unit: BattleUnit = {
+  return {
     id: `${side}-${i}`,
     side,
     name: spec.name,
@@ -545,21 +547,131 @@ function sampleUnit(side: Side, i: number, at: Vec2): BattleUnit {
     oc: spec.oc,
     keywords: spec.keywords,
     models: Array.from({ length: spec.count }, (_, m) => ({ id: `${side}-${i}-${m}`, hull: { pos: { x: 0, y: 0, z: 0 }, facing: 0, foot: circleBase(spec.baseMm), height } })),
+    reserve: true,
   };
-  return placeUnit(unit, at);
+}
+
+/** The sample force for one side, in reserve. */
+export const sampleForce = (side: Side): BattleUnit[] => SAMPLE.map((_, i) => sampleUnit(side, i));
+
+/** A layout, its zones and the units given, as they are: nothing is placed. */
+export function battleWith(layout: TerrainLayout, units: readonly BattleUnit[]): BattleState {
+  const zones = layout.zones?.length === 2 ? (layout.zones as [Zone, Zone]) : edgeZones(layout.size);
+  return { layout, zones, units };
+}
+
+/**
+ * Every unit set down afresh, attacker and defender alike.
+ *
+ * Each side is spread in one row along its zone, evenly across the table's width. A unit that
+ * cannot stand where the row puts it (terrain, a crowded row, a zone of another shape) is
+ * auto-deployed instead, and stays in reserve if it fits nowhere. The units keep their identity,
+ * so a force built from an army survives the reset.
+ */
+export function freshDeployment(state: BattleState): BattleState {
+  const { width, depth } = state.layout.size;
+  let next: BattleState = { ...state, units: state.units.map(withdrawUnit) };
+  const index = indexOf(state);
+  for (const side of ["attacker", "defender"] as const) {
+    const mine = unitsOf(next, side);
+    mine.forEach((unit, i) => {
+      const x = ((i + 1) / (mine.length + 1)) * width;
+      const at = side === "attacker" ? { x, y: 6 } : { x: width - x, y: depth - 6 };
+      if (deployVerdict(next, unit, at, index).ok) next = replaceUnit(next, deployUnit(unit, at));
+    });
+    next = autoDeploy(next, side, index);
+  }
+  return next;
 }
 
 /** A layout, its zones and a sample force per side, spread across each deployment zone. */
 export function sampleBattle(layout: TerrainLayout = LAYOUTS[1] ?? LAYOUTS[0]!): BattleState {
-  const zones = layout.zones?.length === 2 ? (layout.zones as [Zone, Zone]) : edgeZones(layout.size);
-  const { width, depth } = layout.size;
   const units: BattleUnit[] = [];
-  for (let i = 0; i < SAMPLE.length; i++) {
-    const x = ((i + 1) / (SAMPLE.length + 1)) * width;
-    units.push(sampleUnit("attacker", i, { x, y: 6 }));
-    units.push(sampleUnit("defender", i, { x: width - x, y: depth - 6 }));
+  for (let i = 0; i < SAMPLE.length; i++) units.push(sampleUnit("attacker", i), sampleUnit("defender", i));
+  return freshDeployment(battleWith(layout, units));
+}
+
+/** Give one side a different force. The other side's units are untouched, and the new ones arrive in reserve. */
+export function withForce(state: BattleState, side: Side, units: readonly BattleUnit[]): BattleState {
+  return { ...state, units: [...state.units.filter((u) => u.side !== side), ...units.map((u) => ({ ...u, side, reserve: true }))] };
+}
+
+/* ---- a force from an army ---------------------------------------------------------------------- */
+
+/**
+ * A base size as a datasheet writes it: "32mm", "60 x 35mm", "120 x 92mm oval". Text that names no
+ * size gives nothing, and the caller falls back on the unit's class.
+ */
+export function footprintFromBaseSize(text: string | undefined): Footprint | undefined {
+  if (!text) return undefined;
+  const oval = /(\d+(?:\.\d+)?)\s*(?:mm)?\s*[x×]\s*(\d+(?:\.\d+)?)/i.exec(text);
+  if (oval) {
+    const a = Number(oval[1]);
+    const b = Number(oval[2]);
+    return a > 0 && b > 0 ? ovalBase(Math.max(a, b), Math.min(a, b)) : undefined;
   }
-  return { layout, zones, units };
+  const round = /(\d+(?:\.\d+)?)\s*mm/i.exec(text);
+  if (round) {
+    const d = Number(round[1]);
+    return d > 0 ? circleBase(d) : undefined;
+  }
+  return undefined;
+}
+
+/** The base a model of each class usually stands on, for a datasheet that names none. */
+const CLASS_BASES: Readonly<Record<UnitClassId, () => Footprint>> = {
+  infantry: () => circleBase(32),
+  character: () => circleBase(40),
+  vehicle: () => ovalBase(120, 92),
+  transport: () => ovalBase(120, 92),
+  walker: () => circleBase(60),
+  monster: () => ovalBase(105, 70),
+  beast: () => circleBase(50),
+  swarm: () => circleBase(40),
+  aircraft: () => circleBase(60),
+  bike: () => ovalBase(75, 42),
+  mounted: () => ovalBase(60, 35),
+  titanic: () => circleBase(160),
+  fortification: () => circleBase(152.4),
+};
+
+/** The Move a datasheet gives, in inches. `null` is a profile that does not move; nothing is unknown. */
+const DEFAULT_MOVE = 6;
+const profileMove = (p: ModelProfile | undefined): number | undefined => (p === undefined ? undefined : p.M === null ? 0 : p.M);
+
+/**
+ * The units of an army as battle units for one side, from the snapshot the army was built against.
+ *
+ * Model counts come from the army; base sizes and Move from each model's profile on the datasheet,
+ * with the class of the unit (from its keywords) standing in where the datasheet names no base.
+ * A unit whose datasheet is not in the snapshot is left out. Everything arrives in reserve, to be
+ * deployed; a unit embarked in a transport or held in reserves is listed like any other, since the
+ * table plans deployment rather than enforcing it.
+ */
+export function unitsFromRoster(roster: Roster, snapshot: Snapshot, side: Side): BattleUnit[] {
+  const sheets = new Map(snapshot.data.datasheets.map((d) => [d.id, d] as const));
+  const units: BattleUnit[] = [];
+  for (const entry of roster.units) {
+    const sheet = sheets.get(entry.datasheetId);
+    if (!sheet) continue;
+    const lead = sheet.models[0];
+    const keywords = [...sheet.keywords];
+    const height = heightForKeywords(keywords);
+    const classBase = CLASS_BASES[unitClassFor(keywords)]();
+    const unitMove = profileMove(lead) ?? DEFAULT_MOVE;
+    const models: BattleModel[] = [];
+    for (const group of entry.models) {
+      const profile = sheet.models.find((m) => m.id === group.modelProfileId) ?? lead;
+      const foot = footprintFromBaseSize(profile?.baseSize) ?? classBase;
+      const move = profileMove(profile);
+      for (let i = 0; i < group.count; i++) {
+        models.push({ id: `${side}-${entry.id}-${models.length}`, hull: { pos: { x: 0, y: 0, z: 0 }, facing: 0, foot, height }, ...(move !== undefined && move !== unitMove ? { move } : {}) });
+      }
+    }
+    if (!models.length) continue;
+    units.push({ id: `${side}-${entry.id}`, side, name: entry.customName?.trim() || sheet.name, move: unitMove, oc: lead?.OC ?? 0, keywords, models, reserve: true });
+  }
+  return units;
 }
 
 /** Swap the layout under a battle, keeping the units where they stand. */

@@ -12,10 +12,10 @@ import { matrixToCsv } from "../../lib/matrixCsv";
 import { download } from "../../lib/download";
 import { cloneUnit } from "../../lib/scenario";
 import { fmtInt } from "../../lib/format";
-import type { UnitEntry } from "../../lib/unitSet";
+import { UNIT_SET_KEYS, type UnitEntry } from "../../lib/unitSet";
 import { UnitSetPicker } from "./UnitSetPicker";
 import { HeatLegend, Heatmap, formatMetric, metricLabel } from "./Heatmap";
-import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunStatus, parseAnalysisContext, useAnalysisHeader, type AnalysisContext } from "./shared";
+import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunActions, RunStatus, parseAnalysisContext, useAnalysisHeader, type AnalysisContext } from "./shared";
 import { PanelHead, ProportionBar, SelectBox } from "../kit";
 import { t } from "../../i18n";
 
@@ -33,9 +33,11 @@ function parseOptions(raw: unknown): MatrixOptions | undefined {
   return { metric, context: parseAnalysisContext(r.context) };
 }
 
-const runMatrix = (attackers: ScenarioUnit[], defenders: ScenarioUnit[], context: AnalysisContext, snapshot: Snapshot | undefined) => simClient().matrix(attackers, defenders, context, [], snapshot);
-const runDurability = (defenders: ScenarioUnit[], snapshot: Snapshot | undefined) => simClient().durabilityIndex(defenders, {}, snapshot);
+// The tasks take the entries themselves, so `task.ran` holds the sets a result was computed for.
+const runMatrix = (attackers: UnitEntry[], defenders: UnitEntry[], context: AnalysisContext, snapshot: Snapshot | undefined) => simClient().matrix(units(attackers), units(defenders), context, [], snapshot);
+const runDurability = (defenders: UnitEntry[], snapshot: Snapshot | undefined) => simClient().durabilityIndex(units(defenders), {}, snapshot);
 
+const units = (entries: UnitEntry[]): ScenarioUnit[] => entries.map((e) => e.unit);
 const fingerprint = (a: UnitEntry[], d: UnitEntry[], ctx: AnalysisContext) => JSON.stringify([a.map((e) => e.id), d.map((e) => e.id), ctx]);
 
 /** "Best answer per defender": the attacker with the highest value in each column. */
@@ -81,27 +83,22 @@ function DurabilityCard({ rows, running }: { rows: DurabilityIndexRow[] | undefi
  */
 export function MatrixTab({ view = "values" }: { view?: "values" | "swatches" }) {
   const { snapshot, scenario, activeSnapshotId, replaceScenario, notify } = useApp();
-  const attackers = useUnitSet("analyses.matrix.attackers");
-  const defenders = useUnitSet("analyses.matrix.defenders");
+  const attackers = useUnitSet(UNIT_SET_KEYS.matrixAttackers);
+  const defenders = useUnitSet(UNIT_SET_KEYS.matrixDefenders);
   const [opts, setOpts] = usePersistedSetting<MatrixOptions>("analyses.matrix.options", DEFAULT_OPTIONS, parseOptions);
-  const task = useWorkerTask(runMatrix);
-  const durability = useWorkerTask(runDurability);
-  const [ran, setRan] = useState<{ attackers: UnitEntry[]; defenders: UnitEntry[]; fp: string } | undefined>(undefined);
+  const task = useWorkerTask(runMatrix, "analyses.matrix");
+  const durability = useWorkerTask(runDurability, "analyses.matrix.durabilityIndex");
   const [showSets, setShowSets] = useState(false);
 
+  const ran = useMemo(() => (task.ran ? { attackers: task.ran[0], defenders: task.ran[1], fp: fingerprint(task.ran[0], task.ran[1], task.ran[2]) } : undefined), [task.ran]);
+  const loaded = attackers.loaded && defenders.loaded;
   const canRun = attackers.entries.length > 0 && defenders.entries.length > 0;
   const dirty = !!ran && ran.fp !== fingerprint(attackers.entries, defenders.entries, opts.context);
 
   const run = () => {
     if (!canRun) return;
-    setRan({ attackers: attackers.entries, defenders: defenders.entries, fp: fingerprint(attackers.entries, defenders.entries, opts.context) });
     durability.reset();
-    task.run(
-      attackers.entries.map((e) => e.unit),
-      defenders.entries.map((e) => e.unit),
-      opts.context,
-      snapshot,
-    );
+    task.run(attackers.entries, defenders.entries, opts.context, snapshot);
   };
 
   const exportCsv = () => {
@@ -110,11 +107,11 @@ export function MatrixTab({ view = "values" }: { view?: "values" | "swatches" })
   };
 
   // The worker sequences requests and drops superseded ones, so the durability index only starts
-  // once the matrix result is in hand.
-  const defenderUnits = ran?.defenders.map((e) => e.unit);
+  // once the matrix result is in hand. A restored result brings its index along, so that is skipped.
+  const ranDefenders = ran?.defenders;
   useEffect(() => {
-    if (!task.result || !defenderUnits?.length) return;
-    durability.run(defenderUnits, snapshot);
+    if (!task.result || !ranDefenders?.length || durability.result !== undefined || durability.running) return;
+    durability.run(ranDefenders, snapshot);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.result]);
 
@@ -128,21 +125,18 @@ export function MatrixTab({ view = "values" }: { view?: "values" | "swatches" })
   };
 
   // Header actions call through a ref so they never run against a stale closure.
-  const handlers = useRef({ run, exportCsv });
-  handlers.current = { run, exportCsv };
+  const handlers = useRef({ run, cancel: task.cancel, exportCsv });
+  handlers.current = { run, cancel: task.cancel, exportCsv };
   const hasResult = !!task.result;
   useAnalysisHeader(
     () => ({
       subtitle: hasResult ? t("analyses.matrix.sub", { a: ran?.attackers.length ?? 0, d: ran?.defenders.length ?? 0, metric: metricLabel(opts.metric) }) : t("analyses.matrix.subIdle", { a: attackers.entries.length, d: defenders.entries.length }),
       actions: (
-        <>
+        <RunActions canRun={canRun} running={task.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()}>
           <button type="button" disabled={!hasResult} onClick={() => handlers.current.exportCsv()}>
-            {t("analyses.matrix.exportCsv")}
+            {t("analyses.exportCsv")}
           </button>
-          <button type="button" className="primary" disabled={!canRun || task.running} onClick={() => handlers.current.run()}>
-            {t("analyses.run")}
-          </button>
-        </>
+        </RunActions>
       ),
     }),
     // `view` is in here because the Matrix and Heatmap tabs share this instance: switching tabs
@@ -155,7 +149,8 @@ export function MatrixTab({ view = "values" }: { view?: "values" | "swatches" })
   const model = useMemo(() => (task.result ? heatmapModel(task.result, opts.metric) : undefined), [task.result, opts.metric]);
   const best = useMemo(() => (task.result && model ? bestAnswers(model.values, task.result.attackers, task.result.defenders) : []), [task.result, model]);
 
-  const setsOpen = showSets || !canRun;
+  // Force the sets open only once the persisted sets are known to be empty.
+  const setsOpen = showSets || (loaded && !canRun);
 
   return (
     <>
@@ -165,16 +160,16 @@ export function MatrixTab({ view = "values" }: { view?: "values" | "swatches" })
           {t("analyses.matrix.sets", { a: attackers.entries.length, d: defenders.entries.length })}
         </button>
         <SelectBox label={t("analyses.matrix.metric")} value={opts.metric} options={MATRIX_METRICS.map((m) => ({ value: m, label: metricLabel(m) }))} onChange={(m) => setOpts((o) => ({ ...o, metric: m }))} />
-        <RunStatus task={task} extra={dirty ? t("analyses.stale") : undefined} />
+        <RunStatus task={task} stale={dirty} />
       </div>
 
       {setsOpen ? (
         <div className="mx-sets">
           <section className="mx-set">
-            <UnitSetPicker label={t("analyses.set.attackers")} entries={attackers.entries} onChange={attackers.setEntries} archetypeFilter="attackers" />
+            <UnitSetPicker label={t("analyses.set.attackers")} storageKey={UNIT_SET_KEYS.matrixAttackers} entries={attackers.entries} onChange={attackers.setEntries} archetypeFilter="attackers" />
           </section>
           <section className="mx-set">
-            <UnitSetPicker label={t("analyses.set.defenders")} entries={defenders.entries} onChange={defenders.setEntries} />
+            <UnitSetPicker label={t("analyses.set.defenders")} storageKey={UNIT_SET_KEYS.matrixDefenders} entries={defenders.entries} onChange={defenders.setEntries} />
           </section>
           <section className="mx-set" aria-labelledby="matrix-ctx-h">
             <PanelHead id="matrix-ctx-h" title={t("ctx.title")} />
@@ -211,9 +206,9 @@ export function MatrixTab({ view = "values" }: { view?: "values" | "swatches" })
           </div>
           <p className="mx-hint">{t("analyses.matrix.hint")}</p>
         </>
-      ) : (
+      ) : loaded ? (
         <div className="empty">{canRun ? t("analyses.matrix.ready") : t("analyses.matrix.needBoth")}</div>
-      )}
+      ) : null}
     </>
   );
 }

@@ -14,7 +14,9 @@ import {
   edgeZones,
   isSymmetric,
   inZone,
+  describeLayoutIssue,
   layoutIssues,
+  layoutProblems,
   mayClimb,
   mirrored,
   opposite,
@@ -306,5 +308,17 @@ describe("layout validation", () => {
     const bunker = box("bunker", { x: 30, y: 22 }, 10, 8, 5, ["impassable"], [5]);
     expect(layoutIssues(bad([bunker], [{ id: "o1", at: { x: 30, y: 22 } }]))).toEqual(["o1: sits inside impassable terrain (bunker)"]);
     expect(layoutIssues(bad([], [{ id: "o2", at: { x: 99, y: 22 } }]))).toEqual(["o2: off the table"]);
+  });
+
+  it("reports the same problems as data, naming the piece or objective each is about", () => {
+    const bunker = box("bunker", { x: 30, y: 22 }, 10, 8, 5, ["impassable"], [5]);
+    const odd = terrain({ id: "odd", polygon: box("t", { x: 30, y: 22 }, 8, 6, 4).polygon, height: 4, floors: [0, 9] });
+    const problems = layoutProblems(bad([bunker, odd, box("edge", { x: 1, y: 22 }, 8, 4, 3)], [{ id: "o1", at: { x: 30, y: 22 } }]));
+    expect(problems).toEqual([
+      { kind: "floor-outside-piece", subject: "odd", floor: 9 },
+      { kind: "piece-off-table", subject: "edge" },
+      { kind: "objective-in-impassable", subject: "o1", piece: "bunker" },
+    ]);
+    expect(problems.map(describeLayoutIssue)).toEqual(layoutIssues(bad([bunker, odd, box("edge", { x: 1, y: 22 }, 8, 4, 3)], [{ id: "o1", at: { x: 30, y: 22 } }])));
   });
 });

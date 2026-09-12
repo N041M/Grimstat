@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Roster, type Diagnostic, type Snapshot } from "@grimstat/schema";
 import { listRosterVersions, type RosterVersionRecord } from "../../db";
-import { describeRevisionChange, unitIndexFromPath, type RevisionChange } from "../../lib/roster";
+import { describeRevisionChange, type RevisionChange } from "../../lib/roster";
 import { fmtRelative } from "../../lib/format";
 import { Dock, DockSection, ProportionBar } from "../kit";
+import { DiagnosticItem } from "./DiagnosticItem";
 import { t } from "../../i18n";
 
 /** How many revisions the dock walks; each one costs a parse plus a costing pass. */
@@ -36,8 +37,18 @@ function changeText(c: RevisionChange): string {
       return t("roster.history.changedOne", { name: c.name });
     case "detachments":
       return t("roster.history.detachmentChanged");
+    case "renamed":
+      return t("roster.history.renamed", { name: c.name });
+    case "settings":
+      return t("roster.history.settingsChanged");
+    case "reordered":
+      return t("roster.history.reordered");
+    case "other":
+      return t("roster.history.other");
     case "multi":
       return t("roster.history.multi", { n: c.n });
+    case "unreadable":
+      return t("roster.history.unreadable");
   }
 }
 
@@ -50,8 +61,8 @@ function parseVersion(v: RosterVersionRecord): Roster | undefined {
 }
 
 /**
- * The Armies right dock: what validation says, how the detachment budgets stand, and what the last
- * few saves did. Everything here is derived — the editor stays the single source of truth.
+ * The Armies right dock: what the army checks say, how the three budgets stand, and what the last
+ * few saves did. Everything here is derived; the editor stays the single source of truth.
  */
 export function RosterDock({ roster, snapshot, diagnostics, budgets, onSelectUnit, onOpenHistory }: Props) {
   const [versions, setVersions] = useState<RosterVersionRecord[]>([]);
@@ -78,12 +89,14 @@ export function RosterDock({ roster, snapshot, diagnostics, budgets, onSelectUni
     return recent.map((rec, i) => {
       const cur = parseVersion(rec);
       const prev = i + 1 < versions.length ? parseVersion(versions[i + 1]!) : undefined;
-      let change: RevisionChange = { kind: "multi", n: 0 };
+      // A stored revision that fails to parse, or one whose costing throws, is shown as unreadable
+      // rather than as a count of changes.
+      let change: RevisionChange = { kind: "unreadable" };
       if (cur) {
         try {
           change = describeRevisionChange(prev, cur, snapshot);
         } catch {
-          change = { kind: "multi", n: 0 };
+          change = { kind: "unreadable" };
         }
       }
       return { rec, change };
@@ -95,34 +108,13 @@ export function RosterDock({ roster, snapshot, diagnostics, budgets, onSelectUni
       <DockSection>
         {ordered.length === 0 ? <p className="dock-empty">{t("roster.diagnostics.clean")}</p> : null}
         <ul className="val-list">
-          {ordered.map((d, i) => {
-            const idx = unitIndexFromPath(d.path);
-            const bad = d.severity !== "info";
-            const body = (
-              <>
-                <span className={`val-dot ${bad ? "bad" : ""}`.trim()} aria-hidden="true" />
-                <span className="val-text">
-                  <span className="val-msg">{d.message}</span>
-                  <span className="val-rule">{d.code}</span>
-                </span>
-              </>
-            );
-            return (
-              <li key={`${d.code}-${i}`} className="val-item">
-                {idx === undefined ? (
-                  <span className="val-row static">{body}</span>
-                ) : (
-                  <button type="button" className="val-row" title={t("roster.diagnostics.goTo")} onClick={() => onSelectUnit(idx)}>
-                    {body}
-                  </button>
-                )}
-              </li>
-            );
-          })}
+          {ordered.map((d, i) => (
+            <DiagnosticItem key={`${d.code}-${i}`} d={d} onSelectUnit={onSelectUnit} />
+          ))}
         </ul>
       </DockSection>
 
-      <DockSection title={t("roster.dock.detachmentPoints")}>
+      <DockSection title={t("roster.dock.budgets")}>
         <div className="budget-list">
           {budgets.map((b) => (
             <div key={b.label} className="budget-row">

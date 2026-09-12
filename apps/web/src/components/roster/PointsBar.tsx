@@ -2,8 +2,8 @@ import type { PointsBarModel } from "../../lib/pointsBar";
 import { fmtInt } from "../../lib/format";
 import { t, type I18nKey } from "../../i18n";
 
-/** Points read as bare digits here ("1955 / 2000"); thousands separators break the 13px line. */
-const n = (v: number) => String(Math.round(v));
+/** Points are set with `fmtInt` ("1,955 / 2,000") so the header matches the cards and the context column. */
+const n = (v: number) => fmtInt(v);
 
 const SECTION_KEY: Record<string, I18nKey> = {
   character: "roster.section.character",
@@ -14,7 +14,7 @@ const SECTION_KEY: Record<string, I18nKey> = {
 };
 
 /**
- * The army's points as one 8px track segmented by role, then "1955 / 2000" and the spare points.
+ * The army's points as one 8px track segmented by role, then "1,955 / 2,000" and the spare points.
  * Each segment carries a `title` so the roles are readable without a legend.
  */
 export function PointsBar({ model }: { model: PointsBarModel }) {

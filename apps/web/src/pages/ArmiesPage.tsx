@@ -7,10 +7,10 @@ import { useApp } from "../state/AppContext";
 import { hrefFor, navigate } from "../router";
 import { BATTLE_SIZE_ORDER, cloneRoster, newRoster, pointsLimitFor, pointsTone } from "../lib/roster";
 import { newId } from "../lib/ids";
-import { looksLikeRosterXml, rosterFileKind } from "../lib/rosterFile";
+import { looksLikeJson, looksLikeRosterXml, rosterFileKind, rostersFromJson } from "../lib/rosterFile";
 import { fmtDay, fmtInt } from "../lib/format";
 import { download } from "../lib/download";
-import { Dialog, Empty, Field, Icon, Popover } from "../components/ui";
+import { Dialog, Empty, Field, Icon, Popover, useConfirm } from "../components/ui";
 import { ProportionBar } from "../components/kit";
 import { PageHeader, useContextNewAction } from "../components/shell";
 import { t, tn, type I18nKey } from "../i18n";
@@ -66,11 +66,20 @@ export function ArmiesPage() {
   const [over, setOver] = useState(false);
   const [imported, setImported] = useState<{ id: string; name: string; warnings: string[] } | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const [loadError, setLoadError] = useState<string | undefined>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const refresh = useCallback(async () => {
-    const all = await db.rosters.toArray();
-    setItems(all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)));
+    try {
+      const all = await db.rosters.toArray();
+      setItems(all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)));
+      setLoadError(undefined);
+    } catch (e) {
+      setItems([]);
+      setLoadError(e instanceof Error ? e.message : String(e));
+    }
   }, []);
 
   useEffect(() => {
@@ -124,6 +133,12 @@ export function ArmiesPage() {
     [items, snapshot, others, activeSnapshotId],
   );
 
+  // The filter reads the name and the faction, which is what people remember an army by.
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? rows.filter((row) => row.r.name.toLowerCase().includes(q) || row.faction.toLowerCase().includes(q)) : rows;
+  }, [rows, query]);
+
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     try {
@@ -155,20 +170,67 @@ export function ArmiesPage() {
 
   const duplicate = (r: Roster) =>
     run(async () => {
-      await saveRosterWithVersion(cloneRoster(r, t("armies.copyName", { name: r.name })));
+      const copy = cloneRoster(r, t("armies.copyName", { name: r.name }));
+      await saveRosterWithVersion(copy);
       await refresh();
+      notify(t("armies.duplicated", { name: r.name, copy: copy.name }), "success");
     });
 
+  /** Deleting drops the revision history with the army; only the list itself can be put back. */
   const remove = (r: Roster) =>
     run(async () => {
-      if (!window.confirm(t("armies.confirmDelete", { name: r.name }))) return;
+      if (!(await confirm({ title: t("armies.confirmDelete", { name: r.name }), body: t("armies.deleteBody"), confirmLabel: t("common.delete"), danger: true }))) return;
       await deleteRoster(r.id);
       await refresh();
+      notify(t("armies.deleted", { name: r.name }), "info", undefined, {
+        label: t("common.undo"),
+        run: () => {
+          void saveRosterWithVersion(r)
+            .then(refresh)
+            .then(() => notify(t("armies.restored", { name: r.name }), "success"));
+        },
+      });
     });
+
+  /**
+   * The app's own JSON: one saved army or the "Export all" envelope. Ids that are already on this
+   * device are re-keyed so an import never overwrites the army it came from.
+   */
+  const importJson = async () => {
+    const parsed = rostersFromJson(text);
+    if (!parsed) {
+      notify(t("armies.jsonUnreadable"), "error");
+      return;
+    }
+    const existing = new Set((items ?? []).map((r) => r.id));
+    let present = 0;
+    const saved: Roster[] = [];
+    for (const r of parsed.rosters) {
+      const rec = existing.has(r.id) ? cloneRoster(r, t("armies.copyName", { name: r.name })) : r;
+      if (rec !== r) present++;
+      await saveRosterWithVersion(rec);
+      saved.push(rec);
+    }
+    await refresh();
+    setText("");
+    setName("");
+    setFileName(undefined);
+    const details: string[] = [];
+    if (parsed.skipped) details.push(tn(parsed.skipped, "armies.jsonSkipped.one", "armies.jsonSkipped.many"));
+    if (present) details.push(tn(present, "armies.jsonPresent.one", "armies.jsonPresent.many"));
+    notify(tn(saved.length, "armies.importedJson.one", "armies.importedJson.many"), "success", details.length ? details : undefined);
+    closeDialog();
+    const only = saved.length === 1 ? saved[0] : undefined;
+    if (only) navigate("armies", false, only.id);
+  };
 
   const importText = () =>
     run(async () => {
       if (!snapshot || (!text.trim() && !bytes)) return;
+      if (!bytes && looksLikeJson(text)) {
+        await importJson();
+        return;
+      }
       let result: ReturnType<typeof importRosterText>;
       const opts = name.trim() ? { name: name.trim() } : {};
       try {
@@ -366,7 +428,7 @@ export function ArmiesPage() {
               <button type="button" className="link-btn" onClick={() => fileInput.current?.click()}>
                 {t("armies.chooseFile")}
               </button>
-              <input ref={fileInput} type="file" accept=".txt,.rosz,.ros,.xml,text/plain,application/zip" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(e) => void readFile(e.target.files?.[0])} />
+              <input ref={fileInput} type="file" accept=".txt,.rosz,.ros,.xml,.json,text/plain,application/json,application/zip" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(e) => void readFile(e.target.files?.[0])} />
               {fileName ? <div className="small ok-text">{t("armies.fileLoaded", { name: fileName })}</div> : null}
             </div>
             <Field label={t("armies.importText")}>
@@ -394,6 +456,7 @@ export function ArmiesPage() {
                 <li>{t("armies.format.gw")}</li>
                 <li>{t("armies.format.nr")}</li>
                 <li>{t("armies.format.grimstat")}</li>
+                <li>{t("armies.format.json")}</li>
               </ul>
             </div>
             <div className="dialog-actions">
@@ -408,11 +471,27 @@ export function ArmiesPage() {
         )}
       </Dialog>
 
-      {items === undefined ? null : items.length === 0 ? (
+      {items === undefined ? (
+        <p className="muted small">{t("armies.loading")}</p>
+      ) : loadError ? (
+        <div className="army-load-error">
+          <p>{t("armies.loadFailed")}</p>
+          <p className="small muted">{loadError}</p>
+          <button type="button" onClick={() => void refresh()}>
+            {t("common.retry")}
+          </button>
+        </div>
+      ) : items.length === 0 ? (
         snapshot ? <Empty>{t("armies.empty")}</Empty> : null
       ) : (
+        <>
+        <div className="army-filter">
+          <input type="search" value={query} placeholder={t("armies.filter")} aria-label={t("armies.filter")} onChange={(e) => setQuery(e.target.value)} />
+          <span className="small muted">{t("armies.showing", { n: shown.length, total: rows.length })}</span>
+        </div>
+        {shown.length === 0 ? <Empty>{t("armies.noMatch", { q: query.trim() })}</Empty> : null}
         <div className="army-cards">
-          {rows.map(({ r, faction, points, otherSnapshot }) => (
+          {shown.map(({ r, faction, points, otherSnapshot }) => (
             <article key={r.id} className="army-card">
               <div className="army-card-top">
                 <a href={hrefFor("armies", r.id)} className="army-card-title">
@@ -436,7 +515,9 @@ export function ArmiesPage() {
             </article>
           ))}
         </div>
+        </>
       )}
+      {confirmDialog}
       </div>
     </>
   );

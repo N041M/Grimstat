@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { hrefFor, type Route } from "../../router";
 import type { ThemePreference, useTheme } from "../../theme";
 import { useApp } from "../../state/AppContext";
-import { useDismiss } from "../ui";
+import { menuKeys, useDismiss } from "../ui";
 import { t, type I18nKey } from "../../i18n";
 
 export interface RailEntry {
@@ -20,6 +20,7 @@ export const RAIL_ENTRIES: readonly RailEntry[] = [
   { route: "codex", glyph: "X", labelKey: "nav.codex" },
   { route: "analyses", glyph: "N", labelKey: "nav.analyses" },
   { route: "battle", glyph: "B", labelKey: "nav.battle" },
+  { route: "play", glyph: "P", labelKey: "nav.play" },
   { route: "data", glyph: "D", labelKey: "nav.data" },
   { route: "about", glyph: "?", labelKey: "nav.about" },
 ];
@@ -43,7 +44,7 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
         <span aria-hidden="true">{dark ? "☀" : "☾"}</span>
       </button>
       {open ? (
-        <div className="rail-theme-menu menu" role="menu" aria-label={t("theme.menuLabel")}>
+        <div className="rail-theme-menu menu" role="menu" aria-label={t("theme.menuLabel")} onKeyDown={(e) => menuKeys(e, e.currentTarget)}>
           {PREFERENCES.map((p) => (
             <button
               key={p.value}
@@ -69,7 +70,7 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
  * eight single-letter route items, theme control pinned to the bottom. Below 900px the same
  * markup lays itself out as a bottom bar (see `.shell.narrow .rail` in styles.css).
  */
-export function IconRail({ route, theme }: { route: Route; theme: ReturnType<typeof useTheme> }) {
+export function IconRail({ route, theme, offline }: { route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean }) {
   const { solveState, openPalette } = useApp();
   const pending = solveState === "pending";
   return (
@@ -80,12 +81,20 @@ export function IconRail({ route, theme }: { route: Route; theme: ReturnType<typ
       </button>
       <nav className="rail-nav" aria-label={t("nav.label")}>
         {RAIL_ENTRIES.map((e) => (
-          <a key={e.route} className="rail-item" href={hrefFor(e.route)} title={t(e.labelKey)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
+          <a key={e.route} className="rail-item" href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
             <span aria-hidden="true">{e.glyph}</span>
+            <span className="rail-label" aria-hidden="true">
+              {t(e.labelKey)}
+            </span>
           </a>
         ))}
       </nav>
       <div className="rail-spacer" />
+      {offline ? (
+        <span className="rail-offline" role="status" title={t("shell.offlineHint")} aria-label={t("shell.offlineHint")}>
+          {t("shell.offline")}
+        </span>
+      ) : null}
       <ThemeControl theme={theme} />
     </div>
   );

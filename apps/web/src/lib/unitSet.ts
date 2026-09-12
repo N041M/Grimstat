@@ -1,7 +1,41 @@
 import type { Roster, Scenario, ScenarioUnit, Snapshot } from "@grimstat/schema";
 import { archetypes, unitFromDatasheet, unitFromRosterUnit } from "@grimstat/game-40k-11e";
+import type { I18nKey } from "../i18n";
 import { cloneUnit } from "./scenario";
 import { newId } from "./ids";
+
+/** Settings keys of the persisted analysis unit sets, one per picker. */
+export const UNIT_SET_KEYS = {
+  matrixAttackers: "analyses.matrix.attackers",
+  matrixDefenders: "analyses.matrix.defenders",
+  durabilityDefender: "analyses.durability.defender",
+  efficiencyAttackers: "analyses.efficiency.attackers",
+  reverseTarget: "analyses.reverse.target",
+  reverseCandidates: "analyses.reverse.candidates",
+  turnAttackers: "analyses.turn.attackers",
+  turnTargets: "analyses.turn.targets",
+} as const;
+
+export type UnitSetKey = (typeof UNIT_SET_KEYS)[keyof typeof UNIT_SET_KEYS];
+
+export interface UnitSetDescriptor {
+  key: UnitSetKey;
+  /** Label keys of the tab and of the role the set plays there ("Matrix · Attackers"). */
+  tab: I18nKey;
+  role: I18nKey;
+}
+
+/** Every persisted set in tab order. The picker's "Copy from" menu lists these. */
+export const UNIT_SETS: readonly UnitSetDescriptor[] = [
+  { key: UNIT_SET_KEYS.matrixAttackers, tab: "analyses.tab.matrix", role: "analyses.set.attackers" },
+  { key: UNIT_SET_KEYS.matrixDefenders, tab: "analyses.tab.matrix", role: "analyses.set.defenders" },
+  { key: UNIT_SET_KEYS.durabilityDefender, tab: "analyses.tab.durability", role: "analyses.set.defender" },
+  { key: UNIT_SET_KEYS.efficiencyAttackers, tab: "analyses.tab.efficiency", role: "analyses.set.attackers" },
+  { key: UNIT_SET_KEYS.reverseTarget, tab: "analyses.tab.reverse", role: "analyses.reverse.target" },
+  { key: UNIT_SET_KEYS.reverseCandidates, tab: "analyses.tab.reverse", role: "analyses.reverse.candidates" },
+  { key: UNIT_SET_KEYS.turnAttackers, tab: "analyses.tab.turn", role: "analyses.set.attackers" },
+  { key: UNIT_SET_KEYS.turnTargets, tab: "analyses.tab.turn", role: "analyses.set.targets" },
+];
 
 /** Where a unit in an analysis set came from; this is what gets persisted (units are re-resolved on load). */
 export type UnitSource =

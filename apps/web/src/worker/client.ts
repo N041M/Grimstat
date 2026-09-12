@@ -16,6 +16,18 @@ export interface Sequenced<T> {
 /** How long a superseded run may keep the worker busy before we terminate and respawn it. */
 const STALE_KILL_MS = 2500;
 
+/** What a request in flight rejects with when `cancel()` terminates the worker under it. */
+export class CancelledError extends Error {
+  constructor() {
+    super("cancelled");
+    this.name = "CancelledError";
+  }
+}
+
+export function isCancelled(e: unknown): e is CancelledError {
+  return e instanceof CancelledError;
+}
+
 /**
  * Owns the simulation Web Worker. Requests are sequenced: a result is only delivered if no newer
  * request was made meanwhile. If a stale request hogs the worker for too long, the worker is
@@ -27,6 +39,8 @@ export class SimClient {
   private seq = 0;
   private busySince: number | undefined;
   private cachedSnapshotIds = new Set<string>();
+  /** Rejecters of the calls in flight, so `cancel()` can settle them. */
+  private pending = new Set<(e: Error) => void>();
 
   private ensure(): Comlink.Remote<SimWorkerApi> {
     if (!this.proxy) {
@@ -61,22 +75,40 @@ export class SimClient {
     const proxy = this.ensure();
     const worker = this.worker;
     this.busySince = performance.now();
+    let reject: (e: Error) => void = () => undefined;
+    const cancelled = new Promise<never>((_, rej) => {
+      reject = rej;
+    });
+    this.pending.add(reject);
     try {
       let ref: SnapshotRef;
       if (snapshot) {
         const key = `${snapshot.id}|${snapshot.checksum}|${snapshot.updatedAt}`;
         if (!this.cachedSnapshotIds.has(key)) {
-          await proxy.putSnapshot(snapshot);
+          await Promise.race([proxy.putSnapshot(snapshot), cancelled]);
           this.cachedSnapshotIds.add(key);
         }
         ref = snapshot.id;
       }
       if (seq !== this.seq) return { seq, outcome: undefined };
-      const outcome = await fn(proxy, ref);
+      const outcome = await Promise.race([fn(proxy, ref), cancelled]);
       return { seq, outcome: seq === this.seq ? outcome : undefined };
     } finally {
+      this.pending.delete(reject);
       if (this.worker === worker) this.busySince = undefined;
     }
+  }
+
+  /**
+   * Abandon whatever the worker is doing: terminate it (the next call spawns a fresh one) and
+   * reject every call in flight with `CancelledError`. A no-op while nothing is in flight.
+   */
+  cancel(): void {
+    if (!this.pending.size) return;
+    const waiting = [...this.pending];
+    this.pending.clear();
+    this.respawn();
+    for (const rej of waiting) rej(new CancelledError());
   }
 
   run(scenario: Scenario, snapshot: Snapshot | undefined): Promise<Sequenced<RunOutcome>> {

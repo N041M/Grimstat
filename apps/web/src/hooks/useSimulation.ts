@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { Scenario, SimResult, Snapshot } from "@grimstat/schema";
 import { simClient } from "../worker/client";
 
+/** Why the scenario cannot run at all: nothing to attack with, or nothing to attack. */
+export type IdleReason = "no-weapons" | "no-models";
+
 export interface SimulationState {
   result: SimResult | undefined;
   running: boolean;
@@ -11,6 +14,14 @@ export interface SimulationState {
   resultFor: string | undefined;
   /** True from the moment an input changes until the worker's answer for it lands. */
   stale: boolean;
+  /** Set while the scenario is missing what a run needs; nothing is computing then. */
+  idle: IdleReason | undefined;
+}
+
+export function idleReason(s: Scenario): IdleReason | undefined {
+  if (!s.attacker.weapons.some((w) => w.enabled && w.count > 0)) return "no-weapons";
+  if (!s.defender.models.some((m) => m.count > 0)) return "no-models";
+  return undefined;
 }
 
 const DEBOUNCE_MS = 150;
@@ -25,15 +36,15 @@ function fingerprint(s: Scenario): string {
  * cancellation: only the most recent request's result is ever surfaced.
  */
 export function useSimulation(scenario: Scenario, snapshot: Snapshot | undefined): SimulationState {
-  const [state, setState] = useState<Omit<SimulationState, "stale">>({ result: undefined, running: false, error: undefined, elapsedMs: undefined, resultFor: undefined });
+  const [state, setState] = useState<Omit<SimulationState, "stale" | "idle">>({ result: undefined, running: false, error: undefined, elapsedMs: undefined, resultFor: undefined });
   const fp = fingerprint(scenario);
+  const idle = idleReason(scenario);
   const latestScenario = useRef(scenario);
   latestScenario.current = scenario;
 
   useEffect(() => {
     let cancelled = false;
-    const canRun = scenario.attacker.weapons.some((w) => w.enabled && w.count > 0) && scenario.defender.models.some((m) => m.count > 0);
-    if (!canRun) {
+    if (idleReason(scenario)) {
       setState((s) => ({ ...s, running: false, result: undefined, error: undefined, resultFor: fp }));
       return;
     }
@@ -58,5 +69,6 @@ export function useSimulation(scenario: Scenario, snapshot: Snapshot | undefined
   }, [fp, snapshot]);
 
   // Stale covers the debounce window too, so the shell's solve dot reacts to the first keystroke.
-  return { ...state, stale: state.running || state.resultFor !== fp };
+  // An idle scenario is never stale: there is nothing pending for it.
+  return { ...state, idle, stale: !idle && (state.running || state.resultFor !== fp) };
 }

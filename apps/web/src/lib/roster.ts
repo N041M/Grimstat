@@ -204,6 +204,81 @@ export function duplicateUnit(u: RosterUnit): RosterUnit {
   return { ...rest, id: newId("u"), isWarlord: false };
 }
 
+/**
+ * Move the unit `id` by `delta` places in `roster.units`, clamped to the ends of the list. The same
+ * roster object comes back when nothing moves, so callers can skip a save.
+ */
+export function moveUnit(roster: Roster, id: string, delta: number): Roster {
+  const from = roster.units.findIndex((u) => u.id === id);
+  if (from < 0 || !Number.isFinite(delta)) return roster;
+  const to = Math.max(0, Math.min(roster.units.length - 1, from + Math.trunc(delta)));
+  if (to === from) return roster;
+  const units = [...roster.units];
+  const [unit] = units.splice(from, 1);
+  units.splice(to, 0, unit!);
+  return { ...roster, units };
+}
+
+export type UnitAttachment = NonNullable<RosterUnit["attachedTo"]>;
+
+/** One unit taken out of a roster, with what `restoreUnits` needs to put it back where it was. */
+export interface RemovedUnit {
+  unit: RosterUnit;
+  /** Index in `roster.units` before the removal. */
+  index: number;
+  /** Characters that were attached to this unit and lost the attachment when it went. */
+  detached: Array<{ id: string; attachedTo: UnitAttachment }>;
+}
+
+/**
+ * Take the units with the given ids out of the roster. Characters attached to a removed unit stay
+ * in the list and lose their attachment. `removed` records the former indices and attachments.
+ */
+export function removeUnits(roster: Roster, ids: Iterable<string>): { roster: Roster; removed: RemovedUnit[] } {
+  const gone = new Set(ids);
+  const removed: RemovedUnit[] = [];
+  roster.units.forEach((unit, index) => {
+    if (gone.has(unit.id)) removed.push({ unit, index, detached: [] });
+  });
+  if (removed.length === 0) return { roster, removed };
+  const byId = new Map(removed.map((r) => [r.unit.id, r] as const));
+  const units: RosterUnit[] = [];
+  for (const u of roster.units) {
+    if (gone.has(u.id)) continue;
+    const host = u.attachedTo ? byId.get(u.attachedTo.unitId) : undefined;
+    if (host && u.attachedTo) {
+      host.detached.push({ id: u.id, attachedTo: u.attachedTo });
+      const { attachedTo: _a, ...rest } = u;
+      units.push(rest);
+    } else units.push(u);
+  }
+  return { roster: { ...roster, units }, removed };
+}
+
+/**
+ * Undo of `removeUnits`: each unit goes back at its former index (clamped to the current length)
+ * and the characters it had re-attach to it. A unit that is already present is left alone, and a
+ * character that has since attached elsewhere or left the list keeps its current state.
+ */
+export function restoreUnits(roster: Roster, removed: RemovedUnit[]): Roster {
+  const units = [...roster.units];
+  const present = new Set(units.map((u) => u.id));
+  for (const r of [...removed].sort((a, b) => a.index - b.index)) {
+    if (present.has(r.unit.id)) continue;
+    units.splice(Math.min(r.index, units.length), 0, r.unit);
+    present.add(r.unit.id);
+  }
+  const reattach = new Map<string, UnitAttachment>();
+  for (const r of removed) for (const d of r.detached) reattach.set(d.id, d.attachedTo);
+  return {
+    ...roster,
+    units: units.map((u) => {
+      const a = reattach.get(u.id);
+      return a && !u.attachedTo && present.has(a.unitId) ? { ...u, attachedTo: a } : u;
+    }),
+  };
+}
+
 export function hasWargear(group: ModelGroup, item: string): boolean {
   const key = item.toLowerCase();
   return group.wargear.some((w) => w.toLowerCase() === key);
@@ -256,18 +331,34 @@ export function diffRosters(prev: Roster, next: Roster, snapshot: Snapshot): Ros
 /**
  * What one saved revision did, for the editor's history list. Deliberately coarse: a revision is
  * one auto-save, so a single unit change is the common case and anything busier is just a count.
+ * Revisions that touched no unit are told apart by what else moved: the detachments, the name,
+ * the battle size or points limit, the unit order, or something smaller (notes). `unreadable` is
+ * never produced here; the dock uses it for a stored revision that fails to parse.
  */
-export type RevisionChange = { kind: "created" } | { kind: "added" | "removed" | "changed"; name: string } | { kind: "detachments" } | { kind: "multi"; n: number };
+export type RevisionChange =
+  | { kind: "created" }
+  | { kind: "added" | "removed" | "changed"; name: string }
+  | { kind: "detachments" }
+  | { kind: "renamed"; name: string }
+  | { kind: "settings" }
+  | { kind: "reordered" }
+  | { kind: "other" }
+  | { kind: "multi"; n: number }
+  | { kind: "unreadable" };
 
 export function describeRevisionChange(prev: Roster | undefined, next: Roster, snapshot: Snapshot): RevisionChange {
   if (!prev) return { kind: "created" };
   const d = diffRosters(prev, next, snapshot);
   const total = d.added.length + d.removed.length + d.changed.length;
-  if (total === 0) return JSON.stringify(prev.detachments) === JSON.stringify(next.detachments) ? { kind: "multi", n: 0 } : { kind: "detachments" };
   if (total > 1) return { kind: "multi", n: total };
   if (d.added.length) return { kind: "added", name: d.added[0]!.name };
   if (d.removed.length) return { kind: "removed", name: d.removed[0]!.name };
-  return { kind: "changed", name: d.changed[0]!.name };
+  if (d.changed.length) return { kind: "changed", name: d.changed[0]!.name };
+  if (JSON.stringify(prev.detachments) !== JSON.stringify(next.detachments)) return { kind: "detachments" };
+  if (prev.name !== next.name) return { kind: "renamed", name: next.name };
+  if (prev.battleSize !== next.battleSize || prev.pointsLimit !== next.pointsLimit) return { kind: "settings" };
+  if (prev.units.map((u) => u.id).join("\n") !== next.units.map((u) => u.id).join("\n")) return { kind: "reordered" };
+  return { kind: "other" };
 }
 
 /** "/units/3" → 3; anything else → undefined. */

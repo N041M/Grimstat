@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 /**
  * Shared redesign primitives: the control dock, its select boxes / pill chips / switches, the
@@ -70,20 +70,41 @@ export function SelectBox<T extends string>({ label, value, options, onChange, t
   );
 }
 
-/** Same box as `SelectBox`, holding a number instead of a menu (MC iterations). */
-export function NumberBox({ label, value, min, step, onChange, title }: { label: string; value: number; min?: number; step?: number; onChange: (v: number) => void; title?: string }) {
+/**
+ * Same box as `SelectBox`, holding a number instead of a menu (MC iterations). The text is held
+ * locally while the field has focus and committed, clamped to `min`/`max`, on blur or Enter, so
+ * clearing the field to type a new value does not snap it back to the minimum on each keystroke.
+ */
+export function NumberBox({ label, value, min, max, step, onChange, title }: { label: string; value: number; min?: number; max?: number; step?: number; onChange: (v: number) => void; title?: string }) {
+  const [text, setText] = useState(String(value));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setText(String(value));
+  }, [value, editing]);
+  const commit = () => {
+    const n = Number(text);
+    const next = text.trim() === "" || !Number.isFinite(n) ? value : Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
+    setText(String(next));
+    if (next !== value) onChange(next);
+  };
   return (
     <label className="dock-field" title={title}>
       <span className="dock-field-label">{label}</span>
       <span className="selectbox">
         <input
           type="number"
-          value={value}
+          value={text}
           min={min}
+          max={max}
           step={step}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) onChange(n);
+          onFocus={() => setEditing(true)}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => {
+            commit();
+            setEditing(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
           }}
         />
       </span>

@@ -244,6 +244,8 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
         <section className="insp-section">
           <h4 className="inspector-h">{t("roster.inspector.issues")}</h4>
           {issues.length ? (
+            // Every issue here already points at this unit (the page filters by its index), so a
+            // "show the unit" button would only re-select it; the rows stay static on purpose.
             <ul className="diag-list">
               {issues.map((d, i) => (
                 <DiagnosticItem key={`${d.code}-${i}`} d={d} />

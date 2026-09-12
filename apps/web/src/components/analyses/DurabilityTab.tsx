@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ScenarioUnit, Snapshot } from "@grimstat/schema";
 import type { DurabilityEntry } from "@grimstat/game-40k-11e";
 import { useApp } from "../../state/AppContext";
@@ -6,10 +6,10 @@ import { simClient } from "../../worker/client";
 import { useWorkerTask } from "../../hooks/useWorkerTask";
 import { useUnitSet } from "../../hooks/useUnitSet";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
-import { attackerArchetypes, shortArchetypeName, type UnitEntry } from "../../lib/unitSet";
+import { UNIT_SET_KEYS, attackerArchetypes, shortArchetypeName, type UnitEntry } from "../../lib/unitSet";
 import { fmt, pct } from "../../lib/format";
 import { UnitSetPicker } from "./UnitSetPicker";
-import { RunStatus } from "./shared";
+import { RunActions, RunStatus, useAnalysisHeader } from "./shared";
 import { HBarChart } from "../charts/HBarChart";
 import { t } from "../../i18n";
 
@@ -91,7 +91,7 @@ export function DurabilityTab() {
   const { snapshot } = useApp();
   const defender = useUnitSet("analyses.durability.defender");
   const [opts, setOpts] = usePersistedSetting<DurabilityOptions>("analyses.durability.options", DEFAULT_OPTIONS, parseOptions);
-  const task = useWorkerTask(runDurability);
+  const task = useWorkerTask(runDurability, "analyses.durability");
   const [ran, setRan] = useState<{ name: string; fp: string } | undefined>(undefined);
   const attackers = attackerArchetypes();
   const unit = defender.entries[0];
@@ -105,11 +105,22 @@ export function DurabilityTab() {
   };
   const toggleId = (id: string, on: boolean) => setOpts((o) => ({ ...o, attackerIds: on ? [...o.attackerIds.filter((x) => x !== id), id] : o.attackerIds.filter((x) => x !== id) }));
 
+  // Header actions call through a ref so they never run against a stale closure.
+  const handlers = useRef({ run, cancel: task.cancel });
+  handlers.current = { run, cancel: task.cancel };
+  useAnalysisHeader(
+    () => ({
+      subtitle: unit ? t("analyses.durability.sub", { name: unit.unit.name, n: opts.attackerIds.length }) : t("analyses.durability.subIdle"),
+      actions: <RunActions canRun={canRun} running={task.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()} />,
+    }),
+    [canRun, task.running, unit?.unit.name, opts.attackerIds.length],
+  );
+
   return (
     <div className="analysis">
       <aside className="analysis-controls stack">
         <section className="panel">
-          <UnitSetPicker label={t("analyses.set.defender")} entries={defender.entries} onChange={defender.setEntries} single />
+          <UnitSetPicker label={t("analyses.set.defender")} storageKey={UNIT_SET_KEYS.durabilityDefender} entries={defender.entries} onChange={defender.setEntries} single />
         </section>
         <section className="panel stack" aria-labelledby="dur-att-h">
           <h3 id="dur-att-h" style={{ margin: 0 }}>
@@ -127,15 +138,10 @@ export function DurabilityTab() {
             <input type="checkbox" checked={opts.inCover} onChange={(e) => setOpts((o) => ({ ...o, inCover: e.target.checked }))} />
             <span>{t("ctx.inCover")}</span>
           </label>
-          <div className="row">
-            <button type="button" className="primary" disabled={!canRun || task.running} onClick={run}>
-              {t("analyses.run")}
-            </button>
-          </div>
         </section>
       </aside>
       <section className="analysis-results stack">
-        <RunStatus task={task} extra={dirty ? t("analyses.stale") : undefined} />
+        <RunStatus task={task} stale={dirty} />
         {task.result && ran ? (
           <>
             <h3 style={{ margin: 0 }}>{t("analyses.durability.title", { name: ran.name })}</h3>

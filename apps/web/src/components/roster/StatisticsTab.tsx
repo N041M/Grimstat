@@ -18,6 +18,7 @@ import {
 import type { UnitSection } from "../../lib/roster";
 import { fmt, fmtInt, pct } from "../../lib/format";
 import { STAT_TARGET_IDS, TARGET_DETAIL, useArmyStats, type StatTargetId } from "../../hooks/useArmyStats";
+import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead, ProportionBar, SelectBox } from "../kit";
 import { Empty } from "../ui";
 import { t, tn, type I18nKey } from "../../i18n";
@@ -50,8 +51,8 @@ const CURVE_COLUMNS = "68px minmax(60px,1.8fr) 72px 72px";
 /** Target | alone | redundancy bar | needed | cheapest group | its points. */
 const SAT_COLUMNS = "minmax(110px,1.1fr) 54px minmax(70px,0.9fr) 62px minmax(150px,1.9fr) 70px";
 
-/** Points read as bare digits ("970 / 2000"), exactly as the header bar sets them. */
-const plain = (v: number) => String(Math.round(v));
+/** Reject anything but a known archetype when reading the remembered target back. */
+const parseTarget = (raw: unknown): StatTargetId | undefined => STAT_TARGET_IDS.find((id) => id === raw);
 
 /** A 10px mono uppercase label over a 24px mono value. */
 function Tile({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
@@ -157,7 +158,8 @@ interface Props {
  * spinner.
  */
 export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelectUnit }: Props) {
-  const [target, setTarget] = useState<StatTargetId>("marine-like");
+  // The target archetype is a reading preference, so it is remembered across armies.
+  const [target, setTarget] = usePersistedSetting<StatTargetId>("roster.stats.target", "marine-like", parseTarget);
   const [sort, setSort] = useState<StatSort>({ col: "points", dir: "desc" });
 
   const composition = useMemo(() => armyComposition(roster, datasheets, costById), [roster, datasheets, costById]);
@@ -292,7 +294,7 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
         <div className="stat-tiles">
           <Tile
             label={t("roster.stats.metric.points")}
-            value={`${plain(composition.points)} / ${plain(composition.limit)}`}
+            value={`${fmtInt(composition.points)} / ${fmtInt(composition.limit)}`}
             title={composition.over > 0 ? t("roster.points.over", { n: fmtInt(composition.over) }) : t("roster.points.spare", { n: fmtInt(composition.spare) })}
           />
           <Tile label={t("roster.stats.metric.units")} value={fmtInt(composition.units)} />
@@ -324,8 +326,8 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
               </GridCell>
               <GridCell>
                 <span className="stat-share">
-                  <ProportionBar value={r.share} tone={r.tone} height={8} title={`${fmt(r.share * 100, 1)}%`} />
-                  <span className="stat-share-pct">{fmt(r.share * 100, 1)}</span>
+                  <ProportionBar value={r.share} tone={r.tone} height={8} title={pct(r.share, 1)} />
+                  <span className="stat-share-pct">{pct(r.share, 1)}</span>
                 </span>
               </GridCell>
             </GridRow>

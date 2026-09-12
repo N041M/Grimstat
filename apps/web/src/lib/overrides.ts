@@ -1,7 +1,7 @@
 import { EffectRecord, Override, type Ability, type Condition, type EffectOp, type Side, type Snapshot, type Stage } from "@grimstat/schema";
 import { applyOverrides } from "@grimstat/snapshot";
 import { CHANNEL_INFO } from "./gameExtras";
-import type { I18nKey } from "../i18n";
+import { t, type I18nKey } from "../i18n";
 
 /** A stored rules override: the schema `Override` plus record bookkeeping. Keyed by `entity:id`. */
 export interface OverrideRecord extends Override {
@@ -14,6 +14,25 @@ export interface OverrideRecord extends Override {
 
 export function overrideKey(entity: Override["entity"], id: string): string {
   return `${entity}:${id}`;
+}
+
+/** Entity kinds an override can carry, plus the kinds a snapshot diff reports. */
+const ENTITY_LABELS: Record<string, I18nKey> = {
+  faction: "entity.faction",
+  publication: "entity.publication",
+  datasheet: "entity.datasheet",
+  ability: "entity.ability",
+  detachment: "entity.detachment",
+  enhancement: "entity.enhancement",
+  stratagem: "entity.stratagem",
+  wargearPrice: "entity.wargearPrice",
+  priceRule: "entity.priceRule",
+};
+
+/** The entity kind in words ("price rule"), for the overrides list and the snapshot diff. */
+export function entityLabel(entity: string): string {
+  const key = ENTITY_LABELS[entity];
+  return key ? t(key) : entity;
 }
 
 // ---------- Effective snapshot ----------
@@ -219,12 +238,12 @@ export function abilityOverride(ability: Pick<Ability, "id" | "name">, effects: 
 
 /** Feel No Pain X+ as a core keyword (Tier-1); clears any explicit effects. */
 export function fnpOverride(ability: Pick<Ability, "id" | "name">, x: number, note?: string): Override {
-  return { entity: "ability", id: ability.id, patch: { coreKeyword: "FEEL NO PAIN", coreValue: x, effects: null }, note: note?.trim() || `Feel No Pain ${x}+` };
+  return { entity: "ability", id: ability.id, patch: { coreKeyword: "FEEL NO PAIN", coreValue: x, effects: null }, note: note?.trim() || t("overrides.note.fnp", { x }) };
 }
 
 /** Mark an ability as having no effect on the attack sequence so coverage stops listing it. */
 export function noEffectOverride(ability: Pick<Ability, "id" | "name">, note?: string): Override {
-  return { entity: "ability", id: ability.id, patch: { effects: [] }, note: note?.trim() || "No combat effect" };
+  return { entity: "ability", id: ability.id, patch: { effects: [] }, note: note?.trim() || t("overrides.note.noEffect") };
 }
 
 /** True when the patch explicitly says "no combat effect" (`effects: []`). */

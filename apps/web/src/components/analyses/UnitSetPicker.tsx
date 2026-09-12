@@ -4,16 +4,25 @@ import { archetypes, unitFromDatasheet } from "@grimstat/game-40k-11e";
 import { db } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { hrefFor } from "../../router";
-import { attackerArchetypes, makeEntry, rosterHostEntries, totalPoints, type UnitEntry } from "../../lib/unitSet";
+import { UNIT_SETS, attackerArchetypes, makeEntry, rosterHostEntries, totalPoints, type UnitEntry, type UnitSetDescriptor } from "../../lib/unitSet";
+import { loadUnitSet, readStoredSet, unitSetLabel } from "../../hooks/useUnitSet";
+import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { fmtInt } from "../../lib/format";
-import { Field, Tabs } from "../ui";
-import { t } from "../../i18n";
+import { Field, Popover, Tabs, useConfirm } from "../ui";
+import { t, tn } from "../../i18n";
 
 type Source = "army" | "archetype" | "datasheet" | "calculator";
+const SOURCES: Source[] = ["army", "archetype", "datasheet", "calculator"];
+const parseSource = (raw: unknown): Source | undefined => SOURCES.find((s) => s === raw);
+
+/** Clearing this many entries or fewer needs no confirmation. */
+const CLEAR_WITHOUT_ASKING = 2;
 
 export interface UnitSetPickerProps {
   /** Heading of the set ("Attackers", "Targets"…). */
   label: string;
+  /** Settings key the set persists under (see `UNIT_SET_KEYS`); also keys the remembered source tab. */
+  storageKey: string;
   entries: UnitEntry[];
   onChange: (next: UnitEntry[]) => void;
   /** Exactly one unit (adding replaces). */
@@ -25,9 +34,10 @@ export interface UnitSetPickerProps {
 }
 
 /** Shared "build a set of units" control: army units, archetypes, datasheets or the calculator's units; chips with points. */
-export function UnitSetPicker({ label, entries, onChange, single, archetypeFilter = "all", renderExtra }: UnitSetPickerProps) {
+export function UnitSetPicker({ label, storageKey, entries, onChange, single, archetypeFilter = "all", renderExtra }: UnitSetPickerProps) {
   const { snapshot, scenario } = useApp();
-  const [source, setSource] = useState<Source>("archetype");
+  const [source, setSource, sourceLoaded] = usePersistedSetting<Source>(`${storageKey}.source`, "archetype", parseSource);
+  const { confirm, dialog } = useConfirm();
 
   const add = (added: UnitEntry[]) => {
     if (!added.length) return;
@@ -35,7 +45,10 @@ export function UnitSetPicker({ label, entries, onChange, single, archetypeFilte
   };
   const remove = (id: string) => onChange(entries.filter((e) => e.id !== id));
   const update = (id: string) => (patch: Partial<UnitEntry>) => onChange(entries.map((e) => (e.id === id ? { ...e, ...patch } : e)));
-  const clear = () => onChange([]);
+  const clear = async () => {
+    if (entries.length > CLEAR_WITHOUT_ASKING && !(await confirm({ title: t("analyses.picker.clearTitle", { set: label }), body: t("analyses.picker.clearBody", { n: entries.length }), confirmLabel: t("analyses.picker.clear"), danger: true }))) return;
+    onChange([]);
+  };
   const points = totalPoints(entries);
 
   return (
@@ -44,11 +57,14 @@ export function UnitSetPicker({ label, entries, onChange, single, archetypeFilte
         <h3 style={{ margin: 0 }}>
           {label} <span className="muted small">({entries.length}{points !== undefined ? ` · ${t("unit.points", { v: fmtInt(points) })}` : ""})</span>
         </h3>
-        {entries.length ? (
-          <button type="button" className="ghost sm" onClick={clear}>
-            {t("analyses.picker.clear")}
-          </button>
-        ) : null}
+        <span className="unit-set-actions">
+          <CopyFromMenu label={label} storageKey={storageKey} single={!!single} entries={entries} onChange={onChange} />
+          {entries.length ? (
+            <button type="button" className="ghost sm" onClick={() => void clear()}>
+              {t("analyses.picker.clear")}
+            </button>
+          ) : null}
+        </span>
       </div>
       {entries.length ? (
         <ul className="unit-chips" aria-label={label}>
@@ -82,10 +98,11 @@ export function UnitSetPicker({ label, entries, onChange, single, archetypeFilte
           { id: "calculator", label: t("analyses.picker.calculator") },
         ]}
       />
-      {source === "army" ? <ArmySource snapshot={snapshot} single={!!single} onAdd={add} /> : null}
-      {source === "archetype" ? <ArchetypeSource filter={archetypeFilter} single={!!single} onAdd={add} /> : null}
-      {source === "datasheet" ? <DatasheetSource snapshot={snapshot} onAdd={add} /> : null}
-      {source === "calculator" ? (
+      {/* The remembered source arrives a tick after mount; nothing is drawn until then so the panel never swaps. */}
+      {sourceLoaded && source === "army" ? <ArmySource snapshot={snapshot} single={!!single} onAdd={add} /> : null}
+      {sourceLoaded && source === "archetype" ? <ArchetypeSource filter={archetypeFilter} single={!!single} onAdd={add} /> : null}
+      {sourceLoaded && source === "datasheet" ? <DatasheetSource snapshot={snapshot} onAdd={add} /> : null}
+      {sourceLoaded && source === "calculator" ? (
         <div className="row">
           {(["attacker", "defender"] as const).map((side) => {
             const u = scenario[side];
@@ -98,7 +115,75 @@ export function UnitSetPicker({ label, entries, onChange, single, archetypeFilte
           })}
         </div>
       ) : null}
+      {dialog}
     </div>
+  );
+}
+
+/**
+ * "Copy from…": the other persisted sets that hold units, read through the same storage layer
+ * `useUnitSet` uses. Picking one replaces this set with a fresh copy of that set's sources (the
+ * first unit alone for a single picker); the notice offers Undo.
+ */
+function CopyFromMenu({ label, storageKey, single, entries, onChange }: { label: string; storageKey: string; single: boolean; entries: UnitEntry[]; onChange: (next: UnitEntry[]) => void }) {
+  const { snapshot, scenario, withOverrides, notify } = useApp();
+  const [open, setOpen] = useState(false);
+  const [others, setOthers] = useState<Array<{ set: UnitSetDescriptor; n: number }> | undefined>(undefined);
+  const candidates = useMemo(() => UNIT_SETS.filter((d) => d.key !== storageKey), [storageKey]);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setOthers(undefined);
+    void Promise.all(candidates.map(async (set) => ({ set, n: (await readStoredSet(set.key)).length })))
+      .then((all) => alive && setOthers(all.filter((x) => x.n > 0)))
+      .catch(() => alive && setOthers([]));
+    return () => {
+      alive = false;
+    };
+  }, [open, candidates]);
+
+  const copy = async (set: UnitSetDescriptor) => {
+    setOpen(false);
+    const resolved = await loadUnitSet(set.key, { snapshot, scenario, withOverrides });
+    const next = single ? resolved.slice(0, 1) : resolved;
+    if (!next.length) {
+      notify(t("analyses.picker.copyEmpty"), "info");
+      return;
+    }
+    const previous = entries;
+    onChange(next);
+    const from = `${t(set.tab)} · ${t(set.role)}`;
+    notify(tn(next.length, "analyses.picker.copiedOne", "analyses.picker.copiedMany", { from }), "success", undefined, previous.length ? { label: t("common.undo"), run: () => onChange(previous) } : undefined);
+  };
+
+  return (
+    <Popover
+      open={open}
+      onClose={() => setOpen(false)}
+      align="end"
+      className="unit-set-copy"
+      label={t("analyses.picker.copyFromLabel", { set: label })}
+      trigger={
+        <button type="button" className="ghost sm" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {t("analyses.picker.copyFrom")}
+        </button>
+      }
+    >
+      <div className="menu" role="menu" aria-label={t("analyses.picker.copyFromLabel", { set: label })}>
+        {others === undefined ? (
+          <span className="small muted menu-note">{t("analyses.picker.copyLoading")}</span>
+        ) : others.length ? (
+          others.map(({ set, n }) => (
+            <button key={set.key} type="button" role="menuitem" onClick={() => void copy(set)}>
+              {unitSetLabel(set, n)}
+            </button>
+          ))
+        ) : (
+          <span className="small muted menu-note">{t("analyses.picker.copyNone")}</span>
+        )}
+      </div>
+    </Popover>
   );
 }
 

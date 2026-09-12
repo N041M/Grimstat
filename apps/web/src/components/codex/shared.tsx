@@ -85,3 +85,32 @@ export function CodexTools({ factions, factionId, onFaction, query, onQuery, cla
     </div>
   );
 }
+
+/**
+ * A full-width action at the foot of the context column, drawn as a plain button. The dashed
+ * `ContextNewRow` means "create something new" on the other screens, so opening the compare view
+ * does not borrow it.
+ */
+export function ColumnAction({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <div className="codex-ctx-action">
+      <button type="button" onClick={onClick}>
+        {label}
+      </button>
+    </div>
+  );
+}
+
+/** The no-match text for a faction filter, with a one-click widening to every faction. */
+export function NoMatch({ query, factions, factionId, onFaction }: { query: string; factions: CodexFaction[]; factionId: string; onFaction: (id: string) => void }) {
+  if (factionId === ALL_FACTIONS) return <>{t("codex.noMatch")}</>;
+  const faction = factions.find((f) => f.id === factionId)?.name ?? factionId;
+  return (
+    <>
+      {t("codex.noMatchIn", { q: query.trim(), faction })}{" "}
+      <button type="button" className="sm" onClick={() => onFaction(ALL_FACTIONS)}>
+        {t("codex.searchAll")}
+      </button>
+    </>
+  );
+}

@@ -275,41 +275,93 @@ export function isSymmetric(layout: TerrainLayout, tolerance = 0.05): boolean {
 
 /* ---- validation -------------------------------------------------------------------------------- */
 
+/** What can be wrong with a layout. Each kind names the piece or objective it is about. */
+export type LayoutIssueKind =
+  | "piece-off-table"
+  | "piece-not-polygon"
+  | "floor-outside-piece"
+  | "duplicate-piece-id"
+  | "piece-no-area"
+  | "duplicate-objective-id"
+  | "objective-off-table"
+  | "objective-in-impassable";
+
+/** One problem with a layout, as data, so a UI can name the piece and phrase the message its own way. */
+export interface LayoutIssue {
+  readonly kind: LayoutIssueKind;
+  /** The piece or objective the problem is about. */
+  readonly subject: string;
+  /** The floor height, for `floor-outside-piece`. */
+  readonly floor?: number;
+  /** The impassable piece, for `objective-in-impassable`. */
+  readonly piece?: string;
+}
+
+/**
+ * Problems with a layout, as data. An empty list means the layout is playable; it says nothing
+ * about whether it is balanced. `layoutIssues` gives the same list as sentences.
+ */
+export function layoutProblems(layout: TerrainLayout): LayoutIssue[] {
+  const issues: LayoutIssue[] = [];
+  const { width, depth } = layout.size;
+
+  for (const piece of layout.pieces) {
+    const box2 = bounds(piece.polygon);
+    if (box2.minX < -0.01 || box2.minY < -0.01 || box2.maxX > width + 0.01 || box2.maxY > depth + 0.01) issues.push({ kind: "piece-off-table", subject: piece.id });
+    if (piece.polygon.length < 3) issues.push({ kind: "piece-not-polygon", subject: piece.id });
+    for (const f of piece.floors) {
+      if (f < -0.01 || piece.base + f > topOf(piece) + 0.01) issues.push({ kind: "floor-outside-piece", subject: piece.id, floor: f });
+    }
+  }
+
+  const ids = layout.pieces.map((p) => p.id);
+  for (const id of new Set(ids)) if (ids.filter((x) => x === id).length > 1) issues.push({ kind: "duplicate-piece-id", subject: id });
+
+  // A ring whose points are collinear looks like a piece in the data and blocks nothing on the
+  // table, which is the worst way for terrain to be wrong: present in the list, absent in play.
+  for (const piece of layout.pieces) if (piece.polygon.length >= 3 && Math.abs(signedArea(piece.polygon)) < 1e-6) issues.push({ kind: "piece-no-area", subject: piece.id });
+
+  const objectiveIds = layout.objectives.map((o) => o.id);
+  for (const id of new Set(objectiveIds)) if (objectiveIds.filter((x) => x === id).length > 1) issues.push({ kind: "duplicate-objective-id", subject: id });
+
+  for (const objective of layout.objectives) {
+    const { x, y } = objective.at;
+    if (x < 0 || y < 0 || x > width || y > depth) issues.push({ kind: "objective-off-table", subject: objective.id });
+    for (const piece of layout.pieces) {
+      if (!piece.traits.includes("impassable")) continue;
+      if (pointInPolygon(objective.at, piece.polygon)) issues.push({ kind: "objective-in-impassable", subject: objective.id, piece: piece.id });
+    }
+  }
+
+  return issues;
+}
+
+/** One problem as a sentence, in the words a layout editor would use. */
+export function describeLayoutIssue(issue: LayoutIssue): string {
+  switch (issue.kind) {
+    case "piece-off-table":
+      return `${issue.subject}: hangs off the table`;
+    case "piece-not-polygon":
+      return `${issue.subject}: footprint is not a polygon`;
+    case "floor-outside-piece":
+      return `${issue.subject}: floor at ${issue.floor ?? 0}" is outside the piece`;
+    case "duplicate-piece-id":
+      return `${issue.subject}: duplicate piece id`;
+    case "piece-no-area":
+      return `${issue.subject}: footprint encloses no area`;
+    case "duplicate-objective-id":
+      return `${issue.subject}: duplicate objective id`;
+    case "objective-off-table":
+      return `${issue.subject}: off the table`;
+    case "objective-in-impassable":
+      return `${issue.subject}: sits inside impassable terrain (${issue.piece ?? "?"})`;
+  }
+}
+
 /**
  * Problems with a layout, in the words a layout editor would use. An empty list means the layout is
  * playable; it says nothing about whether it is balanced.
  */
 export function layoutIssues(layout: TerrainLayout): string[] {
-  const issues: string[] = [];
-  const { width, depth } = layout.size;
-
-  for (const piece of layout.pieces) {
-    const box2 = bounds(piece.polygon);
-    if (box2.minX < -0.01 || box2.minY < -0.01 || box2.maxX > width + 0.01 || box2.maxY > depth + 0.01) issues.push(`${piece.id}: hangs off the table`);
-    if (piece.polygon.length < 3) issues.push(`${piece.id}: footprint is not a polygon`);
-    for (const f of piece.floors) {
-      if (f < -0.01 || piece.base + f > topOf(piece) + 0.01) issues.push(`${piece.id}: floor at ${f}" is outside the piece`);
-    }
-  }
-
-  const ids = layout.pieces.map((p) => p.id);
-  for (const id of new Set(ids)) if (ids.filter((x) => x === id).length > 1) issues.push(`${id}: duplicate piece id`);
-
-  // A ring whose points are collinear looks like a piece in the data and blocks nothing on the
-  // table, which is the worst way for terrain to be wrong: present in the list, absent in play.
-  for (const piece of layout.pieces) if (piece.polygon.length >= 3 && Math.abs(signedArea(piece.polygon)) < 1e-6) issues.push(`${piece.id}: footprint encloses no area`);
-
-  const objectiveIds = layout.objectives.map((o) => o.id);
-  for (const id of new Set(objectiveIds)) if (objectiveIds.filter((x) => x === id).length > 1) issues.push(`${id}: duplicate objective id`);
-
-  for (const objective of layout.objectives) {
-    const { x, y } = objective.at;
-    if (x < 0 || y < 0 || x > width || y > depth) issues.push(`${objective.id}: off the table`);
-    for (const piece of layout.pieces) {
-      if (!piece.traits.includes("impassable")) continue;
-      if (pointInPolygon(objective.at, piece.polygon)) issues.push(`${objective.id}: sits inside impassable terrain (${piece.id})`);
-    }
-  }
-
-  return issues;
+  return layoutProblems(layout).map(describeLayoutIssue);
 }

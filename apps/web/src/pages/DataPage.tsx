@@ -8,10 +8,12 @@ import { loadSampleSnapshot } from "../lib/snapshotSource";
 import { summarisePatch } from "../lib/overrides";
 import { fmtDay, fmtInt } from "../lib/format";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead } from "../components/kit";
+import { useConfirm } from "../components/ui";
 import { SnapshotCompare } from "../components/data/SnapshotCompare";
-import { FetchSources } from "../components/data/FetchSources";
+import { FetchSources, type FetchSourcesHandle } from "../components/data/FetchSources";
 import { SourceAttribution } from "../components/data/SourceAttribution";
-import { PublishedLists } from "../components/data/PublishedLists";
+import { PublishedLists, type PublishedListsHandle } from "../components/data/PublishedLists";
+import { PublishedLayouts, type PublishedLayoutsHandle } from "../components/data/PublishedLayouts";
 import { hrefFor } from "../router";
 import { PageHeader } from "../components/shell";
 import { t } from "../i18n";
@@ -97,8 +99,13 @@ function SnapshotRow({ m, active, busy, onUse, onRemove }: { m: SnapshotMeta; ac
 export function DataPage() {
   const { snapshotList, activeSnapshotId, rawSnapshot, setActiveSnapshot, refreshSnapshots, refreshOverrides, notify, overrides, overrideStatus } = useApp();
   const [busy, setBusy] = useState(false);
+  const [fetchingAll, setFetchingAll] = useState(false);
   const snapInput = useRef<HTMLInputElement>(null);
   const bundleInput = useRef<HTMLInputElement>(null);
+  const sources = useRef<FetchSourcesHandle>(null);
+  const { confirm, dialog } = useConfirm();
+  const lists = useRef<PublishedListsHandle>(null);
+  const layouts = useRef<PublishedLayoutsHandle>(null);
 
   const overrideNames = useMemo(() => {
     const d = rawSnapshot?.data;
@@ -136,6 +143,24 @@ export function DataPage() {
     }
   };
 
+  /**
+   * The three fetches on this page, one after another, each with the settings its section shows.
+   * The snapshot goes first so the corpus is resolved against the data it just built. Each fetch
+   * reports its own result and errors; a failure in one does not stop the next.
+   */
+  const fetchAll = async () => {
+    setFetchingAll(true);
+    try {
+      await sources.current?.run();
+      await lists.current?.fetchCorpus();
+      await layouts.current?.fetch();
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setFetchingAll(false);
+    }
+  };
+
   const loadSample = () =>
     run(async () => {
       const s = loadSampleSnapshot();
@@ -167,12 +192,23 @@ export function DataPage() {
       notify(t("data.snapshotImported", { id: parsed.data.id }), "success");
     });
 
-  const remove = (id: string) =>
-    run(async () => {
-      if (!window.confirm(t("data.confirmDelete", { id }))) return;
-      await db.snapshots.delete(id);
+  /**
+   * Deleting the active snapshot promotes the next one in the list, which is what `refreshSnapshots`
+   * does with the stored active id. The notice says which snapshot the app reads now.
+   */
+  const remove = async (m: SnapshotMeta) => {
+    const label = m.label ?? m.id;
+    if (!(await confirm({ title: t("data.confirmDelete", { label }), body: t("data.delete.body"), confirmLabel: t("common.delete"), danger: true }))) return;
+    await run(async () => {
+      const wasActive = m.id === activeSnapshotId;
+      await db.snapshots.delete(m.id);
       await refreshSnapshots();
+      const remaining = snapshotList.filter((s) => s.id !== m.id);
+      const next = wasActive ? remaining[0] : undefined;
+      if (!wasActive) notify(t("data.deleted", { label }), "success");
+      else notify(next ? t("data.deleted.active", { label, active: next.label ?? next.id }) : t("data.deleted.none", { label }), "success");
     });
+  };
 
   const doExportAll = () =>
     run(async () => {
@@ -240,23 +276,38 @@ export function DataPage() {
         subtitle={t("page.sub.data")}
         actions={
           <>
-            <button type="button" disabled={busy} onClick={() => void loadSample()}>
+            <button type="button" disabled={busy || fetchingAll} onClick={() => void loadSample()}>
               {t("data.loadSample")}
             </button>
-            <button type="button" className="primary" disabled={busy} onClick={() => snapInput.current?.click()}>
+            <button type="button" disabled={busy || fetchingAll} onClick={() => snapInput.current?.click()}>
               {t("data.importSnapshot")}
             </button>
             <input ref={snapInput} type="file" accept="application/json,.json" className="sr-only" aria-label={t("data.importSnapshot")} onChange={(e) => void importSnapshot(e)} />
+            <button type="button" className="primary" disabled={busy || fetchingAll} title={t("data.fetchAll.hint")} onClick={() => void fetchAll()}>
+              {fetchingAll ? t("data.fetchAll.running") : t("data.fetchAll")}
+            </button>
           </>
         }
       />
       <div className="page-body data-body">
-        <FetchSources />
+        <p className="page-lede">{t("data.intro")}</p>
+
+        <FetchSources ref={sources} />
 
         <section aria-labelledby="data-snapshots-h">
           <PanelHead id="data-snapshots-h" title={t("data.stored")} aside={<span className="t-meta">{t("data.snapshotsMeta", { n: snapshotList.length })}</span>} />
           {snapshotList.length === 0 ? (
-            <p className="data-empty">{t("data.empty")}</p>
+            <>
+              <p className="data-empty">{t("data.empty")}</p>
+              <div className="data-actions data-empty-actions">
+                <button type="button" className="primary" disabled={busy || fetchingAll} onClick={() => void sources.current?.run()}>
+                  {t("data.fetch.title")}
+                </button>
+                <button type="button" disabled={busy || fetchingAll} onClick={() => void loadSample()}>
+                  {t("data.loadSample")}
+                </button>
+              </div>
+            </>
           ) : (
             <div className="data-table-card">
               <GridTable columns={SNAPSHOT_COLUMNS} label={t("data.stored")} className="snap-table">
@@ -268,7 +319,7 @@ export function DataPage() {
                   <GridHeadCell align="end">{t("data.col.built")}</GridHeadCell>
                 </GridHead>
                 {snapshotList.map((m) => (
-                  <SnapshotRow key={m.id} m={m} active={m.id === activeSnapshotId} busy={busy} onUse={() => void setActiveSnapshot(m.id)} onRemove={() => void remove(m.id)} />
+                  <SnapshotRow key={m.id} m={m} active={m.id === activeSnapshotId} busy={busy} onUse={() => void setActiveSnapshot(m.id)} onRemove={() => void remove(m)} />
                 ))}
               </GridTable>
             </div>
@@ -293,7 +344,9 @@ export function DataPage() {
           <p className="data-note">{t("overrides.dataSummary", { n: overrides.length, applied: overrideStatus.applied })}</p>
         </section>
 
-        <PublishedLists />
+        <PublishedLists ref={lists} />
+
+        <PublishedLayouts ref={layouts} />
 
         <section aria-labelledby="data-compare-h">
           <PanelHead id="data-compare-h" title={t("data.compare")} aside={<span className="t-meta">{t("data.compare.meta")}</span>} />
@@ -319,6 +372,7 @@ export function DataPage() {
           </div>
         </section>
       </div>
+      {dialog}
     </>
   );
 }

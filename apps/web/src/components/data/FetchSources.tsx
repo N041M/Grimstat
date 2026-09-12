@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useReducer, useRef, useState, type ReactNode } from "react";
 import { SOURCES } from "@grimstat/adapters";
 import type { SourceRef } from "@grimstat/schema";
 import { db } from "../../db";
@@ -7,7 +7,7 @@ import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { ImportCancelledError, importClient } from "../../worker/importClient";
 import { BROWSER_SOURCES, IDLE_PROGRESS, classifyError, errorMessage, importRequestFor, isRunning, reduceProgress, type BrowserSourceId, type ImportErrorKind, type ImportSelection, type SourceProgress } from "../../lib/importProgress";
 import { fmtDay, fmtInt } from "../../lib/format";
-import { PillChip, ProportionBar } from "../kit";
+import { PanelHead, PillChip, ProportionBar } from "../kit";
 import { t, type I18nKey } from "../../i18n";
 
 export const CLI_IMPORT_COMMAND = "pnpm cli import --system wh40k-11e --out data/snapshots";
@@ -114,11 +114,16 @@ function SourceCard({ id, model, selectable, selected, disabled, onSelect, foote
   );
 }
 
+/** What the Data page's "Fetch everything" button drives: the same run as the panel's own button. */
+export interface FetchSourcesHandle {
+  run: () => Promise<void>;
+}
+
 /**
  * Data page: the three source cards plus the in-browser fetch (MFM points + BSData catalogues) that
  * fills them — selection, faction filter, progress, cancel and the errors the run can end with.
  */
-export function FetchSources() {
+export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources(_props, ref) {
   const { refreshSnapshots, setActiveSnapshot, notify, rawSnapshot } = useApp();
   const [selection, setSelection] = usePersistedSetting<ImportSelection>(SETTING_KEY, DEFAULT_SELECTION, parseSelection);
   const [progress, dispatch] = useReducer(reduceProgress, IDLE_PROGRESS);
@@ -178,13 +183,14 @@ export function FetchSources() {
     setBackground(false);
   }, []);
 
+  useImperativeHandle(ref, () => ({ run: start }), [start]);
+
   const toggle = (id: BrowserSourceId, on: boolean) => setSelection((s) => ({ ...s, sources: { ...s.sources, [id]: on } }));
 
   return (
     <section className="src-block" aria-labelledby="data-fetch-h">
-      <h2 className="sr-only" id="data-fetch-h">
-        {t("data.fetch.title")}
-      </h2>
+      <PanelHead id="data-fetch-h" title={t("data.fetch.title")} />
+      <p className="data-note src-intro">{t("data.fetch.intro")}</p>
       <div className="src-cards">
         {CARD_SOURCES.map((id) => {
           const stored = rawSnapshot?.sources.find((s) => s.adapter === id);
@@ -241,7 +247,6 @@ export function FetchSources() {
         <div className="src-error" role="alert">
           <strong>{t("data.fetch.failed", { msg: progress.error.message })}</strong>
           <p>{errorHint(progress.error.kind)}</p>
-          <p className="mono">{CLI_IMPORT_COMMAND}</p>
           <div className="src-error-actions">
             <button type="button" className="primary" onClick={() => void start()}>
               {t("data.fetch.retry")}
@@ -253,8 +258,13 @@ export function FetchSources() {
               {t("data.fetch.readme")}
             </a>
           </div>
+          <details className="cli-details">
+            <summary>{t("data.cli")}</summary>
+            <p>{t("data.fetch.hint.cli")}</p>
+            <p className="mono">{CLI_IMPORT_COMMAND}</p>
+          </details>
         </div>
       ) : null}
     </section>
   );
-}
+});

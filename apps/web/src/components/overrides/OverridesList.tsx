@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Override } from "@grimstat/schema";
 import type { OverrideRecord } from "../../db";
-import { summarisePatch } from "../../lib/overrides";
+import { entityLabel, summarisePatch } from "../../lib/overrides";
 import { Badge, Empty, Field } from "../ui";
 import { t } from "../../i18n";
 
@@ -79,7 +79,7 @@ export function OverridesList({ records, nameOf, inSnapshot, onEdit, onDelete }:
             return (
               <tr key={r.key}>
                 <td>
-                  <Badge>{r.entity}</Badge>
+                  <Badge>{entityLabel(r.entity)}</Badge>
                 </td>
                 <td className="wrap">
                   {name ?? <span className="mono">{r.id}</span>}
