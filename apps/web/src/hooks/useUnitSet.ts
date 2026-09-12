@@ -41,8 +41,9 @@ export async function resolveSet(stored: StoredUnitEntry[], { withOverrides, ...
       const s = await db.snapshots.get(id);
       return s ? withOverrides(s) : undefined;
     },
+    getPreset: (id: string) => db.unitPresets.get(id),
   };
-  const labels = { archetype: t("analyses.picker.originArchetype"), calculator: t("analyses.picker.originCalculator") };
+  const labels = { archetype: t("analyses.picker.originArchetype"), calculator: t("analyses.picker.originCalculator"), preset: t("analyses.picker.originPreset") };
   const resolved = await Promise.all(stored.map((s) => resolveStored(s, env, labels)));
   return resolved.filter((e): e is UnitEntry => !!e);
 }

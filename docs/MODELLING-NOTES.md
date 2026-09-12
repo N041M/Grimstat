@@ -28,6 +28,31 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - **Fight phase**: only melee weapons; **shooting phase**: only ranged weapons. Pistols/Close-Quarters are not special-cased.
 - **Damaged profiles, Deadly Demise, healing, "ignore first failed save"**: not modelled.
 
+## Loadout check (`loadout.ts`)
+A datasheet's wargear options are prose, and no snapshot carries a machine-readable option tree —
+the one the BattleScribe importer builds is dropped before the snapshot is written, and the other
+two sources never had one. So the check reads the prose, and reports its own coverage every time.
+
+- **Exact**: model count against the summed composition bounds; a weapon that is not on the
+  datasheet at all. Weapons folded in from an attached Leader or Support are skipped, since they
+  belong to that character's sheet.
+- **Tier 2**: option lines whose leading clause names an allowance — "Up to N", "Any number of",
+  "For every N models, up to M", "This model", "The <model>'s", "N <model>'s", "Each" — capped in
+  weapons rather than models, so a line granting "2 inferno pistols" to two models permits four.
+  Against the 11th-edition Wahapedia export this reads about 85% of option lines, and about 83% of
+  datasheets completely.
+- **Withheld**: "nothing grants this weapon" is only reported when *every* option line on the sheet
+  was read. An unread line might be the one that grants it.
+- **Suppressed**: any problem the app's own default build of the unit already has. Where the
+  default-loadout prose names a weapon the parser cannot match, `unitFromDatasheet` hands it to
+  every model, and the unit arrives contradicting its own options through nobody's choice. Against
+  the same export this takes false positives on default loadouts from 14 sheets to zero.
+- **Not modelled**: mutual exclusion between options ("you cannot select the same option twice"),
+  conditions on unit size or on what a model is already carrying, and per-model-profile restrictions.
+  Footnote lines are counted as unread, which is what withholds the strict check on those sheets.
+- The roster editor does not run this yet: a roster records wargear as names per model group with no
+  counts, so ratio limits cannot be expressed there.
+
 ## Coverage tiers
 - Tier 1: weapon keywords in `keywords.ts` and unit core abilities in `patterns.ts#coreAbilityEffects`.
 - Tier 2: `patterns.ts` regexes over ability text (generic phrasings only) and any explicit `effects` on an ability (override packs).

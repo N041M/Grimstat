@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Override, Roster, Scenario, Snapshot } from "@grimstat/schema";
-import { db, exportAll, importAll, overrideKey, type ExportBundle, type OverrideRecord, type SnapshotMeta } from "../db";
+import { db, exportAll, importAll, overrideKey, type ExportBundle, type OverrideRecord, type PublishedListRecord, type SnapshotMeta, type TerrainLayoutRecord, type UnitPresetRecord } from "../db";
 import { nowIso } from "../lib/ids";
 import { download } from "../lib/download";
 import { useApp } from "../state/AppContext";
@@ -258,11 +258,28 @@ export function DataPage() {
         if (p.success) overridesIn.push({ ...p.data, key: overrideKey(p.data.entity, p.data.id), ownerId: typeof rec.ownerId === "string" ? rec.ownerId : "local", createdAt: typeof rec.createdAt === "string" ? rec.createdAt : nowIso(), updatedAt: typeof rec.updatedAt === "string" ? rec.updatedAt : nowIso() });
         else errors.push(`override ${rec.entity ?? "?"}:${rec.id ?? "?"}: ${p.error.issues[0]?.message ?? "invalid"}`);
       }
+      // Everything `exportAll` writes has to come back, or a backup quietly loses the stores the
+      // importer forgot to name. These three have no Zod schema of their own, so each record is
+      // checked for the fields the app reads and the rest are reported rather than dropped in
+      // silence.
+      const kept = <T,>(list: unknown, label: string, ok: (x: Record<string, unknown>) => boolean): T[] => {
+        const out: T[] = [];
+        for (const r of Array.isArray(list) ? list : []) {
+          if (r && typeof r === "object" && ok(r as Record<string, unknown>)) out.push(r as T);
+          else errors.push(`${label} ${(r as { id?: string })?.id ?? "?"}: not a ${label} record`);
+        }
+        return out;
+      };
+      const isText = (v: unknown) => typeof v === "string" && v.length > 0;
+      const terrainLayouts = kept<TerrainLayoutRecord>(b.stores.terrainLayouts, "layout", (r) => isText(r.id) && isText(r.name) && isText(r.json));
+      const publishedLists = kept<PublishedListRecord>(b.stores.publishedLists, "list", (r) => isText(r.id));
+      const unitPresets = kept<UnitPresetRecord>(b.stores.unitPresets, "preset", (r) => isText(r.id) && isText(r.name) && !!r.unit && typeof r.unit === "object");
+
       const counts = await importAll({
         format: "grimstat-export",
         version: 1,
         exportedAt: b.exportedAt ?? new Date().toISOString(),
-        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings: Array.isArray(b.stores.settings) ? b.stores.settings : [], rosters, overrides: overridesIn },
+        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings: Array.isArray(b.stores.settings) ? b.stores.settings : [], rosters, overrides: overridesIn, terrainLayouts, publishedLists, unitPresets },
       });
       await refreshSnapshots();
       await refreshOverrides();

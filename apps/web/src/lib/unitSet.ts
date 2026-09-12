@@ -42,7 +42,8 @@ export type UnitSource =
   | { kind: "roster"; rosterId: string; unitId: string }
   | { kind: "archetype"; archetypeId: string }
   | { kind: "datasheet"; snapshotId: string; datasheetId: string }
-  | { kind: "calculator"; side: "attacker" | "defender" };
+  | { kind: "calculator"; side: "attacker" | "defender" }
+  | { kind: "preset"; presetId: string };
 
 export interface UnitEntry {
   /** Unique within the set (the same source may appear twice, e.g. two identical squads). */
@@ -74,6 +75,8 @@ export function sourceKey(s: UnitSource): string {
       return `datasheet:${s.snapshotId}:${s.datasheetId}`;
     case "calculator":
       return `calculator:${s.side}`;
+    case "preset":
+      return `preset:${s.presetId}`;
   }
 }
 
@@ -86,7 +89,7 @@ export function isStoredEntry(x: unknown): x is StoredUnitEntry {
   const s = (x as { source?: unknown }).source;
   if (!s || typeof s !== "object") return false;
   const kind = (s as { kind?: unknown }).kind;
-  return kind === "roster" || kind === "archetype" || kind === "datasheet" || kind === "calculator";
+  return kind === "roster" || kind === "archetype" || kind === "datasheet" || kind === "calculator" || kind === "preset";
 }
 
 export function makeEntry(source: UnitSource, unit: ScenarioUnit, origin: string, extra: Pick<StoredUnitEntry, "optionId" | "weight"> = {}): UnitEntry {
@@ -112,10 +115,11 @@ export interface ResolveEnv {
   scenario: Scenario;
   getRoster(id: string): Promise<Roster | undefined>;
   getSnapshot(id: string): Promise<Snapshot | undefined>;
+  getPreset(id: string): Promise<{ name: string; unit: ScenarioUnit } | undefined>;
 }
 
 /** Rebuild an entry from its persisted source; undefined when the source no longer exists. */
-export async function resolveStored(stored: StoredUnitEntry, env: ResolveEnv, labels: { archetype: string; calculator: string }): Promise<UnitEntry | undefined> {
+export async function resolveStored(stored: StoredUnitEntry, env: ResolveEnv, labels: { archetype: string; calculator: string; preset: string }): Promise<UnitEntry | undefined> {
   const s = stored.source;
   const extra = { ...(stored.optionId !== undefined ? { optionId: stored.optionId } : {}), ...(stored.weight !== undefined ? { weight: stored.weight } : {}) };
   switch (s.kind) {
@@ -127,6 +131,12 @@ export async function resolveStored(stored: StoredUnitEntry, env: ResolveEnv, la
       const unit = env.scenario[s.side];
       if (!unit.models.length) return undefined;
       return makeEntry(s, unit, labels.calculator, extra);
+    }
+    case "preset": {
+      // The preset holds the unit itself, so unlike a datasheet source there is nothing to rebuild:
+      // what was saved is what comes back, loadout and all.
+      const preset = await env.getPreset(s.presetId);
+      return preset ? makeEntry(s, preset.unit, labels.preset, extra) : undefined;
     }
     case "datasheet": {
       const snap = env.snapshot?.id === s.snapshotId ? env.snapshot : await env.getSnapshot(s.snapshotId);

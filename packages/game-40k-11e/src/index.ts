@@ -18,6 +18,8 @@ export { hitGate, woundGate, woundTarget, pUnsaved, damagePMF } from "./attack";
 export { constraints11e, BATTLE_SIZES, compositionBounds, RESERVES_FRACTION, reservesLimit, startsInReserves } from "./constraints";
 export { parseTransportCapacity, unitFitsKeywords, hasKeywordPhrase } from "./transport";
 export type { TransportCapacity } from "./transport";
+export { readWargearOptions, checkLoadout, UNLIMITED } from "./loadout";
+export type { WargearOption, WargearReading, LoadoutProblem, LoadoutCheck } from "./loadout";
 export { makeScenario, runMatrix, durabilityProfile, durabilityIndex, efficiencyRanking, incomingFire, effectiveWounds, pReferenceSticks, REFERENCE_ATTACK } from "./analysis";
 export type { MatrixResult, MatrixCell, DurabilityEntry, DurabilityIndexRow, EfficiencyRow, IncomingEntry, IncomingFireRow, ReferenceAttack } from "./analysis";
 export { optimiseTurn, evaluateTurnPlan, DEFAULT_TURN_OPTIONS } from "./optimiser";

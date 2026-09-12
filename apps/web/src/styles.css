@@ -1480,6 +1480,81 @@ table.data input.dice {
   overflow: auto;
 }
 
+/* A saved preset: the row loads it, the trailing button removes it. The delete sits outside the
+   loading button rather than inside it, since a button inside a button is not a thing. */
+.preset-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+}
+.preset-row:last-child {
+  border-bottom: 0;
+}
+.preset-row > button:first-child {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+.preset-row > button:first-child > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 0.6rem;
+}
+.preset-row > button:last-child {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-right: 0.35rem;
+}
+/* The loadout verdict under the weapon rows: problems first, then what was and was not checked. */
+.loadout-check {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.loadout-check-h {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.loadout-problems {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.loadout-problems li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--accent);
+  font-size: 0.9rem;
+}
+.loadout-rule {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: pre-line;
+}
+.loadout-coverage {
+  margin: 0;
+}
+
+.preset-save {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+}
+
 /* ---------- Dashboard / widgets ---------- */
 .dashboard {
   position: relative;

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Datasheet, Roster, Snapshot } from "@grimstat/schema";
 import { archetypes, unitFromDatasheet } from "@grimstat/game-40k-11e";
-import { db } from "../../db";
+import { db, listUnitPresets, type UnitPresetRecord } from "../../db";
+import { useStoreVersion } from "../../hooks/useStoreVersion";
 import { useApp } from "../../state/AppContext";
 import { hrefFor } from "../../router";
 import { UNIT_SETS, attackerArchetypes, makeEntry, rosterHostEntries, totalPoints, type UnitEntry, type UnitSetDescriptor } from "../../lib/unitSet";
@@ -11,8 +12,8 @@ import { fmtInt } from "../../lib/format";
 import { Field, Popover, Tabs, useConfirm } from "../ui";
 import { t, tn } from "../../i18n";
 
-type Source = "army" | "archetype" | "datasheet" | "calculator";
-const SOURCES: Source[] = ["army", "archetype", "datasheet", "calculator"];
+type Source = "army" | "archetype" | "datasheet" | "calculator" | "preset";
+const SOURCES: Source[] = ["army", "archetype", "datasheet", "calculator", "preset"];
 const parseSource = (raw: unknown): Source | undefined => SOURCES.find((s) => s === raw);
 
 /** Clearing this many entries or fewer needs no confirmation. */
@@ -96,6 +97,7 @@ export function UnitSetPicker({ label, storageKey, entries, onChange, single, ar
           { id: "archetype", label: t("analyses.picker.archetypes") },
           { id: "datasheet", label: t("analyses.picker.datasheets") },
           { id: "calculator", label: t("analyses.picker.calculator") },
+          { id: "preset", label: t("analyses.picker.presets") },
         ]}
       />
       {/* The remembered source arrives a tick after mount; nothing is drawn until then so the panel never swaps. */}
@@ -115,7 +117,36 @@ export function UnitSetPicker({ label, storageKey, entries, onChange, single, ar
           })}
         </div>
       ) : null}
+      {sourceLoaded && source === "preset" ? <PresetSource onAdd={add} /> : null}
       {dialog}
+    </div>
+  );
+}
+
+/** The units saved from a calculator unit picker, offered here as they were saved. */
+function PresetSource({ onAdd }: { onAdd: (e: UnitEntry[]) => void }) {
+  const version = useStoreVersion("unitPresets");
+  const [presets, setPresets] = useState<UnitPresetRecord[] | undefined>(undefined);
+
+  useEffect(() => {
+    let alive = true;
+    void listUnitPresets()
+      .then((all) => alive && setPresets(all))
+      .catch(() => alive && setPresets([]));
+    return () => {
+      alive = false;
+    };
+  }, [version]);
+
+  if (presets === undefined) return null;
+  if (!presets.length) return <p className="muted small">{t("analyses.picker.presetsEmpty")}</p>;
+  return (
+    <div className="check-list">
+      {presets.map((p) => (
+        <button key={p.id} type="button" className="sm" onClick={() => onAdd([makeEntry({ kind: "preset", presetId: p.id }, p.unit, t("analyses.picker.originPreset"))])}>
+          {t("analyses.picker.addPreset", { name: p.name })}
+        </button>
+      ))}
     </div>
   );
 }
