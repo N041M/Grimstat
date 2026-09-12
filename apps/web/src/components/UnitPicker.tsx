@@ -334,6 +334,12 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
                       onChange(cloneUnit(p.unit));
                       setNameTouched(true);
                       setPresetName(p.name);
+                      // The data tab's own fields have to follow the preset, or its model count and
+                      // attachments show whatever was last picked and the next edit rebuilds the
+                      // unit from the wrong numbers.
+                      setAttached(p.unit.ref?.attachedDatasheetIds ?? []);
+                      // The unit's own models, not an attached character's, exactly as the data tab counts them.
+                      setCount(p.unit.models.filter((m) => !m.isCharacter).reduce((n, m) => n + m.count, 0) || modelCount(p.unit) || 1);
                     }}
                   >
                     <span>
