@@ -11,6 +11,7 @@ import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { fmtInt } from "../../lib/format";
 import { Field, Popover, Tabs, useConfirm } from "../ui";
 import { t, tn } from "../../i18n";
+import { Attached } from "../Attached";
 
 type Source = "army" | "archetype" | "datasheet" | "calculator" | "preset";
 const SOURCES: Source[] = ["army", "archetype", "datasheet", "calculator", "preset"];
@@ -81,6 +82,7 @@ export function UnitSetPicker({ label, storageKey, entries, onChange, single, ar
                   ×
                 </button>
               </span>
+              <Attached unit={e.unit} className="unit-chip-attached" />
               {renderExtra ? <span className="unit-chip-extra">{renderExtra(e, update(e.id))}</span> : null}
             </li>
           ))}

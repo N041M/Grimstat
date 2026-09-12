@@ -10,6 +10,9 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/dev-dist/**",
       "data/**",
+      // A git worktree is a second checkout of this same repo. Linting it from the parent reports
+      // every file twice, against a node_modules it does not have.
+      ".claude/worktrees/**",
       "**/*.d.ts",
     ],
   },

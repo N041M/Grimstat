@@ -45,6 +45,23 @@ export const ScenarioWeapon = z.object({
 });
 export type ScenarioWeapon = z.infer<typeof ScenarioWeapon>;
 
+/**
+ * A character folded into a unit as its Leader or Support.
+ *
+ * The character's models, weapons, abilities and points are merged into the host unit, because that
+ * is how the rules treat it: one unit, one target, one allocation. That merge is lossy for anyone
+ * trying to *show* the unit, though — once folded in, the only trace of the leader was a suffix on
+ * the unit's name. This keeps the fact itself, so a screen can say who is leading what instead of
+ * spelling it inside a string.
+ */
+export const AttachedCharacter = z.object({
+  name: z.string(),
+  role: z.enum(["leader", "support"]),
+  /** The character's own datasheet, when the unit came from data. */
+  datasheetId: Id.optional(),
+});
+export type AttachedCharacter = z.infer<typeof AttachedCharacter>;
+
 /** Either an inline (ad-hoc / archetype) unit or a reference into a snapshot. Inline is always populated after resolution. */
 export const ScenarioUnit = z.object({
   name: z.string(),
@@ -52,6 +69,8 @@ export const ScenarioUnit = z.object({
   keywords: z.array(z.string()).default([]),
   models: z.array(ScenarioModel).default([]),
   weapons: z.array(ScenarioWeapon).default([]),
+  /** Characters attached to this unit; their models and weapons are already folded in above. */
+  attached: z.array(AttachedCharacter).default([]),
   /** Effect records contributed by the unit's own abilities, leaders, enhancements, etc. (after resolution). */
   effects: z.array(EffectRecord).default([]),
   points: z.number().optional(),

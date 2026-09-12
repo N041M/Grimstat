@@ -5,7 +5,7 @@ import { plugin, runScenario as run10 } from "./index";
 
 const close = (a: number, b: number, tol = 1e-9) => expect(Math.abs(a - b)).toBeLessThanOrEqual(tol);
 const gun = (over: Partial<ScenarioWeapon> = {}): ScenarioWeapon => ({ name: "gun", count: 10, kind: "ranged", range: 24, A: "1", skill: 3, S: 4, AP: 0, D: "1", keywords: [], enabled: true, ...over });
-const unit = (models: ScenarioUnit["models"], weapons: ScenarioWeapon[] = [], keywords: string[] = []): ScenarioUnit => ({ name: "u", keywords, models, weapons, effects: [] });
+const unit = (models: ScenarioUnit["models"], weapons: ScenarioWeapon[] = [], keywords: string[] = []): ScenarioUnit => ({ name: "u", keywords, models, weapons, attached: [], effects: [] });
 const target = (Sv: number) => unit([{ name: "m", count: 10, T: 4, Sv, W: 1, isCharacter: false, keywords: [] }]);
 
 describe("10th edition plugin", () => {

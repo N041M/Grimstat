@@ -9,7 +9,7 @@ export function defaultContext(): Scenario["context"] {
 }
 
 export function emptyUnit(name: string): ScenarioUnit {
-  return { name, keywords: [], models: [], weapons: [], effects: [] };
+  return { name, keywords: [], models: [], weapons: [], attached: [], effects: [] };
 }
 
 export function cloneUnit(u: ScenarioUnit): ScenarioUnit {

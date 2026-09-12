@@ -1506,6 +1506,59 @@ table.data input.dice {
   align-self: center;
   margin-right: 0.35rem;
 }
+/* The attachment line where it sits inside a row that already has its own spacing. */
+.roll-attached {
+  margin-top: -0.1rem;
+}
+.roll-gone .attached-inline {
+  margin-left: 0.45rem;
+}
+.unit-card-attached {
+  padding: 0 0.55rem 0.3rem;
+}
+.unit-chip-attached {
+  padding-left: 0.1rem;
+}
+/* The host row's own marker: who is standing in this unit, at a glance down the column. */
+.ut-badge.ut-attached {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  /* Long enough for a two-word character name, which is most of them; the title carries the rest. */
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ut-attached-mark {
+  flex: none;
+  width: 11px;
+  height: 11px;
+}
+
+/* Who is attached to a unit, as its own line: the character mark, then the words. Accented, because
+   a led squad is not the same unit as the one on the datasheet and the player has to see that. */
+.attached {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: var(--accent);
+}
+.attached-mark {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  opacity: 0.85;
+}
+.attached-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The loadout verdict under the weapon rows: problems first, then what was and was not checked. */
 .loadout-check {
   display: flex;

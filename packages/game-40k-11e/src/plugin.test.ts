@@ -5,7 +5,7 @@ import { hitGate, woundGate, woundTarget, pUnsaved, runScenario, archetypes, lis
 const close = (a: number, b: number, tol = 1e-9) => expect(Math.abs(a - b)).toBeLessThanOrEqual(tol);
 
 function unit(models: ScenarioUnit["models"], weapons: ScenarioWeapon[] = [], keywords: string[] = [], effects: ScenarioUnit["effects"] = []): ScenarioUnit {
-  return { name: "u", keywords, models, weapons, effects };
+  return { name: "u", keywords, models, weapons, attached: [], effects };
 }
 const gun = (over: Partial<ScenarioWeapon> = {}): ScenarioWeapon => ({ name: "gun", count: 10, kind: "ranged", range: 24, A: "1", skill: 3, S: 4, AP: 0, D: "1", keywords: [], enabled: true, ...over });
 const marines = () => unit([{ name: "m", count: 10, T: 4, Sv: 3, W: 1, isCharacter: false, keywords: [] }], [], ["INFANTRY"]);
