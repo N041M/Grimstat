@@ -113,6 +113,33 @@ describe("runScenario", () => {
     close(r.weapons[0]!.expectedHits, 4);
     close(r.expectedDamage, 6, 1e-9);
   });
+  it("anti-MONSTER/VEHICLE matches either printed keyword", () => {
+    const w = gun({ count: 6, S: 6, AP: 1, D: "3", keywords: [{ name: "ANTI", keyword: "MONSTER/VEHICLE", value: 4 }, { name: "DEVASTATING WOUNDS" }] });
+    const tank = unit([{ name: "t", count: 1, T: 11, Sv: 2, W: 30, isCharacter: false, keywords: [] }], [], ["VEHICLE"]);
+    const beast = unit([{ name: "b", count: 1, T: 11, Sv: 2, W: 30, isCharacter: false, keywords: [] }], [], ["MONSTER"]);
+    const walls = unit([{ name: "f", count: 1, T: 11, Sv: 2, W: 30, isCharacter: false, keywords: [] }], [], ["FORTIFICATION"]);
+    close(runScenario(scenario(unit([], [w]), tank)).expectedDamage, 6, 1e-9);
+    close(runScenario(scenario(unit([], [w]), beast)).expectedDamage, 6, 1e-9);
+    // no match: crits stay on 6, so of 4 hits only 1/6 turn into mortal damage and 1/6 wound normally
+    close(runScenario(scenario(unit([], [w]), walls)).expectedDamage, 4 * ((1 / 6) * 3 + (1 / 6) * (1 / 3) * 3), 1e-9);
+  });
+  it("a conditional keyword applies only against a target its condition admits", () => {
+    const bodies = (): ScenarioUnit["models"] => [{ name: "m", count: 10, T: 10, Sv: 3, W: 1, isCharacter: false, keywords: [] }];
+    const troops = unit(bodies(), [], ["INFANTRY"]);
+    const tank = unit(bodies(), [], ["VEHICLE"]);
+    const conditional = gun({ keywords: [{ name: "LETHAL HITS", keyword: "NON-MONSTER/VEHICLE", raw: "Lethal Hits: non-MONSTER/VEHICLE" }] });
+    const plain = gun({ keywords: [{ name: "LETHAL HITS" }] });
+    const always = { lethalChoice: "always" as const };
+    const damage = (w: ScenarioWeapon, def: ScenarioUnit) => runScenario(scenario(unit([], [w]), def, always)).expectedDamage;
+    // S4 vs T10 wounds on 6+, so the auto-wound from a critical hit carries most of the damage
+    const withLethal = 10 * (1 / 6 + (3 / 6) * (1 / 6)) * (1 / 3);
+    const withoutLethal = 10 * (4 / 6) * (1 / 6) * (1 / 3);
+    close(damage(conditional, troops), withLethal, 1e-9);
+    close(damage(conditional, tank), withoutLethal, 1e-9);
+    // the unconditional keyword is unchanged, against either target
+    close(damage(plain, troops), withLethal, 1e-9);
+    close(damage(plain, tank), withLethal, 1e-9);
+  });
   it("lethal hits auto choice prefers rolling when devastating + anti makes crits likely", () => {
     const tank = unit([{ name: "t", count: 1, T: 11, Sv: 2, W: 30, isCharacter: false, keywords: [] }], [], ["VEHICLE"]);
     const w = gun({ count: 6, S: 6, AP: 1, D: "3", keywords: [{ name: "ANTI", keyword: "VEHICLE", value: 2 }, { name: "DEVASTATING WOUNDS" }, { name: "LETHAL HITS" }] });

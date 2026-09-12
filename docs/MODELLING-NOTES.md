@@ -9,6 +9,7 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - Re-roll policies (ones / failed / non-critical "fishing") as exact per-die transforms; a single Command Re-roll of one failed hit or one failed wound roll per weapon profile as an exact order-statistic adjustment.
 - Substitute dice (Miracle/Fate dice): one hit roll or one wound roll per weapon profile set to a fixed value instead of rolled; the fixed die is never re-rolled.
 - Critical hits/wounds with adjustable thresholds (Anti-X, "crits on 5+", Conversion), Sustained Hits (fixed or dice), Lethal Hits (optional; `auto` picks whichever gives the higher expected damage), Devastating Wounds (mortal damage equal to D, max one model per critical wound, no spill), Twin-linked, Lance, Heavy, Melta, Torrent (no hit roll → no critical hits), Snap Shooting (6s only, no re-rolls).
+- Weapon keywords printed with a target-keyword condition ("Lethal Hits: non-MONSTER/VEHICLE", "Anti-MONSTER/VEHICLE 4+") apply only against a target that satisfies the condition. Slash-separated keywords mean any one of them, and a leading "non-" negates the whole list.
 - Saves: invulnerable checked on the unmodified roll, armour on the AP-modified roll, best of both; unmodified 6 always saves and 1 always fails; save-roll modifiers capped ±1.
 - Damage modifiers in order set → ×(round up) → ± (min 1) → cap; Feel No Pain as per-wound binomial thinning.
 - Allocation: a Markov DP over (models slain, wounds on the current model) per allocation group; damage never spills to the next model; wasted damage tracked; characters are separate groups; Precision allocates to character groups first; otherwise bodyguards absorb first.
@@ -21,6 +22,7 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - **Damage modifiers on Devastating Wounds**: applied (mortal wounds equal the *modified* Damage). Flip `RULES.damageModsApplyToDevastating` if your event rules differently.
 - **Cleave X**: modelled as +X attacks per 5 models in the target (like Blast). Verify against the printed rule.
 - **Hazardous**: fails on 1–2; 1 mortal wound (3 if the firing unit is entirely VEHICLE/MONSTER); reported as expected self-inflicted mortal wounds, not applied to the attacker's profile.
+- **Weapon-keyword conditions** are read as a list of target keywords. A condition printed any other way — a phase, a range, something about the attacker — matches no target, so the keyword is dropped against all of them. Coverage still counts such a keyword as Tier 1.
 - **Sustained Hits** extra hits are never critical.
 - **Fast rolling / defender choice**: the defender's allocation policy is a fixed rule (protect character / in order); it does not optimise per roll result. Within a group the rules already force damage onto the wounded model first, so there is no separate "spread" policy.
 - **Weapon order**: `heuristic` sorts profiles by rough expected damage; a different order changes overkill slightly.

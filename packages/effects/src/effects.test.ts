@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ModifierSet, evaluateCondition, collectModifiers, KeywordRegistry, type EvalContext } from "./index";
+import { ModifierSet, evaluateCondition, collectModifiers, targetKeywordCondition, KeywordRegistry, type EvalContext } from "./index";
 
 const ctx: EvalContext = {
   attackerKeywords: new Set(["INFANTRY"]),
@@ -55,6 +55,17 @@ describe("conditions", () => {
     expect(evaluateCondition({ weaponKind: "melee" }, ctx)).toBe(false);
     expect(evaluateCondition(undefined, ctx)).toBe(true);
   });
+  it("reads a printed target-keyword list, negated or not", () => {
+    expect(targetKeywordCondition("VEHICLE")).toEqual({ targetKeyword: "VEHICLE" });
+    expect(targetKeywordCondition("MONSTER/VEHICLE")).toEqual({ any: [{ targetKeyword: "MONSTER" }, { targetKeyword: "VEHICLE" }] });
+    expect(targetKeywordCondition("NON-VEHICLE")).toEqual({ not: { targetKeyword: "VEHICLE" } });
+    expect(targetKeywordCondition("non-MONSTER/VEHICLE")).toEqual({ not: { any: [{ targetKeyword: "MONSTER" }, { targetKeyword: "VEHICLE" }] } });
+    expect(targetKeywordCondition(undefined)).toBeUndefined();
+    // ctx target is VEHICLE, IMPERIUM
+    expect(evaluateCondition(targetKeywordCondition("MONSTER/VEHICLE"), ctx)).toBe(true);
+    expect(evaluateCondition(targetKeywordCondition("NON-MONSTER/VEHICLE"), ctx)).toBe(false);
+    expect(evaluateCondition(targetKeywordCondition("NON-MONSTER/TITANIC"), ctx)).toBe(true);
+  });
   it("collects only matching side and condition", () => {
     const mods = collectModifiers(
       [
@@ -78,5 +89,25 @@ describe("KeywordRegistry", () => {
     const unknown = r.apply([{ name: "MELTA", value: 2 }, { name: "ASSAULT" }, { name: "WEIRD", raw: "Weird 3" }], { ...ctx, mods, targetModelCount: 5, warnings: [] });
     expect(unknown).toEqual(["Weird 3"]);
     expect(mods.num("damage", 1)).toBe(3);
+  });
+  it("gates a handler on the condition printed with the keyword", () => {
+    const r = new KeywordRegistry();
+    r.register("LETHAL HITS", (_kw, c) => c.mods.add({ channel: "lethal", op: "flag", value: true }));
+    const run = (keyword?: string) => {
+      const mods = new ModifierSet();
+      r.apply([{ name: "LETHAL HITS", ...(keyword ? { keyword } : {}) }], { ...ctx, mods, targetModelCount: 5, warnings: [] });
+      return mods.flag("lethal");
+    };
+    expect(run()).toBe(true);
+    expect(run("VEHICLE")).toBe(true); // ctx target is VEHICLE
+    expect(run("NON-MONSTER/VEHICLE")).toBe(false);
+    expect(run("INFANTRY")).toBe(false);
+  });
+  it("leaves `kw.keyword` to a handler that owns it", () => {
+    const r = new KeywordRegistry();
+    r.register("ANTI", (kw, c) => c.mods.add({ channel: "crit-wound", op: "cap", value: Number(kw.value), source: kw.keyword }), { ownsKeyword: true });
+    const mods = new ModifierSet();
+    r.apply([{ name: "ANTI", keyword: "MONSTER", value: 4 }], { ...ctx, mods, targetModelCount: 5, warnings: [] });
+    expect(mods.num("crit-wound", 6)).toBe(4);
   });
 });

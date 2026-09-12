@@ -7,7 +7,7 @@ import { runScenario, runScenarioWith, keywordRegistry } from "./scenario";
 import { create11eKeywordRegistry } from "./keywords";
 import type { GameSystem, PluginManifest, Scenario, Snapshot } from "@grimstat/schema";
 import type { RulesParams } from "./manifest";
-import type { KeywordHandler } from "@grimstat/effects";
+import type { KeywordHandler, KeywordOptions } from "@grimstat/effects";
 
 export type { GameSystemPluginApi, UnitFromDatasheetOptions } from "./api";
 export { archetypes, gameSystem, manifest, RULES, RULES_10E, coverageFor, listToggles, resolveScenarioUnit, unitFromDatasheet, unitFromRosterUnit, baseWeaponName, parseLoadout, runScenario, GENERIC_TOGGLES, activeToggleEffects, pointsFor };
@@ -30,8 +30,8 @@ export type { SensitivityVariant, SensitivityResult, SensitivityVariantDef } fro
 export type { TurnOption, TurnAttacker, TurnTarget, TurnPlanInput, TurnAssignment, TurnTargetOutcome, TurnPlanResult } from "./optimiser";
 
 /** Extension point: add or override a Tier-1 weapon keyword without touching this package. */
-export function registerKeyword(name: string, handler: KeywordHandler): void {
-  keywordRegistry.register(name, handler);
+export function registerKeyword(name: string, handler: KeywordHandler, opts: KeywordOptions = {}): void {
+  keywordRegistry.register(name, handler, opts);
 }
 export { keywordRegistry };
 

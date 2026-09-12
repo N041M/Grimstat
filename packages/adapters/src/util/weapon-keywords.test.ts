@@ -41,6 +41,7 @@ describe("parseWeaponKeywords", () => {
 
   it("parses conditional forms", () => {
     expect(one("LETHAL HITS: non-MONSTER/VEHICLE")).toMatchObject({ name: "LETHAL HITS", keyword: "NON-MONSTER/VEHICLE" });
+    expect(one("Sustained Hits 2: INFANTRY")).toMatchObject({ name: "SUSTAINED HITS", value: 2, keyword: "INFANTRY" });
   });
 
   it("returns an empty list for empty or dash input", () => {

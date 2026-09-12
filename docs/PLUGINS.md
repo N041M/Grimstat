@@ -14,6 +14,8 @@ r.register("SHRED", (_kw, c) => {
 });
 ```
 
+A keyword can be printed with a condition ("Lethal Hits: non-MONSTER/VEHICLE"); the adapter leaves the target keywords on `kw.keyword` and the registry runs the handler only against a target that matches, so a handler does not read them itself. A handler that wants `kw.keyword` for its own purposes, as ANTI-X does, is registered with `{ ownsKeyword: true }`.
+
 Channels and their caps live in `channels.ts` (`hit-roll` is capped ±1, `skill` is the uncapped BS/WS stat channel, and so on). Keywords with no effect on the maths go in `registerInert(...)` so they do not show up as unmodelled.
 
 ## 2. A new unit ability (Tier-2, no code)

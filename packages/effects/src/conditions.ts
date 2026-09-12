@@ -33,3 +33,19 @@ export function evaluateCondition(c: Condition | undefined, ctx: EvalContext): b
   if (c.flag !== undefined && !ctx.flags.has(c.flag)) return false;
   return true;
 }
+
+/**
+ * Read the target-keyword text an adapter leaves on `WeaponKeyword.keyword` — "VEHICLE",
+ * "MONSTER/VEHICLE", "NON-MONSTER/VEHICLE" — as a condition. Slash-separated names mean "any of";
+ * a leading "NON-" negates the whole list. Empty text yields no condition.
+ */
+export function targetKeywordCondition(text: string | undefined | null): Condition | undefined {
+  if (!text) return undefined;
+  let body = norm(text);
+  const negated = /^NON[\s-]+/.test(body);
+  if (negated) body = body.replace(/^NON[\s-]+/, "").trim();
+  const names = body.split("/").map((s) => s.trim()).filter(Boolean);
+  if (!names.length) return undefined;
+  const match: Condition = names.length === 1 ? { targetKeyword: names[0]! } : { any: names.map((n) => ({ targetKeyword: n })) };
+  return negated ? { not: match } : match;
+}

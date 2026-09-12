@@ -1,4 +1,4 @@
-import { KeywordRegistry } from "@grimstat/effects";
+import { KeywordRegistry, evaluateCondition, targetKeywordCondition } from "@grimstat/effects";
 import { CH } from "./channels";
 import { RULES, type RulesParams } from "./manifest";
 
@@ -8,7 +8,12 @@ function numVal(v: number | string | undefined, fallback = 1): number {
   return fallback;
 }
 
-/** Tier-1 weapon keywords of 11th edition. Each handler translates a keyword into modifiers/flags. */
+/**
+ * Tier-1 weapon keywords of 11th edition. Each handler translates a keyword into modifiers/flags.
+ * A keyword printed with a condition ("LETHAL HITS: non-MONSTER/VEHICLE") arrives with the target
+ * keywords on `kw.keyword`; the registry gates the handler on them, so handlers below need not.
+ * ANTI-X is the exception: it reads `kw.keyword` as its own target and is registered as such.
+ */
 export function create11eKeywordRegistry(rules: RulesParams = RULES): KeywordRegistry {
   const r = new KeywordRegistry();
 
@@ -35,12 +40,16 @@ export function create11eKeywordRegistry(rules: RulesParams = RULES): KeywordReg
     c.mods.add({ channel: CH.sustained, op: "set", value: typeof v === "string" && !/^\d+$/.test(v) ? v : numVal(v), source: "Sustained Hits" });
   });
   r.register("DEVASTATING WOUNDS", (_kw, c) => c.mods.add({ channel: CH.devastating, op: "flag", value: true, source: "Devastating Wounds" }));
-  r.register("ANTI", (kw, c) => {
-    const target = (kw.keyword ?? "").toUpperCase();
-    if (target && c.targetKeywords.has(target)) {
+  r.register(
+    "ANTI",
+    (kw, c) => {
+      const target = (kw.keyword ?? "").toUpperCase();
+      const cond = targetKeywordCondition(target);
+      if (!cond || !evaluateCondition(cond, c)) return;
       c.mods.add({ channel: CH.critWound, op: "cap", value: numVal(kw.value, 6), source: `Anti-${target} ${numVal(kw.value, 6)}+` });
-    }
-  });
+    },
+    { ownsKeyword: true },
+  );
   r.register("MELTA", (kw, c) => {
     if (c.rangeBand === "half") c.mods.add({ channel: CH.damage, op: "add", value: numVal(kw.value), source: "Melta" });
   });
