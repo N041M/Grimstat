@@ -28,8 +28,8 @@ export const en = {
   "page.sub.overrides": "{n} active · applied to every snapshot",
 
   // shell: solve state on the brand mark
-  "solve.current": "Result current",
-  "solve.pending": "Recomputing…",
+  "solve.current": "Result is up to date",
+  "solve.pending": "Working out a new result…",
 
   // shell: context column
   "ctxcol.snapshot": "Snapshot",
@@ -54,7 +54,7 @@ export const en = {
   "ctxcol.noUnits": "No units in the set yet.",
   "ctxcol.noSources": "No sources on the active snapshot.",
   "ctxcol.localOverrides": "Local overrides",
-  "ctxcol.overridesMeta": "hand-authored fixes",
+  "ctxcol.overridesMeta": "rules you have corrected yourself",
   "ctxcol.doc.kind": "docs",
   "ctxcol.doc.design": "Design document",
   "ctxcol.doc.modelling": "Modelling notes",
@@ -84,7 +84,6 @@ export const en = {
   "palette.unitFailed": "Could not build “{name}” from the snapshot.",
   "palette.footOpen": "⌘K open",
   "palette.footRun": "↵ run",
-  "palette.footSolve": "solve state on the mark",
   "footer.disclaimer": "Unofficial fan project. Not affiliated with or endorsed by Games Workshop. Warhammer 40,000 © Games Workshop Ltd. This app ships no GW data; you import it yourself.",
   "common.close": "Close",
   "common.cancel": "Cancel",
@@ -282,7 +281,7 @@ export const en = {
   "byWeapon.rowTitle": "{name} — {v} expected damage ({share} of the total)",
 
   // calculator: context dock
-  "dock.title": "Context",
+  "dock.title": "Situation",
   "dock.status": "{backend} · {ms} ms",
   "dock.computing": "computing…",
   "dock.rangeBand": "Range band",
@@ -457,7 +456,7 @@ export const en = {
   "results.elapsed": "{ms} ms",
 
   // dashboard
-  "dashboard.autoFit": "Fit heights",
+  "dashboard.autoFit": "Fit to content",
   "dashboard.autoFitHint": "Resize every panel to the height its content needs",
   "dashboard.reset": "Reset layout",
   "dashboard.dragHint": "Drag to move this panel",
@@ -514,8 +513,8 @@ export const en = {
   "weapons.wounds": "Wounds",
   "weapons.unsaved": "Unsaved",
   "weapons.damage": "Damage",
-  "weapons.trace": "trace",
-  "weapons.hideTrace": "hide",
+  "weapons.trace": "show the maths",
+  "weapons.hideTrace": "hide the maths",
   "weapons.none": "No weapons were resolved.",
 
   "coverage.total": "Scenario",
@@ -824,7 +823,7 @@ export const en = {
   "roster.strat.source.faction": "Faction",
   "roster.strat.source.core": "Core",
   "roster.strat.noneForList": "The active snapshot has stratagems, but none of them reach this faction or the detachments this list took.",
-  "roster.strat.noneInData": "The active snapshot carries no stratagems. Only the Wahapedia export has them, and a browser cannot fetch it, so import a snapshot built by the CLI to read them here.",
+  "roster.strat.noneInData": "Your game data has no stratagems in it. Only the rules text export carries them, and it has to be fetched through a mirror — set one up on the Data page and fetch again.",
   "roster.strat.dataLink": "Open the Data page",
   "roster.tab.units": "Units",
   "roster.tab.stats": "Statistics",

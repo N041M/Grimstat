@@ -318,10 +318,11 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
           ))}
           {groups.length === 0 ? <div className="pal-empty">{t("palette.empty")}</div> : null}
         </div>
+        {/* Only the two keys that work here. "solve state on the mark" described the brand dot,
+            which is not in this dialog and not something the reader can do anything about. */}
         <div className="pal-foot">
           <span>{t("palette.footOpen")}</span>
           <span>{t("palette.footRun")}</span>
-          <span>{t("palette.footSolve")}</span>
         </div>
       </div>
     </div>
