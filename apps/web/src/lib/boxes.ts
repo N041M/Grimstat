@@ -139,9 +139,27 @@ export function linesForFactions(read: ResolvedBox, factionIds: readonly string[
   return read.lines.filter((l) => l.ds && factionIds.includes(l.ds.factionId) && l.models > 0);
 }
 
-/** Boxes a snapshot can actually place: at least one line of the box names a datasheet it has. */
+/**
+ * Boxes a snapshot can actually place, newest first: at least one line of the box names a datasheet
+ * it has. A reader looking for the box they just bought is looking at this year's, and one looking
+ * for a box from years back knows roughly when it was.
+ */
 export function boxesFor(boxes: readonly BoxSet[], snapshot: Snapshot): readonly ResolvedBox[] {
-  return boxes.map((b) => resolveBox(b, snapshot)).filter((r) => r.lines.some((l) => l.ds));
+  return boxes
+    .map((b) => resolveBox(b, snapshot))
+    .filter((r) => r.lines.some((l) => l.ds))
+    .sort((a, b) => (a.box.announced < b.box.announced ? 1 : a.box.announced > b.box.announced ? -1 : a.box.name.localeCompare(b.box.name)));
+}
+
+/** Boxes under the year they were announced in, newest year first. */
+export function boxesByYear(boxes: readonly ResolvedBox[]): readonly { year: string; boxes: readonly ResolvedBox[] }[] {
+  const years: { year: string; boxes: ResolvedBox[] }[] = [];
+  for (const b of boxes) {
+    const year = b.box.announced.slice(0, 4);
+    const group = years.find((g) => g.year === year) ?? (years.push({ year, boxes: [] }), years[years.length - 1]!);
+    group.boxes.push(b);
+  }
+  return years;
 }
 
 /**

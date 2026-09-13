@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import type { BoxSet } from "../data/boxes";
 import { BOX_SETS } from "../data/boxes";
-import { boxesFor, linesForFactions, modelsByDatasheet, nameLine, resolveBox, unitSize } from "./boxes";
+import { boxesByYear, boxesFor, linesForFactions, modelsByDatasheet, nameLine, resolveBox, unitSize } from "./boxes";
 
 const snapshot = loadSyntheticSnapshot();
 const ds = (id: string) => snapshot.data.datasheets.find((d) => d.id === `ds:${id}`)!;
 
 /** Boxes in the synthetic vocabulary, so nothing here asserts a real product's contents. */
-const box = (lines: BoxSet["lines"]): BoxSet => ({ id: "b", name: "Test box", kind: "battleforce", lines, source: "test" });
+const box = (lines: BoxSet["lines"]): BoxSet => ({ id: "b", name: "Test box", kind: "battleforce", announced: "2026-01-01", lines, source: "test" });
 
 describe("reading a box against a snapshot", () => {
   it("counts a line that gives models as it is written", () => {
@@ -171,6 +171,37 @@ describe("a line written two ways at once", () => {
   });
 });
 
+describe("ordering the boxes", () => {
+  const dated = (id: string, name: string, announced: string): BoxSet => ({ id, name, kind: "battleforce", announced, lines: [{ name: "Warden Squad", models: 5 }], source: "test" });
+
+  it("puts the newest first, so the box just bought is at the top", () => {
+    const all = [dated("a", "Older", "2023-05-01"), dated("b", "Newest", "2026-02-01"), dated("c", "Middle", "2024-11-16")];
+    expect(boxesFor(all, snapshot).map((r) => r.box.name)).toEqual(["Newest", "Middle", "Older"]);
+  });
+
+  it("settles two boxes of one day by name, rather than by the order they were typed in", () => {
+    const all = [dated("b", "Zeta", "2026-02-01"), dated("a", "Alpha", "2026-02-01")];
+    expect(boxesFor(all, snapshot).map((r) => r.box.name)).toEqual(["Alpha", "Zeta"]);
+  });
+
+  it("groups them under the year they were announced in, newest year first", () => {
+    const all = [dated("a", "Old", "2023-05-01"), dated("b", "New", "2026-02-01"), dated("c", "Also new", "2026-09-01")];
+    const years = boxesByYear(boxesFor(all, snapshot));
+    expect(years.map((g) => [g.year, g.boxes.length])).toEqual([["2026", 2], ["2023", 1]]);
+  });
+
+  /** The case the year exists for: one name, two boxes, different models inside. */
+  it("keeps two boxes that share a name, and dates them apart", () => {
+    const all = [
+      { ...dated("swarm-2024", "Battleforce: Tyranid Swarm", "2024-11-16"), lines: [{ name: "Thornlings", models: 10 }] },
+      { ...dated("swarm-2026", "Battleforce: Tyranid Swarm", "2026-06-15"), lines: [{ name: "Thornlings", models: 20 }] },
+    ];
+    const read = boxesFor(all, snapshot);
+    expect(read.map((r) => [r.box.announced, r.models])).toEqual([["2026-06-15", 20], ["2024-11-16", 10]]);
+    expect(boxesByYear(read).map((g) => g.year)).toEqual(["2026", "2024"]);
+  });
+});
+
 describe("the shipped seed list", () => {
   it("has an id, a name, a source and at least one line for every box", () => {
     expect(BOX_SETS.length).toBeGreaterThan(0);
@@ -203,6 +234,25 @@ describe("the shipped seed list", () => {
 
   it("uses ids that are its own", () => {
     expect(new Set(BOX_SETS.map((b) => b.id)).size).toBe(BOX_SETS.length);
+  });
+
+  it("dates every box, as a day", () => {
+    for (const b of BOX_SETS) expect(b.announced, b.name).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  /**
+   * Names come back. A Battleforce sold one year under a name can be sold again years later with
+   * different models in it, and a reader picking "the Tyranid Swarm one" has to be able to see
+   * which of them is theirs. Sharing a name is allowed; sharing a name and a date is not, because
+   * then nothing on screen tells them apart.
+   */
+  it("never repeats a name on the same day", () => {
+    const seen = new Map<string, string>();
+    for (const b of BOX_SETS) {
+      const key = `${b.name.toLowerCase()}\u0000${b.announced}`;
+      expect(seen.get(key), `${b.name} (${b.announced}) is in the list twice`).toBeUndefined();
+      seen.set(key, b.id);
+    }
   });
 
   /** The synthetic snapshot shares no unit with the real world, so none of these can place. */

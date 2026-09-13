@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Snapshot } from "@grimstat/schema";
 import { BOX_SETS } from "../../data/boxes";
-import { boxesFor, linesForFactions, modelsByDatasheet, type ResolvedBox } from "../../lib/boxes";
+import { boxesByYear, boxesFor, linesForFactions, modelsByDatasheet, type ResolvedBox } from "../../lib/boxes";
 import { Dialog } from "../ui";
 import { t } from "../../i18n";
 
@@ -47,9 +47,13 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
             <button type="button" className="ghost sm" onClick={() => setPickedId(undefined)}>
               {t("collection.box.back")}
             </button>
-            <a className="box-source" href={picked.box.source} target="_blank" rel="noreferrer noopener">
-              {t("collection.box.contents")}
-            </a>
+            <span className="box-source">
+              {picked.box.announced}
+              {" · "}
+              <a href={picked.box.source} target="_blank" rel="noreferrer noopener">
+                {t("collection.box.contents")}
+              </a>
+            </span>
           </div>
           {picked.factionIds.map((id) => (
             <section key={id} className="box-army">
@@ -107,19 +111,33 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
   );
 }
 
+/**
+ * The boxes, under the year each was announced in.
+ *
+ * Grouped by year rather than run together, because names come back: a Battleforce sold one year
+ * under a name can be sold again years later with different models in it, and the year is what
+ * tells a reader which of them is the one on their shelf.
+ */
 function BoxList({ boxes, onPick }: { boxes: readonly ResolvedBox[]; onPick: (id: string) => void }) {
   if (!boxes.length) return <p className="muted">{t("collection.box.none")}</p>;
   return (
-    <ul className="box-picker">
-      {boxes.map((b) => (
-        <li key={b.box.id}>
-          <button type="button" onClick={() => onPick(b.box.id)}>
-            <span className="box-name">{b.box.name}</span>
-            <span className="box-meta mono">{t("collection.box.summary", { models: b.models, armies: b.factionIds.length })}</span>
-          </button>
-        </li>
+    <>
+      {boxesByYear(boxes).map((group) => (
+        <section key={group.year} className="box-year">
+          <h3>{group.year}</h3>
+          <ul className="box-picker">
+            {group.boxes.map((b) => (
+              <li key={b.box.id}>
+                <button type="button" onClick={() => onPick(b.box.id)}>
+                  <span className="box-name">{b.box.name}</span>
+                  <span className="box-meta mono">{t("collection.box.summary", { models: b.models, armies: b.factionIds.length })}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       ))}
-    </ul>
+    </>
   );
 }
 

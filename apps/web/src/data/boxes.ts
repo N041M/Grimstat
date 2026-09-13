@@ -56,8 +56,21 @@ export type BoxKind = "combat-patrol" | "battleforce";
 
 export interface BoxSet {
   readonly id: string;
+  /**
+   * As the box is sold. Names come back: a Battleforce called Tyranid Swarm has been sold more than
+   * once with different models inside, so a name alone does not say which box somebody owns and the
+   * date has to be shown beside it.
+   */
   readonly name: string;
   readonly kind: BoxKind;
+  /**
+   * The day the contents below were announced, as YYYY-MM-DD.
+   *
+   * The announcement rather than the release, because that is the date on the page the contents were
+   * read from. A box usually reaches shops within a month or two of it, which is near enough to sort
+   * by and to tell two boxes of the same name apart, and it is the date this list can stand behind.
+   */
+  readonly announced: string;
   readonly lines: readonly BoxLine[];
   /** The announcement the contents were read from. */
   readonly source: string;
@@ -66,12 +79,274 @@ export interface BoxSet {
 const REVEALED = "https://www.warhammer-community.com/en-gb/articles/n5pspedx/new-warhammer-40000-battleforces-revealed/";
 const SEVEN = "https://www.warhammer-community.com/en-gb/articles/tqw4l4sz/muster-mighty-forces-with-seven-new-warhammer-40000-battleforce-boxes/";
 const IRON_WARRIORS = "https://www.warhammer-community.com/en-gb/articles/mnepgmud/revealed-combat-patrol-iron-warriors-and-heavily-armoured-battalions/";
+const CHRISTMAS = "https://www.warhammer-community.com/en-gb/articles/bzezbhjo/saturday-pre-order-start-your-next-army-with-new-christmas-battleforces/";
+const CHAOS_GODS = "https://www.warhammer-community.com/en-gb/articles/errixp3a/new-battleforce-boxes-pit-the-chaos-gods-against-each-other/";
+const KROOT_CORSAIRS = "https://www.warhammer-community.com/en-gb/articles/5zzqwaml/four-new-combat-patrols-bring-kroot-corsairs-and-chaos-to-the-battlefield/";
+const FIVE_PATROLS = "https://www.warhammer-community.com/2022/01/10/the-tau-empire-leads-the-charge-as-five-combat-patrols-prepare-to-land/";
+const MECHANICUS_NECRONS = "https://www.warhammer-community.com/en-gb/articles/KbUjKYHp/exert-mechanical-supremacy-with-new-combat-patrol-boxes-for-the-adeptus-mechanicus-and-necrons/";
+const THREE_PATROLS = "https://www.warhammer-community.com/en-gb/articles/vbojdl9z/saturday-pre-orders-three-new-combat-patrols-inbound/";
 
 export const BOX_SETS: readonly BoxSet[] = [
+  {
+    id: "bf-penitent-crusade-host",
+    name: "Battleforce: Penitent Crusade Host",
+    kind: "battleforce",
+    announced: "2024-11-16",
+    source: CHRISTMAS,
+    lines: [
+      { name: "Ministorum Priest", models: 1 },
+      { name: "Penitent Engines", models: 2, or: ["Mortifiers"] },
+      // A Repentia Squad is a Superior and four to nine Sisters, so the box's two lines are one
+      // unit of ten rather than a squad and a character standing next to it.
+      { name: "Repentia Squad", models: 10 },
+      { name: "Arco-flagellants", models: 10 },
+      { name: "Sororitas Rhino", models: 2 },
+    ],
+  },
+  {
+    id: "bf-valourstrike-lance",
+    name: "Battleforce: Valourstrike Lance",
+    kind: "battleforce",
+    announced: "2024-11-16",
+    source: CHRISTMAS,
+    lines: [
+      { name: "Knight Paladin", models: 1, or: ["Knight Errant"] },
+      // One Armiger kit builds a Helverin or a Warglaive, so which four were built is their owner's.
+      { name: "Armigers", models: 4, ownerNames: true },
+    ],
+  },
+  {
+    id: "bf-hypercrypt-legion",
+    name: "Battleforce: Hypercrypt Legion",
+    kind: "battleforce",
+    announced: "2024-11-16",
+    source: CHRISTMAS,
+    lines: [
+      { name: "Overlord with Translocation Shroud", models: 1 },
+      { name: "C'tan Shard of the Void Dragon", models: 1 },
+      { name: "Triarch Praetorians", models: 10, or: ["Lychguard"] },
+      { name: "Necron Warriors", models: 10 },
+      { name: "Canoptek Scarab Swarms", models: 3 },
+    ],
+  },
+  {
+    id: "bf-retaliation-cadre",
+    name: "Battleforce: Retaliation Cadre",
+    kind: "battleforce",
+    announced: "2024-11-16",
+    source: CHRISTMAS,
+    lines: [
+      { name: "Commander in Coldstar Battlesuit", models: 1, or: ["Commander in Enforcer Battlesuit"] },
+      { name: "Riptide Battlesuit", models: 1 },
+      { name: "Ghostkeel Battlesuit", models: 1 },
+      { name: "Broadside Battlesuits", models: 1 },
+      // The announcement says the box holds specialist drones without saying how many.
+    ],
+  },
+  {
+    id: "bf-inner-circle-task-force",
+    name: "Battleforce: Inner Circle Task Force",
+    kind: "battleforce",
+    announced: "2024-11-16",
+    source: CHRISTMAS,
+    lines: [
+      { name: "Chaplain in Terminator Armour", models: 1 },
+      { name: "Inner Circle Companions", models: 6 },
+      { name: "Deathwing Knights", models: 10 },
+    ],
+  },
+  {
+    id: "bf-lords-of-excess",
+    name: "Battleforce: Lords of Excess",
+    kind: "battleforce",
+    announced: "2026-01-01",
+    source: CHAOS_GODS,
+    lines: [
+      { name: "Noise Marines", models: 12 },
+      { name: "Tormentors", models: 10 },
+      { name: "Daemon Prince of Slaanesh", models: 1, or: ["Daemon Prince of Slaanesh with Wings"] },
+      { name: "Infractors", models: 10 },
+    ],
+  },
+  {
+    id: "bf-khorne-daemonkin",
+    name: "Battleforce: Khorne Daemonkin",
+    kind: "battleforce",
+    announced: "2026-01-01",
+    source: CHAOS_GODS,
+    lines: [
+      { name: "Lord on Juggernaut", models: 1 },
+      { name: "Bloodcrushers", models: 6 },
+      { name: "Khorne Berzerkers", models: 10 },
+      { name: "Bloodletters", models: 20 },
+    ],
+  },
+  {
+    id: "bf-sekhmet-coven",
+    name: "Battleforce: Sekhmet Coven",
+    kind: "battleforce",
+    announced: "2026-01-01",
+    source: CHAOS_GODS,
+    lines: [
+      { name: "Infernal Master", models: 1 },
+      { name: "Exalted Sorcerers", models: 3 },
+      { name: "Scarab Occult Terminators", models: 10 },
+      { name: "Mutalith Vortex Beast", models: 1 },
+    ],
+  },
+  {
+    id: "bf-vile-vectorium",
+    name: "Battleforce: Vile Vectorium",
+    kind: "battleforce",
+    announced: "2026-01-01",
+    source: CHAOS_GODS,
+    lines: [
+      // Lord Felthius and his Tainted Cohort have no sheet of their own any more. The four models
+      // are Blightlord Terminators, which is the kit they come from and what they are fielded as.
+      { name: "Blightlord Terminators", models: 4 },
+      { name: "Deathshroud Terminators", models: 3 },
+      { name: "Foetid Bloat-drones", models: 3 },
+      { name: "Poxwalkers", models: 20 },
+    ],
+  },
+  {
+    id: "cp-tau-empire",
+    name: "Combat Patrol: T'au Empire",
+    kind: "combat-patrol",
+    announced: "2022-01-10",
+    source: FIVE_PATROLS,
+    lines: [
+      { name: "Cadre Fireblade", models: 1 },
+      { name: "Ethereal", models: 1 },
+      { name: "Ghostkeel Battlesuit", models: 1 },
+      { name: "Stealth Battlesuits", models: 3 },
+      { name: "Strike Team", models: 10 },
+    ],
+  },
+  {
+    id: "cp-aeldari-corsairs",
+    name: "Combat Patrol: Aeldari Corsairs",
+    kind: "combat-patrol",
+    announced: "2026-02-23",
+    source: KROOT_CORSAIRS,
+    lines: [
+      { name: "Kharseth", models: 1 },
+      { name: "Corsair Voidreavers", models: 10 },
+      { name: "Corsair Skyreavers", models: 5 },
+      { name: "Wave Serpent", models: 1 },
+    ],
+  },
+  {
+    id: "cp-red-corsairs",
+    name: "Combat Patrol: Red Corsairs",
+    kind: "combat-patrol",
+    announced: "2026-02-23",
+    source: KROOT_CORSAIRS,
+    lines: [
+      { name: "Red Corsairs Reave-Captain", models: 1 },
+      { name: "Red Corsairs Raiders", models: 5 },
+      { name: "Fellgor Beastmen", models: 10 },
+      { name: "Chaos Rhino", models: 1 },
+    ],
+  },
+  {
+    id: "cp-kroot",
+    name: "Combat Patrol: Kroot",
+    kind: "combat-patrol",
+    announced: "2026-02-23",
+    source: KROOT_CORSAIRS,
+    lines: [
+      { name: "Kroot Farstalkers", models: 10 },
+      { name: "Kroot Hounds", models: 2 },
+      { name: "Kroot Lone-spear", models: 1 },
+      { name: "Krootox Rampagers", models: 3 },
+      { name: "Krootox Rider", models: 1 },
+    ],
+  },
+  {
+    id: "cp-night-lords",
+    name: "Combat Patrol: Night Lords",
+    kind: "combat-patrol",
+    announced: "2026-02-23",
+    source: KROOT_CORSAIRS,
+    lines: [
+      { name: "Chaos Lord with Jump Pack", models: 1 },
+      { name: "Chosen", models: 5 },
+      { name: "Legionaries", models: 10 },
+      { name: "Chaos Rhino", models: 1 },
+    ],
+  },
+  {
+    id: "cp-adeptus-mechanicus",
+    name: "Combat Patrol: Adeptus Mechanicus",
+    kind: "combat-patrol",
+    announced: "2023-11-06",
+    source: MECHANICUS_NECRONS,
+    lines: [
+      { name: "Tech-Priest Manipulus", models: 1 },
+      { name: "Skitarii Vanguard", models: 10 },
+      { name: "Pteraxii Sterylizors", models: 5 },
+      { name: "Serberys Sulphurhounds", models: 3 },
+    ],
+  },
+  {
+    id: "cp-necrons",
+    name: "Combat Patrol: Necrons",
+    kind: "combat-patrol",
+    announced: "2023-11-06",
+    source: MECHANICUS_NECRONS,
+    lines: [
+      { name: "Overlord", models: 1 },
+      { name: "Necron Warriors", models: 10 },
+      { name: "Skorpekh Destroyers", models: 3 },
+      { name: "Canoptek Doomstalker", models: 1 },
+      { name: "Canoptek Scarab Swarms", models: 3 },
+    ],
+  },
+  {
+    id: "cp-iron-hands",
+    name: "Combat Patrol: Iron Hands",
+    kind: "combat-patrol",
+    announced: "2025-10-11",
+    source: THREE_PATROLS,
+    lines: [
+      { name: "Techmarine", models: 1 },
+      { name: "Firestrike Servo-turrets", models: 2 },
+      { name: "Heavy Intercessor Squad", models: 10 },
+    ],
+  },
+  {
+    id: "cp-white-scars",
+    name: "Combat Patrol: White Scars",
+    kind: "combat-patrol",
+    announced: "2025-10-11",
+    source: THREE_PATROLS,
+    lines: [
+      { name: "Captain on Bike", models: 1 },
+      { name: "Outrider Squad", models: 3 },
+      { name: "Impulsor", models: 1 },
+      { name: "Assault Intercessor Squad", models: 5 },
+    ],
+  },
+  {
+    id: "cp-harlequins",
+    name: "Combat Patrol: Harlequins",
+    kind: "combat-patrol",
+    announced: "2025-10-11",
+    source: THREE_PATROLS,
+    lines: [
+      { name: "Troupe", units: 1 },
+      { name: "Skyweavers", models: 2 },
+      { name: "Starweaver", models: 1 },
+      { name: "Voidweaver", models: 1 },
+      { name: "Solitaire", models: 1 },
+    ],
+  },
   {
     id: "cp-iron-warriors",
     name: "Combat Patrol: Iron Warriors",
     kind: "combat-patrol",
+    announced: "2026-03-09",
     source: IRON_WARRIORS,
     lines: [
       { name: "Chaos Terminator Squad", models: 5 },
@@ -84,6 +359,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-astra-militarum-platoon",
     name: "Battleforce: Astra Militarum Platoon",
     kind: "battleforce",
+    announced: "2026-06-15",
     source: REVEALED,
     lines: [
       { name: "Cadian Command Squad", units: 1 },
@@ -98,6 +374,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-tyranid-swarm",
     name: "Battleforce: Tyranid Swarm",
     kind: "battleforce",
+    announced: "2026-06-15",
     source: REVEALED,
     lines: [
       { name: "Lictor", models: 1 },
@@ -112,6 +389,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-chaos-space-marines-warband",
     name: "Battleforce: Chaos Space Marines Warband",
     kind: "battleforce",
+    announced: "2026-06-15",
     source: REVEALED,
     lines: [
       { name: "Lord Discordant on Helstalker", models: 1 },
@@ -125,6 +403,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-necron-host",
     name: "Battleforce: Necron Host",
     kind: "battleforce",
+    announced: "2026-06-15",
     source: REVEALED,
     lines: [
       { name: "Catacomb Command Barge", models: 1 },
@@ -139,6 +418,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-blissbound-warband",
     name: "Battleforce: Blissbound Warband",
     kind: "battleforce",
+    announced: "2025-10-06",
     source: SEVEN,
     lines: [
       { name: "Fulgrim", models: 1 },
@@ -150,6 +430,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-cthonian-prospect",
     name: "Battleforce: Cthonian Prospect",
     kind: "battleforce",
+    announced: "2025-10-06",
     source: SEVEN,
     lines: [
       // The Iron-master's datasheet is the Iron-master, an Ironkin Assistant and three E-COGs, so
@@ -165,6 +446,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-crusher-stampede",
     name: "Battleforce: Crusher Stampede",
     kind: "battleforce",
+    announced: "2025-10-06",
     source: SEVEN,
     lines: [
       // The two Neuroloids in the box are the Neurotyrant's Neuroloids ability rather than a unit,
@@ -180,6 +462,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-farsight-cadre",
     name: "Battleforce: Farsight Cadre",
     kind: "battleforce",
+    announced: "2025-10-06",
     source: SEVEN,
     lines: [
       { name: "Commander Farsight", models: 1 },
@@ -194,11 +477,13 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-iron-halo-strike-force",
     name: "Battleforce: Iron Halo Strike Force",
     kind: "battleforce",
+    announced: "2025-10-06",
     source: SEVEN,
     lines: [
       { name: "Captain", models: 1 },
       // The announcement names the retinue without counting it, so the datasheet counts it.
       { name: "Company Heroes", units: 1 },
+      { name: "Lieutenant", models: 1 },
       { name: "Sternguard Veteran Squad", models: 5 },
       { name: "Hellblaster Squad", models: 5 },
       { name: "Ballistus Dreadnought", models: 1 },
@@ -209,6 +494,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-hellforged-warband",
     name: "Battleforce: Hellforged Warband",
     kind: "battleforce",
+    announced: "2025-10-06",
     source: SEVEN,
     lines: [
       { name: "Lord Discordant on Helstalker", models: 1 },
@@ -223,6 +509,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     id: "bf-krieg-siege-platoon",
     name: "Battleforce: Krieg Siege Platoon",
     kind: "battleforce",
+    announced: "2025-10-06",
     source: SEVEN,
     lines: [
       // The announcement says Lord Commissar, which no longer has a sheet of its own.

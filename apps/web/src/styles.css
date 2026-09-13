@@ -2644,6 +2644,16 @@ body.sheet-open {
   color: var(--muted);
   white-space: nowrap;
 }
+/* The year a box was announced in, over the boxes announced in it. */
+.box-year h3 {
+  margin: 14px 0 6px;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.box-year:first-child h3 {
+  margin-top: 0;
+}
 .box-head {
   display: flex;
   align-items: center;
