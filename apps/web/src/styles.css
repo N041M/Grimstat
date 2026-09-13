@@ -2872,6 +2872,41 @@ a.btn:hover {
   font: 400 11px/1.5 var(--font);
   color: var(--faint);
 }
+.dock-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+  margin-bottom: 0;
+}
+.dock-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.dock-disclosure > summary::after {
+  content: "+";
+  font: 400 12px/1 var(--mono);
+  color: var(--faint);
+  margin-left: auto;
+}
+.dock-disclosure[open] > summary::after {
+  content: "−";
+}
+.dock-disclosure > summary:hover .dock-section-title {
+  color: var(--ink);
+}
+/* Not a live "how many are on" count, so it stays quiet rather than taking the accent. */
+.dock-disclosure > summary .dock-section-count {
+  color: var(--faint);
+}
+.dock-disclosure-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 10px;
+}
+.dock-advanced-note {
+  margin: 0;
+  font: 400 11px/1.5 var(--font);
+  color: var(--faint);
+}
 
 /* select-style control: 78px label + a --panel box with a mono value and a chevron */
 .dock-field {

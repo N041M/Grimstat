@@ -294,6 +294,8 @@ export const en = {
   "dock.weaponOrder": "Weapon order",
   "dock.backend": "Backend",
   "dock.iterations": "MC iters",
+  "dock.advanced": "Advanced",
+  "dock.advancedHint": "How the answer is worked out. The defaults suit almost every scenario.",
   "dock.range.full": "Full",
   "dock.range.half": "Half",
   "dock.alloc.protect": "Protect char.",
