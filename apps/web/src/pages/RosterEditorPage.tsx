@@ -220,6 +220,11 @@ export function RosterEditorPage({ id }: { id: string }) {
           savedAt={savedAt}
           errors={errors}
           warns={warns}
+          diagnostics={diagnostics}
+          onSelectUnit={(i) => {
+            const u = roster.units[i];
+            if (u) selectFromStats(u.id);
+          }}
           mode={mode}
           onMode={(m) => {
             setMode(m);

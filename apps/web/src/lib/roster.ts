@@ -10,6 +10,26 @@ export type ModelGroup = RosterUnit["models"][number];
 
 export const BATTLE_SIZE_ORDER: BattleSize[] = ["combat-patrol", "incursion", "strike-force", "onslaught", "custom"];
 
+/**
+ * A faction and the factions it inherits from, nearest first.
+ *
+ * A Chapter, Craftworld or Hive Fleet keeps a handful of datasheets and detachments of its own and
+ * takes the rest from the codex above it, so anything offered to an army has to look up the chain
+ * rather than match one id. Cycles in the data stop the walk rather than hang it.
+ */
+export function factionLineage(snapshot: Snapshot, factionId: string): string[] {
+  const byId = new Map(snapshot.data.factions.map((f) => [f.id, f] as const));
+  const chain: string[] = [];
+  const seen = new Set<string>();
+  let id: string | undefined = factionId;
+  while (id && !seen.has(id)) {
+    seen.add(id);
+    chain.push(id);
+    id = byId.get(id)?.parentFactionId;
+  }
+  return chain;
+}
+
 export function pointsLimitFor(size: BattleSize, customLimit = 2000): number {
   return size === "custom" ? customLimit : BATTLE_SIZES[size].points;
 }

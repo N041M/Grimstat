@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Detachment, Roster, Snapshot } from "@grimstat/schema";
-import { detachmentPointsFor } from "../../lib/roster";
+import { detachmentPointsFor, factionLineage } from "../../lib/roster";
 import { newId } from "../../lib/ids";
 import { Icon, Popover } from "../ui";
 import { t } from "../../i18n";
@@ -82,7 +82,9 @@ export function DetachmentStrip({ roster, snapshot, onChange, pickerOpen, onPick
   const [hl, setHl] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const byId = useMemo(() => new Map(snapshot.data.detachments.map((d) => [d.id, d] as const)), [snapshot]);
-  const available = useMemo(() => snapshot.data.detachments.filter((d) => d.factionId === roster.factionId).sort((a, b) => a.name.localeCompare(b.name)), [snapshot, roster.factionId]);
+  // A Chapter's own catalogue holds a detachment or two; the rest belong to the codex above it.
+  const lineage = useMemo(() => new Set(factionLineage(snapshot, roster.factionId)), [snapshot, roster.factionId]);
+  const available = useMemo(() => snapshot.data.detachments.filter((d) => lineage.has(d.factionId)).sort((a, b) => a.name.localeCompare(b.name)), [snapshot, lineage]);
   const spent = roster.detachments.reduce((s, d) => s + (byId.get(d.detachmentId)?.dp ?? 0), 0);
   const limit = detachmentPointsFor(roster.battleSize);
   const takenTags = useMemo(() => new Set(roster.detachments.map((d) => byId.get(d.detachmentId)?.uniqueTag).filter((x): x is string => !!x)), [roster.detachments, byId]);
