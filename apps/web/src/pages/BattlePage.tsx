@@ -8,6 +8,7 @@ import { TerrainPanel } from "../components/battle/TerrainPanel";
 import { LayoutLibrary } from "../components/battle/LayoutLibrary";
 import { LayoutPicker } from "../components/battle/LayoutPicker";
 import { inSelection } from "../components/battle/selection";
+import { MOD_NAME } from "../lib/keys";
 import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
 import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
@@ -1403,7 +1404,7 @@ function MovePanel({
           {coarse ? null : (
             <>
               <p className="muted small">{t("battle.rotate.hint")}</p>
-              <p className="muted small">{t("battle.group.hint")}</p>
+              <p className="muted small">{t("battle.group.hint", { mod: MOD_NAME })}</p>
             </>
           )}
         </>

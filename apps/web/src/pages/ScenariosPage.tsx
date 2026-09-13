@@ -4,6 +4,7 @@ import { db } from "../db";
 import { useApp } from "../state/AppContext";
 import { navigate } from "../router";
 import { newScenario } from "../lib/scenario";
+import { MOD } from "../lib/keys";
 import { newId, nowIso } from "../lib/ids";
 import { permalinkUrl } from "../lib/permalink";
 import { fmt, fmtRelative, pct } from "../lib/format";
@@ -121,7 +122,7 @@ export function ScenariosPage() {
             <span className="filter-field">
               <input type="search" className="filter-input" value={query} placeholder={t("scenarios.filter")} aria-label={t("scenarios.filter")} onChange={(e) => setQuery(e.target.value)} />
               <button type="button" className="filter-kbd" onClick={openPalette} title={t("scenarios.paletteHint")} aria-label={t("scenarios.paletteHint")}>
-                ⌘K
+                {`${MOD}K`}
               </button>
             </span>
             <button type="button" className="primary" onClick={() => void create()}>
