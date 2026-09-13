@@ -20,7 +20,7 @@
  * asking when they have just typed a weapon count in.
  */
 
-import type { Datasheet, ScenarioUnit } from "@grimstat/schema";
+import type { Datasheet, RosterModelGroup, ScenarioUnit } from "@grimstat/schema";
 import { compositionBounds } from "./constraints";
 import { baseWeaponName, parseLoadout } from "./resolve";
 
@@ -38,6 +38,8 @@ export interface WargearOption {
   readonly text: string;
   /** Weapon base names this line grants, lower-cased; only names the datasheet actually carries. */
   readonly grants: readonly string[];
+  /** Weapon base names this line takes away to pay for the grant, lower-cased. Empty when the line only adds. */
+  readonly replaces: readonly string[];
   /** The most of each granted weapon a unit of `models` models may hold. */
   limit(models: number): number;
 }
@@ -121,6 +123,27 @@ function matchWeapon(name: string, bases: readonly string[]): string | undefined
 }
 
 /**
+ * The weapons an option line takes away to pay for what it grants.
+ *
+ * A line writes the swap one of two ways. "Any number of models can each have their hallowed mace
+ * replaced with 1 anointed halberd" puts the weapon it takes in front of "replaced with"; "Any
+ * number of models can each replace their hallowed mace with 1 anointed halberd" puts it between
+ * "replace" and "with". A line that only adds — "this model can be equipped with 1 plasma pistol" —
+ * takes nothing away and names nothing here.
+ *
+ * A name that is only part of a longer one the same head also names is dropped, so a line about a
+ * twin hail gun does not read as a line about a hail gun as well.
+ */
+function replacedWeapons(line: string, bases: readonly string[]): string[] {
+  const s = tidy(line);
+  const head = /^([\s\S]*?)\breplaced with\b/i.exec(s)?.[1] ?? /\breplaces?\s+(?:their|its|the)\s+([\s\S]*?)\s+with\b/i.exec(s)?.[1];
+  if (head === undefined) return [];
+  const lower = head.toLowerCase();
+  const hit = bases.filter((b) => lower.includes(b));
+  return hit.filter((b) => !hit.some((other) => other !== b && other.includes(b)));
+}
+
+/**
  * How many models one option line may be applied to.
  *
  * Only the leading clause is read, because that is where the allowance is written. A line whose
@@ -197,7 +220,7 @@ export function readWargearOptions(ds: Datasheet): WargearReading {
     const grants = [...new Set(grantCandidates(line).map((c) => {
       const { copies, name } = splitCount(c);
       const base = matchWeapon(name, bases);
-      return base ? `${base} ${copies}` : undefined;
+      return base ? `${base}\u0000${copies}` : undefined;
     }).filter((x): x is string => !!x))];
 
     if (!limit || !grants.length) {
@@ -205,16 +228,66 @@ export function readWargearOptions(ds: Datasheet): WargearReading {
       continue;
     }
 
+    const replaces = replacedWeapons(line, bases);
     for (const packed of grants) {
-      const [base, copiesText] = packed.split(" ");
+      const [base, copiesText] = packed.split("\u0000");
       const copies = Number(copiesText) || 1;
-      options.push({ text: line, grants: [base!], limit: (models) => limit(models) * copies });
+      options.push({ text: line, grants: [base!], replaces, limit: (models) => limit(models) * copies });
     }
   }
 
   // A sheet whose options are all "None" is fixed; one with options as well is not.
   if (options.length) fixed = false;
   return { options, unread, fixed, complete: unread.length === 0 };
+}
+
+/**
+ * Weapons the datasheet hands a roster unit's models that the list left out.
+ *
+ * Several list dialects write only part of a unit's loadout. The GW app's attached-unit blocks print
+ * "9x Warden / 9x Flux carbine" and say nothing about the shock maul every Warden also carries; a
+ * tournament pack often prints only the weapons a unit swapped for. Read as a complete selection,
+ * such a list strips the unit down to what it happened to mention, and a squad whose melee weapons
+ * were all defaults ends up unable to fight.
+ *
+ * So a default the list does not name is handed back, unless the list names a weapon that could have
+ * displaced it. That means an option line taking that default away and granting a weapon the group
+ * holds more of than the default loadout already gives it. The surplus copy is what shows a swap was
+ * made. A sergeant listed with a power weapon and no chainsword has swapped the chainsword away,
+ * because nothing else puts a power weapon in their hand. An Ashen Crusher listed with one vortex
+ * cannon has not given up its twin hail gun for a second one, because the cannon it is holding is
+ * the cannon the datasheet already gave it.
+ *
+ * A line the option parser could not read grants nothing here, so a swap written in prose it cannot
+ * follow reads as an omission and the default comes back. That is the safer way round. A restored
+ * weapon is one the datasheet itself prints, and it sits on the unit where the player can take it
+ * off again. A weapon dropped in silence only shows up as a unit that does no damage.
+ *
+ * The counts are in models, ready to add to a selection tallied the same way.
+ */
+export function omittedDefaults(ds: Datasheet, groups: readonly RosterModelGroup[]): Map<string, number> {
+  const out = new Map<string, number>();
+  const parsed = parseLoadout(ds);
+  if (!parsed.all.length && !Object.keys(parsed.byProfile).length) return out;
+  const reading = readWargearOptions(ds);
+  for (const g of groups) {
+    const profile = ds.models.find((m) => m.id === g.modelProfileId)?.name.toLowerCase();
+    const defaults = [...new Set([...parsed.all, ...(profile ? parsed.byProfile[profile] ?? [] : [])])];
+    const held = new Map<string, number>();
+    for (const item of g.wargear) {
+      const k = key(baseWeaponName(item));
+      held.set(k, (held.get(k) ?? 0) + 1);
+    }
+    const byDefault = new Set(defaults.map(key));
+    const displaced = (base: string): boolean =>
+      reading.options.some((o) => o.replaces.includes(base) && o.grants.some((granted) => (held.get(granted) ?? 0) > (byDefault.has(granted) ? 1 : 0)));
+    for (const d of defaults) {
+      const k = key(d);
+      if (held.has(k) || displaced(k)) continue;
+      out.set(d, (out.get(d) ?? 0) + g.count);
+    }
+  }
+  return out;
 }
 
 export interface LoadoutProblem {

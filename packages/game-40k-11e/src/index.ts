@@ -20,7 +20,7 @@ export { constraints11e, BATTLE_SIZES, compositionBounds, RESERVES_FRACTION, res
 export type { BattleSizeRules } from "./constraints";
 export { parseTransportCapacity, unitFitsKeywords, hasKeywordPhrase } from "./transport";
 export type { TransportCapacity } from "./transport";
-export { readWargearOptions, checkLoadout, UNLIMITED } from "./loadout";
+export { readWargearOptions, checkLoadout, omittedDefaults, UNLIMITED } from "./loadout";
 export type { WargearOption, WargearReading, LoadoutProblem, LoadoutCheck, CheckLoadoutOptions } from "./loadout";
 export { makeScenario, phaseFor, runMatrix, durabilityProfile, durabilityIndex, efficiencyRanking, incomingFire, effectiveWounds, pReferenceSticks, removalChain, editionOf, combineSampling, REFERENCE_ATTACK, DEFAULT_GAME_SYSTEM_ID } from "./analysis";
 export type { MatrixResult, MatrixCell, DurabilityEntry, DurabilityIndexRow, EfficiencyRow, IncomingEntry, IncomingFireRow, ReferenceAttack, RemovalChain, EditionOpts, RunSampling } from "./analysis";

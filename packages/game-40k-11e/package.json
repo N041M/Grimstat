@@ -15,6 +15,7 @@
     "@grimstat/resolver": "workspace:*"
   },
   "devDependencies": {
+    "@grimstat/adapters": "workspace:*",
     "@grimstat/snapshot": "workspace:*"
   }
 }

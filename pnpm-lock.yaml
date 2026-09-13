@@ -201,6 +201,9 @@ importers:
         specifier: workspace:*
         version: link:../schema
     devDependencies:
+      '@grimstat/adapters':
+        specifier: workspace:*
+        version: link:../adapters
       '@grimstat/snapshot':
         specifier: workspace:*
         version: link:../snapshot

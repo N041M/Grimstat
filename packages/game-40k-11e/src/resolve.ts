@@ -5,6 +5,7 @@ import { CH } from "./channels";
 import type { UnitFromDatasheetOptions } from "./api";
 
 import { keywordRegistry as registry } from "./scenario";
+import { omittedDefaults } from "./loadout";
 
 export function upper(s: string): string {
   return s.trim().toUpperCase();
@@ -234,8 +235,12 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
  * "<Character>: <weapon>", so the host's pass — whose prefix is empty — would otherwise match them
  * too, and zero them, because the character's weapons are never named in the host's own wargear.
  * `others` lists every attached character's prefix so each pass only touches its own.
+ *
+ * A list that names no weapon this sheet carries is not a selection at all, and the datasheet's own
+ * loadout stands. One that names some is read against `ds`, which puts back the default weapons the
+ * list left out — see `omittedDefaults` for which of them come back.
  */
-function applyWargearSelection(weapons: ScenarioWeapon[], groups: RosterUnit["models"], prefix = "", others: readonly string[] = []): ScenarioWeapon[] {
+function applyWargearSelection(ds: Datasheet, weapons: ScenarioWeapon[], groups: RosterUnit["models"], prefix = "", others: readonly string[] = []): ScenarioWeapon[] {
   const selected = new Map<string, number>();
   for (const g of groups) for (const item of g.wargear) {
     const key = baseWeaponName(item).toLowerCase();
@@ -244,6 +249,7 @@ function applyWargearSelection(weapons: ScenarioWeapon[], groups: RosterUnit["mo
   const mine = (w: ScenarioWeapon): boolean => w.name.startsWith(prefix) && !others.some((p) => p !== prefix && w.name.startsWith(p));
   const anyMatch = weapons.filter(mine).some((w) => selected.has(baseWeaponName(w.name.slice(prefix.length)).toLowerCase()));
   if (!anyMatch) return weapons;
+  for (const [base, count] of omittedDefaults(ds, groups)) selected.set(base, (selected.get(base) ?? 0) + count);
   const enabledBase = new Set<string>();
   return weapons.map((w) => {
     if (!mine(w)) return w;
@@ -267,9 +273,9 @@ export function unitFromRosterUnit(unit: RosterUnit, roster: Roster, snapshot: S
   const base = unitFromDatasheet(ds, snapshot, { modelCount, attachedDatasheetIds: attached.map((a) => a.datasheetId) });
   const attachedSheets = attached.map((a) => ({ entry: a, ds: snapshot.data.datasheets.find((d) => d.id === a.datasheetId) }));
   const prefixes = attachedSheets.flatMap((x) => (x.ds ? [`${x.ds.name}: `] : []));
-  let weapons = applyWargearSelection(base.weapons, unit.models, "", prefixes);
+  let weapons = applyWargearSelection(ds, base.weapons, unit.models, "", prefixes);
   for (const { entry, ds: cds } of attachedSheets) {
-    if (cds) weapons = applyWargearSelection(weapons, entry.models, `${cds.name}: `, prefixes);
+    if (cds) weapons = applyWargearSelection(cds, weapons, entry.models, `${cds.name}: `, prefixes);
   }
   const ctx = createContext(roster, snapshot);
   const points = ctx.unitCost(unit).total + attached.reduce((s, a) => s + ctx.unitCost(a).total, 0);

@@ -24,7 +24,9 @@ describe("unitFromRosterUnit", () => {
     expect(u.attached).toEqual([{ name: "Warden Captain", role: "leader", datasheetId: "ds:ashen-wardens:warden-captain" }]);
     expect(u.models.map((m) => `${m.name}x${m.count}`)).toEqual(["Warden Sergeantx1", "Wardenx9", "Warden Captainx1"]);
     const on = u.weapons.filter((w) => w.enabled).map((w) => `${w.name}x${w.count}`);
-    expect(on).toEqual(expect.arrayContaining(["Flux carbinex10", "Shock maulx9", "Power fistx1", "Warden Captain: Flux pistolx1", "Warden Captain: Relic bladex1"]));
+    // Ten shock mauls for nine that are listed: the sergeant's group names a power fist and a flux
+    // carbine but not the maul the datasheet gives every model, and no option takes that maul away.
+    expect(on).toEqual(expect.arrayContaining(["Flux carbinex10", "Shock maulx10", "Power fistx1", "Warden Captain: Flux pistolx1", "Warden Captain: Relic bladex1"]));
     expect(u.points).toBe(180 + 80 + 15);
   });
   it("enables a selected non-loadout weapon and disables unselected loadout weapons", () => {
