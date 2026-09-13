@@ -152,8 +152,9 @@ export const BOX_SETS: readonly BoxSet[] = [
     kind: "battleforce",
     source: SEVEN,
     lines: [
-      { name: "Brôkhyr Iron-master", models: 1 },
-      { name: "E-COGs", models: 3 },
+      // The Iron-master's datasheet is the Iron-master, an Ironkin Assistant and three E-COGs, so
+      // the box's two lines are one unit and its composition is what counts them.
+      { name: "Brôkhyr Iron-master", units: 1 },
       { name: "Brôkhyr Thunderkyn", models: 3 },
       { name: "Cthonian Earthshakers", models: 2 },
       { name: "Cthonian Beserks", models: 10 },
@@ -166,8 +167,9 @@ export const BOX_SETS: readonly BoxSet[] = [
     kind: "battleforce",
     source: SEVEN,
     lines: [
+      // The two Neuroloids in the box are the Neurotyrant's Neuroloids ability rather than a unit,
+      // so there is no datasheet for a shelf counted per datasheet to put them against.
       { name: "Neurotyrant", models: 1 },
-      { name: "Neuroloids", models: 2 },
       { name: "Screamer-Killer", models: 1 },
       { name: "Tyrannofex", models: 1, or: ["Tervigon"] },
       { name: "Haruspex", models: 1, or: ["Exocrine"] },
@@ -223,7 +225,8 @@ export const BOX_SETS: readonly BoxSet[] = [
     kind: "battleforce",
     source: SEVEN,
     lines: [
-      { name: "Lord Commissar", models: 1 },
+      // The announcement says Lord Commissar, which no longer has a sheet of its own.
+      { name: "Commissar", models: 1 },
       { name: "Krieg Command Squad", units: 1 },
       { name: "Death Korps of Krieg", models: 20 },
       { name: "Krieg Combat Engineers", units: 1 },
