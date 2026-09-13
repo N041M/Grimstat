@@ -1,23 +1,18 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * What the service worker has to say to the shell: a new build is waiting, or the app has just been
- * cached for offline use. `main.tsx` feeds both from `registerSW`. `App` reads `needRefresh` and
- * shows the update banner. Nothing reads `offlineReady` yet.
+ * What the service worker has to say to the shell.
+ *
+ * A new build takes over on its own and reloads the page onto it, so there is nothing to ask the
+ * reader about and nothing here for it. What is left is `offlineReady`, which `main.tsx` feeds from
+ * `registerSW` the first time the app is cached. Nothing reads it yet.
  */
 export interface SwState {
-  needRefresh: boolean;
   offlineReady: boolean;
 }
 
-let state: SwState = { needRefresh: false, offlineReady: false };
-let updater: ((reloadPage?: boolean) => Promise<void>) | undefined;
+let state: SwState = { offlineReady: false };
 const listeners = new Set<() => void>();
-
-function set(patch: Partial<SwState>): void {
-  state = { ...state, ...patch };
-  listeners.forEach((l) => l());
-}
 
 export const swStore = {
   subscribe(l: () => void): () => void {
@@ -27,22 +22,9 @@ export const swStore = {
   get(): SwState {
     return state;
   },
-  needRefresh(): void {
-    set({ needRefresh: true });
-  },
   offlineReady(): void {
-    set({ offlineReady: true });
-  },
-  dismiss(): void {
-    set({ needRefresh: false, offlineReady: false });
-  },
-  setUpdater(fn: (reloadPage?: boolean) => Promise<void>): void {
-    updater = fn;
-  },
-  /** Activate the waiting service worker and reload onto the new build. */
-  async update(): Promise<void> {
-    set({ needRefresh: false });
-    await updater?.(true);
+    state = { ...state, offlineReady: true };
+    listeners.forEach((l) => l());
   },
 };
 

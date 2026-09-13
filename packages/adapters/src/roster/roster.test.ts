@@ -5,7 +5,7 @@ import type { Roster, RosterUnit } from "@grimstat/schema";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import { SYNTHETIC_DIR } from "../test-utils";
 import { exportRosterText, importRosterText, exportRosterPrintHtml } from "./index";
-import { parseDetSpec, parseUnitHeader, parseWargearItems, parseWargearList, splitList } from "./import";
+import { parseDetSpec, parseEnhancement, parseFactionSize, parseGroupSpec, parseUnitHeader, parseWargearItems, parseWargearList, splitList, stripPlusMarks } from "./import";
 import { RosterImportContext, nameIndexOf } from "./import-common";
 
 const snapshot = loadSyntheticSnapshot();
@@ -424,5 +424,98 @@ describe("the snapshot's name index", () => {
     expect(ctx.matchDatasheet("Squad Warden")?.id).toBe("ds:ashen-wardens:warden-squad");
     expect(ctx.matchDatasheet("The Ashen Crusher of Doom")?.id).toBe("ds:ashen-wardens:ashen-crusher");
     expect(ctx.matchDatasheet("Nothing of the sort")).toBeUndefined();
+  });
+});
+
+describe("faction and battle size lines", () => {
+  it("reads the faction, the size and the points limit out of every dialect", () => {
+    expect(parseFactionSize("Ashen Wardens — Strike Force [2000pts]")).toEqual({ faction: "Ashen Wardens", size: "Strike Force", points: "2000" });
+    expect(parseFactionSize("Ashen Wardens – Combat Patrol (1,000 points)")).toEqual({ faction: "Ashen Wardens", size: "Combat Patrol", points: "1,000" });
+    expect(parseFactionSize("Ashen Wardens - Incursion")).toEqual({ faction: "Ashen Wardens", size: "Incursion" });
+    expect(parseFactionSize("Ashen Wardens — Nope")).toBeUndefined();
+    expect(parseFactionSize("Ashen Wardens—Incursion")).toBeUndefined();
+    expect(parseFactionSize("Strike Force (2,000 points)")).toBeUndefined();
+  });
+
+  // the spaces in front of the dash belong to the pattern, and the faction name takes one of them back
+  it("gives a space back when nothing else is left for the faction name", () => {
+    expect(parseFactionSize("  — Incursion")).toEqual({ faction: " ", size: "Incursion" });
+    expect(parseFactionSize(" — Incursion")).toBeUndefined();
+  });
+
+  it("reads a line padded with spaces in bounded time", () => {
+    for (const pad of [2000, 20000]) {
+      const started = performance.now();
+      parseFactionSize(`"Ember Vanguard"${" ".repeat(pad)}(`);
+      expect(performance.now() - started).toBeLessThan(50);
+    }
+  });
+});
+
+describe("the plus marks around a header line", () => {
+  it("takes the marks and the spaces behind them off both ends", () => {
+    expect(stripPlusMarks("++ FACTION KEYWORD: Ashen Wardens ++")).toBe("FACTION KEYWORD: Ashen Wardens");
+    expect(stripPlusMarks("+ Detachment: Ember Vanguard")).toBe("Detachment: Ember Vanguard");
+    expect(stripPlusMarks("no marks")).toBe("no marks");
+  });
+
+  // the pattern this reads with reaches the end of the line, so it can only give up three of a longer run
+  it("leaves the spaces alone when more than three marks close the line", () => {
+    expect(stripPlusMarks("a +++++")).toBe("a ++");
+    expect(stripPlusMarks("a +++")).toBe("a");
+  });
+
+  it("reads a line padded with spaces in bounded time", () => {
+    for (const pad of [2000, 20000]) {
+      const started = performance.now();
+      stripPlusMarks(`"Ember Vanguard"${" ".repeat(pad)}(`);
+      expect(performance.now() - started).toBeLessThan(50);
+    }
+  });
+});
+
+describe("the model groups of a unit header line", () => {
+  it("reads the count, the model name and the wargear in the brackets", () => {
+    expect(parseGroupSpec("2x Warden (Flux carbine, Shock maul)")).toEqual({ count: "2", name: "Warden", body: "Flux carbine, Shock maul" });
+    expect(parseGroupSpec("10x Battle Sister")).toEqual({ count: "10", name: "Battle Sister" });
+    expect(parseGroupSpec("2x Warden (")).toBeUndefined();
+    expect(parseGroupSpec("Warden")).toBeUndefined();
+  });
+
+  // the spaces after the count belong to the pattern, and the model name takes one of them back
+  it("gives a space back when nothing else is left for the model name", () => {
+    expect(parseGroupSpec("2x  (Flux carbine)")).toEqual({ count: "2", name: " ", body: "Flux carbine" });
+  });
+
+  it("reads a line padded with spaces in bounded time", () => {
+    for (const pad of [2000, 20000]) {
+      const started = performance.now();
+      parseGroupSpec(`2x "Ember Vanguard"${" ".repeat(pad)}(`);
+      expect(performance.now() - started).toBeLessThan(50);
+    }
+  });
+});
+
+describe("enhancement flags", () => {
+  it("reads the name and takes the cost off, however the dialect writes it", () => {
+    expect(parseEnhancement("Enhancement: Ember Blade (+15 pts)")).toBe("Ember Blade");
+    expect(parseEnhancement("Enhancements: Ember Blade (+15 Points)")).toBe("Ember Blade");
+    expect(parseEnhancement("Enhancement: Ember Blade (15 pts)")).toBe("Ember Blade");
+    expect(parseEnhancement("Enhancement: Ember Blade")).toBe("Ember Blade");
+    expect(parseEnhancement("Warlord")).toBeUndefined();
+  });
+
+  // the spaces after the colon belong to the pattern, and the name takes one of them back
+  it("gives a space back when nothing else is left for the name", () => {
+    expect(parseEnhancement("Enhancement: ")).toBe(" ");
+    expect(parseEnhancement("Enhancement:")).toBeUndefined();
+  });
+
+  it("reads a line padded with spaces in bounded time", () => {
+    for (const pad of [2000, 20000]) {
+      const started = performance.now();
+      parseEnhancement(`Enhancement: "Ember Blade"${" ".repeat(pad)}(`);
+      expect(performance.now() - started).toBeLessThan(50);
+    }
   });
 });

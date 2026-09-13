@@ -27,6 +27,7 @@ import {
   updatePiece,
 } from "../../lib/layoutEdit";
 import { t, type I18nKey } from "../../i18n";
+import { DELETE_KEY, MOD, SHIFT } from "../../lib/keys";
 
 /** The traits worth a checkbox. The rest follow from the piece's kind and are not set by hand. */
 const EDITABLE_TRAITS: readonly TerrainTrait[] = ["obscuring", "light-cover", "heavy-cover", "impassable", "difficult", "breachable", "scalable", "defensible", "transparent"];
@@ -242,7 +243,7 @@ export function TerrainPanel({
             <p className="muted small">{t("battle.terrain.edgesHint")}</p>
           </div>
         ) : null}
-        {coarse ? null : <p className="battle-keys">{t("battle.terrain.keys", { mod: MOD })}</p>}
+        {coarse ? null : <p className="battle-keys">{t("battle.terrain.keys", { mod: MOD, shift: SHIFT, del: DELETE_KEY })}</p>}
       </section>
 
       <section className="battle-section">
@@ -366,7 +367,6 @@ function issueText(issue: LayoutIssue): string {
 }
 
 /** The key that undoes, named the way the platform names it. */
-const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl+";
 
 /**
  * A labelled number with steppers. Inches everywhere, so no unit picker.

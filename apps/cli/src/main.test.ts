@@ -152,13 +152,19 @@ describe("--help", () => {
  */
 describe("the entry point", () => {
   /** A snapshot with enough datasheets under one name for `show` to print more than 64 KiB. */
+  /**
+   * A snapshot whose listing runs to megabytes. The size is the point: the reader can only arrive
+   * late enough to matter while the CLI is still writing, and the CLI only waits once the pipe it is
+   * writing into is full. A listing that fits in the pipe leaves nothing queued at exit, so it can
+   * tell a CLI that flushes from one that does not.
+   */
   function crowdedSnapshot(dir: string): string {
     const snapshot = JSON.parse(readFileSync(SNAPSHOT, "utf8")) as { data: { datasheets: Array<Record<string, unknown>> } };
     const proto = snapshot.data.datasheets[0]!;
     const clones = Array.from({ length: 800 }, (_, i) => ({
       ...proto,
       id: `clone-${i}`,
-      name: `Clone ${String(i).padStart(4, "0")} ${"Reiver Squad Veteran ".repeat(4)}`,
+      name: `Clone ${String(i).padStart(4, "0")} ${"Reiver Squad Veteran ".repeat(120)}`,
       weapons: [],
       abilityIds: [],
       composition: [],
@@ -171,28 +177,56 @@ describe("the entry point", () => {
     return file;
   }
 
-  /** Run the CLI as a child process, with a reader that waits `delayMs` before it starts reading. */
+  /**
+   * Run the CLI as a child process, with a reader that waits `delayMs` before it starts reading.
+   *
+   * The run is handed back once the child has exited and its output has ended, because the end only
+   * arrives after every byte has been read. Waiting for the child's close event instead can report
+   * output that is still sitting unread.
+   *
+   * This only measures anything while the child is still writing when the reader arrives. A child
+   * that fits its whole output in the pipe finishes early, and the bytes are then dropped rather
+   * than delivered, so `crowdedSnapshot` writes far more than any pipe holds.
+   */
   function runCli(argv: string[], delayMs: number): Promise<{ code: number; out: string }> {
     const tsx = join(process.cwd(), "node_modules/.bin/tsx");
     const entry = join(process.cwd(), "apps/cli/src/main.ts");
     return new Promise((resolve, reject) => {
       const child = spawn(tsx, [entry, ...argv], { stdio: ["ignore", "pipe", "ignore"] });
+      child.stdout.pause();
       const chunks: Buffer[] = [];
       let code = 0;
+      let exited = false;
+      let ended = false;
+      const settle = (): void => {
+        if (exited && ended) resolve({ code, out: Buffer.concat(chunks).toString("utf8") });
+      };
       child.on("error", reject);
-      child.on("exit", (c) => (code = c ?? 0));
-      child.on("close", () => resolve({ code, out: Buffer.concat(chunks).toString("utf8") }));
-      setTimeout(() => child.stdout.on("data", (c: Buffer) => chunks.push(c)), delayMs);
+      child.on("exit", (c) => {
+        code = c ?? 0;
+        exited = true;
+        settle();
+      });
+      child.stdout.on("end", () => {
+        ended = true;
+        settle();
+      });
+      setTimeout(() => {
+        child.stdout.on("data", (c: Buffer) => chunks.push(c));
+        child.stdout.resume();
+      }, delayMs);
     });
   }
 
   it("writes all of its output even when the reader starts late", async () => {
     const file = crowdedSnapshot(workDir());
     const drained = await runCli(["show", file, "clone"], 0);
-    expect(drained.out.length).toBeGreaterThan(64 * 1024);
+    expect(drained.code).toBe(0);
+    // Larger than the biggest pipe a system hands out, so the CLI is certain to still be writing.
+    expect(drained.out.length).toBeGreaterThan(1024 * 1024);
     const waited = await runCli(["show", file, "clone"], 1000);
-    expect(waited.out.length).toBe(drained.out.length);
     expect(waited.code).toBe(0);
+    expect(waited.out.length).toBe(drained.out.length);
   }, 60_000);
 
   it("still hands a non-zero exit code to the shell", async () => {

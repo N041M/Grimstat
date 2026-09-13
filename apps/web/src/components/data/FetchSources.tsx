@@ -229,14 +229,14 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
     await runRequest(req);
   }, [selection, mirror, notify, runRequest]);
 
-  /** One card's own button: fetch that source and merge it over the snapshot already in hand. */
+  /** One card's own button: fetch that source and rebuild the snapshot already in hand around it. */
   const refreshOne = useCallback(
     async (id: BrowserSourceId) => {
       if (!rawSnapshot) {
         notify(t("data.fetch.oneNeedsSnapshot"), "error");
         return;
       }
-      await runRequest(refreshRequestFor(id, selection, { data: rawSnapshot.data, sources: rawSnapshot.sources, fetchedAt: rawSnapshot.createdAt }, undefined, mirror));
+      await runRequest(refreshRequestFor(id, selection, rawSnapshot.sources, undefined, mirror));
     },
     [rawSnapshot, selection, mirror, notify, runRequest],
   );

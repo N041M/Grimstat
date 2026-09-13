@@ -159,8 +159,7 @@ function fmt(v: unknown): string {
 /**
  * Deep copy of the plain data an adapter emitted. Fields taken from a single source were handed on by
  * reference, which left the merged snapshot sharing arrays and objects with the parts it was built
- * from, and `mergeOntoBase` sharing them with the snapshot already in the database. Editing either
- * one would then change the other.
+ * from. Editing either one would then change the other.
  */
 function copy<T>(v: T): T {
   if (Array.isArray(v)) return v.map((x) => copy(x)) as T;
@@ -567,10 +566,8 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     const uniqueTag = pick("detachment", c.id, "uniqueTag", members, P, (i) => i["uniqueTag"] as string | undefined, { compare: (v) => (v ?? "").toLowerCase() });
     if (uniqueTag) d.uniqueTag = uniqueTag;
     detachments.push(d);
-    // A stored snapshot already carries what the points authority contributed when it was built. A
-    // detachment only the base has is therefore not reported as missing from the points authority.
     const only = c.members.length === 1 ? c.members[0]!.adapter : undefined;
-    if (parts.length > 1 && only && only !== P[0] && only !== BASE_ADAPTER) {
+    if (parts.length > 1 && only && only !== P[0]) {
       unmatched.push({ adapter: only, entity: "detachment", id: c.id, name: d.name, reason: "not found in the points authority" });
     }
   }
@@ -639,50 +636,4 @@ function firstCopyPoints(rules: PriceRule[]): number | undefined {
   const first = [...rules].filter((r) => r.copyRange.min <= 1).sort((a, b) => a.copyRange.min - b.copyRange.min)[0] ?? rules[0];
   const tier = first ? [...first.tiers].sort((a, b) => a.models - b.models)[0] : undefined;
   return tier?.points;
-}
-
-// ---- refreshing one source over a stored snapshot -----------------------------------------------
-
-/** The adapter id a stored snapshot takes while it stands in as the base of a single-source refresh. */
-export const BASE_ADAPTER = "snapshot-base";
-
-export interface MergeBase {
-  data: SnapshotData;
-  /** The adapters the stored snapshot was built from, in any order. */
-  adapters: string[];
-  fetchedAt: string;
-}
-
-/**
- * Merge freshly fetched parts over a snapshot that is already stored, so one source can be updated
- * without downloading the others again.
- *
- * The base stands for every source it still holds, so it takes the rank of the best of them in each
- * precedence list. Refreshing BSData therefore leaves Wahapedia's rules text and MFM's points where
- * they are, because both outrank BSData for the fields they own. A base holding nothing but the
- * refreshed source ranks last, so its fields all give way to the fresh copy.
- *
- * The base also holds the stale copy of the source being refreshed, and the stored snapshot records
- * no field-by-field provenance, so there is no way to tell those fields from the ones the base holds
- * on behalf of a source that still outranks the refresh. The base keeps them. A refresh therefore
- * fills in fields the base is missing and updates the fields no remaining source outranks it for,
- * and leaves the rest as they were. Ranking the base below the refreshed source instead would update
- * those fields, at the cost of overwriting MFM's points and Wahapedia's rules text with BSData's,
- * which is the worse trade for a snapshot whose points and rules text are the parts that have to be
- * right. Refreshing every source together, which is what the Data page's "Fetch everything" does,
- * has neither problem.
- */
-export function mergeOntoBase(base: MergeBase, parts: MergePart[], policyIn: Partial<MergePolicy> = {}): MergeResult {
-  const policy: MergePolicy = { ...DEFAULT_MERGE_POLICY, ...policyIn };
-  const refreshed = new Set(parts.map((p) => p.sourceRef.adapter));
-  const remaining = base.adapters.filter((a) => !refreshed.has(a));
-  const withBase = (order: string[]): string[] => {
-    const ranks = remaining.map((a) => order.indexOf(a)).filter((i) => i >= 0);
-    const at = ranks.length ? Math.min(...ranks) : order.length;
-    const out = [...order];
-    out.splice(at, 0, BASE_ADAPTER);
-    return out;
-  };
-  const basePart: MergePart = { ...base.data, sourceRef: { adapter: BASE_ADAPTER, fetchedAt: base.fetchedAt } };
-  return mergeSources([basePart, ...parts], { ...policy, pointsPrecedence: withBase(policy.pointsPrecedence), textPrecedence: withBase(policy.textPrecedence) });
 }

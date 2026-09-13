@@ -6,6 +6,7 @@ import { useApp } from "../../state/AppContext";
 import { navigate } from "../../router";
 import type { useTheme } from "../../theme";
 import { newScenario } from "../../lib/scenario";
+import { ENTER, MOD } from "../../lib/keys";
 import { loadSampleSnapshot } from "../../lib/snapshotSource";
 import { fmt, fmtInt, fmtRelative } from "../../lib/format";
 import { buildGroups, flattenGroups, stepIndex, type PaletteGroupId, type PaletteItem } from "../../lib/palette";
@@ -342,8 +343,8 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
         {/* Only the two keys that work here. "solve state on the mark" described the brand dot,
             which is not in this dialog and not something the reader can do anything about. */}
         <div className="pal-foot">
-          <span>{t("palette.footOpen")}</span>
-          <span>{t("palette.footRun")}</span>
+          <span>{t("palette.footOpen", { mod: MOD })}</span>
+          <span>{t("palette.footRun", { enter: ENTER })}</span>
         </div>
       </div>
     </div>

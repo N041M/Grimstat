@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SnapshotData, type Ability, type Detachment, type GameSystem, type PriceRule, type Publication, type Stratagem, type WargearPrice, type WeaponProfile } from "@grimstat/schema";
-import { mergeOntoBase, mergeSources, type MergePart, type PartialDatasheet } from "./merge";
+import { mergeSources, type MergePart, type PartialDatasheet } from "./merge";
 
 const FETCHED_AT = "2026-01-01T00:00:00.000Z";
 
@@ -92,110 +92,85 @@ describe("mergeSources: datasheets without a model profile", () => {
   });
 });
 
-describe("mergeOntoBase: refreshing one source over a stored snapshot", () => {
-  const base = (over: Partial<MergePart>) =>
-    mergeSources([part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], ...over })]).data;
-
-  it("keeps what a source the refresh did not touch had ranked higher", () => {
-    // Wahapedia outranks BSData for rules text, so a BSData refresh must not overwrite its effect.
-    // BSData outranks Wahapedia for points, so the CP cost has to follow the fresh copy.
-    const stored = mergeSources([
-      part("wahapedia-csv", { stratagems: [stratagem({ effect: "Everything explodes." })] }),
-      part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], stratagems: [stratagem({ cpCost: 2 })] }),
-    ]).data;
-    expect(stored.stratagems[0]).toMatchObject({ cpCost: 2, effect: "Everything explodes." });
-    const merged = mergeOntoBase(
-      { data: stored, adapters: ["wahapedia-csv", "bsdata-json"], fetchedAt: FETCHED_AT },
-      [part("bsdata-json", { stratagems: [stratagem({ cpCost: 5, effect: "It fizzles." })], datasheets: [datasheet({ models: [MODEL] })] })],
-    );
-    expect(merged.data.stratagems[0]!.effect).toBe("Everything explodes.");
-    expect(merged.data.stratagems[0]!.cpCost).toBe(5);
+/**
+ * Updating one source rebuilds the snapshot from every source it had: the fresh part, and the others
+ * re-read from the files kept on this machine. These tests stand in for that by merging the same
+ * parts again with one of them changed.
+ *
+ * The question each one asks is whether a field landed with the source that has authority over it.
+ * Both ways of getting that wrong matter. A refresh that leaves its own source's fields stale does
+ * nothing at all, and one that lets the refreshed source win every field replaces the points and the
+ * rules text with its own copies of them.
+ */
+describe("refreshing one source", () => {
+  /** The three parts a full import merged, as they would be read back and re-merged. */
+  const original = (): Record<string, MergePart> => ({
+    "mfm-yaml": part("mfm-yaml", { datasheets: [datasheet({})], priceRules: [RULE], stratagems: [stratagem({ cpCost: 1 })] }),
+    "bsdata-json": part("bsdata-json", { datasheets: [datasheet({ models: [MODEL], wargearOptions: ["A model may take a plasma gun."] })], stratagems: [stratagem({ cpCost: 2, effect: "BSData's wording." })], wargearPrices: [wargear(5)] }),
+    "wahapedia-csv": part("wahapedia-csv", { datasheets: [datasheet({ models: [MODEL] })], stratagems: [stratagem({ effect: "Everything explodes." })] }),
   });
 
-  it("takes the refreshed source's own value where it is the authority", () => {
-    // MFM owns points, so refreshing MFM over a stored snapshot must move the price.
-    const stored = mergeSources([
-      part("mfm-yaml", { datasheets: [datasheet({})], priceRules: [RULE] }),
-      part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })] }),
-    ]).data;
-    const merged = mergeOntoBase(
-      { data: stored, adapters: ["mfm-yaml", "bsdata-json"], fetchedAt: FETCHED_AT },
-      [part("mfm-yaml", { datasheets: [datasheet({})], priceRules: [{ ...RULE, tiers: [{ models: 5, points: 75 }] }] })],
-    );
-    expect(merged.data.priceRules[0]!.tiers).toEqual([{ models: 5, points: 75 }]);
-    expect(merged.data.datasheets[0]!.models).toEqual([MODEL]);
-  });
+  const stored = mergeSources(Object.values(original())).data;
 
-  it("keeps the entities no fresh part mentions", () => {
-    const stored = base({ stratagems: [stratagem({ effect: "Everything explodes." })] });
-    const merged = mergeOntoBase({ data: stored, adapters: ["bsdata-json"], fetchedAt: FETCHED_AT }, [
-      part("wahapedia-csv", { datasheets: [datasheet({ models: [MODEL] })] }),
-    ]);
-    expect(merged.data.stratagems).toHaveLength(1);
-    expect(() => SnapshotData.parse(merged.data)).not.toThrow();
-  });
+  /** Fetch one source again with different values, and merge it with the other two as they were. */
+  const refresh = (adapter: string, body: Omit<MergePart, "sourceRef">) => {
+    const parts = original();
+    parts[adapter] = part(adapter, body);
+    return mergeSources(Object.values(parts));
+  };
 
-  it("does not report what only the base carries as unmatched", () => {
-    const stored = mergeSources([
-      part("mfm-yaml", { datasheets: [datasheet({})], priceRules: [RULE] }),
-      part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], detachments: [detachment()] }),
-    ]).data;
-    const merged = mergeOntoBase({ data: stored, adapters: ["mfm-yaml", "bsdata-json"], fetchedAt: FETCHED_AT }, [
-      part("mfm-yaml", { datasheets: [datasheet({})], priceRules: [RULE] }),
-    ]);
-    expect(merged.data.detachments).toHaveLength(1);
-    expect(merged.unmatched).toEqual([]);
-    expect(merged.warnings.some((w) => w.includes("unmatched"))).toBe(false);
-  });
-});
-
-describe("mergeOntoBase: a base built from all three sources", () => {
-  const ADAPTERS = ["mfm-yaml", "bsdata-json", "wahapedia-csv"];
-  const stored = mergeSources([
-    part("mfm-yaml", { datasheets: [datasheet({})], priceRules: [RULE], stratagems: [stratagem({ cpCost: 1 })] }),
-    part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], stratagems: [stratagem({ cpCost: 2, effect: "BSData's wording." })], wargearPrices: [wargear(5)] }),
-    part("wahapedia-csv", { datasheets: [datasheet({ models: [MODEL] })], stratagems: [stratagem({ effect: "Everything explodes." })] }),
-  ]).data;
-  const refresh = (adapter: string, body: Omit<MergePart, "sourceRef">) => mergeOntoBase({ data: stored, adapters: ADAPTERS, fetchedAt: FETCHED_AT }, [part(adapter, body)]);
-
-  it("took each field from its authority", () => {
+  it("took each field from its authority to begin with", () => {
     expect(stored.stratagems[0]).toMatchObject({ cpCost: 1, effect: "Everything explodes." });
     expect(stored.priceRules[0]!.tiers).toEqual([{ models: 5, points: 90 }]);
     expect(stored.wargearPrices[0]!.points).toBe(5);
+    expect(stored.datasheets[0]!.wargearOptions).toEqual(["A model may take a plasma gun."]);
   });
 
-  it("moves the points when MFM is refreshed and keeps Wahapedia's text", () => {
+  it("moves MFM's points and leaves Wahapedia's text and BSData's structure alone", () => {
     const merged = refresh("mfm-yaml", { datasheets: [datasheet({})], priceRules: [{ ...RULE, tiers: [{ models: 5, points: 75 }] }], stratagems: [stratagem({ cpCost: 4, effect: "MFM's terse wording." })] });
     expect(merged.data.priceRules[0]!.tiers).toEqual([{ models: 5, points: 75 }]);
     expect(merged.data.stratagems[0]!.cpCost).toBe(4);
     expect(merged.data.stratagems[0]!.effect).toBe("Everything explodes.");
-    expect(merged.data.datasheets[0]!.models).toEqual([MODEL]);
+    expect(merged.data.datasheets[0]!.wargearOptions).toEqual(["A model may take a plasma gun."]);
+    expect(merged.data.wargearPrices[0]!.points).toBe(5);
   });
 
-  it("moves the text when Wahapedia is refreshed and keeps MFM's points", () => {
+  it("moves Wahapedia's text and leaves MFM's points and BSData's structure alone", () => {
     const merged = refresh("wahapedia-csv", { datasheets: [datasheet({ models: [MODEL] })], stratagems: [stratagem({ cpCost: 9, effect: "It fizzles." })] });
     expect(merged.data.stratagems[0]!.effect).toBe("It fizzles.");
     expect(merged.data.stratagems[0]!.cpCost).toBe(1);
     expect(merged.data.priceRules[0]!.tiers).toEqual([{ models: 5, points: 90 }]);
+    expect(merged.data.datasheets[0]!.wargearOptions).toEqual(["A model may take a plasma gun."]);
     expect(merged.data.wargearPrices[0]!.points).toBe(5);
   });
 
-  it("keeps MFM's points and Wahapedia's text when BSData is refreshed", () => {
-    // Both outrank BSData for the fields they own, and the base stands for both, so a BSData refresh
-    // must not move either. Getting this wrong is worse than a refresh that changes nothing: it
-    // replaces the points and the rules text with BSData's copies of them.
-    const merged = refresh("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], stratagems: [stratagem({ cpCost: 3, effect: "BSData's new wording." })], wargearPrices: [wargear(15)] });
-    expect(merged.data.stratagems[0]!.effect).toBe("Everything explodes.");
+  it("moves BSData's own fields and leaves MFM's points and Wahapedia's text alone", () => {
+    // The one the old merge could not do. BSData owns wargear options and wargear prices here, so
+    // both have to follow the fresh copy while the points and the rules text stay where they were.
+    const merged = refresh("bsdata-json", {
+      datasheets: [datasheet({ models: [MODEL], wargearOptions: ["A model may take a melta gun."] })],
+      stratagems: [stratagem({ cpCost: 3, effect: "BSData's new wording." })],
+      wargearPrices: [wargear(15)],
+    });
+    expect(merged.data.datasheets[0]!.wargearOptions).toEqual(["A model may take a melta gun."]);
+    expect(merged.data.wargearPrices[0]!.points).toBe(15);
     expect(merged.data.priceRules[0]!.tiers).toEqual([{ models: 5, points: 90 }]);
+    expect(merged.data.stratagems[0]!.effect).toBe("Everything explodes.");
+    expect(merged.data.stratagems[0]!.cpCost).toBe(1);
   });
 
-  it("ranks a base holding nothing but the refreshed source last", () => {
-    const only = mergeSources([part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], stratagems: [stratagem({ cpCost: 2, effect: "Everything explodes." })], wargearPrices: [wargear(5)] })]).data;
-    const merged = mergeOntoBase({ data: only, adapters: ["bsdata-json"], fetchedAt: FETCHED_AT }, [
-      part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], stratagems: [stratagem({ cpCost: 3, effect: "It fizzles." })], wargearPrices: [wargear(15)] }),
-    ]);
+  it("takes the fresh copy of everything when the snapshot had one source", () => {
+    const merged = mergeSources([part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], stratagems: [stratagem({ cpCost: 3, effect: "It fizzles." })], wargearPrices: [wargear(15)] })]);
     expect(merged.data.stratagems[0]).toMatchObject({ cpCost: 3, effect: "It fizzles." });
     expect(merged.data.wargearPrices[0]!.points).toBe(15);
+  });
+
+  it("keeps an entity only one source carries", () => {
+    const parts = original();
+    parts["bsdata-json"] = part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], detachments: [detachment()] });
+    const merged = mergeSources(Object.values(parts));
+    expect(merged.data.detachments).toHaveLength(1);
+    expect(() => SnapshotData.parse(merged.data)).not.toThrow();
   });
 });
 
@@ -252,11 +227,10 @@ describe("mergeSources: the merged data copies its inputs", () => {
     expect([...refs(merged.data)].filter((o) => inputs.has(o))).toHaveLength(0);
   });
 
-  it("leaves the stored snapshot alone when the refreshed one is edited", () => {
-    const stored = mergeSources(sources()).data;
-    const merged = mergeOntoBase({ data: stored, adapters: ["wahapedia-csv", "mfm-yaml"], fetchedAt: FETCHED_AT }, [
-      part("mfm-yaml", { datasheets: [datasheet({})], priceRules: [RULE] }),
-    ]).data;
+  it("leaves an earlier merge of the same parts alone when the later one is edited", () => {
+    const parts = sources();
+    const stored = mergeSources(parts).data;
+    const merged = mergeSources(parts).data;
 
     const ds = merged.datasheets[0]!;
     ds.keywords.push("VEHICLE");

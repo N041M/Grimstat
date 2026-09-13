@@ -4,6 +4,7 @@ import type { ThemePreference, useTheme } from "../../theme";
 import { useApp } from "../../state/AppContext";
 import { Icon, Sheet, menuKeys, useDismiss } from "../ui";
 import { t, type I18nKey } from "../../i18n";
+import { MOD } from "../../lib/keys";
 
 export interface RailEntry {
   route: Route;
@@ -94,7 +95,7 @@ export function IconRail({ route, theme, offline, stacked }: { route: Route; the
   const pending = solveState === "pending";
   return (
     <div className={stacked ? "rail rail-stacked" : "rail"}>
-      <button type="button" className="rail-mark" onClick={() => openPalette()} title={t("palette.openHint")} aria-label={t("palette.open")} aria-haspopup="dialog">
+      <button type="button" className="rail-mark" onClick={() => openPalette()} title={t("palette.openHint", { mod: MOD })} aria-label={t("palette.open")} aria-haspopup="dialog">
         <span className="rail-mark-diamond" aria-hidden="true" />
         <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
       </button>

@@ -2,14 +2,22 @@
 import * as Comlink from "comlink";
 import type { Snapshot } from "@grimstat/schema";
 import { SOURCES, fetchSource, type AdapterOutput, type FetchLike, type ParseOptions } from "@grimstat/adapters";
-import { buildSnapshot, mergeOntoBase, mergeSources, pruneFactionsWithoutDatasheets } from "@grimstat/snapshot";
-import { MIRRORED_SOURCE, catalogueFilter, type BrowserSourceId, type ImportEvent, type ImportRequest, type ImportSummary, type SourceCounts } from "../lib/importProgress";
+import { buildSnapshot, mergeSources, pruneFactionsWithoutDatasheets } from "@grimstat/snapshot";
+import { putSourceFiles, readSourceFiles, type SourceFilesRecord } from "../db";
+import { BROWSER_SOURCES, MIRRORED_SOURCE, catalogueFilter, sourcesToFetch, type BrowserSourceId, type ImportEvent, type ImportRequest, type ImportSummary, type SourceCounts } from "../lib/importProgress";
 
 /**
  * Browser-side counterpart of `apps/cli/src/commands/import.ts`: fetch every selected source straight from
  * GitHub (CORS-enabled hosts only), parse per source, merge, build a checksummed Snapshot. Runs in a
  * Web Worker so the multi-megabyte parse/merge never blocks the UI; progress goes back through a
  * Comlink-proxied callback. Overrides are not applied here — the app applies them when it reads a snapshot.
+ *
+ * Updating one source rebuilds the snapshot from every source it had. Laying the fresh part over the
+ * stored snapshot cannot work, because a snapshot records which sources built it but not which of
+ * them supplied each field, so the stale copy of the refreshed source is indistinguishable from the
+ * fields another source still owns. Merging all the sources together is what a first import does,
+ * and it gets every field from the source with authority over it. The files each source arrived as
+ * are kept on this machine so the other two do not have to be downloaded again.
  */
 
 export interface ImportResult {
@@ -37,6 +45,16 @@ function abortError(): Error {
   return e;
 }
 
+/**
+ * A source the run had to download because the snapshot is built from it did not answer. The run
+ * stops its other downloads, which would otherwise report the stop as the reason it ended.
+ */
+function missingSourceError(): Error {
+  const e = new Error("This snapshot is built from a source that could not be fetched, so nothing was changed.");
+  e.name = "MissingSourceError";
+  return e;
+}
+
 /** Zod errors carry hundreds of issues; keep the first few readable lines. */
 function tidy(err: unknown): Error {
   if (err instanceof Error && err.name === "AbortError") return err;
@@ -48,7 +66,13 @@ function tidy(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
 
-async function fetchAndParse(id: BrowserSourceId, request: ImportRequest, fetchedAt: string, signal: AbortSignal, emit: (e: ImportEvent) => void): Promise<AdapterOutput> {
+/** A source that took part in the merge, and the files it was parsed from when they are newly downloaded. */
+interface Part {
+  out: AdapterOutput;
+  files?: Record<string, string>;
+}
+
+async function fetchAndParse(id: BrowserSourceId, request: ImportRequest, fetchedAt: string, signal: AbortSignal, emit: (e: ImportEvent) => void): Promise<Part> {
   const fetchImpl: FetchLike = (url, init) => fetch(url, { ...(init ?? {}), signal });
   const filter = id === "bsdata-json" ? catalogueFilter(request.catalogueFilter ?? "") : undefined;
   // Wahapedia's own server sends no CORS headers, so the browser reads a mirror of its export.
@@ -71,10 +95,55 @@ async function fetchAndParse(id: BrowserSourceId, request: ImportRequest, fetche
   if (fetched.ref) parseOpts.ref = fetched.ref;
   const out = SOURCES[id].adapter.parse(fetched.files, parseOpts);
   emit({ type: "parsed", source: id, warnings: out.warnings.length, sample: out.warnings.slice(0, WARNING_SAMPLE), counts: countsOf(out), ...(out.sourceRef.ref ? { ref: out.sourceRef.ref } : {}) });
-  return out;
+  return { out, files: fetched.files };
 }
 
-const api: ImportWorkerApi = {
+/**
+ * The files each source of the snapshot being refreshed was last downloaded as, for the sources this
+ * run is not fetching. A source with nothing kept here is left out, and the caller downloads it.
+ */
+async function heldFiles(request: ImportRequest): Promise<Map<BrowserSourceId, SourceFilesRecord>> {
+  const held = new Map<BrowserSourceId, SourceFilesRecord>();
+  const asked = new Set(request.sources);
+  for (const stored of request.base ?? []) {
+    const id = stored.adapter as BrowserSourceId;
+    if (asked.has(id) || held.has(id) || !BROWSER_SOURCES.includes(id)) continue;
+    try {
+      const rec = await readSourceFiles(request.gameSystemId, id);
+      if (rec) held.set(id, rec);
+    } catch {
+      // The store cannot be read, so the source is downloaded.
+    }
+  }
+  return held;
+}
+
+/** Re-read a source from the files already here, stamped with the download they came from. */
+function parseHeld(rec: SourceFilesRecord, gameSystemId: string): AdapterOutput {
+  const opts: ParseOptions = { gameSystemId, fetchedAt: rec.fetchedAt, url: rec.url };
+  if (rec.ref) opts.ref = rec.ref;
+  return SOURCES[rec.adapter as BrowserSourceId].adapter.parse(rec.files, opts);
+}
+
+/**
+ * Keep what a run downloaded, so the next fetch of one source can read the others back.
+ *
+ * By the time this is called the run has a finished snapshot to hand back, and the files only save
+ * work on the next fetch. Nothing here is allowed to fail the run, so a browser that will not take
+ * them costs the next fetch a download and nothing else.
+ */
+async function keepFiles(gameSystemId: string, parts: Part[]): Promise<void> {
+  for (const p of parts) {
+    if (!p.files) continue;
+    try {
+      await putSourceFiles({ gameSystemId, adapter: p.out.sourceRef.adapter, files: p.files, url: p.out.sourceRef.url ?? "", fetchedAt: p.out.sourceRef.fetchedAt, ...(p.out.sourceRef.ref ? { ref: p.out.sourceRef.ref } : {}) });
+    } catch {
+      // Nothing is kept for this source. The next fetch of it downloads what it needs.
+    }
+  }
+}
+
+export const api: ImportWorkerApi = {
   async run(request, onEvent) {
     if (controller) throw new Error("An import is already running");
     const t0 = performance.now();
@@ -85,39 +154,63 @@ const api: ImportWorkerApi = {
     };
     try {
       const fetchedAt = new Date().toISOString();
+      // Sources the run does not have to download are read back from the files already here. One
+      // whose files will not parse is added to the download list, so a damaged record costs a
+      // download and nothing else.
+      const held = await heldFiles(request);
+      const download = new Set(sourcesToFetch(request, (id) => held.get(id)));
+      const reused: Part[] = [];
+      for (const [id, rec] of held) {
+        if (download.has(id)) continue;
+        try {
+          reused.push({ out: parseHeld(rec, request.gameSystemId) });
+        } catch {
+          download.add(id);
+        }
+      }
+      const downloading = BROWSER_SOURCES.filter((id) => download.has(id));
+      emit({ type: "planned", sources: downloading });
+      if (ctl.signal.aborted) throw abortError();
       // A mirror is something the user set up, and it can be missing or stale in ways the other two
-      // sources are not. Wahapedia failing costs the snapshot its rules text; failing the whole run
-      // over it would cost the snapshot entirely, so the run goes on without it and says so.
+      // sources are not. Wahapedia failing costs a first import its rules text. Failing the whole
+      // run over it would cost that import the snapshot entirely, so the run goes on without it and
+      // says which source did not answer.
+      //
+      // A source the run is downloading only because the snapshot needs it is different. Going on
+      // without it writes a snapshot missing everything that source carried, over a snapshot that
+      // had it. The run stops instead and the stored snapshot is left alone.
+      const asked = new Set(request.sources);
       const settled = await Promise.all(
-        request.sources.map(async (id) => {
+        downloading.map(async (id) => {
           try {
             return await fetchAndParse(id, request, fetchedAt, ctl.signal, emit);
           } catch (e) {
-            if (id === MIRRORED_SOURCE && !ctl.signal.aborted) return undefined;
+            if (id === MIRRORED_SOURCE && asked.has(id) && !ctl.signal.aborted) return undefined;
+            const reason = !asked.has(id) && !ctl.signal.aborted ? missingSourceError() : e;
             ctl.abort(); // stop the other source's downloads too
-            throw e;
+            throw reason;
           }
         }),
       );
       if (ctl.signal.aborted) throw abortError();
-      const parts = settled.filter((p): p is AdapterOutput => p !== undefined);
+      const fetchedParts = settled.filter((p): p is Part => p !== undefined);
+      // Canonical order, so the snapshot's source list reads the same whichever source was fetched.
+      const parts = [...fetchedParts, ...reused].sort((a, b) => BROWSER_SOURCES.indexOf(a.out.sourceRef.adapter as BrowserSourceId) - BROWSER_SOURCES.indexOf(b.out.sourceRef.adapter as BrowserSourceId));
       if (!parts.length) throw new Error("Every source failed, so there is nothing to merge.");
       emit({ type: "merging" });
-      // Refreshing one source keeps the rest of the snapshot it was fetched into, so the fresh part
-      // is merged over that data rather than standing alone.
-      const base = request.base;
-      const merge = base ? mergeOntoBase({ data: base.data, adapters: base.sources.map((s) => s.adapter), fetchedAt: base.fetchedAt }, parts) : mergeSources(parts);
-      // a catalogue filter limits the structure source; drop the factions the points source added on its own
-      if (!base && (request.catalogueFilter ?? "").trim()) {
+      const merge = mergeSources(parts.map((p) => p.out));
+      // A catalogue filter limits which catalogues are downloaded. The factions the points source
+      // added on its own have no datasheets left, so they go.
+      if ((request.catalogueFilter ?? "").trim()) {
         const pruned = pruneFactionsWithoutDatasheets(merge.data);
         merge.data = pruned.data;
         if (pruned.removedFactions.length) merge.warnings.push(`Pruned ${pruned.removedFactions.length} factions without datasheets (catalogue filter).`);
       }
       emit({ type: "merged", conflicts: merge.conflicts.length, warnings: merge.warnings.length, unmatched: merge.unmatched.length });
       emit({ type: "building" });
-      const refreshed = new Set(parts.map((p) => p.sourceRef.adapter));
-      const sources = base ? [...base.sources.filter((s) => !refreshed.has(s.adapter)), ...parts.map((p) => p.sourceRef)] : parts.map((p) => p.sourceRef);
+      const sources = parts.map((p) => p.out.sourceRef);
       const snapshot = await buildSnapshot({ data: merge.data, sources, conflicts: merge.conflicts, label: request.label });
+      await keepFiles(request.gameSystemId, fetchedParts);
       const summary: ImportSummary = {
         snapshotId: snapshot.id,
         label: snapshot.label,
@@ -129,6 +222,7 @@ const api: ImportWorkerApi = {
       };
       return { snapshot, summary };
     } catch (e) {
+      if (e instanceof Error && e.name === "MissingSourceError") throw e;
       throw ctl.signal.aborted ? abortError() : tidy(e);
     } finally {
       if (controller === ctl) controller = undefined;

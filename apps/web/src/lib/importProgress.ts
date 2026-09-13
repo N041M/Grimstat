@@ -1,5 +1,5 @@
 import type { SourceId } from "@grimstat/adapters";
-import type { SnapshotData, SourceRef } from "@grimstat/schema";
+import type { SourceRef } from "@grimstat/schema";
 
 /**
  * Pure model behind the Data page's "Fetch from community sources" panel: which sources a browser can
@@ -73,16 +73,48 @@ export interface ImportRequest {
   wahapediaMirror?: string;
   label: string;
   /**
-   * The snapshot a single-source refresh builds on: its data stands in for every source that is not
-   * being fetched, and its source list is carried over minus the ones this run replaces.
+   * The sources of the snapshot a single-source refresh updates.
+   *
+   * The run rebuilds the snapshot from all of them, so every field comes from the source that owns
+   * it. The ones not being fetched are read back from the files kept on this machine, and are
+   * downloaded again when those files are missing or came from a different download.
    */
-  base?: ImportBase;
+  base?: SourceRef[];
 }
 
-export interface ImportBase {
-  data: SnapshotData;
-  sources: SourceRef[];
+/** Where a source's files came from and when, which is what a snapshot's source list records. */
+export interface HeldFetch {
+  url: string;
+  ref?: string;
   fetchedAt: string;
+}
+
+/**
+ * Whether files held on this machine are the ones a snapshot was built from. They are when they
+ * agree on when the download happened and where it came from.
+ */
+export function isSameFetch(stored: SourceRef, held: HeldFetch): boolean {
+  return held.fetchedAt === stored.fetchedAt && held.url === (stored.url ?? "") && (held.ref ?? "") === (stored.ref ?? "");
+}
+
+/**
+ * Which sources a run has to download: the ones asked for, plus any other source of the snapshot
+ * being refreshed whose files are not here to read back.
+ *
+ * Every source of the snapshot takes part in the merge, because a field only lands with the right
+ * authority when every source that could supply it is present. That means downloading a source whose
+ * files are missing, and one whose files came from a different download than the one that built the
+ * snapshot.
+ */
+export function sourcesToFetch(request: ImportRequest, held: (id: BrowserSourceId) => HeldFetch | undefined): BrowserSourceId[] {
+  const wanted = new Set<BrowserSourceId>(request.sources);
+  for (const stored of request.base ?? []) {
+    const id = stored.adapter as BrowserSourceId;
+    if (!BROWSER_SOURCES.includes(id) || wanted.has(id)) continue;
+    const have = held(id);
+    if (!have || !isSameFetch(stored, have)) wanted.add(id);
+  }
+  return BROWSER_SOURCES.filter((id) => wanted.has(id));
 }
 
 /** Comma-separated, trimmed, lower-cased, empty terms dropped. */
@@ -129,14 +161,17 @@ export function importRequestFor(sel: ImportSelection, now = new Date(), mirror?
 }
 
 /**
- * One source's own Fetch button: that source alone, merged over the snapshot in hand. The label says
- * which source moved, so the snapshot list reads as a history of what was updated when.
+ * One source's own Fetch button: download that source and rebuild the snapshot in hand around it.
+ * The label says which source moved, so the snapshot list reads as a history of what was updated
+ * when.
  */
-export function refreshRequestFor(id: BrowserSourceId, sel: ImportSelection, base: ImportBase, now = new Date(), mirror?: string): ImportRequest {
-  const filter = id === "bsdata-json" && catalogueTerms(sel.factionFilter).length ? sel.factionFilter.trim() : undefined;
+export function refreshRequestFor(id: BrowserSourceId, sel: ImportSelection, base: SourceRef[], now = new Date(), mirror?: string): ImportRequest {
+  const filter = catalogueTerms(sel.factionFilter).length ? sel.factionFilter.trim() : undefined;
   const req: ImportRequest = { gameSystemId: BROWSER_GAME_SYSTEM_ID, sources: [id], label: `${SOURCE_LABEL[id]} ${now.toISOString().slice(0, 10)}`, base };
   if (filter) req.catalogueFilter = filter;
-  if (id === MIRRORED_SOURCE && mirror) req.wahapediaMirror = wahapediaMirrorBase(mirror, BROWSER_GAME_SYSTEM_ID);
+  // Any source can pull Wahapedia into the run, because a source whose files are not here is
+  // downloaded alongside the one that was asked for.
+  if (hasMirror(mirror)) req.wahapediaMirror = wahapediaMirrorBase(mirror!, BROWSER_GAME_SYSTEM_ID);
   return req;
 }
 
@@ -156,6 +191,8 @@ export interface SourceCounts {
 
 /** Events the worker posts while it runs (via a Comlink-proxied callback). */
 export type ImportEvent =
+  /** The sources this run downloads, which is settled once the worker has seen what is already here. */
+  | { type: "planned"; sources: BrowserSourceId[] }
   | { type: "downloading"; source: BrowserSourceId; index: number; total: number }
   | { type: "parsing"; source: BrowserSourceId; files: number; ref?: string }
   | { type: "parsed"; source: BrowserSourceId; warnings: number; sample: string[]; counts: SourceCounts; ref?: string }
@@ -246,6 +283,10 @@ export function reduceProgress(p: ImportProgress, a: ImportAction): ImportProgre
   }
   if (!isRunning(p)) return p;
   switch (a.type) {
+    case "planned":
+      // A refresh downloads the sources whose files are not here as well as the one asked for. The
+      // cards are settled here because that is the first point at which the list is known.
+      return { ...p, sources: a.sources.map((id) => p.sources.find((s) => s.id === id) ?? freshSource(id)) };
     case "downloading":
       return patchSource(p, a.source, (s) => ({ ...s, stage: "downloading", index: a.index, total: a.total }));
     case "parsing":
