@@ -89,6 +89,8 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
  * `stacked` is the tablet rail. It stands in the page at 78px rather than hanging over it, and
  * every item shows its name under its letter at all times. A tablet has no pointer to hover with,
  * so the labels have to be there without one.
+ *
+ * Each item carries `data-route`, which is how the tour finds the one to point at (see Tour.tsx).
  */
 export function IconRail({ route, theme, offline, stacked }: { route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean; stacked?: boolean }) {
   const { solveState, openPalette } = useApp();
@@ -101,7 +103,7 @@ export function IconRail({ route, theme, offline, stacked }: { route: Route; the
       </button>
       <nav className="rail-nav rail-nav-fill" aria-label={t("nav.label")}>
         {WORK_ENTRIES.map((e) => (
-          <a key={e.route} className="rail-item" href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
+          <a key={e.route} className="rail-item" data-route={e.route} href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
             <span className="rail-glyph" aria-hidden="true">
               {e.glyph}
             </span>
@@ -111,7 +113,7 @@ export function IconRail({ route, theme, offline, stacked }: { route: Route; the
           </a>
         ))}
         {FOOT_ENTRIES.map((e) => (
-          <a key={e.route} className="rail-item rail-item-foot" href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
+          <a key={e.route} className="rail-item rail-item-foot" data-route={e.route} href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
             <span className="rail-glyph" aria-hidden="true">
               {e.glyph}
             </span>

@@ -57,6 +57,10 @@ export interface AppContextValue {
   paletteOpen: boolean;
   openPalette(): void;
   closePalette(): void;
+  /** The tour of the app. It opens itself on a first visit, and from the About screen or the palette after that. */
+  tourOpen: boolean;
+  openTour(): void;
+  closeTour(): void;
 }
 
 export const NOTICE_AUTO_DISMISS_MS = 4000;
@@ -80,10 +84,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const noticeTimers = useRef(new Map<number, number>());
   const [solveState, setSolveStateRaw] = useState<SolveState>("current");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
 
   const setSolveState = useCallback((s: SolveState) => setSolveStateRaw((prev) => (prev === s ? prev : s)), []);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
+  const openTour = useCallback(() => {
+    // The palette is where one of the ways into the tour lives, and it would otherwise stay open
+    // over the first card.
+    setPaletteOpen(false);
+    setTourOpen(true);
+  }, []);
+  const closeTour = useCallback(() => setTourOpen(false), []);
 
   const dismissNotice = useCallback((id?: number) => {
     const timers = noticeTimers.current;
@@ -205,8 +217,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AppContextValue>(
-    () => ({ ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notices, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette }),
-    [ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notices, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette],
+    () => ({ ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notices, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette, tourOpen, openTour, closeTour }),
+    [ready, snapshot, rawSnapshot, snapshotList, activeSnapshotId, overrides, overrideStatus, withOverrides, refreshOverrides, scenario, scenarioLoadKey, notices, updateScenario, replaceScenario, setActiveSnapshot, refreshSnapshots, notify, dismissNotice, solveState, setSolveState, paletteOpen, openPalette, closePalette, tourOpen, openTour, closeTour],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

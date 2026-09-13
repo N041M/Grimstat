@@ -23,7 +23,9 @@ function UnitCard({ unit, side, showWeapons, onEdit }: { unit: ScenarioUnit; sid
   const models = modelCount(unit);
   const wounds = unit.models.reduce((s, m) => s + m.count * m.W, 0);
   return (
-    <div className="calc-side">
+    /* The attacker's card is what the tour points at on this screen: the two units are what every
+       number on it is about. See TOUR_STEPS in lib/tour.ts. */
+    <div className="calc-side" data-tour={side === "attacker" ? "calc-unit" : undefined}>
       <div className="calc-side-head">
         <span className={`calc-side-role ${side}`}>{t(side === "attacker" ? "side.attacker" : "side.defender")}</span>
         <span className="calc-side-pts">{unit.points === undefined ? "" : t("ctxcol.pts", { n: fmtInt(unit.points) })}</span>

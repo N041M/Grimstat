@@ -22,7 +22,7 @@ import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sheet, useConfirm, useEdgeFade } from "./components/ui";
-import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, useBarHostRef } from "./components/shell";
+import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, Tour, useBarHostRef } from "./components/shell";
 import { mayReplaceScenario, setReplaceScenarioGuard } from "./components/shell/ContextColumn";
 import { useOnline } from "./lib/sw";
 import { t } from "./i18n";
@@ -211,6 +211,7 @@ export function App() {
         </div>
       ) : null}
       <CommandPalette theme={theme} />
+      <Tour />
       {confirmDialog}
     </div>
   );

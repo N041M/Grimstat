@@ -941,6 +941,177 @@ code,
   color: var(--faint);
 }
 
+/* ---- the tour of the app ----
+   Three layers over the shell. `.tour-block` swallows clicks, because the steps drive the address
+   themselves and a click that changed screen underneath would leave the card describing something
+   else. `.tour-spot` dims the page with its own outward shadow, which leaves the rail item inside
+   the hole in its own colours with nothing drawn over it; that shadow is painted but never
+   hit-tested, which is why the blocking layer is separate. The card is placed by `lib/tour.ts` and
+   carries the arrow's offset in `--tour-arrow`. */
+body.tour-open {
+  overflow: hidden;
+}
+.tour-block {
+  position: fixed;
+  inset: 0;
+  z-index: 48;
+}
+.tour-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 48;
+  pointer-events: none;
+  background: rgba(10, 10, 12, 0.55);
+}
+/* The hole travels: it opens on the rail item that names the screen and then slides to the control
+   the step is about, which is the whole point of walking somebody through a screen. */
+.tour-spot {
+  position: fixed;
+  z-index: 48;
+  pointer-events: none;
+  border-radius: var(--radius);
+  outline: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgba(10, 10, 12, 0.55);
+  transition:
+    left 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+    top 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+    width 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+    height 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+/* A ring leaving the control, twice, so the eye lands on it after the hole has stopped moving. The
+   ring is drawn outside the hole and must not darken it, so it carries no background. */
+.tour-spot::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid var(--accent);
+}
+.tour-spot[data-phase="focus"]::after {
+  animation: tour-ring 1.5s ease-out 0.36s 2;
+}
+@keyframes tour-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+.tour-card {
+  position: fixed;
+  z-index: 49;
+  transition:
+    left 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+    top 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 14px 15px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-overlay);
+  box-shadow: 0 24px 64px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: gs-fade 0.12s ease-out;
+}
+.tour-card:focus {
+  outline: none;
+}
+/* A square turned on its corner: two of its borders are dropped so the two that face the rail are
+   the ones left, and the card's own background hides where it meets the edge. */
+.tour-card::before {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  top: var(--tour-arrow, 50%);
+  margin-top: -5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  transform: rotate(45deg);
+}
+.tour-card[data-side="right"]::before {
+  left: -6px;
+  border-top: 0;
+  border-right: 0;
+}
+.tour-card[data-side="left"]::before {
+  right: -6px;
+  border-bottom: 0;
+  border-left: 0;
+}
+.tour-card[data-side="below"]::before {
+  top: -6px;
+  left: var(--tour-arrow, 50%);
+  margin: 0 0 0 -5px;
+  border-bottom: 0;
+  border-right: 0;
+}
+.tour-card[data-side="above"]::before {
+  top: auto;
+  bottom: -6px;
+  left: var(--tour-arrow, 50%);
+  margin: 0 0 0 -5px;
+  border-top: 0;
+  border-left: 0;
+}
+.tour-card[data-side="centre"]::before {
+  display: none;
+}
+.tour-text {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.tour-count {
+  margin: 0;
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--faint);
+}
+/* The card names a screen, and the page header beside it writes that name in sentence case. An h2's
+   shouted default would have the two disagree. */
+.tour-card h2 {
+  margin: 0;
+  text-transform: none;
+}
+.tour-body {
+  margin: 0;
+  font: 400 13px/1.55 var(--font);
+  color: var(--ink-2);
+}
+.tour-meta {
+  margin: 0;
+  font: 400 11px/1.4 var(--mono);
+  color: var(--faint);
+}
+.tour-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tour-foot-gap {
+  flex: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-card,
+  .tour-spot,
+  .tour-spot::after {
+    animation: none;
+    transition: none;
+  }
+}
+
 /* ---- the top bar, on phones and tablets ----
    The context column is a sheet at these widths, and this bar is what opens it. On a phone it also
    carries the ☰ that opens the navigation drawer; on a tablet the rail is already on screen, so

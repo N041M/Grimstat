@@ -86,7 +86,7 @@ export function GameSetup({ games, onOpen, notify }: Props) {
                 ))}
               </select>
             </Field>
-            <button type="submit" className="primary setup-start">
+            <button type="submit" className="primary setup-start" data-tour="play-start">
               {t("play.setup.begin")}
             </button>
           </form>

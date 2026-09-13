@@ -331,7 +331,7 @@ export function DataPage() {
               {t("data.importSnapshot")}
             </button>
             <input ref={snapInput} type="file" accept="application/json,.json" className="sr-only" aria-label={t("data.importSnapshot")} onChange={(e) => void importSnapshot(e)} />
-            <button type="button" className="primary" disabled={busy || fetchingAll} title={t("data.fetchAll.hint")} onClick={() => void fetchAll()}>
+            <button type="button" className="primary" data-tour="data-fetch" disabled={busy || fetchingAll} title={t("data.fetchAll.hint")} onClick={() => void fetchAll()}>
               {fetchingAll ? t("data.fetchAll.running") : t("data.fetchAll")}
             </button>
           </>

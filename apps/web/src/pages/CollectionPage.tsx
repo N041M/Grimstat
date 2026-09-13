@@ -188,7 +188,7 @@ export function CollectionPage() {
         subtitle={t("page.sub.collection", { sheets: fmtInt(totals.datasheets), models: fmtInt(totals.models), painted: pct(totals.paintedFraction, 0) })}
         actions={
           <>
-            <button type="button" className="primary" disabled={!snapshot} onClick={() => setDialog("add")}>
+            <button type="button" className="primary" data-tour="collection-add" disabled={!snapshot} onClick={() => setDialog("add")}>
               <Icon name="plus" />
               {t("collection.add")}
             </button>

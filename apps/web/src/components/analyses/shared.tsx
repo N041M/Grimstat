@@ -55,7 +55,7 @@ export function RunActions({ canRun, running, onRun, onCancel, runLabel, childre
           {t("common.cancel")}
         </button>
       ) : null}
-      <button type="button" className="primary" disabled={!canRun || running} onClick={onRun}>
+      <button type="button" className="primary" data-tour="analyses-run" disabled={!canRun || running} onClick={onRun}>
         {runLabel ?? t("analyses.run")}
       </button>
     </>

@@ -125,7 +125,7 @@ export function ScenariosPage() {
                 {`${MOD}K`}
               </button>
             </span>
-            <button type="button" className="primary" onClick={() => void create()}>
+            <button type="button" className="primary" data-tour="scenarios-new" onClick={() => void create()}>
               {t("scenarios.new")}
             </button>
           </>

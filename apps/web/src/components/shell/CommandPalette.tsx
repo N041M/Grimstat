@@ -32,7 +32,7 @@ function storedExpectedDamage(s: Scenario): number | undefined {
 }
 
 export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }) {
-  const { paletteOpen, openPalette, closePalette, snapshot, replaceScenario, updateScenario, notify, refreshSnapshots, setActiveSnapshot } = useApp();
+  const { paletteOpen, openPalette, closePalette, snapshot, replaceScenario, updateScenario, notify, refreshSnapshots, setActiveSnapshot, openTour } = useApp();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -236,6 +236,13 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
       },
     });
     out.push({
+      id: "act:tour",
+      group: "actions",
+      glyph: "?",
+      label: t("tour.replay"),
+      run: () => openTour(),
+    });
+    out.push({
       id: "act:theme",
       group: "actions",
       glyph: theme.resolved === "dark" ? "☀" : "☾",
@@ -246,7 +253,7 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
       },
     });
     return out;
-  }, [scenarios, rosters, snapshot, theme, close, replaceScenario, updateScenario, notify, refreshSnapshots, setActiveSnapshot]);
+  }, [scenarios, rosters, snapshot, theme, close, replaceScenario, updateScenario, notify, refreshSnapshots, setActiveSnapshot, openTour]);
 
   const labels = useMemo<Record<PaletteGroupId, string>>(() => ({ goto: t("palette.group.goto"), scenarios: t("palette.group.scenarios"), armies: t("palette.group.armies"), units: t("palette.group.units"), actions: t("palette.group.actions") }), []);
   const groups = useMemo(() => buildGroups(commands, query, labels, { scenarios: SCENARIO_CAP, armies: ARMY_CAP, units: UNIT_CAP }), [commands, query, labels]);

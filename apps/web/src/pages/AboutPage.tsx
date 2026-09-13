@@ -6,6 +6,7 @@ import { gameSystem, manifest } from "@grimstat/game-40k-11e";
 import { host } from "../plugin";
 import { hrefFor } from "../router";
 import { PageHeader, REPO_URL } from "../components/shell";
+import { useApp } from "../state/AppContext";
 import { t, type I18nKey } from "../i18n";
 
 /**
@@ -26,6 +27,7 @@ function bundleLabel(): string {
 const APP_VERSION = "0.1.0";
 
 export function AboutPage() {
+  const { openTour } = useApp();
   const plugins = [...host.registries.manifests.values()];
   // `note` is shown under the value as well as in the tooltip, which a touch screen never opens.
   const stats: Array<{ key: I18nKey; value: string; note: string }> = [
@@ -41,6 +43,11 @@ export function AboutPage() {
       <div className="page-body about-col">
         <p className="about-lede prose">{t("about.what1")}</p>
         <p className="about-lede prose">{t("about.what2")}</p>
+        <p className="about-tour">
+          <button type="button" onClick={openTour}>
+            {t("tour.replay")}
+          </button>
+        </p>
 
         <section className="about-card" aria-labelledby="about-policy-h">
           <h2 className="t-eyebrow" id="about-policy-h">

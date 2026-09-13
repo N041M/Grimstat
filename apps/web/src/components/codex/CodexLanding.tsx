@@ -83,7 +83,7 @@ export function CodexLanding({ snapshot, factions, factionId, onFaction, query, 
   return (
     <div className="codex-landing">
       <p className="codex-lede">{t("codex.landing.lede")}</p>
-      <div className="codex-landing-tools">
+      <div className="codex-landing-tools" data-tour="codex-filter">
         <CodexTools factions={factions} factionId={factionId} onFaction={onFaction} query={query} onQuery={onQuery} />
         <span className="t-meta codex-landing-count">{t("codex.landing.count", { n: total })}</span>
       </div>

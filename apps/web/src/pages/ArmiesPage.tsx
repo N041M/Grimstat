@@ -323,7 +323,7 @@ export function ArmiesPage() {
         subtitle={t("page.sub.armies", { n: items?.length ?? 0 })}
         actions={
           <>
-            <button type="button" className="primary" disabled={!snapshot || busy} onClick={() => setDialog("new")}>
+            <button type="button" className="primary" data-tour="armies-new" disabled={!snapshot || busy} onClick={() => setDialog("new")}>
               <Icon name="plus" />
               {t("armies.new")}
             </button>

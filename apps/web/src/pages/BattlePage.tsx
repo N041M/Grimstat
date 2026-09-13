@@ -1007,7 +1007,7 @@ export function BattlePage() {
         <div className="battle-stage">
           {/* Everything the keys do to the table, as buttons over it: a finger has no ⌘ and no arrows,
               and a mouse user should not have to learn a chord to approve a move. */}
-          <div className="battle-toolbar" role="group" aria-label={t("battle.table.actions")} hidden={!webgl} ref={toolbarRef}>
+          <div className="battle-toolbar" data-tour="battle-tools" role="group" aria-label={t("battle.table.actions")} hidden={!webgl} ref={toolbarRef}>
             {/* One cluster per thing the controls act on — the plan, the history, the facing, the
                 selection, the view — with a rule between them. Nine controls in one undivided row
                 read as nine unrelated things; in five clusters the eye finds the one it wants. */}
