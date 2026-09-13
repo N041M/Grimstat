@@ -2395,12 +2395,34 @@ body.sheet-open {
 .sheet.sheet-left .sheet-handle span {
   width: 28px;
 }
+.nav-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  padding-right: 6px;
+}
+.nav-drawer-close {
+  flex: none;
+  margin-top: 2px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-btn);
+  color: var(--ink-2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.nav-drawer-close:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
 .nav-drawer-mark {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 6px 14px 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px 12px 14px;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -7755,7 +7777,8 @@ button.battle-scope-btn:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
+  /* Beside the page's name rather than across the bar from it, within reach of the same thumb. */
+  margin-left: 4px;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;

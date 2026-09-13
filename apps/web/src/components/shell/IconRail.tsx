@@ -123,19 +123,24 @@ export function NavDrawer({ open, onClose, route, theme, offline }: { open: bool
   const pending = solveState === "pending";
   return (
     <Sheet open={open} onClose={onClose} side="left" label={t("nav.label")} className="nav-drawer">
-      <button
-        type="button"
-        className="nav-drawer-mark"
-        onClick={() => {
-          onClose();
-          openPalette();
-        }}
-      >
-        <span className="rail-mark-diamond" aria-hidden="true" />
-        <span className="nav-drawer-brand">{t("nav.name")}</span>
-        <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
-        <span className="nav-drawer-palette">{t("nav.search")}</span>
-      </button>
+      <div className="nav-drawer-head">
+        <button
+          type="button"
+          className="nav-drawer-mark"
+          onClick={() => {
+            onClose();
+            openPalette();
+          }}
+        >
+          <span className="rail-mark-diamond" aria-hidden="true" />
+          <span className="nav-drawer-brand">{t("nav.name")}</span>
+          <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
+          <span className="nav-drawer-palette">{t("nav.search")}</span>
+        </button>
+        <button type="button" className="nav-drawer-close" onClick={onClose} aria-label={t("common.close")}>
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
       <nav className="nav-drawer-list" aria-label={t("nav.label")}>
         {RAIL_ENTRIES.map((e) => (
           <a key={e.route} className="nav-drawer-item" href={hrefFor(e.route)} aria-current={route === e.route ? "page" : undefined} onClick={onClose}>
