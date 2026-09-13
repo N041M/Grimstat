@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 
 /**
  * Shared redesign primitives: the control dock, its select boxes / pill chips / switches, the
@@ -39,6 +39,9 @@ export function DockSection({ title, count, children, className }: { title?: str
   );
 }
 
+/** How long a dock block takes to fold or unfold, matching the sheet's own slide. */
+const FOLD_MS = 180;
+
 /**
  * A dock block the reader can fold away. It starts closed, which suits controls that change how
  * precisely the answer is worked out rather than the situation being modelled, so the dock opens on
@@ -46,13 +49,58 @@ export function DockSection({ title, count, children, className }: { title?: str
  * width and not at another.
  */
 export function DockDisclosure({ title, meta, children, className, open }: { title: string; meta?: ReactNode; children: ReactNode; className?: string; open?: boolean }) {
+  const details = useRef<HTMLDetailsElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const playing = useRef<{ anim: Animation; opening: boolean } | null>(null);
+
+  /**
+   * `<details>` shows and hides its content outright, with no state in between for a transition to
+   * cross, so the fold is played here. Opening sets `open` first and measures what the block wants,
+   * then runs its height up from nothing. Closing runs the same frames backwards and only sets
+   * `open` to false once they finish, which is why the block stays open while it is closing.
+   *
+   * That last part is why a press mid-fold asks the fold which way it is going rather than asking
+   * the element whether it is open: a block half way through closing is still `open`, so reading
+   * the element would have started a second close and a reader pressing twice would have watched it
+   * shut, not re-open. Reversing also starts from the height on screen at that moment, so the block
+   * carries on from where it had reached instead of jumping to one end.
+   *
+   * A reader who has asked for less motion gets the browser's own instant toggle: the handler
+   * returns before it prevents the default, so nothing here runs at all.
+   */
+  const fold = (e: MouseEvent<HTMLElement>) => {
+    const el = details.current;
+    const b = body.current;
+    if (!el || !b) return;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    e.preventDefault();
+    const inFlight = playing.current;
+    const opening = inFlight ? !inFlight.opening : !el.open;
+    // Read where it is before cancelling: cancelling puts the box back to its CSS height at once.
+    const mid = inFlight ? { height: `${b.getBoundingClientRect().height}px`, marginTop: getComputedStyle(b).marginTop, opacity: getComputedStyle(b).opacity } : undefined;
+    inFlight?.anim.cancel();
+    if (opening && !el.open) el.open = true;
+    const shut = { height: "0px", marginTop: "0px", opacity: "0" };
+    const shown = { height: `${b.scrollHeight}px`, marginTop: getComputedStyle(b).marginTop, opacity: "1" };
+    b.style.overflow = "hidden";
+    const anim = b.animate([mid ?? (opening ? shut : shown), opening ? shown : shut], { duration: FOLD_MS, easing: "ease" });
+    playing.current = { anim, opening };
+    anim.onfinish = () => {
+      b.style.overflow = "";
+      if (!opening) el.open = false;
+      playing.current = null;
+    };
+  };
+
   return (
-    <details className={`dock-section dock-disclosure ${className ?? ""}`.trim()} open={open}>
-      <summary className="dock-section-head">
+    <details ref={details} className={`dock-section dock-disclosure ${className ?? ""}`.trim()} open={open}>
+      <summary className="dock-section-head" onClick={fold}>
         <span className="dock-section-title">{title}</span>
         {meta === undefined ? null : <span className="dock-section-count">{meta}</span>}
       </summary>
-      <div className="dock-disclosure-body">{children}</div>
+      <div className="dock-disclosure-body" ref={body}>
+        {children}
+      </div>
     </details>
   );
 }
