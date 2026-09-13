@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, TerrainIndex, bounds, canSee, canStand, circleBase, coherency, coreSegment, distance, inZone, ovalBase, segPolygonDistance, terrain, type Vec2 } from "@grimstat/board";
+import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, TerrainIndex, bounds, canSee, canStand, circleBase, coherency, coreSegment, distance, inBox, inZone, ovalBase, segPolygonDistance, terrain, type TerrainLayout, type Vec2 } from "@grimstat/board";
 import {
   anchorOf,
   applyGroupMove,
@@ -29,14 +29,21 @@ import {
   dropMark,
   findUnit,
   formation,
+  freshDeployment,
   indexOf,
   placeUnit,
+  muster,
+  musterAt,
+  musterUnit,
+  musterVerdict,
   replaceUnit,
   sampleBattle,
+  sampleForce,
   sightBetween,
   tapeDistance,
   translateUnit,
   unitHulls,
+  withForce,
   withdrawUnit,
   moveOf,
   zoneOf,
@@ -44,7 +51,15 @@ import {
   type BattleUnit,
 } from "./battle";
 
-const state = sampleBattle(RUINED_CITY);
+/**
+ * A sample force set down on the board.
+ *
+ * `sampleBattle` leaves both forces on their muster tables, which is where a game starts; almost
+ * everything tested here is about units that are already deployed, so they are deployed first.
+ */
+const deployed = (layout: TerrainLayout): BattleState => freshDeployment(sampleBattle(layout));
+
+const state = deployed(RUINED_CITY);
 const attacker = (i = 0) => state.units.filter((u) => u.side === "attacker")[i]!;
 const defender = (i = 0) => state.units.filter((u) => u.side === "defender")[i]!;
 
@@ -175,7 +190,7 @@ describe("drag legality", () => {
 
   it("refuses to walk into a solid, and says so", () => {
     // Drop a unit next to a ruin, then try to put it inside the wall of an impassable bunker.
-    const sealed = sampleBattle(OPEN_APPROACH);
+    const sealed = deployed(OPEN_APPROACH);
     const unit = placeUnit(sealed.units[0]!, { x: 16, y: 26 });
     const withUnit = replaceUnit(sealed, unit);
     const verdict = dragVerdict(withUnit, unit, { x: 16, y: 30 }, indexOf(withUnit));
@@ -197,7 +212,7 @@ describe("drag legality", () => {
 describe("moving models one at a time", () => {
   // A single squad on empty ground. The sample battle packs units along the deployment edge, and a
   // neighbouring unit's bases make every verdict about them rather than about the model being moved.
-  const open = sampleBattle(OPEN_APPROACH);
+  const open = deployed(OPEN_APPROACH);
   const index = indexOf(open);
   const squad = () => placeUnit(open.units[0]!, { x: 30, y: 16 });
   const alone = (unit: BattleUnit): BattleState => ({ ...open, units: [unit] });
@@ -332,7 +347,7 @@ describe("the sight tool", () => {
     // Open Approach has a ruin at (16, 30). A shooter at (16, 8) cannot see a model behind it, but
     // can see one standing clear of it — and the readout has to find the second even though the
     // first is the unit's anchor.
-    const open = sampleBattle(OPEN_APPROACH);
+    const open = deployed(OPEN_APPROACH);
     const openIndex = indexOf(open);
     const shooter = placeUnit(open.units[0]!, { x: 16, y: 8 });
     const at = (positions: [number, number][]): BattleUnit => ({
@@ -376,7 +391,7 @@ describe("the charge tool", () => {
 
 describe("ruin walls on the table", () => {
   it("refuses a vehicle a spot inside a ruin and lets infantry take it", () => {
-    const state = sampleBattle(RUINED_CITY);
+    const state = deployed(RUINED_CITY);
     const index = indexOf(state);
     const inside = { x: 11, y: 11 }; // the middle of a3', a two-storey ruin
     const transport = state.units.find((u) => u.keywords.includes("VEHICLE"))!;
@@ -402,11 +417,11 @@ describe("the tape", () => {
 });
 
 describe("deployment", () => {
-  const base = sampleBattle(OPEN_APPROACH);
+  const base = deployed(OPEN_APPROACH);
   const attacker = base.units.find((u) => u.side === "attacker" && u.models.length === 10)!;
 
   it("keeps a unit in reserve off the table: it blocks nothing and is not counted among the deployed", () => {
-    const withdrawn = { ...base, units: base.units.map((u) => (u.id === attacker.id ? withdrawUnit(u) : u)) };
+    const withdrawn = { ...base, units: base.units.map((u) => (u.id === attacker.id ? withdrawUnit(base, u) : u)) };
     expect(deployedUnits(withdrawn).map((u) => u.id)).not.toContain(attacker.id);
     expect(withdrawn.units.find((u) => u.id === attacker.id)!.reserve).toBe(true);
     // Its old spot is free ground for anyone else now.
@@ -428,7 +443,7 @@ describe("deployment", () => {
 
   it("sets a unit down as a fresh block, with nothing spent and no route", () => {
     const moved = applyUnitMove(attacker, { x: anchorOf(attacker).pos.x + 2, y: anchorOf(attacker).pos.y, z: 0 }, 2);
-    const down = deployUnit(withdrawUnit(moved), { x: 20, y: 5 });
+    const down = deployUnit(withdrawUnit(base, moved), { x: 20, y: 5 });
     expect(down.reserve).toBe(false);
     expect(down.models.every((m) => (m.spent ?? 0) === 0 && m.from === undefined && m.route === undefined)).toBe(true);
     expect(deployVerdict(base, down, { x: 20, y: 5 }).at).toEqual({ x: 20, y: 5, z: 0 });
@@ -453,9 +468,96 @@ describe("deployment", () => {
   });
 });
 
+describe("the muster table", () => {
+  const start = sampleBattle(OPEN_APPROACH);
+  const { width, depth } = start.layout.size;
+
+  it("spawns every unit on its own side's table, beside the play area rather than on it", () => {
+    expect(start.units.length).toBeGreaterThan(0);
+    expect(deployedUnits(start)).toHaveLength(0);
+    for (const unit of start.units) {
+      expect(unit.reserve).toBe(true);
+      for (const m of unit.models) expect(musterAt(start, { x: m.hull.pos.x, y: m.hull.pos.y })).toBe(unit.side);
+    }
+    // Each table is clear of the board, on its own side of it.
+    expect(muster(start, "attacker").area.maxY).toBeLessThan(0);
+    expect(muster(start, "defender").area.minY).toBeGreaterThan(depth);
+    // And nothing on the board is on a muster table.
+    expect(musterAt(start, { x: width / 2, y: depth / 2 })).toBeUndefined();
+  });
+
+  it("gives every unit a berth of its own, and keeps it while the others are deployed", () => {
+    const berths = muster(start, "attacker").berths;
+    const mine = start.units.filter((u) => u.side === "attacker");
+    expect(berths.size).toBe(mine.length);
+    for (const unit of mine) expect(inBox(berths.get(unit.id)!, muster(start, "attacker").area)).toBe(true);
+    // Berths come from the whole force, so deploying one unit does not move the rest.
+    const after = freshDeployment(start);
+    expect([...muster(after, "attacker").berths]).toEqual([...berths]);
+  });
+
+  it("sends a withdrawn unit back to the berth it was deployed from", () => {
+    const unit = start.units.find((u) => u.side === "attacker")!;
+    const home = unit.models.map((m) => m.hull.pos);
+    const down = replaceUnit(start, deployUnit(unit, { x: 20, y: 6 }));
+    expect(findUnit(down, unit.id)!.reserve).toBe(false);
+    const back = withdrawUnit(down, findUnit(down, unit.id)!);
+    expect(back.reserve).toBe(true);
+    back.models.forEach((m, i) => {
+      expect(m.hull.pos.x).toBeCloseTo(home[i]!.x);
+      expect(m.hull.pos.y).toBeCloseTo(home[i]!.y);
+    });
+    // And the board is clear again: everything is back where it spawned.
+    expect(clearDeployment(down).units.every((u) => u.reserve)).toBe(true);
+  });
+
+  it("refuses a spot off the table or one another unit is already standing on", () => {
+    const home = muster(start, "attacker");
+    const unit = start.units.find((u) => u.side === "attacker")!;
+    const neighbour = start.units.find((u) => u.side === "attacker" && u.id !== unit.id)!;
+    // Its own berth is free, since a unit never stands on itself.
+    expect(musterVerdict(start, unit, home.berths.get(unit.id)!).ok).toBe(true);
+    expect(musterVerdict(start, unit, { x: width / 2, y: depth / 2 }).problems).toContain("battle.problem.offMuster");
+    expect(musterVerdict(start, unit, home.berths.get(neighbour.id)!).problems).toContain("battle.problem.musterTaken");
+    // The defender's table is not a place for an attacker's unit either.
+    expect(musterVerdict(start, unit, { x: width / 2, y: muster(start, "defender").area.minY + 2 }).problems).toContain("battle.problem.offMuster");
+  });
+
+  it("wraps a force too wide for one row onto more, and deepens the table to hold them", () => {
+    const shallow = muster(start, "attacker");
+    // Five copies of the sample force: far more than fits across a 60" table in one row.
+    const many = Array.from({ length: 5 }, (_, copy) =>
+      sampleForce("attacker").map((u) => ({ ...u, id: `${u.id}-${copy}`, models: u.models.map((m) => ({ ...m, id: `${m.id}-${copy}` })) })),
+    ).flat();
+    const big = withForce(start, "attacker", many);
+    const table = muster(big, "attacker");
+    expect(table.berths.size).toBe(many.length);
+    expect(table.area.maxY - table.area.minY).toBeGreaterThan(shallow.area.maxY - shallow.area.minY);
+    // Every unit still stands wholly on the table, and none of them on another.
+    for (const unit of big.units.filter((u) => u.side === "attacker")) {
+      expect(musterVerdict(big, unit, table.berths.get(unit.id)!).ok).toBe(true);
+      for (const m of unit.models) expect(musterAt(big, { x: m.hull.pos.x, y: m.hull.pos.y })).toBe("attacker");
+    }
+    // The defender's table is untouched by the attacker's crowd.
+    expect(muster(big, "defender").area).toEqual(muster(start, "defender").area);
+  });
+
+  it("stands a unit where it is put down on the table, off the board and with nothing spent", () => {
+    const table = muster(start, "defender");
+    const unit = start.units.find((u) => u.side === "defender")!;
+    const spot = { x: table.area.minX + 8, y: (table.area.minY + table.area.maxY) / 2 };
+    const moved = applyUnitMove(unit, { x: 20, y: 20, z: 0 }, 3);
+    const shelved = musterUnit(moved, spot);
+    expect(shelved.reserve).toBe(true);
+    expect(musterVerdict(start, shelved, spot).ok).toBe(true);
+    for (const m of shelved.models) expect(musterAt(start, { x: m.hull.pos.x, y: m.hull.pos.y })).toBe("defender");
+    expect(shelved.models.every((m) => (m.spent ?? 0) === 0 && m.from === undefined && m.route === undefined)).toBe(true);
+  });
+});
+
 describe("routes", () => {
   it("remembers the way a model went, so the table can animate it round a corner", () => {
-    const state = sampleBattle(RUINED_CITY);
+    const state = deployed(RUINED_CITY);
     const unit = state.units.find((u) => u.side === "attacker" && u.models.length === 10)!;
     const model = unit.models[0]!;
     const index = indexOf(state);
@@ -470,7 +572,7 @@ describe("routes", () => {
   });
 
   it("never reaches past the table's edge", () => {
-    const state = sampleBattle(OPEN_APPROACH);
+    const state = deployed(OPEN_APPROACH);
     const unit = state.units.find((u) => u.side === "attacker")!;
     const edge = { ...state, units: state.units.map((u) => (u.id === unit.id ? placeUnit(u, { x: 5, y: 5 }) : u)) };
     const model = edge.units.find((u) => u.id === unit.id)!.models[0]!;
@@ -592,7 +694,7 @@ describe("moving a selection together", () => {
    * and not one anybody makes with real models.
    */
   const squadAtARuin = (sideways = 0) => {
-    const world = sampleBattle(RUINED_CITY);
+    const world = deployed(RUINED_CITY);
     const unit = world.units.find((u) => u.side === "attacker" && u.models.length === 5)!;
     const ruin = world.layout.pieces.find((p) => p.id === "b1")!;
     const box = bounds(ruin.polygon);
@@ -666,7 +768,7 @@ describe("the sight tool asks the whole unit", () => {
 
 describe("dragging a whole unit", () => {
   it("is limited by the model with the least movement left, and never spends more than a model has", () => {
-    const open = sampleBattle(OPEN_APPROACH);
+    const open = deployed(OPEN_APPROACH);
     const unit = placeUnit(deployedUnits(open).find((u) => u.side === "attacker" && u.models.length >= 5)!, { x: 30, y: 8 });
     let world = replaceUnit(open, unit);
     const index = indexOf(world);

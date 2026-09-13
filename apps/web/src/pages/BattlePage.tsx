@@ -40,6 +40,9 @@ import {
   modelMoveVerdict,
   modelReach,
   moveOf,
+  musterAt,
+  musterUnit,
+  musterVerdict,
   otherHulls,
   groupMoveVerdict,
   type GroupMember,
@@ -279,13 +282,13 @@ export function BattlePage() {
   }, []);
 
   /**
-   * Put another layout on the table. The forces stay as they are and are set down again in the new
-   * table's zones, so changing the table does not throw away the armies chosen for it. Tapes and the
-   * terrain history belonged to the old table and go with it.
+   * Put another layout on the table. The forces stay as they are and go back to their muster
+   * tables, since a deployment was for the table it was made on. Tapes and the terrain history
+   * belonged to the old table and go with it.
    */
   const loadBattle = useCallback(
     (next: TerrainLayout) => {
-      dispatch({ type: "replace", battle: freshDeployment(battleWith(next, units)) });
+      dispatch({ type: "replace", battle: clearDeployment(battleWith(next, units)) });
       setSelectedId(undefined);
       setActiveModelId(undefined);
       setTerrainId(undefined);
@@ -306,8 +309,9 @@ export function BattlePage() {
   );
 
   /**
-   * Set every unit down again in its own zone. The layout and its history are not touched, and
-   * anything measured or planned against the old positions goes, since it was about them.
+   * Clear the board: every unit goes back to its berth on its own muster table, ready to be
+   * deployed again. The layout and its history are not touched, and anything measured or planned
+   * against the old positions goes, since it was about them.
    */
   const resetDeployment = useCallback(async () => {
     if (!(await confirm({ title: t("battle.reset.title"), body: t("battle.reset.body"), confirmLabel: t("battle.reset"), danger: true }))) return;
@@ -317,7 +321,7 @@ export function BattlePage() {
     setTapes([]);
     setPendingMark(undefined);
     setRefusal(undefined);
-    dispatch({ type: "units", change: freshDeployment, record: true });
+    dispatch({ type: "units", change: clearDeployment, record: true });
   }, [confirm, setTapes, setPendingMark]);
 
   /**
@@ -461,7 +465,21 @@ export function BattlePage() {
     setPlan(undefined);
   }, [plan, applyMove]);
   const onDeploy = useCallback((unitId: string, at: Vec2) => editUnit(unitId, (unit) => deployUnit(unit, at), true), [editUnit]);
-  const onWithdraw = useCallback((unitId: string) => editUnit(unitId, withdrawUnit, true), [editUnit]);
+  /** Stand a unit on its muster table where it was dropped, rather than back in its own berth. */
+  const onMuster = useCallback((unitId: string, at: Vec2) => editUnit(unitId, (unit) => musterUnit(unit, at), true), [editUnit]);
+  /** Take a unit off the board: it goes back to the berth it was deployed from. */
+  const onWithdraw = useCallback(
+    (unitId: string) =>
+      dispatch({
+        type: "units",
+        record: true,
+        change: (b) => {
+          const unit = findUnit(b, unitId);
+          return unit ? replaceUnit(b, withdrawUnit(b, unit)) : b;
+        },
+      }),
+    [],
+  );
 
   /**
    * Turn the active model, or the whole unit, in place. A turn the table refuses is reported over the
@@ -503,7 +521,7 @@ export function BattlePage() {
     const model = activeModel ?? selected.models[0];
     return model ? { unitId: selected.id, modelId: model.id, hull: model.hull } : undefined;
   }, [selected, activeModel, tool]);
-  const deployAll = useCallback(() => dispatch({ type: "units", change: (b) => autoDeploy(autoDeploy(b, "attacker"), "defender"), record: true }), []);
+  const deployAll = useCallback(() => dispatch({ type: "units", change: freshDeployment, record: true }), []);
 
   /** The planned move's ghost: the model, or the whole formation, standing where it would land. */
   const planned = useMemo(() => {
@@ -650,8 +668,11 @@ export function BattlePage() {
       }
       if (!selected) return;
       if (tool === "deploy") {
-        const verdict = deployVerdict(state, selected, at, index);
-        if (verdict.ok) onDeploy(selected.id, at);
+        // A press on the unit's own muster table sends it back to the shelf; anywhere else on the
+        // floor is an attempt to deploy it, and is refused where deployment is refused.
+        const shelving = musterAt(state, at) === selected.side;
+        const verdict = shelving ? musterVerdict(state, selected, at) : deployVerdict(state, selected, at, index);
+        if (verdict.ok) (shelving ? onMuster : onDeploy)(selected.id, at);
         setDragging(false);
         setDrag(verdict.ok ? undefined : { unitId: selected.id, to: at, legal: false, problems: verdict.problems });
         return;
@@ -676,7 +697,7 @@ export function BattlePage() {
       setDragging(false);
       setDrag(verdict.ok ? undefined : { unitId: selected.id, modelId: activeModel?.id, to: at, legal: false, problems: verdict.problems });
     },
-    [tool, selected, activeModel, state, index, proposeMove, proposeGroupMove, onDeploy, mark, grouped, group],
+    [tool, selected, activeModel, state, index, proposeMove, proposeGroupMove, onDeploy, onMuster, mark, grouped, group],
   );
 
   const onDrag = useCallback((next: DragState | undefined) => {
@@ -828,7 +849,7 @@ export function BattlePage() {
    */
   const readout =
     dragging && drag && selected
-      ? { bad: !drag.legal, text: drag.legal ? (tool === "deploy" ? t("battle.dragDeploy") : t("battle.dragCost", { cost: (drag.cost ?? 0).toFixed(1), move: activeModel ? moveOf(selected, activeModel) : selected.move })) : t((drag.problems[0] ?? "battle.problem.tooFar") as I18nKey) }
+      ? { bad: !drag.legal, text: drag.legal ? (drag.toMuster ? t("battle.dragMuster") : tool === "deploy" || selected.reserve ? t("battle.dragDeploy") : t("battle.dragCost", { cost: (drag.cost ?? 0).toFixed(1), move: activeModel ? moveOf(selected, activeModel) : selected.move })) : t((drag.problems[0] ?? "battle.problem.tooFar") as I18nKey) }
       : live !== undefined
         ? { bad: false, text: t("battle.measureLive", { d: live.toFixed(1) }) }
         : undefined;
@@ -932,6 +953,7 @@ export function BattlePage() {
                   canDrag={tool === "select" || tool === "deploy"}
                   dragMode={tool === "deploy" ? "deploy" : "move"}
                   onDeploy={onDeploy}
+                  onMuster={onMuster}
                   highlightZone={tool === "deploy" ? selected?.side : undefined}
                   editing={editing}
                   labelsRef={labelsRef}
@@ -956,7 +978,7 @@ export function BattlePage() {
           )}
           <div className="battle-labels" ref={labelsRef} aria-hidden="true">
             {state.units.map((u) => (
-              <div key={u.id} className={`battle-label ${u.side}`}>
+              <div key={u.id} className={`battle-label ${u.side} ${u.reserve ? "waiting" : ""}`.trim()}>
                 <UnitArt of={u} />
                 {t(u.name as I18nKey)}
               </div>

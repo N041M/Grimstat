@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BATTLE_SIZES, RUINED_CITY, ruin } from "@grimstat/board";
-import { deployUnit, freshDeployment, sampleBattle, withdrawUnit } from "./battle";
+import { clearDeployment, deployUnit, sampleBattle } from "./battle";
 import { addPiece, emptyLayout, movePiece } from "./layoutEdit";
 import { FORK_SUFFIX, HISTORY_CAP, UNIT_HISTORY_CAP, canRedo, canUndo, canUndoUnits, editorReducer, initialEditor, type EditorAction, type EditorState } from "./battleEditor";
 
@@ -109,13 +109,14 @@ describe("editing with a history", () => {
 });
 
 describe("taking unit actions back", () => {
-  const withdrawFirst: EditorAction = { type: "units", record: true, change: (b) => ({ ...b, units: b.units.map((u, i) => (i === 0 ? withdrawUnit(u) : u)) }) };
+  // Everything starts on its muster table, so the action to take back is a deployment.
+  const deployFirst: EditorAction = { type: "units", record: true, change: (b) => ({ ...b, units: b.units.map((u, i) => (i === 0 ? deployUnit(u, { x: 20, y: 6 }) : u)) }) };
 
   it("records a unit action when asked and puts the units back on undo, leaving the terrain history alone", () => {
     const s0 = run(start(), nudge(1));
     expect(canUndoUnits(s0)).toBe(false);
-    const s1 = editorReducer(s0, withdrawFirst);
-    expect(s1.battle.units[0]!.reserve).toBe(true);
+    const s1 = editorReducer(s0, deployFirst);
+    expect(s1.battle.units[0]!.reserve).toBe(false);
     expect(canUndoUnits(s1)).toBe(true);
     expect(s1.past).toBe(s0.past);
 
@@ -128,17 +129,17 @@ describe("taking unit actions back", () => {
 
   it("does not record an unrecorded action, an action that changed nothing, or an undo with nothing to undo", () => {
     const s0 = start();
-    const quiet = editorReducer(s0, { ...withdrawFirst, record: false });
-    expect(quiet.battle.units[0]!.reserve).toBe(true);
+    const quiet = editorReducer(s0, { ...deployFirst, record: false });
+    expect(quiet.battle.units[0]!.reserve).toBe(false);
     expect(canUndoUnits(quiet)).toBe(false);
     expect(editorReducer(s0, { type: "units", record: true, change: (b) => b })).toBe(s0);
     expect(editorReducer(s0, { type: "undoUnits" })).toBe(s0);
   });
 
-  it("keeps the layout history through a reset of the deployment", () => {
-    const s0 = run(start(), nudge(1), withdrawFirst);
-    const s1 = editorReducer(s0, { type: "units", record: true, change: freshDeployment });
-    expect(s1.battle.units[0]!.reserve).toBe(false);
+  it("keeps the layout history through a clearing of the board", () => {
+    const s0 = run(start(), nudge(1), deployFirst);
+    const s1 = editorReducer(s0, { type: "units", record: true, change: clearDeployment });
+    expect(s1.battle.units[0]!.reserve).toBe(true);
     expect(s1.past).toBe(s0.past);
     expect(editorReducer(s1, { type: "undoUnits" }).battle.units).toBe(s0.battle.units);
   });
