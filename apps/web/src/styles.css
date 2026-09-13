@@ -2858,6 +2858,25 @@ a.btn:hover {
   flex-direction: column;
   gap: 9px;
 }
+/*
+ * The side groups had no rules of their own, so "Attacker" and "Defender" fell back to 14px body
+ * text at full contrast — louder than the section heading above them, and with nothing separating
+ * one group from the next. They are sub-labels, so they take the dock's own eyebrow type a step
+ * quieter than the section titles they sit under.
+ */
+.dock-chip-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dock-chip-group-title {
+  display: block;
+  margin-bottom: 7px;
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--faint);
+}
 .dock-chips {
   display: flex;
   flex-wrap: wrap;
