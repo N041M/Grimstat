@@ -7433,10 +7433,6 @@ button.battle-scope-btn:hover {
 .data-empty-actions {
   margin-top: 12px;
 }
-/* The intro under the fetch panel's heading. */
-.src-intro {
-  max-width: 78ch;
-}
 /* "Using the CLI": the shell commands, folded away until asked for. */
 .cli-details {
   margin-top: 10px;

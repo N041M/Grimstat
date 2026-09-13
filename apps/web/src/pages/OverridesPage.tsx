@@ -197,7 +197,6 @@ export function OverridesPage() {
         }
       />
       <div className="page-body stack">
-      <p className="page-lede">{t("overrides.intro")}</p>
 
       <div className="analysis overrides-layout">
         <aside className="analysis-controls stack">

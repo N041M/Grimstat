@@ -379,7 +379,6 @@ export const PublishedLists = forwardRef<PublishedListsHandle>(function Publishe
         </div>
       ) : null}
 
-      <p className="data-note">{t("data.published.note")}</p>
       <p className="data-note">{t("data.published.feed.how")}</p>
       <details className="cli-details">
         <summary>{t("data.cli")}</summary>
