@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { NARROW_QUERY, useMediaQuery } from "../../hooks/useMediaQuery";
 import type { ManualToggle, Scenario, ScenarioContext, Snapshot } from "@grimstat/schema";
 import { gameApi } from "../../plugin";
 import { isToggleOn, setToggle } from "../../lib/scenario";
@@ -80,6 +81,7 @@ export function ContextDock({ scenario, snapshot, sim, onContext, onToggles }: {
   const opts = fields(ctx);
   const toggles: ManualToggle[] = useMemo(() => gameApi().listToggles(scenario, snapshot), [scenario, snapshot]);
   const on = toggles.filter((tg) => isToggleOn(tg, scenario.enabledToggles)).length;
+  const stacked = useMediaQuery(NARROW_QUERY);
 
   return (
     <Dock label={t("dock.title")} meta={statusLine(sim)}>
@@ -110,7 +112,12 @@ export function ContextDock({ scenario, snapshot, sim, onContext, onToggles }: {
         ))}
       </DockSection>
 
-      <DockSection title={t("dock.rules")} count={t("dock.rulesOn", { n: on })} className="dock-toggles">
+      {/*
+       * Beside the results this list is the dock's main business and stands open in a column that
+       * scrolls on its own. Stacked under the chart it was 1273px of switches between the chart and
+       * the next widget, so there it folds away and the count on its summary says how many are on.
+       */}
+      <DockDisclosure title={t("dock.rules")} meta={t("dock.rulesOn", { n: on })} className="dock-toggles" open={!stacked}>
         {toggles.length === 0 ? <p className="dock-empty">{t("dock.noToggles")}</p> : null}
         {toggles.map((tg) => (
           <SwitchRow
@@ -122,7 +129,7 @@ export function ContextDock({ scenario, snapshot, sim, onContext, onToggles }: {
             onChange={(v) => onToggles(setToggle(scenario.enabledToggles, tg, v))}
           />
         ))}
-      </DockSection>
+      </DockDisclosure>
 
       <DockDisclosure title={t("dock.advanced")} meta={solverLine(sim)}>
         <p className="dock-advanced-note">{t("dock.advancedHint")}</p>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactGridLayout, { WidthProvider, type Layout } from "react-grid-layout";
 import { db, type DashboardLayoutRecord } from "../db";
 import { analysisKeys, widgetAvailable, widgetsFrom, type ReactWidgetDef, type WidgetProps } from "../widgets/registry";
@@ -131,7 +131,30 @@ function useMedia(query: string): boolean {
   return m;
 }
 
-export function Dashboard({ id, inputs, defaultHidden = [], actions }: { id: string; inputs: WidgetProps; /** Widget ids a fresh layout (no stored record) starts without. */ defaultHidden?: readonly string[]; /** Extra controls for the dashboard bar, before the layout buttons. */ actions?: ReactNode }) {
+export function Dashboard({
+  id,
+  inputs,
+  defaultHidden = [],
+  actions,
+  stackAfter,
+}: {
+  id: string;
+  inputs: WidgetProps;
+  /** Widget ids a fresh layout (no stored record) starts without. */
+  defaultHidden?: readonly string[];
+  /** Extra controls for the dashboard bar, before the layout buttons. */
+  actions?: ReactNode;
+  /**
+   * Something to place in the one-column stack, directly under a named widget. The side-by-side
+   * layout has its own room for a panel like this, so it is only read in the stacked view; a page
+   * that passes it renders the same thing beside the grid at the wider widths.
+   *
+   * The reader chooses which widgets are here and in what order, so the named one may not be in the
+   * stack at all. It then follows the first widget instead. Last would put it below everything,
+   * which is the placement this exists to avoid.
+   */
+  stackAfter?: { widgetId: string; node: ReactNode };
+}) {
   const { notify } = useApp();
   const { confirm, dialog } = useConfirm();
   const provided = analysisKeys(inputs.analyses);
@@ -411,10 +434,18 @@ export function Dashboard({ id, inputs, defaultHidden = [], actions }: { id: str
           </span>
         </div>
         <div className="dash-stack">
-          {order.map((widgetId) => {
-            const w = byId.get(widgetId);
-            return w ? <div key={widgetId}>{panel(w, false)}</div> : null;
-          })}
+          {(() => {
+            const shown = order.filter((w) => byId.has(w));
+            const anchor = shown.includes(stackAfter?.widgetId ?? "") ? stackAfter!.widgetId : shown[0];
+            return shown.map((widgetId) => (
+              <Fragment key={widgetId}>
+                <div>{panel(byId.get(widgetId)!, false)}</div>
+                {stackAfter && widgetId === anchor ? stackAfter.node : null}
+              </Fragment>
+            ));
+          })()}
+          {/* Nothing to follow: an empty stack still has to show the panel. */}
+          {stackAfter && !order.some((w) => byId.has(w)) ? stackAfter.node : null}
         </div>
       </div>
     );

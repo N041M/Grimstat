@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import type { Scenario, ScenarioContext, ScenarioUnit } from "@grimstat/schema";
 import { useApp, useReportSolveState } from "../state/AppContext";
 import { useSimulation } from "../hooks/useSimulation";
@@ -28,6 +29,14 @@ interface EditBackup {
 
 /** Panels a fresh calculator layout starts without: coverage is already in the context column. */
 const DEFAULT_HIDDEN = ["core.coverage"];
+
+/**
+ * Where the Situation panel goes once the screen is one column. Beside the results it is a column
+ * of its own, always in view; stacked, it followed every widget, which put the phase and the range
+ * band about five thousand pixels down a page whose first answer is at the top. It sits under the
+ * damage distribution instead, so the chart and the controls that change it are on the same screen.
+ */
+const DOCK_AFTER_WIDGET = "core.damage-distribution";
 
 export function CalculatorPage() {
   const { scenario, snapshot, activeSnapshotId, updateScenario, replaceScenario, scenarioLoadKey, notify } = useApp();
@@ -148,6 +157,10 @@ export function CalculatorPage() {
   };
 
   const inputs = useMemo(() => ({ scenario, result: sim.result, snapshot, running: sim.running, error: sim.error, pinned, idle: sim.idle }), [scenario, sim.result, snapshot, sim.running, sim.error, pinned, sim.idle]);
+  // The same panel, in the column beside the results or in the stack under the chart. It is built
+  // once either way, so switching width moves it rather than mounting a second one.
+  const stacked = useMediaQuery(NARROW_QUERY);
+  const dock = <ContextDock scenario={scenario} snapshot={snapshot} sim={sim} onContext={onContext} onToggles={(enabledToggles) => updateScenario((s) => ({ ...s, enabledToggles }))} />;
 
   const dashActions = (
     <>
@@ -209,9 +222,9 @@ export function CalculatorPage() {
           ) : null}
           {/* The id carries a version: the redesign changed the widget set and the default packing, so
               layouts stored against the old composition are not reconciled onto the new one. */}
-          <Dashboard id="calculator.v2" inputs={inputs} defaultHidden={DEFAULT_HIDDEN} actions={dashActions} />
+          <Dashboard id="calculator.v2" inputs={inputs} defaultHidden={DEFAULT_HIDDEN} actions={dashActions} stackAfter={stacked ? { widgetId: DOCK_AFTER_WIDGET, node: dock } : undefined} />
         </div>
-        <ContextDock scenario={scenario} snapshot={snapshot} sim={sim} onContext={onContext} onToggles={(enabledToggles) => updateScenario((s) => ({ ...s, enabledToggles }))} />
+        {stacked ? null : dock}
       </div>
 
       {/* The unit pickers (From data / Archetype / Custom) live behind each card's Edit affordance.

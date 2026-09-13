@@ -40,12 +40,14 @@ export function DockSection({ title, count, children, className }: { title?: str
 }
 
 /**
- * A dock block that starts closed. Holds controls that change how precisely the answer is worked
- * out rather than the situation being modelled, so the dock opens on the choices a player makes.
+ * A dock block the reader can fold away. It starts closed, which suits controls that change how
+ * precisely the answer is worked out rather than the situation being modelled, so the dock opens on
+ * the choices a player makes. `open` starts it open instead, for a block that earns its room at one
+ * width and not at another.
  */
-export function DockDisclosure({ title, meta, children, className }: { title: string; meta?: ReactNode; children: ReactNode; className?: string }) {
+export function DockDisclosure({ title, meta, children, className, open }: { title: string; meta?: ReactNode; children: ReactNode; className?: string; open?: boolean }) {
   return (
-    <details className={`dock-section dock-disclosure ${className ?? ""}`.trim()}>
+    <details className={`dock-section dock-disclosure ${className ?? ""}`.trim()} open={open}>
       <summary className="dock-section-head">
         <span className="dock-section-title">{title}</span>
         {meta === undefined ? null : <span className="dock-section-count">{meta}</span>}

@@ -3314,8 +3314,10 @@ a.btn:hover {
 .dock-disclosure > summary:hover .dock-section-title {
   color: var(--ink);
 }
-/* Not a live "how many are on" count, so it stays quiet rather than taking the accent. */
-.dock-disclosure > summary .dock-section-count {
+/* A disclosure's meta is usually a note rather than a count, so it stays quiet. The rules block is
+   the exception: folded away, its "how many are on" is the only reading of what is switched on, so
+   it keeps the colour a count has everywhere else. */
+.dock-disclosure:not(.dock-toggles) > summary .dock-section-count {
   color: var(--faint);
 }
 .dock-disclosure-body {
@@ -6144,10 +6146,15 @@ button.val-row:hover {
 }
 
 /* Distribution: the reading switch, and a scale label so a probability is readable without hovering. */
+/* The legend and the density/cumulative switch sit on one line when there is room. Below about a
+   phone's width the legend takes a line of its own, and 14px between a line of text and the top of
+   a 36px control read as the two being one block. The row gap is the wider one; it only applies
+   once they have wrapped. */
 .dist-head-aside {
   display: flex;
   align-items: center;
-  gap: 14px;
+  column-gap: 14px;
+  row-gap: 20px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
