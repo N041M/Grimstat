@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Snapshot } from "@grimstat/schema";
+import type { Datasheet, Snapshot } from "@grimstat/schema";
 import { boxesByYear, boxesFor, linesForFactions, loadBoxSets, modelsByDatasheet, type ResolvedBox } from "../../lib/boxes";
 import type { BoxSet } from "../../data/boxes";
 import { Dialog } from "../ui";
@@ -39,6 +39,9 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
   }, [open]);
 
   const factionName = (id: string): string => snapshot?.data.factions.find((f) => f.id === id)?.name ?? id;
+  // A Legends sheet and the live one that replaced it share a name, so the name alone cannot say
+  // which is which — and "or Venerable Dreadnought" beside a Venerable Dreadnought says nothing.
+  const sheetName = (ds: Datasheet): string => (ds.isLegends ? t("collection.box.legendsOf", { unit: ds.name }) : ds.name);
   const totals = picked ? modelsByDatasheet(linesForFactions(picked, ticked)) : undefined;
   const models = totals ? [...totals.values()].reduce((s, v) => s + v.models, 0) : 0;
 
@@ -80,8 +83,8 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
                   .map((l, i) => (
                     <li key={`${l.line.name}-${i}`}>
                       <span className="box-count mono">{l.models}</span>
-                      {l.ds!.name}
-                      {l.alternatives.length ? <span className="box-or">{t("collection.box.or", { units: l.alternatives.map((a) => a.name).join(", ") })}</span> : null}
+                      {sheetName(l.ds!)}
+                      {l.alternatives.length ? <span className="box-or">{t("collection.box.or", { units: l.alternatives.map(sheetName).join(", ") })}</span> : null}
                       {l.alsoIn.length ? <span className="box-or">{t("collection.box.alsoIn", { armies: l.alsoIn.map((a) => factionName(a.factionId)).join(", ") })}</span> : null}
                     </li>
                   ))}
@@ -96,15 +99,10 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
                   <li key={`${l.line.name}-${i}`}>
                     <span className="box-count mono">{l.models}</span>
                     {l.line.name}
+                    {l.unknownName ? <span className="box-or">{t("collection.box.noSheet")}</span> : null}
                   </li>
                 ))}
               </ul>
-            </section>
-          ) : null}
-          {picked.unknown.length ? (
-            <section className="box-aside">
-              <h3>{t("collection.box.unknown")}</h3>
-              <p className="muted">{picked.unknown.join(", ")}</p>
             </section>
           ) : null}
           <div className="dialog-actions">

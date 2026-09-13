@@ -3,7 +3,7 @@ import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BoxFileSchema, type BoxSet } from "../data/boxes";
-import { boxesByYear, boxesFor, forgetBoxSets, linesForFactions, loadBoxSets, modelsByDatasheet, nameLine, resolveBox, unitSize } from "./boxes";
+import { boxesByYear, boxesFor, forgetBoxSets, isOlderThanEdition, LEGENDS_FROM, linesForFactions, loadBoxSets, modelsByDatasheet, nameLine, resolveBox, unitSize } from "./boxes";
 
 const snapshot = loadSyntheticSnapshot();
 
@@ -137,6 +137,86 @@ describe("a unit more than one army fields", () => {
     expect(read.factionIds).toEqual(["faction:ashen-wardens"]);
     expect(modelsByDatasheet(read.lines).size).toBe(2);
     expect(read.models).toBe(6);
+  });
+});
+
+/**
+ * A unit moved to Legends is the unit that came in an older box, and the live sheet of that name is
+ * usually the kit that replaced it. Which of the two somebody is holding depends on when they
+ * bought it, so the box's age decides and the other sheet is offered beside it.
+ */
+describe("a name carried by both a Legends sheet and a live one", () => {
+  /** The synthetic snapshot with one name on two sheets, Legends and live. */
+  const twinned = () => {
+    const copy = structuredClone(snapshot);
+    const live = copy.data.datasheets.find((d) => d.name === "Ashen Crusher")!;
+    copy.data.datasheets.push({ ...live, id: `${live.id}:legends`, isLegends: true });
+    return copy;
+  };
+  const crusher = (announced?: string): BoxSet => ({
+    id: "b", name: "Test box", kind: "battleforce", ...(announced ? { announced } : {}),
+    lines: [{ name: "Warden Squad", models: 5 }, { name: "Ashen Crusher", models: 1 }], source: "test",
+  });
+
+  it("gives an old box the Legends sheet", () => {
+    const read = resolveBox(crusher("2016"), twinned());
+    expect(read.lines[1]!.ds!.isLegends).toBe(true);
+  });
+
+  it("gives a box of this edition the live sheet", () => {
+    const read = resolveBox(crusher("2026-06-01"), twinned());
+    expect(read.lines[1]!.ds!.isLegends).toBeFalsy();
+  });
+
+  /** A box nobody could date is an old box; the undated ones are the old ones. */
+  it("treats a box with no date as old", () => {
+    expect(isOlderThanEdition({ ...crusher(), announced: undefined } as BoxSet)).toBe(true);
+    expect(resolveBox(crusher(), twinned()).lines[1]!.ds!.isLegends).toBe(true);
+  });
+
+  it("offers the sheet it did not take, so the owner can say which they have", () => {
+    const read = resolveBox(crusher("2016"), twinned());
+    expect(read.lines[1]!.alternatives.map((d) => !!d.isLegends)).toEqual([false]);
+    const now = resolveBox(crusher("2026-06-01"), twinned());
+    expect(now.lines[1]!.alternatives.map((d) => !!d.isLegends)).toEqual([true]);
+  });
+
+  it("says nothing extra when only one sheet carries the name", () => {
+    expect(resolveBox(crusher("2016"), snapshot).lines[1]!.alternatives).toEqual([]);
+  });
+
+  it("keeps the edition it reckons from in one place", () => {
+    expect(LEGENDS_FROM).toMatch(/^\d{4}$/);
+  });
+});
+
+/**
+ * A name the data does not carry at all is the reader's to place. Saying "not in your data" and
+ * stopping leaves them holding models with nowhere to count them.
+ */
+describe("a name under neither a Legends sheet nor a live one", () => {
+  const missing = box([{ name: "Warden Squad", models: 5 }, { name: "Marneus Calgar", models: 1 }]);
+
+  it("is handed back to be labelled rather than only reported", () => {
+    const read = resolveBox(missing, snapshot);
+    expect(read.toName.map((l) => l.line.name)).toEqual(["Marneus Calgar"]);
+    expect(read.lines[1]!.unknownName).toBe(true);
+    expect(read.lines[1]!.models).toBe(1);
+  });
+
+  it("still says the data does not carry it", () => {
+    expect(resolveBox(missing, snapshot).unknown).toEqual(["Marneus Calgar"]);
+  });
+
+  it("is told apart from a line the box left open on purpose", () => {
+    const read = resolveBox(box([{ name: "Drones", models: 8, ownerNames: true }, { name: "Marneus Calgar", models: 1 }]), snapshot);
+    expect(read.toName.map((l) => [l.line.name, !!l.unknownName])).toEqual([["Drones", false], ["Marneus Calgar", true]]);
+  });
+
+  it("counts where it is told once labelled", () => {
+    const read = resolveBox(missing, snapshot);
+    const named = nameLine(read.toName[0]!, ds("ashen-wardens:warden-captain"));
+    expect(modelsByDatasheet([named]).get("ds:ashen-wardens:warden-captain")!.models).toBe(1);
   });
 });
 

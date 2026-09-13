@@ -47,6 +47,13 @@ export interface ResolvedLine {
   /** The datasheets the line's kit could have been built as instead, that this snapshot knows. */
   readonly alternatives: readonly Datasheet[];
   /**
+   * Nothing in this snapshot goes by that name, so there is no datasheet to file it against and the
+   * count is waiting on the reader to say what it is. Told apart from a line the box left open on
+   * purpose, because the reason differs: one is a kit with choices, this is a name the data does
+   * not carry.
+   */
+  readonly unknownName?: true;
+  /**
    * The same unit on other armies' lists.
    *
    * A Rhino is a Rhino. Space Marines, Grey Knights, the Sisters and half a dozen others each field
@@ -88,6 +95,21 @@ export function unitSize(ds: Datasheet): number {
   return Math.max(1, ds.models.length > 1 ? ds.models.length : 1);
 }
 
+/**
+ * The edition the snapshot describes began in this year.
+ *
+ * A boxed set older than it is assumed to hold the model that has since been moved to Legends;
+ * one from this edition, the model still in print. Written down here because it is the one fact
+ * this reasoning needs and it changes once an edition, rather than being buried in a comparison.
+ */
+export const LEGENDS_FROM = "2026";
+
+/** Is this box old enough that a name on both a Legends sheet and a live one means the Legends one? */
+export function isOlderThanEdition(box: BoxSet, from: string = LEGENDS_FROM): boolean {
+  // A box nobody could date is an old box: the ones without a recorded date are the old ones.
+  return !box.announced || box.announced.slice(0, 4) < from;
+}
+
 /** Every datasheet in the snapshot that goes by this name, in whatever faction. */
 function candidates(snapshot: Snapshot, name: string): readonly Datasheet[] {
   return nameIndexOf(snapshot).names.filter((n) => sameUnitName(n.ds.name, name)).map((n) => n.ds);
@@ -112,8 +134,29 @@ export function resolveBox(box: BoxSet, snapshot: Snapshot): ResolvedBox {
   for (const cands of named) {
     for (const id of new Set(cands.map((d) => d.factionId))) score.set(id, (score.get(id) ?? 0) + 1);
   }
+  // A box older than the edition in hand is assumed to hold the Legends model; one from this
+  // edition, the live one. See LEGENDS_FROM.
+  const old = isOlderThanEdition(box);
+
+  /**
+   * Which sheet a name belongs to when several carry it.
+   *
+   * The army the box is for comes first: that is what reading the box as a whole settles. Between a
+   * Legends sheet and a live one of the same name, the box's age decides. A unit moved to Legends
+   * is the unit that came in an older box, and the live sheet of that name is usually the kit that
+   * replaced it, so an old box assumes Legends and a current one assumes live. Five names in a full
+   * snapshot are carried by both — a Venerable Dreadnought among them — and without this the choice
+   * was whichever the data happened to list first.
+   *
+   * It is only ever an assumption. The sheet not taken is offered beside it, because the person who
+   * owns the model is the one who knows which of the two is in their hand.
+   */
   const best = (cands: readonly Datasheet[]): Datasheet | undefined =>
-    [...cands].sort((a, b) => (score.get(b.factionId) ?? 0) - (score.get(a.factionId) ?? 0))[0];
+    [...cands].sort(
+      (a, b) =>
+        (score.get(b.factionId) ?? 0) - (score.get(a.factionId) ?? 0) ||
+        (old ? Number(!!b.isLegends) - Number(!!a.isLegends) : Number(!!a.isLegends) - Number(!!b.isLegends)),
+    )[0];
 
   const lines: ResolvedLine[] = [];
   const unknown: string[] = [];
@@ -126,14 +169,25 @@ export function resolveBox(box: BoxSet, snapshot: Snapshot): ResolvedBox {
       lines.push({ line, models: line.models ?? 0, alternatives: [], alsoIn: [], needsName: true });
       return;
     }
+    // A name this snapshot carries under neither a Legends sheet nor a live one is the reader's to
+    // place. Saying "not in your data" and stopping leaves them holding models and no way to count
+    // them; asking them which sheet it is leaves them somewhere to put it.
+    if (!named[i]!.length) {
+      unknown.push(line.name);
+      lines.push({ line, models: line.models ?? 0, alternatives: [], alsoIn: [], needsName: true, unknownName: true });
+      return;
+    }
     const ds = best(named[i]!);
     const alternatives = (line.or ?? []).map((n) => best(candidates(snapshot, n))).filter((d): d is Datasheet => !!d);
+    // The same name under both a Legends sheet and a live one: whichever the age did not pick is
+    // offered beside it rather than dropped, since only the owner knows which model they have.
+    const twin = ds ? named[i]!.find((c) => c.id !== ds.id && c.factionId === ds.factionId && !!c.isLegends !== !!ds.isLegends) : undefined;
+    if (twin) alternatives.push(twin);
     // One sheet per faction among the rest: a dozen Chapters' worth of the same Rhino is a fact
     // about the rules, not something a reader needs listed a dozen times.
     const alsoIn = ds ? named[i]!.filter((d) => d.factionId !== ds.factionId).filter((d, j, all) => all.findIndex((o) => o.factionId === d.factionId) === j) : [];
     const n = ds ? (line.models ?? (line.units ?? 1) * unitSize(ds)) : (line.models ?? 0);
-    if (!ds) unknown.push(line.name);
-    else if (!factionIds.includes(ds.factionId)) factionIds.push(ds.factionId);
+    if (ds && !factionIds.includes(ds.factionId)) factionIds.push(ds.factionId);
     lines.push({ line, ...(ds ? { ds } : {}), models: n, alternatives, alsoIn, needsName: false });
     if (ds) models += n;
   });
