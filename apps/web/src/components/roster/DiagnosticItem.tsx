@@ -4,7 +4,7 @@ import { t } from "../../i18n";
 
 /**
  * One diagnostic line: the message, then the suggested fix when the rule offers one. The rule's
- * internal code is never printed; it stays available as the tooltip. Rows that point at a unit
+ * internal code is not printed, and stays available as the tooltip. Rows that point at a unit
  * become a button when `onSelectUnit` is given.
  */
 export function DiagnosticItem({ d, onSelectUnit }: { d: Diagnostic; onSelectUnit?: (index: number) => void }) {

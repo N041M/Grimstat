@@ -14,8 +14,8 @@ import type { PlayContext } from "./types";
  *
  * This is the screen a player looks at between dice rolls, so the wound tracker is the row itself:
  * the common damage amounts are one tap, the bar shifts colour as a unit drops, and everything that
- * is used once a game (off the table, destroyed, remove) sits behind the row's own toggle. Nothing
- * here decides anything; it records what the players did, and every change goes through the game
+ * is used once a game (off the table, destroyed, remove) sits behind the row's own toggle. This component
+ * records what the players did and decides nothing on its own. Every change goes through the game
  * handle so the log and undo stay correct.
  */
 

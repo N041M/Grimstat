@@ -851,7 +851,7 @@ const CLASS_BASES: Readonly<Record<UnitClassId, () => Footprint>> = {
   fortification: () => circleBase(152.4),
 };
 
-/** The Move a datasheet gives, in inches. `null` is a profile that does not move; nothing is unknown. */
+/** The Move a datasheet gives, in inches. `null` means the profile does not move, and is not used for an unknown Move. */
 const DEFAULT_MOVE = 6;
 const profileMove = (p: ModelProfile | undefined): number | undefined => (p === undefined ? undefined : p.M === null ? 0 : p.M);
 

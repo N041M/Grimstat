@@ -102,7 +102,7 @@ export function UnitSetPicker({ label, storageKey, entries, onChange, single, ar
           { id: "preset", label: t("analyses.picker.presets") },
         ]}
       />
-      {/* The remembered source arrives a tick after mount; nothing is drawn until then so the panel never swaps. */}
+      {/* The remembered source arrives a tick after mount, so nothing is drawn until then and the panel does not swap. */}
       {sourceLoaded && source === "army" ? <ArmySource snapshot={snapshot} single={!!single} onAdd={add} /> : null}
       {sourceLoaded && source === "archetype" ? <ArchetypeSource filter={archetypeFilter} single={!!single} onAdd={add} /> : null}
       {sourceLoaded && source === "datasheet" ? <DatasheetSource snapshot={snapshot} onAdd={add} /> : null}

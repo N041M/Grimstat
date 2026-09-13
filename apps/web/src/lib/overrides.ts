@@ -41,7 +41,7 @@ export interface EffectiveSnapshot {
   snapshot: Snapshot;
   /** Overrides whose entity was found in the snapshot. */
   applied: number;
-  /** Overrides whose entity id is not in this snapshot (kept; they may apply to another snapshot). */
+  /** Overrides whose entity id is not in this snapshot (kept, because they may apply to another snapshot). */
   missing: number;
 }
 

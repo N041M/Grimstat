@@ -3,7 +3,7 @@ import { createGameSystem, RULES_10E } from "@grimstat/game-40k-11e";
 
 /**
  * Warhammer 40,000 10th edition, expressed as rule-parameter overrides on the shared pipeline:
- * cover is +1 to the armour save (not a BS penalty; no bonus for a 3+ save against AP0),
+ * cover is +1 to the armour save (not a BS penalty, and no bonus for a 3+ save against AP0),
  * unmodified 6s do not automatically save, Lethal Hits is automatic, Hazardous fails on a 1 only,
  * and CLEAVE does not exist. 10e codexes remain legal alongside 11e, so both plugins coexist.
  */

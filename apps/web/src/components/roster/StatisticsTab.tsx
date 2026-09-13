@@ -74,7 +74,7 @@ function Section({ title, aside, note, children }: { title: string; aside?: Reac
   );
 }
 
-/** The quiet "solving 3 units" count; nothing at all once the worker has caught up. */
+/** The quiet "solving 3 units" count, which disappears once the worker has caught up. */
 function Pending({ n }: { n: number }) {
   if (n <= 0) return null;
   return (

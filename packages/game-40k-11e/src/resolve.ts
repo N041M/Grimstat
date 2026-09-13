@@ -400,7 +400,7 @@ export const GENERIC_TOGGLES: ManualToggle[] = [
   {
     id: "miracle-hit-6",
     label: "Miracle/Fate dice: one hit roll set to 6",
-    description: "One attack die per weapon profile is not rolled; it counts as an unmodified 6.",
+    description: "One attack die per weapon profile is not rolled. It counts as an unmodified 6.",
     side: "attacker",
     effects: [{ when: { stage: "hit", side: "attacker" }, op: "substitute", target: CH.hitRoll, value: 6, source: "Miracle dice" }],
     defaultOn: false,
@@ -408,7 +408,7 @@ export const GENERIC_TOGGLES: ManualToggle[] = [
   {
     id: "miracle-wound-6",
     label: "Miracle/Fate dice: one wound roll set to 6",
-    description: "One wound roll per weapon profile is not rolled; it counts as an unmodified 6.",
+    description: "One wound roll per weapon profile is not rolled. It counts as an unmodified 6.",
     side: "attacker",
     effects: [{ when: { stage: "wound", side: "attacker" }, op: "substitute", target: CH.woundRoll, value: 6, source: "Miracle dice" }],
     defaultOn: false,

@@ -428,7 +428,7 @@ export function opponentScenarioUnit(u: OpponentUnit, state?: UnitState): Scenar
  *
  * Casualties are taken from the back of the unit, which is how a squad is usually removed, and
  * weapon counts fall with the models carrying them. The tracker does not know which specific models
- * died, so this is proportional rather than exact; it is far closer than solving at full strength,
+ * died, so this is proportional rather than exact. It is far closer than solving at full strength,
  * which is what a companion would otherwise report in the middle of a game.
  */
 export function atStrength(unit: ScenarioUnit, state: UnitState, startingModels: number): ScenarioUnit {

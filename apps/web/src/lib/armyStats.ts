@@ -7,7 +7,7 @@ import { BAR_ORDER, pointsBarModel, type SegmentTone } from "./pointsBar";
  * Pure aggregation behind Armies → Statistics: what the army *is*, before anything is simulated.
  *
  * Everything here is derived from the roster plus the snapshot's datasheets and the resolver's
- * costing; no worker, no DOM, no storage. The simulated numbers (damage, durability) are joined on
+ * costing, without a worker, DOM access or storage. The simulated numbers (damage, durability) are joined on
  * top of these rows by `useArmyStats`.
  *
  * Two different foldings are used on purpose, and both are correct:

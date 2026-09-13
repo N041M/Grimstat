@@ -82,7 +82,7 @@ export const EffectRecord = z.object({
 });
 export type EffectRecord = z.infer<typeof EffectRecord>;
 
-/** A Tier-3 ability exposes a manual toggle the user can switch on in a scenario; it may carry approximate effects. */
+/** A Tier-3 ability exposes a manual toggle the user can switch on in a scenario, and it may carry approximate effects. */
 export const ManualToggle = z.object({
   id: z.string(),
   label: z.string(),
