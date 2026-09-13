@@ -132,7 +132,9 @@ export function useTabInView(ref: RefObject<HTMLElement | null>, value: string):
   useEffect(() => {
     const bar = ref.current;
     if (!bar || bar.scrollWidth <= bar.clientWidth) return;
-    const tab = bar.querySelector<HTMLElement>('[aria-selected="true"]');
+    // A tab strip marks its own with `aria-selected`; the battle table's tools are toggles and
+    // mark theirs with `aria-pressed`. Either way there is one.
+    const tab = bar.querySelector<HTMLElement>('[aria-selected="true"], [aria-pressed="true"]');
     tab?.scrollIntoView({ inline: "nearest", block: "nearest" });
   }, [ref, value]);
 }
@@ -198,7 +200,7 @@ export function numOrNull(v: string): number | null {
 
 // ---------- icons (16px line icons, currentColor) ----------
 
-export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse" | "target" | "cube" | "plan";
+export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse" | "target" | "cube" | "plan" | "camera";
 
 const PATHS: Record<IconName, ReactNode> = {
   export: (
@@ -281,6 +283,14 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M14 6h-4V2" />
       <path d="M2 10h4v4" />
       <path d="M14 10h-4v4" />
+    </>
+  ),
+  /* The control that opens the view's options. A camera rather than one of the views it offers:
+     the cube glyph doubled as the orbit option inside the menu, so the two read as the same thing. */
+  camera: (
+    <>
+      <path d="M1.8 5.2h3l1-1.6h4.4l1 1.6h3v7.2a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z" />
+      <circle cx="8" cy="8.8" r="2.4" />
     </>
   ),
   /* The two ways of looking at a table: from an angle, and straight down. */

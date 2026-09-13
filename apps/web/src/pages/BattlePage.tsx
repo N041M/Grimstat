@@ -15,7 +15,7 @@ import { db } from "../db";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
 import { canRedo, canUndo, canUndoUnits, editorReducer, initialEditor } from "../lib/battleEditor";
-import { Badge, Icon, useConfirm, useDismiss, useEdgeFade } from "../components/ui";
+import { Badge, Icon, useConfirm, useDismiss, useEdgeFade, useTabInView } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
 import { silhouetteFor, type SilhouetteId } from "../lib/silhouettes";
 import {
@@ -253,6 +253,8 @@ export function BattlePage() {
   const [activeModelId, setActiveModelId] = useState<string | undefined>();
   const [targetId, setTargetId] = useState<string | undefined>();
   const [tool, setTool] = useState<BattleTool>("select");
+  // The tool in hand scrolls itself into view, so it is never the one off the edge of the strip.
+  useTabInView(toolstripRef, tool);
   const [view, setView] = useState<CameraMode>("orbit");
   /** Bumped to put the camera back where the view opened; see `Cameras`. */
   const [recentre, setRecentre] = useState(0);
@@ -1032,30 +1034,29 @@ export function BattlePage() {
                   </button>
                 ))}
               </div>
-            </div>
-          ) : null}
-          {webgl ? (
-            <div className="battle-view-tools" ref={cameraRef}>
-              {/* Full screen on top: it is the one here that is pressed mid-game. */}
-              {compact ? (
-                <button type="button" className="battle-view-btn battle-fullscreen" aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")} aria-label={t(focused ? "battle.focus.off" : "battle.focus.on")}>
-                  <Icon name={focused ? "collapse" : "expand"} />
+              <div className="battle-view-tools" ref={cameraRef}>
+                {/* Full screen first: it is the one here that is pressed mid-game. */}
+                {compact ? (
+                  <button type="button" className="battle-view-btn battle-fullscreen" aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")} aria-label={t(focused ? "battle.focus.off" : "battle.focus.on")}>
+                    <Icon name={focused ? "collapse" : "expand"} />
+                  </button>
+                ) : null}
+                <button type="button" className="battle-view-btn" aria-expanded={cameraOpen} aria-controls="battle-camera" onClick={() => setCameraOpen((on) => !on)} title={t("battle.view.cameraTitle")} aria-label={t("battle.view.camera")}>
+                  {/* A camera, not one of the views it offers: the cube glyph is the orbit option
+                      inside the menu, and a control that wears its own contents reads as one. */}
+                  <Icon name="camera" />
                 </button>
-              ) : null}
-              <button type="button" className="battle-view-btn" aria-expanded={cameraOpen} aria-controls="battle-camera" onClick={() => setCameraOpen((on) => !on)} title={t("battle.view.cameraTitle")} aria-label={t("battle.view.camera")}>
-                {/* The glyph is the view the table is in, so the folded control still says which. */}
-                <Icon name={view === "orbit" ? "cube" : "plan"} />
-              </button>
-              <div className="battle-camera" id="battle-camera" role="group" aria-label={t("battle.view.camera")} hidden={!cameraOpen}>
-                <button type="button" className="battle-view-btn" aria-pressed={view === "orbit"} onClick={() => { setView("orbit"); closeCamera(); }} title={t("battle.view.orbit")} aria-label={t("battle.view.orbit")}>
-                  <Icon name="cube" />
-                </button>
-                <button type="button" className="battle-view-btn" aria-pressed={view === "top"} onClick={() => { setView("top"); closeCamera(); }} title={t("battle.view.top")} aria-label={t("battle.view.top")}>
-                  <Icon name="plan" />
-                </button>
-                <button type="button" className="battle-view-btn" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre")}>
-                  <Icon name="target" />
-                </button>
+                <div className="battle-camera" id="battle-camera" role="group" aria-label={t("battle.view.camera")} hidden={!cameraOpen}>
+                  <button type="button" className="battle-view-btn" aria-pressed={view === "orbit"} onClick={() => { setView("orbit"); closeCamera(); }} title={t("battle.view.orbit")} aria-label={t("battle.view.orbit")}>
+                    <Icon name="cube" />
+                  </button>
+                  <button type="button" className="battle-view-btn" aria-pressed={view === "top"} onClick={() => { setView("top"); closeCamera(); }} title={t("battle.view.top")} aria-label={t("battle.view.top")}>
+                    <Icon name="plan" />
+                  </button>
+                  <button type="button" className="battle-view-btn" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre")}>
+                    <Icon name="target" />
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}

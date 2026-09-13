@@ -6079,6 +6079,10 @@ button.val-row:hover {
   }
 }
 .battle-stage {
+  /* The height of a tool button, and the padding around the strip holding them. The marks beside
+     the tools are built from the same two, which is what keeps them on the same line. */
+  --battle-mark-box: 24px;
+  --battle-strip-pad: 4px;
   position: relative;
   min-width: 0;
   overflow: hidden;
@@ -8083,11 +8087,10 @@ button.battle-scope-btn:hover {
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
 }
-/* The 40px floor every other control gets would square these off; their target is the box around
-   each instead, which is the 44 a thumb needs. */
+/* The 40px floor every other control gets would square these off. Their box is already a tool
+   button's height, which is what puts them on its line, and the chip inside it stays 30px. */
 .shell.compact .battle-view-btn {
   min-height: 0;
-  height: 30px;
 }
 .shell.compact .ctx-bar-action {
   scroll-snap-align: end;
@@ -9928,6 +9931,7 @@ body.battle-focused .battle-stage {
   right: 8px;
   display: flex;
   align-items: flex-start;
+  gap: 8px;
   pointer-events: none;
 }
 .battle-head > * {
@@ -9957,73 +9961,130 @@ body.battle-focused .battle-stage {
 
 /* What acts on the view: which way it looks at the table, recentring it, and giving it the screen. */
 /*
- * What acts on the view, in a column down the right edge under the tool strip.
+ * What acts on the view: a column at the far end of the head row, its top level with the tools.
  *
- * It shared the head row with the tools until five tool names came to 344px against the 359 a
- * phone's table is wide. Beside a 30px column the tools had 321 and "Terrain" was cut off. Under
- * it they have the whole row and all five read; the marks are glyphs, so a column suits them and
- * costs 30px of width rather than a row of height.
+ * A column rather than a row because it costs the tools 30px of their line instead of 70. They
+ * still scroll on a phone, where five names come to 344px against about 320 left over, but the
+ * tool in hand scrolls itself into view, so the one being used is never the one off the edge.
  */
 .battle-view-tools {
-  position: absolute;
-  z-index: 5;
-  /* Clear of the tool strip above: 8px inset, a 32px strip, and 8px between them. */
-  top: 48px;
-  right: 8px;
+  position: relative;
+  flex: none;
+  margin-left: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
+  /* The same padding the tool strip carries, so the two start on the same line. */
+  padding: var(--battle-strip-pad) 0;
 }
-/* The camera's options, folded away until the mark above them is pressed. */
+/*
+ * The camera's options, folded away until the mark above them is pressed.
+ *
+ * They grow out of that mark and fold back into it rather than appearing and disappearing. The
+ * `display` transition is what lets a folded group animate at all: without `allow-discrete` the
+ * browser applies `display: none` on the first frame and there is nothing left to animate. Where
+ * that is not understood the group simply shows and hides, which is where this started.
+ */
 .battle-camera {
+  position: absolute;
+  top: calc(100% - var(--battle-strip-pad) + 4px);
+  right: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: top center;
+  transition:
+    opacity 160ms ease,
+    transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    display 200ms allow-discrete;
 }
 .battle-camera[hidden] {
   display: none;
+  opacity: 0;
+  transform: scale(0.8);
 }
-/* The mark that opens them is the one that is on while they are showing. */
-.battle-view-btn[aria-expanded="true"] {
-  background: #e6e8ec;
-  color: #15161a;
+@starting-style {
+  .battle-camera:not([hidden]) {
+    opacity: 0;
+    transform: scale(0.8);
+  }
 }
+/* Each mark arrives just after the one above it, so the group unrolls down the edge rather than
+   appearing all at once. */
+.battle-camera > button {
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 160ms ease,
+    transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.battle-camera:not([hidden]) > button:nth-child(2) {
+  transition-delay: 40ms;
+}
+.battle-camera:not([hidden]) > button:nth-child(3) {
+  transition-delay: 80ms;
+}
+@starting-style {
+  .battle-camera:not([hidden]) > button {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/*
+ * The box is the height of a tool button, so the first mark lines up with the tools beside it; the
+ * chip drawn inside it is 30px, so the mark still sits lightly on the board. Sizing the chip itself
+ * and letting the box follow put the mark's middle 8px above the tool row's.
+ */
 .battle-view-btn {
   position: relative;
-  width: 30px;
-  height: 30px;
+  width: var(--battle-mark-box);
+  height: var(--battle-mark-box);
   min-height: 0;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--radius-input);
-  background: rgba(21, 22, 26, 0.6);
+  background: transparent;
   color: #e6e8ec;
   cursor: pointer;
 }
-/* Each mark is 30px so it sits lightly on the board; the target around it is the 44 a thumb needs. */
-.battle-view-btn::after {
+.battle-view-btn::before {
   content: "";
   position: absolute;
-  inset: -7px;
+  inset: calc((var(--battle-mark-box) - 30px) / 2);
+  border-radius: var(--radius-input);
+  background: rgba(21, 22, 26, 0.6);
+  transition:
+    background-color 140ms ease,
+    transform 120ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.battle-view-btn > .icon {
+  position: relative;
+}
+.battle-view-btn:hover:not(:disabled)::before {
+  background: rgba(21, 22, 26, 0.88);
 }
 .battle-view-btn:hover:not(:disabled) {
-  background: rgba(21, 22, 26, 0.88);
   color: #ffffff;
 }
 /* The view the table is in, and the mode focus is in: the same filled treatment the row at the
    foot uses for a mode that is on. */
-.battle-view-btn[aria-pressed="true"] {
+.battle-view-btn[aria-pressed="true"]::before,
+.battle-view-btn[aria-expanded="true"]::before {
   background: #e6e8ec;
+}
+.battle-view-btn[aria-pressed="true"],
+.battle-view-btn[aria-expanded="true"] {
   color: #15161a;
 }
-.battle-view-btn[aria-pressed="true"]:hover:not(:disabled) {
+.battle-view-btn[aria-pressed="true"]:hover:not(:disabled)::before {
   background: #ffffff;
-  color: #15161a;
 }
 /* The corner is the corner in focus as well. A control that moves when it is used is one you have
    to find twice. */
@@ -10084,5 +10145,37 @@ body.battle-focused .battle-stage {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation-duration: 0.001s !important;
+  }
+}
+
+/* ---------- The table's controls answer the hand ----------
+   Everything on the table — the tools along the head, the marks down the edge, the row along the
+   foot — takes its colour change over 140ms rather than in one frame, and gives under a press. The
+   press is the part that matters on a touch screen, where there is no hover to say a control
+   noticed: the mark shrinks a little while the finger is on it.
+
+   Disabled controls change too, because in this toolbar disabled is a state that comes and goes as
+   a plan is made and approved, not a fixed property of the button.
+
+   The page's reduced-motion rule flattens all of it. */
+.battle-toolstrip button,
+.battle-toolbar button,
+.battle-view-btn {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 120ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.battle-toolstrip button:active:not(:disabled),
+.battle-toolbar button:active:not(:disabled),
+.battle-view-btn:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+/* The marks match whatever height a tool button has at this width. */
+@media (max-width: 1039px) {
+  .shell.compact .battle-stage {
+    --battle-mark-box: 38px;
   }
 }
