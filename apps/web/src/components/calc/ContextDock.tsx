@@ -3,7 +3,7 @@ import type { ManualToggle, Scenario, ScenarioContext, Snapshot } from "@grimsta
 import { gameApi } from "../../plugin";
 import { isToggleOn, setToggle } from "../../lib/scenario";
 import type { SimulationState } from "../../hooks/useSimulation";
-import { Dock, DockSection, NumberBox, PillChip, SelectBox, SwitchRow } from "../kit";
+import { Dock, DockDisclosure, DockSection, NumberBox, PillChip, SelectBox, SwitchRow } from "../kit";
 import { fmtInt } from "../../lib/format";
 import { t, type I18nKey } from "../../i18n";
 
@@ -55,11 +55,21 @@ function fields(context: ScenarioContext) {
   };
 }
 
-/** "exact · 4 ms", the pending state while the worker is busy, or what the scenario still lacks. */
-function statusLine(sim: SimulationState): string {
+/**
+ * The dock header only carries states the reader can act on: what the scenario still lacks, a
+ * failure, or that a new answer is on its way. A finished run says nothing, because "exact · 4 ms"
+ * is a fact about the solver rather than about the units.
+ */
+function statusLine(sim: SimulationState): string | undefined {
   if (sim.idle) return t(sim.idle === "no-weapons" ? "dock.idle.noWeapons" : "dock.idle.noModels");
   if (sim.error) return t("results.error");
   if (sim.stale || !sim.result) return t("dock.computing");
+  return undefined;
+}
+
+/** "exact · 4 ms" — how the last answer was reached, shown inside the advanced block. */
+function solverLine(sim: SimulationState): string | undefined {
+  if (!sim.result || sim.stale) return undefined;
   const backend = sim.result.backend === "exact" ? t("results.backend.exact") : t("dock.backend.mcWith", { n: fmtInt(sim.result.iterations) });
   return t("dock.status", { backend, ms: fmtInt(sim.elapsedMs ?? 0) });
 }
@@ -75,11 +85,6 @@ export function ContextDock({ scenario, snapshot, sim, onContext, onToggles }: {
       <DockSection className="dock-fields">
         <SelectBox label={t("dock.rangeBand")} title={t("ctx.rangeBand")} value={ctx.rangeBand} options={opts.rangeBand} onChange={(rangeBand) => onContext({ rangeBand })} />
         <SelectBox label={t("dock.phase")} title={t("ctx.phase")} value={ctx.phase} options={opts.phase} onChange={(phase) => onContext({ phase })} />
-        <SelectBox label={t("dock.allocation")} title={t("ctx.allocation")} value={ctx.allocationPolicy} options={opts.allocationPolicy} onChange={(allocationPolicy) => onContext({ allocationPolicy })} />
-        <SelectBox label={t("dock.lethal")} title={t("ctx.lethal")} value={ctx.lethalChoice} options={opts.lethalChoice} onChange={(lethalChoice) => onContext({ lethalChoice })} />
-        <SelectBox label={t("dock.weaponOrder")} title={t("ctx.weaponOrder")} value={ctx.weaponOrder} options={opts.weaponOrder} onChange={(weaponOrder) => onContext({ weaponOrder })} />
-        <SelectBox label={t("dock.backend")} title={t("ctx.backend")} value={ctx.backend} options={opts.backend} onChange={(backend) => onContext({ backend })} />
-        {opts.showIterations ? <NumberBox label={t("dock.iterations")} title={t("ctx.mcIterations")} value={ctx.mcIterations} min={1000} step={1000} onChange={(v) => onContext({ mcIterations: Math.max(1000, Math.floor(v)) })} /> : null}
       </DockSection>
 
       <DockSection className="dock-chip-groups">
@@ -108,6 +113,15 @@ export function ContextDock({ scenario, snapshot, sim, onContext, onToggles }: {
           />
         ))}
       </DockSection>
+
+      <DockDisclosure title={t("dock.advanced")} meta={solverLine(sim)}>
+        <p className="dock-advanced-note">{t("dock.advancedHint")}</p>
+        <SelectBox label={t("dock.allocation")} title={t("ctx.allocation")} value={ctx.allocationPolicy} options={opts.allocationPolicy} onChange={(allocationPolicy) => onContext({ allocationPolicy })} />
+        <SelectBox label={t("dock.lethal")} title={t("ctx.lethal")} value={ctx.lethalChoice} options={opts.lethalChoice} onChange={(lethalChoice) => onContext({ lethalChoice })} />
+        <SelectBox label={t("dock.weaponOrder")} title={t("ctx.weaponOrder")} value={ctx.weaponOrder} options={opts.weaponOrder} onChange={(weaponOrder) => onContext({ weaponOrder })} />
+        <SelectBox label={t("dock.backend")} title={t("ctx.backend")} value={ctx.backend} options={opts.backend} onChange={(backend) => onContext({ backend })} />
+        {opts.showIterations ? <NumberBox label={t("dock.iterations")} title={t("ctx.mcIterations")} value={ctx.mcIterations} min={1000} step={1000} onChange={(v) => onContext({ mcIterations: Math.max(1000, Math.floor(v)) })} /> : null}
+      </DockDisclosure>
     </Dock>
   );
 }

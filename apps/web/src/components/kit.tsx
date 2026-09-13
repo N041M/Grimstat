@@ -39,6 +39,22 @@ export function DockSection({ title, count, children, className }: { title?: str
   );
 }
 
+/**
+ * A dock block that starts closed. Holds controls that change how precisely the answer is worked
+ * out rather than the situation being modelled, so the dock opens on the choices a player makes.
+ */
+export function DockDisclosure({ title, meta, children, className }: { title: string; meta?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <details className={`dock-section dock-disclosure ${className ?? ""}`.trim()}>
+      <summary className="dock-section-head">
+        <span className="dock-section-title">{title}</span>
+        {meta === undefined ? null : <span className="dock-section-count">{meta}</span>}
+      </summary>
+      <div className="dock-disclosure-body">{children}</div>
+    </details>
+  );
+}
+
 // ---------- controls ----------
 
 export interface Option<T extends string> {

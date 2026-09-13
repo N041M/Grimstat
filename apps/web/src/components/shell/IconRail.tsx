@@ -41,7 +41,12 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
   return (
     <div className="rail-theme" ref={ref}>
       <button type="button" className="rail-item rail-theme-btn" aria-haspopup="menu" aria-expanded={open} title={label} aria-label={t("theme.toggleAria")} onClick={() => setOpen((v) => !v)}>
-        <span aria-hidden="true">{dark ? "☀" : "☾"}</span>
+        <span className="rail-glyph" aria-hidden="true">
+          {dark ? "☀" : "☾"}
+        </span>
+        <span className="rail-label" aria-hidden="true">
+          {t("theme.menuLabel")}
+        </span>
       </button>
       {open ? (
         <div className="rail-theme-menu menu" role="menu" aria-label={t("theme.menuLabel")} onKeyDown={(e) => menuKeys(e, e.currentTarget)}>
@@ -67,8 +72,10 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
 
 /**
  * The 56px icon rail: brand mark (opens the command palette, carries the solve-state dot),
- * one single-letter item per route, theme control pinned to the bottom. Below 900px the same
- * markup lays itself out as a bottom bar (see `.shell.narrow .rail` in styles.css).
+ * one single-letter item per route, theme control pinned to the bottom. Pointing at it or
+ * tabbing into it widens it over the page to name each item, since a letter on its own says
+ * little — see `.rail` in styles.css. Below 900px the same markup lays itself out as a bottom
+ * bar, where every item keeps a permanent label under its glyph.
  */
 export function IconRail({ route, theme, offline }: { route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean }) {
   const { solveState, openPalette } = useApp();
@@ -82,7 +89,9 @@ export function IconRail({ route, theme, offline }: { route: Route; theme: Retur
       <nav className="rail-nav" aria-label={t("nav.label")}>
         {RAIL_ENTRIES.map((e) => (
           <a key={e.route} className="rail-item" href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
-            <span aria-hidden="true">{e.glyph}</span>
+            <span className="rail-glyph" aria-hidden="true">
+              {e.glyph}
+            </span>
             <span className="rail-label" aria-hidden="true">
               {t(e.labelKey)}
             </span>

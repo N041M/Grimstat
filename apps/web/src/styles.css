@@ -68,6 +68,10 @@
   --radius-overlay: 8px;
   --radius-pill: 12px;
   --gutter: 22px;
+  /* Collapsed rail width doubles as the glyph column inside it, so an item's letter does not
+     shift sideways when the rail opens. */
+  --rail-w: 56px;
+  --rail-w-open: 172px;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -236,7 +240,7 @@ code,
 .shell {
   height: 100vh;
   display: grid;
-  grid-template-columns: 56px minmax(240px, 264px) minmax(0, 1fr);
+  grid-template-columns: var(--rail-w) minmax(240px, 264px) minmax(0, 1fr);
   overflow: hidden;
   background: var(--bg);
   color: var(--ink);
@@ -246,22 +250,59 @@ code,
   .shell {
     min-width: 1040px;
   }
+  /* The rail is lifted out of flow so it can widen over the page, which would otherwise let these
+     two slide down into its track. Pin them to the tracks they belong in. */
+  .ctx-col {
+    grid-column: 2;
+  }
+  .main-region {
+    grid-column: 3;
+  }
 }
 .shell-loading {
   padding: 22px;
 }
 
 /* ---- icon rail ---- */
+/*
+ * 56px of glyphs that widens to show each item's name while the pointer (or keyboard focus) is in
+ * it. The shell's first grid track stays 56px and the rail is lifted out of flow over it, so the
+ * expansion covers the context column for a moment instead of reflowing the page under the cursor.
+ */
 .rail {
   border-right: 1px solid var(--line);
   background: var(--rail);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   padding: 12px 0;
   gap: 4px;
-  position: relative;
-  z-index: 2;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--rail-now, var(--rail-w));
+  transition: width 0.16s ease;
+  z-index: 20;
+}
+/*
+ * Two rules rather than one list: an engine without `:has()` drops the whole selector list, which
+ * would take hover expansion down with it. Keyboard focus opens the rail, a mouse click does not —
+ * clicking an item would otherwise leave it pinned open over the page after the route changed.
+ * Only the nav counts, so working the theme menu leaves the rail where it is.
+ */
+.rail:hover {
+  --rail-now: var(--rail-w-open);
+  box-shadow: 2px 0 14px rgb(0 0 0 / 0.18);
+}
+.rail:has(.rail-nav :focus-visible) {
+  --rail-now: var(--rail-w-open);
+  box-shadow: 2px 0 14px rgb(0 0 0 / 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail {
+    transition: none;
+  }
 }
 .rail-mark {
   width: 30px;
@@ -274,9 +315,12 @@ code,
   align-items: center;
   justify-content: center;
   margin-bottom: 14px;
+  /* Centres the mark in the collapsed rail's 56px and keeps it there once the rail opens. */
+  margin-left: calc((var(--rail-w) - 30px) / 2);
   cursor: pointer;
   position: relative;
   flex: none;
+  align-self: flex-start;
 }
 .rail-mark:hover {
   opacity: 0.85;
@@ -308,20 +352,27 @@ code,
   gap: 4px;
 }
 .rail-item {
-  width: 38px;
   height: 38px;
   border-radius: 6px;
   border: 0;
   background: transparent;
   padding: 0;
+  margin: 0 9px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   font: 600 13px/1 var(--mono);
   color: var(--muted);
   text-decoration: none;
   cursor: pointer;
   flex: none;
+  overflow: hidden;
+}
+/* The glyph keeps the width the collapsed rail leaves it, less the item's own side margins. */
+.rail-glyph {
+  width: calc(var(--rail-w) - 18px);
+  flex: none;
+  text-align: center;
 }
 .rail-item:hover {
   background: var(--hover);
@@ -342,9 +393,10 @@ code,
   font: 400 14px/1 var(--font);
   color: var(--faint);
 }
+/* Fixed to the collapsed rail's edge, so an open menu never slides when the rail widens. */
 .rail-theme-menu {
   position: absolute;
-  left: 46px;
+  left: calc(var(--rail-w) - 10px);
   bottom: 0;
   z-index: 30;
   min-width: 132px;
@@ -801,8 +853,12 @@ code,
     grid-template-rows: minmax(0, 1fr) 56px;
     min-width: 0;
   }
+  /* No flyout on a phone: the rail is the bottom bar and goes back into the grid. */
   .rail {
     order: 2;
+    position: static;
+    width: auto;
+    transition: none;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
@@ -811,8 +867,14 @@ code,
     border-right: 0;
     border-top: 1px solid var(--line);
   }
+  .rail:hover,
+  .rail:focus-within {
+    width: auto;
+    box-shadow: none;
+  }
   .rail-mark {
     margin-bottom: 0;
+    margin-left: 0;
   }
   .rail-nav {
     flex-direction: row;
@@ -954,9 +1016,17 @@ code,
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.6rem;
 }
-/* Two columns that fold to one on the container's width — for panels the user can resize. */
+/*
+ * Two columns that fold to one on the container's width — for panels the user can resize.
+ *
+ * Used by What if, whose rows are a name, a bar and a number. 190px let the pair stay side by side
+ * until each column was a third of that, by which point nine of the twenty-six names were cut to
+ * "Re-roll all faile…" — the column folded long after it had stopped being readable. Measured, the
+ * names all fit at a 400px column and the first is clipped at 372px, so folding at 400px hands the
+ * single column the full width at the moment two columns stop working.
+ */
 .grid-2.grid-fold {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
 }
 @media (max-width: 899px) {
   .grid-2 {
@@ -2796,6 +2866,25 @@ a.btn:hover {
   flex-direction: column;
   gap: 9px;
 }
+/*
+ * The side groups had no rules of their own, so "Attacker" and "Defender" fell back to 14px body
+ * text at full contrast — louder than the section heading above them, and with nothing separating
+ * one group from the next. They are sub-labels, so they take the dock's own eyebrow type a step
+ * quieter than the section titles they sit under.
+ */
+.dock-chip-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dock-chip-group-title {
+  display: block;
+  margin-bottom: 7px;
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--faint);
+}
 .dock-chips {
   display: flex;
   flex-wrap: wrap;
@@ -2807,6 +2896,41 @@ a.btn:hover {
 }
 .dock-empty {
   margin: 6px 0 0;
+  font: 400 11px/1.5 var(--font);
+  color: var(--faint);
+}
+.dock-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+  margin-bottom: 0;
+}
+.dock-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.dock-disclosure > summary::after {
+  content: "+";
+  font: 400 12px/1 var(--mono);
+  color: var(--faint);
+  margin-left: auto;
+}
+.dock-disclosure[open] > summary::after {
+  content: "−";
+}
+.dock-disclosure > summary:hover .dock-section-title {
+  color: var(--ink);
+}
+/* Not a live "how many are on" count, so it stays quiet rather than taking the accent. */
+.dock-disclosure > summary .dock-section-count {
+  color: var(--faint);
+}
+.dock-disclosure-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 10px;
+}
+.dock-advanced-note {
+  margin: 0;
   font: 400 11px/1.5 var(--font);
   color: var(--faint);
 }
@@ -3150,7 +3274,10 @@ a.btn:hover {
 /* hero header: eyebrow + 56px figure, four secondary metrics right-aligned */
 .hero {
   display: flex;
-  align-items: flex-end;
+  /* `safe` is what keeps a wrapped tile row from being cut off: when the tiles need two rows and
+     the block is taller than the panel, alignment falls back to the top edge rather than growing
+     upwards past it, which put the first row's labels out of view. */
+  align-items: safe flex-end;
   justify-content: space-between;
   gap: 16px;
   height: 100%;
@@ -3164,6 +3291,8 @@ a.btn:hover {
   text-transform: uppercase;
   letter-spacing: 0.13em;
   color: var(--faint);
+  /* Two lines of eyebrow above the figure reads as a mistake; let the row wrap instead. */
+  white-space: nowrap;
 }
 .hero-value-row {
   display: flex;
@@ -3184,7 +3313,7 @@ a.btn:hover {
 }
 .hero-stats {
   display: flex;
-  gap: 26px;
+  gap: 18px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -3353,7 +3482,7 @@ a.btn:hover {
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 6px;
 }
@@ -3375,11 +3504,14 @@ a.btn:hover {
   border-color: var(--line);
   background: var(--panel);
 }
-.calc-ctx-new {
+.calc-ctx-new,
+.calc-ctx-swap {
   flex: none;
   width: 22px;
   height: 22px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
   border: 1px solid var(--line);
   border-radius: var(--radius-input);
@@ -3388,9 +3520,13 @@ a.btn:hover {
   font: 400 13px/1 var(--font);
   cursor: pointer;
 }
-.calc-ctx-new:hover:not(:disabled) {
+.calc-ctx-new:hover:not(:disabled),
+.calc-ctx-swap:hover:not(:disabled) {
   border-color: var(--ink);
   color: var(--ink);
+}
+.calc-ctx-swap:active {
+  background: var(--hover);
 }
 .calc-ctx-status {
   grid-column: 1 / -1;
@@ -3836,13 +3972,15 @@ a.btn:hover {
 .dash-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   padding: 10px 22px;
   flex: none;
   border-bottom: 1px solid var(--line-soft);
 }
+/* Only the loading line uses this now; it keeps to the left while the buttons stay right. */
 .dash-hint {
+  margin-right: auto;
   font: 400 10px/1.4 var(--mono);
   color: var(--faint);
   min-width: 0;
@@ -3867,6 +4005,11 @@ a.btn:hover {
 .dash-btn:hover:not(:disabled) {
   border-color: var(--ink);
   color: var(--ink);
+}
+.dash-btn:disabled {
+  color: var(--faint);
+  border-color: var(--line-soft);
+  cursor: default;
 }
 .dash-btn.on,
 .dash-btn.on:hover:not(:disabled) {
@@ -4189,6 +4332,23 @@ a.btn:hover {
   padding: 10px 22px 22px;
   font: 400 10px/1.4 var(--mono);
   color: var(--faint);
+}
+
+/*
+ * Shortcut strips answer a question only someone already driving the list by keyboard is asking,
+ * so they wait for focus to land inside their surface. They keep their space rather than being
+ * removed from flow, so nothing below them jumps when they appear.
+ */
+.ut-keys,
+.stat-keys,
+.battle-keys {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+:focus-within > .ut-keys,
+:focus-within > .stat-keys,
+:focus-within > .battle-keys {
+  opacity: 1;
 }
 
 /* ---------- Armies: Statistics tab ----------
@@ -7066,6 +7226,8 @@ button.battle-scope-btn:hover {
 }
 .rail-offline {
   flex: none;
+  align-self: flex-start;
+  margin-left: 9px;
   margin-bottom: 6px;
   padding: 3px 5px;
   border-radius: 4px;
@@ -7079,46 +7241,48 @@ button.battle-scope-btn:hover {
 .rail-item {
   position: relative;
 }
+/* Sits in the width the open rail adds. Invisible while collapsed rather than clipped, so the
+   theme menu and the offline badge are free to overflow the rail as they always did. */
 .rail-label {
-  position: absolute;
-  left: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 3px 7px;
-  border-radius: 4px;
-  background: var(--btn-bg);
-  color: var(--btn-fg);
-  font: 500 11px/1.2 var(--font);
+  font: 500 12px/1 var(--font);
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.12s;
-  z-index: 30;
 }
-.rail-item:hover .rail-label,
-.rail-item:focus-visible .rail-label {
+.rail:hover .rail-label {
   opacity: 1;
+}
+.rail:has(.rail-nav :focus-visible) .rail-label {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-label {
+    transition: none;
+  }
 }
 @media (max-width: 899px) {
   .rail-item {
     flex-direction: column;
+    justify-content: center;
     gap: 3px;
     width: auto;
     min-width: 34px;
     height: 44px;
     padding: 0 3px;
+    margin: 0;
+    overflow: visible;
+  }
+  .rail-glyph {
+    width: auto;
   }
   .rail-label {
-    position: static;
-    transform: none;
     opacity: 1;
-    padding: 0;
-    background: none;
     color: inherit;
     font: 500 7px/1 var(--mono);
     letter-spacing: 0.04em;
-    text-transform: uppercase;
     transition: none;
+    text-transform: uppercase;
   }
   .rail-offline {
     margin-bottom: 0;

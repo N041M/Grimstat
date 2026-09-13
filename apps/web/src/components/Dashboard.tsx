@@ -27,6 +27,23 @@ const ROW_HEIGHT = 36 - GUTTER;
 const HEADLESS = new Set(["core.summary", "core.damage-distribution", "core.models-slain", "core.damage-by-weapon"]);
 
 /**
+ * Region width at which panels stop sharing a row.
+ *
+ * Half a row is `(region - 3 * GUTTER) / 2`, so 500px puts a half-width panel at about 230px. That
+ * is where the pair the default layout actually places side by side — models slain and damage by
+ * weapon — starts to overflow; measured, they are clean to 230px and below 200px respectively.
+ * Panels that end up beside each other further down the packing are looser about it: unit cards
+ * scrolls its table, and what-if ellipsizes long ability names at any width it is ever given.
+ *
+ * What matters is the region, not the window: the rail and the context column take a fixed ~320px,
+ * and the calculator adds its dock, so a 1040px window leaves only ~470px here. Unstacking needs a
+ * little more width than stacking gave up, so a scrollbar appearing or disappearing at the
+ * threshold cannot flip it back and forth.
+ */
+const STACK_BELOW = 500;
+const UNSTACK_ABOVE = 540;
+
+/**
  * Pack widgets left-to-right, top-to-bottom using their default sizes.
  *
  * Widget order plus the default sizes are the designed composition: the hero full width, the damage
@@ -120,15 +137,43 @@ export function Dashboard({ id, inputs, defaultHidden = [], actions }: { id: str
   const provided = analysisKeys(inputs.analyses);
   // Analysis widgets are gated on the inputs this dashboard provides (see widgetAvailable).
   const widgets = useMemo(() => widgetsFrom(host).filter((w) => widgetAvailable(w, inputs.analyses)), [provided]); // eslint-disable-line react-hooks/exhaustive-deps
-  const gridRef = useRef<HTMLDivElement>(null);
+  // Written by attachRegion rather than handed to an element, so it is mutable.
+  const gridRef = useRef<HTMLDivElement | null>(null);
   const [layout, setLayout] = useState<Layout[] | undefined>(undefined);
   const [hidden, setHidden] = useState<string[] | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
   const [menu, setMenu] = useState(false);
-  const narrow = useMedia("(max-width: 899px)");
+  const phone = useMedia("(max-width: 899px)");
+  const [tooNarrow, setTooNarrow] = useState(false);
+  // A phone drops the grid for its own reasons; a desktop window drops it when the region is too
+  // narrow to halve. Either way the stored layout is left alone and comes back with the width.
+  const narrow = phone || tooNarrow;
   // Event handlers from the grid and the fit button read the latest state through these, not a closure.
   const latest = useRef({ layout, hidden });
   latest.current = { layout, hidden };
+
+  /**
+   * Every branch of this component roots on the region element, and they swap as the layout loads
+   * and as the width crosses the threshold. A callback ref re-runs the observer on each of those
+   * swaps; a plain ref would have been read once, while the first render was still the loading
+   * placeholder, and the width would then never be measured at all.
+   */
+  const [region, setRegion] = useState<HTMLDivElement | null>(null);
+  const attachRegion = useCallback((el: HTMLDivElement | null) => {
+    gridRef.current = el;
+    setRegion(el);
+  }, []);
+
+  useEffect(() => {
+    if (!region || phone || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => {
+      const w = entry?.contentRect.width ?? 0;
+      if (!w) return;
+      setTooNarrow((was) => (was ? w < UNSTACK_ABOVE : w < STACK_BELOW));
+    });
+    ro.observe(region);
+    return () => ro.disconnect();
+  }, [region, phone]);
 
   useEffect(() => {
     let alive = true;
@@ -237,7 +282,7 @@ export function Dashboard({ id, inputs, defaultHidden = [], actions }: { id: str
 
   if (!loaded || !layout || !hidden) {
     return (
-      <div className="dashboard">
+      <div className="dashboard" ref={attachRegion}>
         <div className="dash-bar">
           <span className="dash-hint" role="status">
             {t("dashboard.loading")}
@@ -335,16 +380,34 @@ export function Dashboard({ id, inputs, defaultHidden = [], actions }: { id: str
     </Popover>
   ) : null;
 
-  // Phones drop the grid entirely: one column, panels sized by their own content. Positions stay
-  // untouched, so the desktop arrangement survives a trip through a narrow window.
+  // One column, panels sized by their own content. Positions stay untouched, so the arrangement
+  // survives a trip through a narrow window. The ref stays on so the region keeps being measured;
+  // without it the observer would lose its target here and never report the width coming back.
   if (narrow) {
     return (
-      <div className="dashboard narrow">
+      <div className="dashboard narrow" ref={attachRegion}>
         {dialog}
         <div className="dash-bar">
           <span className="dash-actions">
             {actions}
             {hiddenMenu}
+            {/*
+             * A window that is merely too narrow to halve keeps its layout controls; a phone has
+             * no layout to control. Reset works either way, since what it resets is the stored
+             * arrangement the width will bring back. Fitting heights cannot: stacked panels are
+             * sized by their content and ignore the stored height, so measuring one here would
+             * record the height it needs at full width and apply it at half.
+             */}
+            {phone ? null : (
+              <>
+                <button type="button" className="dash-btn" disabled title={t("dashboard.autoFitStacked")}>
+                  {t("dashboard.autoFit")}
+                </button>
+                <button type="button" className="dash-btn" onClick={() => void reset()}>
+                  {t("dashboard.reset")}
+                </button>
+              </>
+            )}
           </span>
         </div>
         <div className="dash-stack">
@@ -358,10 +421,10 @@ export function Dashboard({ id, inputs, defaultHidden = [], actions }: { id: str
   }
 
   return (
-    <div className="dashboard" ref={gridRef}>
+    <div className="dashboard" ref={attachRegion}>
       {dialog}
+      {/* Each panel head carries its own "drag to move" tooltip, so the bar needs no standing caption. */}
       <div className="dash-bar">
-        <span className="dash-hint">{t("dashboard.hint")}</span>
         <span className="dash-actions">
           {actions}
           {hiddenMenu}

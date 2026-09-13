@@ -63,9 +63,9 @@ export function DamageDistribution({ result, running }: WidgetProps) {
           </div>
         }
       />
-      {/* The y scale is implicit (the tallest bar fills the plot), so name what it measures and where its top sits. */}
+      {/* The y scale is implicit (the tallest bar fills the plot), so name what it measures. */}
       <div className="dist-scale mono" aria-hidden="true">
-        {t("dist.yScale", { label: t(view === "cumulative" ? "dist.yLabel.cumulative" : "dist.yLabel.density"), v: pct(scale, scale < 0.1 ? 1 : 0) })}
+        {t("dist.yScale", { label: t(view === "cumulative" ? "dist.yLabel.cumulative" : "dist.yLabel.density") })}
       </div>
       <div className="dist-plot" role="img" aria-label={t(view === "cumulative" ? "dist.ariaCumulative" : "dist.aria", { mean: result.expectedDamage.toFixed(1), p25: fmtInt(p.p25), p75: fmtInt(p.p75) })}>
         {bars.map((b, i) => (
