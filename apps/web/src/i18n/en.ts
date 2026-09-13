@@ -19,12 +19,12 @@ export const en = {
 
   // page headers (20px title + 11px mono subtitle)
   "page.sub.calculator": "{att} → {def}",
-  "page.sub.scenarios": "{n} saved · stored on this device only",
+  "page.sub.scenarios": "{n} saved",
   "page.sub.scenariosSolving": "{n} saved · solving {p} in the background",
-  "page.sub.armies": "{n} saved · validated against the active snapshot",
-  "page.sub.analyses": "unit-vs-unit statistics · runs locally",
-  "page.sub.data": "fetched to this device · no game data ships with the app",
-  "page.sub.about": "version {v} · offline-capable · open source",
+  "page.sub.armies": "{n} saved",
+  "page.sub.analyses": "one unit against another",
+  "page.sub.data": "the game data this app reads",
+  "page.sub.about": "version {v}",
   "page.sub.overrides": "{n} active · applied to every snapshot",
 
   // shell: solve state on the brand mark
@@ -2040,7 +2040,7 @@ export const en = {
 
   // Codex: the datasheet viewer and the compare view
   "nav.codex": "Codex",
-  "page.sub.codex": "{n} datasheets in the active snapshot · read from your own data",
+  "page.sub.codex": "{n} datasheets",
   "page.sub.codexSheet": "{faction} · {role} · {size}",
   "page.sub.codexCompare": "{n} side by side · the best value in each row is marked",
   "page.sub.codexCompareEmpty": "nothing side by side yet",
