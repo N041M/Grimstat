@@ -131,6 +131,26 @@ export interface UnitPresetRecord {
   factionId?: string;
 }
 
+/**
+ * One datasheet in the player's collection: the models of it they own, and how many are painted.
+ *
+ * Keyed by datasheet rather than by anything of its own, because that is the question a collection
+ * answers — "how many of these do I have?" — and because it is what an army asks for. The name and
+ * faction are copied in at the time of adding, so an entry still reads when the active snapshot is
+ * one the datasheet has left. Changing data source does not empty the collection.
+ */
+export interface CollectionEntryRecord {
+  /** The datasheet's id. One record per datasheet. */
+  id: string;
+  name: string;
+  factionId: string;
+  factionName: string;
+  /** Models owned, and how many of those are painted. Painted is never more than owned. */
+  owned: number;
+  painted: number;
+  updatedAt: string;
+}
+
 export type { OverrideRecord } from "./lib/overrides";
 export { overrideKey } from "./lib/overrides";
 
@@ -147,6 +167,7 @@ export class GrimstatDb extends Dexie {
   publishedResolved!: Table<ResolvedListRecord, string>;
   games!: Table<GameRecord, string>;
   unitPresets!: Table<UnitPresetRecord, string>;
+  collection!: Table<CollectionEntryRecord, string>;
 
   constructor(name = "grimstat") {
     super(name);
@@ -269,6 +290,22 @@ export class GrimstatDb extends Dexie {
         await lists.bulkPut(stale.map((r) => ({ ...r, id: publishedListId(r) })));
         await tx.table("publishedResolved").clear();
       });
+    // v10: the player's collection — models owned per datasheet.
+    this.version(10).stores({
+      snapshots: "id, gameSystemId, updatedAt",
+      scenarios: "id, name, updatedAt, snapshotId",
+      layouts: "id",
+      settings: "key",
+      rosters: "id, name, factionId, snapshotId, updatedAt",
+      rosterVersions: "id, rosterId, updatedAt",
+      overrides: "&key, entity, id, updatedAt",
+      terrainLayouts: "id, name, updatedAt",
+      publishedLists: "id, faction, placing, importedAt",
+      publishedResolved: "&key, snapshotId, recordId",
+      games: "id, rosterId, updatedAt",
+      unitPresets: "id, name, factionId, updatedAt",
+      collection: "id, factionId, updatedAt",
+    });
   }
 }
 
@@ -289,7 +326,7 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
  */
 export const STORE_CHANGED = "grimstat:store-changed";
 
-export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts" | "publishedLists" | "publishedResolved" | "games" | "unitPresets";
+export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts" | "publishedLists" | "publishedResolved" | "games" | "unitPresets" | "collection";
 
 export function notifyStoreChanged(store: StoreName): void {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORE_CHANGED, { detail: store }));
@@ -382,22 +419,25 @@ export interface ExportBundle {
     publishedLists?: PublishedListRecord[];
     /** Added with db v8; absent in older bundles. */
     unitPresets?: UnitPresetRecord[];
+    /** Added with db v10; absent in older bundles. */
+    collection?: CollectionEntryRecord[];
   };
 }
 
 export async function exportAll(): Promise<ExportBundle> {
-  const [snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray(), db.terrainLayouts.toArray(), db.publishedLists.toArray(), db.unitPresets.toArray()]);
-  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets } };
+  const [snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray(), db.terrainLayouts.toArray(), db.publishedLists.toArray(), db.unitPresets.toArray(), db.collection.toArray()]);
+  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection } };
 }
 
-export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number; terrainLayouts: number; publishedLists: number; unitPresets: number }> {
+export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number; terrainLayouts: number; publishedLists: number; unitPresets: number; collection: number }> {
   const s = bundle.stores;
   const rosters = s.rosters ?? [];
   const overrides = s.overrides ?? [];
   const terrainLayouts = s.terrainLayouts ?? [];
   const publishedLists = s.publishedLists ?? [];
   const unitPresets = s.unitPresets ?? [];
-  await db.transaction("rw", [db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, db.overrides, db.terrainLayouts, db.publishedLists, db.unitPresets], async () => {
+  const collection = s.collection ?? [];
+  await db.transaction("rw", [db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, db.overrides, db.terrainLayouts, db.publishedLists, db.unitPresets, db.collection], async () => {
     if (s.snapshots.length) await db.snapshots.bulkPut(s.snapshots);
     if (s.scenarios.length) await db.scenarios.bulkPut(s.scenarios);
     if (s.layouts.length) await db.layouts.bulkPut(s.layouts);
@@ -409,12 +449,14 @@ export async function importAll(bundle: ExportBundle): Promise<{ snapshots: numb
     // the list itself, so it is recomputed here and an import stays one record per list.
     if (publishedLists.length) await db.publishedLists.bulkPut(publishedLists.map((r) => ({ ...r, id: publishedListId(r) })));
     if (unitPresets.length) await db.unitPresets.bulkPut(unitPresets);
+    if (collection.length) await db.collection.bulkPut(collection);
   });
   notifyStoreChanged("rosters");
   if (terrainLayouts.length) notifyStoreChanged("terrainLayouts");
   if (publishedLists.length) notifyStoreChanged("publishedLists");
   if (unitPresets.length) notifyStoreChanged("unitPresets");
-  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length, terrainLayouts: terrainLayouts.length, publishedLists: publishedLists.length, unitPresets: unitPresets.length };
+  if (collection.length) notifyStoreChanged("collection");
+  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length, terrainLayouts: terrainLayouts.length, publishedLists: publishedLists.length, unitPresets: unitPresets.length, collection: collection.length };
 }
 
 /** Every stored override, oldest first. */

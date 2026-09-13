@@ -8815,3 +8815,230 @@ body.play-focused .shell.narrow {
   font: 400 11px/1.4 var(--mono);
   color: var(--muted);
 }
+
+/* ---------- My collection ----------
+   Counts first: the summary strip, then one grid per faction, then the straight answer per army. */
+.coll-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(90px, auto)) minmax(160px, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.coll-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.coll-stat-value {
+  font: 500 20px/1.1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.coll-stat-label {
+  font: 500 10px/1.2 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.coll-painted {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.coll-painted-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.coll-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.coll-filter input {
+  flex: 1;
+  min-width: 0;
+  max-width: 320px;
+}
+.coll-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+.coll-table .gtable-row {
+  cursor: default;
+}
+.coll-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.coll-num {
+  width: 100%;
+  max-width: 84px;
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+/* An army the shelf can field, and what it is short of when it cannot. */
+.coll-armies {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 12px 16px 16px;
+}
+.coll-army {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.coll-army.is-ready {
+  border-color: var(--good);
+}
+.coll-army-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.coll-army-name {
+  font: 600 13px/1.3 var(--font);
+  color: var(--ink);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.coll-army-name:hover {
+  color: var(--mid);
+}
+.coll-army-note {
+  margin: 0;
+}
+.coll-army-missing {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.coll-army-missing li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font: 400 11px/1.4 var(--font);
+  color: var(--ink-2);
+}
+.coll-army-missing-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* The picker: a scrolling list of datasheets, one press to add a unit's worth. */
+.coll-pick-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(48vh, 420px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.coll-pick-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 2fr) minmax(80px, 1fr) 80px 80px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--ink);
+  font: 400 12px/1.4 var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.coll-pick-row:last-child {
+  border-bottom: 0;
+}
+.coll-pick-row:hover {
+  background: var(--hover);
+}
+.coll-pick-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coll-pick-have {
+  text-align: right;
+  color: var(--muted);
+}
+.coll-fill-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.coll-fill-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--ink);
+  font: 400 12px/1.4 var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.coll-fill-row:last-child {
+  border-bottom: 0;
+}
+.coll-fill-row:hover {
+  background: var(--hover);
+}
+.coll-fill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .coll-summary {
+    grid-template-columns: repeat(3, minmax(70px, 1fr));
+  }
+  .coll-painted {
+    grid-column: 1 / -1;
+  }
+  .coll-pick-row {
+    grid-template-columns: minmax(120px, 2fr) 70px;
+  }
+  .coll-pick-row > :nth-child(2),
+  .coll-pick-row > .coll-pick-have {
+    display: none;
+  }
+}
