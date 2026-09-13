@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { hrefFor, type Route } from "../../router";
 import type { ThemePreference, useTheme } from "../../theme";
 import { useApp } from "../../state/AppContext";
-import { Sheet, menuKeys, useDismiss } from "../ui";
+import { Icon, Sheet, menuKeys, useDismiss } from "../ui";
 import { t, type I18nKey } from "../../i18n";
 
 export interface RailEntry {
@@ -25,6 +25,14 @@ export const RAIL_ENTRIES: readonly RailEntry[] = [
   { route: "data", glyph: "D", labelKey: "nav.data" },
   { route: "about", glyph: "?", labelKey: "nav.about" },
 ];
+
+/**
+ * About is not one of the places the work happens, so it sits at the foot of the rail and of the
+ * drawer, beside the theme control, rather than at the end of the run of destinations.
+ */
+const FOOT_ROUTES: readonly Route[] = ["about"];
+const WORK_ENTRIES = RAIL_ENTRIES.filter((e) => !FOOT_ROUTES.includes(e.route));
+const FOOT_ENTRIES = RAIL_ENTRIES.filter((e) => FOOT_ROUTES.includes(e.route));
 
 const PREFERENCES: Array<{ value: ThemePreference; key: I18nKey }> = [
   { value: "light", key: "theme.optionLight" },
@@ -87,8 +95,8 @@ export function IconRail({ route, theme, offline }: { route: Route; theme: Retur
         <span className="rail-mark-diamond" aria-hidden="true" />
         <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
       </button>
-      <nav className="rail-nav" aria-label={t("nav.label")}>
-        {RAIL_ENTRIES.map((e) => (
+      <nav className="rail-nav rail-nav-fill" aria-label={t("nav.label")}>
+        {WORK_ENTRIES.map((e) => (
           <a key={e.route} className="rail-item" href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
             <span className="rail-glyph" aria-hidden="true">
               {e.glyph}
@@ -98,8 +106,17 @@ export function IconRail({ route, theme, offline }: { route: Route; theme: Retur
             </span>
           </a>
         ))}
+        {FOOT_ENTRIES.map((e) => (
+          <a key={e.route} className="rail-item rail-item-foot" href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
+            <span className="rail-glyph" aria-hidden="true">
+              {e.glyph}
+            </span>
+            <span className="rail-label" aria-hidden="true">
+              {t(e.labelKey)}
+            </span>
+          </a>
+        ))}
       </nav>
-      <div className="rail-spacer" />
       {offline ? (
         <span className="rail-offline" role="status" title={t("shell.offlineHint")} aria-label={t("shell.offlineHint")}>
           {t("shell.offline")}
@@ -124,25 +141,28 @@ export function NavDrawer({ open, onClose, route, theme, offline }: { open: bool
   return (
     <Sheet open={open} onClose={onClose} side="left" label={t("nav.label")} className="nav-drawer">
       <div className="nav-drawer-head">
-        <button
-          type="button"
-          className="nav-drawer-mark"
-          onClick={() => {
-            onClose();
-            openPalette();
-          }}
-        >
-          <span className="rail-mark-diamond" aria-hidden="true" />
-          <span className="nav-drawer-brand">{t("nav.name")}</span>
+        <span className="rail-mark" aria-hidden="true">
+          <span className="rail-mark-diamond" />
           <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
-          <span className="nav-drawer-palette">{t("nav.search")}</span>
-        </button>
+        </span>
+        <span className="nav-drawer-brand">{t("nav.name")}</span>
         <button type="button" className="nav-drawer-close" onClick={onClose} aria-label={t("common.close")}>
           <span aria-hidden="true">×</span>
         </button>
       </div>
+      <button
+        type="button"
+        className="nav-drawer-search"
+        onClick={() => {
+          onClose();
+          openPalette();
+        }}
+      >
+        <Icon name="search" />
+        {t("palette.placeholder")}
+      </button>
       <nav className="nav-drawer-list" aria-label={t("nav.label")}>
-        {RAIL_ENTRIES.map((e) => (
+        {WORK_ENTRIES.map((e) => (
           <a key={e.route} className="nav-drawer-item" href={hrefFor(e.route)} aria-current={route === e.route ? "page" : undefined} onClick={onClose}>
             <span className="nav-drawer-glyph" aria-hidden="true">
               {e.glyph}
@@ -152,6 +172,14 @@ export function NavDrawer({ open, onClose, route, theme, offline }: { open: bool
         ))}
       </nav>
       <div className="nav-drawer-foot">
+        {FOOT_ENTRIES.map((e) => (
+          <a key={e.route} className="nav-drawer-item" href={hrefFor(e.route)} aria-current={route === e.route ? "page" : undefined} onClick={onClose}>
+            <span className="nav-drawer-glyph" aria-hidden="true">
+              {e.glyph}
+            </span>
+            {t(e.labelKey)}
+          </a>
+        ))}
         {offline ? (
           <span className="rail-offline" role="status">
             {t("shell.offline")}
