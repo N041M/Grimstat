@@ -288,7 +288,7 @@ function DataBody({ param, inSheet }: BodyProps) {
       <ContextList>
         {sources.length === 0 ? <ContextEmpty>{t("ctxcol.noSources")}</ContextEmpty> : null}
         {sources.map((s, i) => (
-          <ContextRow key={`${s.adapter}:${i}`} name={s.adapter} value={shortRef(s.ref)} meta={fmtRelative(s.fetchedAt)} title={[s.adapter, s.ref, s.url].filter(Boolean).join(" · ")} href={hrefFor("data")} />
+          <ContextRow key={`${s.adapter}:${i}`} name={SOURCE_NAME[s.adapter] ? t(SOURCE_NAME[s.adapter]!) : s.adapter} value={shortRef(s.ref)} meta={fmtRelative(s.fetchedAt)} title={[s.adapter, s.ref, s.url].filter(Boolean).join(" · ")} href={hrefFor("data")} />
         ))}
         <ContextRow name={t("ctxcol.localOverrides")} value={String(overrides.length)} meta={t("ctxcol.overridesMeta")} selected={param === "overrides"} href={hrefFor("data", "overrides")} />
       </ContextList>
@@ -296,6 +296,13 @@ function DataBody({ param, inSheet }: BodyProps) {
     </ContextFrame>
   );
 }
+
+/** The adapters a snapshot can carry, under the names the Data page gives them. */
+const SOURCE_NAME: Record<string, I18nKey> = {
+  "mfm-yaml": "data.fetch.source.mfm-yaml",
+  "bsdata-json": "data.fetch.source.bsdata-json",
+  "wahapedia-csv": "data.fetch.source.wahapedia-csv",
+};
 
 const DOCS: Array<{ key: I18nKey; file: string }> = [
   { key: "ctxcol.doc.design", file: "DESIGN.md" },
