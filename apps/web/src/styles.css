@@ -2612,6 +2612,29 @@ body.sheet-open {
 /* ---- adding a boxed set to the collection ----
    A list of boxes, then one box's contents grouped by the army each line belongs to. The armies
    carry the ticks, because a box split with a friend puts half its models on somebody else's shelf. */
+/* The row that narrows the list. Sticky, because the filters are useless once they have scrolled
+   away and the list under them is long by design. */
+.box-filters {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 8px;
+  background: var(--panel);
+}
+.box-search {
+  flex: 1 1 190px;
+  min-width: 0;
+}
+.box-shown {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .box-picker {
   list-style: none;
   margin: 0;
@@ -6080,6 +6103,14 @@ button.val-row:hover {
   }
   .ovr-scope {
     text-align: left;
+  }
+  /* Label above the field rather than beside it. Side by side at this width leaves the label too
+     narrow to read its own words and the field too narrow to type a faction list into. */
+  .src-filter {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    flex-basis: 100%;
   }
   .src-filter input {
     width: 100%;
@@ -9820,6 +9851,12 @@ body.play-focused .shell.compact {
   .shell.compact .src-card-select {
     flex-direction: row;
     align-items: center;
+    flex-wrap: wrap;
+  }
+  /* The download size is a caption for the card, not a third control, so it takes the line under
+     the buttons rather than standing at the end of the row they are in. */
+  .shell.compact .src-card-size {
+    flex-basis: 100%;
   }
   .shell.compact .dash-btn,
   .shell.compact .mx-sets-toggle,

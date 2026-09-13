@@ -49,7 +49,7 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
     <Dialog open={open} onClose={onClose} wide title={t("collection.box.title")} className="box-dialog">
       {!picked ? (
         sets ? (
-          <BoxList boxes={boxes} onPick={setPickedId} />
+          <BoxList boxes={boxes} onPick={setPickedId} factionName={factionName} />
         ) : (
           <p className="muted">{t("collection.box.reading")}</p>
         )
@@ -135,18 +135,75 @@ function unitSplit(l: ResolvedLine) {
   return <span className="box-or">{tn(l.line.units, "collection.box.inUnits.one", "collection.box.inUnits.many")}</span>;
 }
 
+/** The kinds of box, under the names the shops use for them rather than the ids the file stores. */
+function kindLabel(kind: BoxSet["kind"]): string {
+  if (kind === "combat-patrol") return t("collection.box.kind.combatPatrol");
+  if (kind === "battleforce") return t("collection.box.kind.battleforce");
+  return t("collection.box.kind.starter");
+}
+
 /**
  * The boxes, under the year each was announced in.
  *
  * Grouped by year rather than run together, because names come back: a Battleforce sold one year
  * under a name can be sold again years later with different models in it, and the year is what
  * tells a reader which of them is the one on their shelf.
+ *
+ * There are more than two hundred of them, which is further than anybody scrolls, so the list
+ * narrows three ways: by name, by the army inside, and by what kind of box it is. The search reads
+ * the units in the box as well as the name on the lid, because somebody who wants a Redemptor
+ * Dreadnought does not know which box to look under — not knowing is the reason they are here. It
+ * reads the name the line was written with and the datasheet it resolved to, so a box found under
+ * either spelling is still found.
  */
-function BoxList({ boxes, onPick }: { boxes: readonly ResolvedBox[]; onPick: (id: string) => void }) {
+function BoxList({ boxes, onPick, factionName }: { boxes: readonly ResolvedBox[]; onPick: (id: string) => void; factionName: (id: string) => string }) {
+  const [query, setQuery] = useState("");
+  const [faction, setFaction] = useState("");
+  const [kind, setKind] = useState("");
+
+  // Only the armies and kinds these boxes actually hold, so no filter offers an empty result.
+  const factions = useMemo(
+    () => [...new Set(boxes.flatMap((b) => b.factionIds))].map((id) => ({ id, name: factionName(id) })).sort((a, b) => a.name.localeCompare(b.name)),
+    [boxes, factionName],
+  );
+  const kinds = useMemo(() => [...new Set(boxes.map((b) => b.box.kind))].sort(), [boxes]);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return boxes.filter((b) => {
+      if (faction && !b.factionIds.includes(faction)) return false;
+      if (kind && b.box.kind !== kind) return false;
+      if (!q) return true;
+      if (b.box.name.toLowerCase().includes(q)) return true;
+      return b.lines.some((l) => l.line.name.toLowerCase().includes(q) || !!l.ds?.name.toLowerCase().includes(q));
+    });
+  }, [boxes, query, faction, kind]);
+
   if (!boxes.length) return <p className="muted">{t("collection.box.none")}</p>;
   return (
     <>
-      {boxesByYear(boxes).map((group) => (
+      <div className="box-filters">
+        <input type="search" className="box-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("collection.box.search")} aria-label={t("collection.box.search")} />
+        <select value={faction} onChange={(e) => setFaction(e.target.value)} aria-label={t("collection.box.anyArmy")}>
+          <option value="">{t("collection.box.anyArmy")}</option>
+          {factions.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+            </option>
+          ))}
+        </select>
+        <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label={t("collection.box.anyKind")}>
+          <option value="">{t("collection.box.anyKind")}</option>
+          {kinds.map((k) => (
+            <option key={k} value={k}>
+              {kindLabel(k)}
+            </option>
+          ))}
+        </select>
+        <span className="box-shown mono">{tn(shown.length, "collection.box.showing.one", "collection.box.showing.many", { n: shown.length })}</span>
+      </div>
+      {!shown.length ? <p className="muted">{t("collection.box.noMatch")}</p> : null}
+      {boxesByYear(shown).map((group) => (
         <section key={group.year ?? "undated"} className="box-year">
           <h3>{group.year ?? t("collection.box.undated")}</h3>
           <ul className="box-picker">
