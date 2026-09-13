@@ -1376,7 +1376,8 @@ dialog.dialog::backdrop {
 }
 .dialog-head {
   display: flex;
-  align-items: center;
+  /* A title that wraps to two lines keeps the close button on the first one. */
+  align-items: start;
   justify-content: space-between;
   gap: 0.75rem;
 }
@@ -4155,6 +4156,23 @@ a.btn:hover {
 .roster-save.error,
 .roster-issues.bad {
   color: var(--accent);
+}
+/* The issue count opens the checks it counts, so it carries the header's own type rather than a button's. */
+.roster-issues.as-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.roster-issues.as-button:hover {
+  text-decoration-style: solid;
+}
+.roster-issues-pop .popover {
+  width: min(92vw, 420px);
 }
 .roster-header .page-title-field input {
   max-width: 520px;
@@ -7309,6 +7327,24 @@ button.battle-scope-btn:hover {
   color: var(--ink-2);
   font-size: 13px;
   line-height: 1.5;
+}
+/* A confirm asks a question with a name in it, so its title is a sentence rather than a shouted heading. */
+.confirm-dialog .dialog-head h2 {
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+/* The destructive answer is this dialog's main action, so it is filled like a primary button. The
+   accent is the same red in both themes, so the label stays light in both. */
+.confirm-dialog .dialog-actions button.danger {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fbfaf8;
+  font-weight: 600;
+}
+.confirm-dialog .dialog-actions button.danger:hover:not(:disabled) {
+  opacity: 0.88;
 }
 
 /* ===== Armies list: filter row and the failed-read state ===== */
