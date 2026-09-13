@@ -143,7 +143,7 @@ function SourceCard({ id, model, selectable, selected, disabled, onSelect, onRef
               {t("data.fetch.one")}
             </button>
           ) : null}
-          <span className="src-card-size">{selectable && id !== "wahapedia-csv" ? sourceSize(id as BrowserSourceId) : ""}</span>
+          {id !== "wahapedia-csv" ? <span className="src-card-size">{sourceSize(id as BrowserSourceId)}</span> : null}
         </div>
       ) : null}
       {footer}
