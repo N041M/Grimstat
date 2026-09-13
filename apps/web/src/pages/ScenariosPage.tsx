@@ -14,7 +14,7 @@ import { GridCell, GridHead, GridHeadCell, GridRow, GridTable } from "../compone
 import { PageHeader, useContextNewAction } from "../components/shell";
 import { t, type I18nKey } from "../i18n";
 
-/** Scenario | Attacker | Defender | Avg damage | Kill chance | Dmg / 100 pts | Edited. */
+/** Scenario | Attacker | Defender | Expected damage | Kill chance | Dmg / 100 pts | Edited. */
 const COLUMNS = "minmax(180px,2fr) minmax(150px,1.4fr) minmax(150px,1.4fr) 90px 90px 100px 110px";
 
 /** Kill chance at or above this is drawn in the accent. */

@@ -227,7 +227,7 @@ export const en = {
   "scenarios.col.name": "Scenario",
   "scenarios.col.attacker": "Attacker",
   "scenarios.col.defender": "Defender",
-  "scenarios.col.dmg": "Avg damage",
+  "scenarios.col.dmg": "Expected damage",
   "scenarios.col.kill": "Kill chance",
   "scenarios.col.per100": "Dmg / 100 pts",
   "scenarios.col.edited": "Edited",
@@ -480,7 +480,7 @@ export const en = {
   "widget.warnings": "Warnings",
   "widget.warnings.desc": "Engine warnings for this run.",
 
-  "summary.expectedDamage": "Average damage",
+  "summary.expectedDamage": "Expected damage",
   "summary.expectedSlain": "Models slain",
   "summary.pKill": "Kill chance",
   "summary.pAtLeastOne": "Chance of 1+ slain",
@@ -1362,7 +1362,7 @@ export const en = {
   "analyses.picker.archetypeLabel": "Archetypes",
   "analyses.picker.addSelected": "Add selected ({n})",
 
-  "analyses.metric.damage": "Average damage",
+  "analyses.metric.damage": "Expected damage",
   "analyses.metric.damage.notation": "E[damage]",
   "analyses.metric.slain": "Models slain",
   "analyses.metric.slain.notation": "E[slain]",
