@@ -88,10 +88,21 @@ export function useEdgeFade(ref: RefObject<HTMLElement | null>, watch?: unknown)
     const el = ref.current;
     if (!el) return;
     const update = () => {
-      // A sub-pixel margin: a strip scrolled to its end can land a fraction short of the maximum.
-      const room = el.scrollWidth - el.clientWidth;
-      const start = el.scrollLeft > 1;
-      const end = el.scrollLeft < room - 1;
+      /*
+       * Where the first and last children sit, rather than `scrollLeft` against `scrollWidth`.
+       * These strips carry side padding — the tab bar 16px, the battle toolbar 4 — and a strip
+       * with padding rests at a `scrollLeft` of exactly that, never 0, so reading the number
+       * directly reported content hidden off the left of a strip nobody had scrolled.
+       */
+      const first = el.firstElementChild;
+      const last = el.lastElementChild;
+      if (!first || !last) {
+        el.removeAttribute("data-fade");
+        return;
+      }
+      const box = el.getBoundingClientRect();
+      const start = first.getBoundingClientRect().left < box.left - 1;
+      const end = last.getBoundingClientRect().right > box.right + 1;
       const mark = start && end ? "both" : start ? "start" : end ? "end" : "";
       if (mark) el.setAttribute("data-fade", mark);
       else el.removeAttribute("data-fade");

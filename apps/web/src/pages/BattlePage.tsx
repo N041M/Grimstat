@@ -8,13 +8,13 @@ import { LayoutLibrary } from "../components/battle/LayoutLibrary";
 import { LayoutPicker } from "../components/battle/LayoutPicker";
 import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
-import { useMediaQuery } from "../hooks/useMediaQuery";
+import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
 import { db } from "../db";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
 import { canRedo, canUndo, canUndoUnits, editorReducer, initialEditor } from "../lib/battleEditor";
-import { Badge, Tabs, useConfirm } from "../components/ui";
+import { Badge, Tabs, useConfirm, useEdgeFade } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
 import { silhouetteFor, type SilhouetteId } from "../lib/silhouettes";
 import {
@@ -156,6 +156,67 @@ export function BattlePage() {
   const { confirm, dialog } = useConfirm();
   /** A finger has no Shift, no ⌘ and no arrow keys, so the table offers those as buttons instead. */
   const coarse = useMediaQuery("(pointer: coarse)");
+  const compact = useMediaQuery(COMPACT_QUERY);
+  const [focus, setFocus] = usePersistedSetting<boolean>("battle.focus", false, (raw) => (typeof raw === "boolean" ? raw : undefined));
+
+  /**
+   * Focus: the table takes the whole screen. The shell goes, the page's title goes, and so does the
+   * panel beside or beneath the table, which leaves the tools, the table and the controls over it.
+   *
+   * It is for the widths where the table is short of room. Above 1040px the table already has
+   * 850×820 with the panel next to it, and there is nothing to win.
+   *
+   * The class goes on the document because the rail and the top bar belong to the shell rather than
+   * to this page — the same arrangement the Play screen uses.
+   */
+  const focused = focus && compact;
+  useEffect(() => {
+    if (!focused) return;
+    document.body.classList.add("battle-focused");
+    return () => document.body.classList.remove("battle-focused");
+  }, [focused]);
+
+  /**
+   * Full screen takes the browser's own chrome as well. It needs a gesture and may be refused —
+   * Safari on iPhone has no Fullscreen API at all — so the mode works with or without it.
+   */
+  const wentFullscreen = useRef(false);
+  // In focus the toolbar is one row along the foot of the table, so it scrolls and its ends fade.
+  // Which buttons it holds changes with the tool, which the hook's own observer picks up.
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  useEdgeFade(toolbarRef, focused);
+  const toggleFocus = useCallback(() => {
+    const next = !focus;
+    setFocus(next);
+    try {
+      if (next && !document.fullscreenElement) {
+        void document.documentElement
+          .requestFullscreen?.()
+          .then(() => {
+            wentFullscreen.current = true;
+          })
+          .catch(() => undefined);
+      } else if (!next && document.fullscreenElement) {
+        wentFullscreen.current = false;
+        void document.exitFullscreen?.().catch(() => undefined);
+      }
+    } catch {
+      // Refused by the browser. Giving the table the screen is the part that matters.
+    }
+  }, [focus, setFocus]);
+
+  // Leaving full screen by the browser's own gesture leaves focus too, so the two cannot disagree
+  // about which one the screen is in.
+  useEffect(() => {
+    const on = () => {
+      if (document.fullscreenElement) return;
+      if (!wentFullscreen.current) return;
+      wentFullscreen.current = false;
+      setFocus(false);
+    };
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, [setFocus]);
   const [editor, dispatch] = useReducer(editorReducer, undefined, () => initialEditor(sampleBattle()));
   const state = editor.battle;
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -884,7 +945,7 @@ export function BattlePage() {
         <div className="battle-stage">
           {/* Everything the keys do to the table, as buttons over it: a finger has no ⌘ and no arrows,
               and a mouse user should not have to learn a chord to approve a move. */}
-          <div className="battle-toolbar" role="group" aria-label={t("battle.table.actions")} hidden={!webgl}>
+          <div className="battle-toolbar" role="group" aria-label={t("battle.table.actions")} hidden={!webgl} ref={toolbarRef}>
             {tool === "terrain" ? (
               <div className="battle-hist" role="group" aria-label={t("battle.terrain.history")}>
                 <button type="button" className="ghost sm" disabled={!canUndo(editor)} onClick={() => dispatch({ type: "undo" })} title={t("battle.terrain.undo")} aria-label={t("battle.terrain.undo")}>
@@ -937,6 +998,13 @@ export function BattlePage() {
             <button type="button" className="ghost sm" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre.title")}>
               {t("battle.recentre")}
             </button>
+            {/* The way in and the way out are the same control, and it is over the table, which is
+                the one thing focus keeps on screen. */}
+            {compact ? (
+              <button type="button" className={`sm ${focused ? "" : "ghost"}`.trim()} aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")}>
+                {t(focused ? "battle.focus.off" : "battle.focus.on")}
+              </button>
+            ) : null}
           </div>
           {webgl ? (
             <ErrorBoundary compact resetKey={layout.id}>

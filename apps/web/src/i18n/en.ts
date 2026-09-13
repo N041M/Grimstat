@@ -1374,6 +1374,10 @@ export const en = {
   "battle.deploy.selectedDeployedTouch": "Drag it to reposition, or send it back with the × beside its name.",
   "battle.recentre": "Recentre",
   "battle.recentre.title": "Put the camera back where the view opened",
+  "battle.focus.on": "Focus",
+  "battle.focus.off": "Leave focus",
+  "battle.focus.onTitle": "Give the table the whole screen",
+  "battle.focus.offTitle": "Show the navigation and the panel again",
 
   // battle: the wording for a finger. Each of these has a keyboard-and-mouse twin above, and the
   // page picks between them on (pointer: coarse).

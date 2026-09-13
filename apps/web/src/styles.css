@@ -9805,3 +9805,68 @@ body.play-focused .shell.compact {
 [data-fade="both"] {
   mask-image: linear-gradient(to right, transparent, #000 var(--fade-w), #000 calc(100% - var(--fade-w)), transparent);
 }
+
+/* ---------- Battle: focus ----------
+   The table takes the whole screen. The shell goes, the page's title and subtitle go, and so does
+   the panel, which leaves the tool strip, the table and the controls over it. The page stops
+   scrolling, so the table fills what is left rather than ending at 60% of the window.
+
+   What the panel held is either on the table already or in the toolbar over it: a drag shows its
+   cost beside the finger, a tape shows its length along itself, and Approve, Discard, Undo and the
+   turn controls are all in the toolbar. Terrain is the tool that still wants the panel, and leaving
+   focus is one press on the same control that entered it. */
+body.battle-focused .shell.compact .rail,
+body.battle-focused .shell.compact .ctx-bar,
+body.battle-focused .battle-page .page-header-title,
+body.battle-focused .battle-panel {
+  display: none;
+}
+body.battle-focused .shell.compact {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+body.battle-focused .shell.compact .main-region {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+body.battle-focused .shell.compact .battle-page {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+body.battle-focused .battle-page .page-header {
+  padding-top: calc(6px + env(safe-area-inset-top, 0px));
+  padding-bottom: 4px;
+}
+body.battle-focused .battle-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+body.battle-focused .battle-stage {
+  border-bottom: 0;
+}
+/*
+ * The toolbar moves to the foot of the table. Over the top it wrapped to three rows and covered
+ * the far half of the board, which is the half focus was meant to hand back. Along the bottom it
+ * is one row, within reach of the thumb, over ground that is behind the near deployment zone.
+ */
+body.battle-focused .battle-toolbar {
+  top: auto;
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  left: 8px;
+  right: 8px;
+  width: auto;
+  max-width: none;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+body.battle-focused .battle-toolbar::-webkit-scrollbar {
+  display: none;
+}
+body.battle-focused .battle-toolbar button {
+  flex: none;
+  scroll-snap-align: start;
+}
