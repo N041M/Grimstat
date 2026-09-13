@@ -8,7 +8,7 @@ import { ContextDock } from "../components/calc/ContextDock";
 import { ScenarioCards } from "../components/calc/ScenarioCards";
 import { Dialog, useConfirm } from "../components/ui";
 import { db } from "../db";
-import { cloneUnit, forStorage, hasUnsavedEdits, newScenario, sameScenario, touch } from "../lib/scenario";
+import { cloneUnit, forStorage, hasUnsavedEdits, newScenario, phaseForUnit, sameScenario, touch } from "../lib/scenario";
 import { permalinkUrl } from "../lib/permalink";
 import { headlineOf, type Headline } from "../lib/headline";
 import { csvFileName, resultToCsv } from "../lib/resultCsv";
@@ -60,7 +60,20 @@ export function CalculatorPage() {
 
   const saved = useMemo(() => (stored === null ? undefined : sameScenario(stored, scenario)), [stored, scenario]);
 
-  const setUnit = (side: Side) => (unit: ScenarioUnit) => updateScenario((s) => ({ ...s, [side]: unit, ...(unit.ref ? { snapshotId: unit.ref.snapshotId } : {}) }));
+  /**
+   * Put a unit on one side, and follow the attacker's loadout with the phase.
+   *
+   * A melee profile typed into the shooting phase produced a flat 0.0, because the engine resolves
+   * only the weapons the phase uses. The phase moves with the unit the player just built, so the
+   * screen answers the loadout in front of them. It moves on a unit change alone, never on a phase
+   * change, so the control stays theirs once they set it.
+   */
+  const setUnit = (side: Side) => (unit: ScenarioUnit) => {
+    const context = side === "attacker" ? phaseForUnit(scenario.context, unit) : scenario.context;
+    const moved = context.phase !== scenario.context.phase;
+    updateScenario((s) => ({ ...s, [side]: unit, ...(unit.ref ? { snapshotId: unit.ref.snapshotId } : {}), ...(moved ? { context: { ...s.context, phase: context.phase } } : {}) }));
+    if (moved) notify(t(context.phase === "fight" ? "calc.phase.toFight" : "calc.phase.toShooting"), "info");
+  };
 
   const save = useCallback(async () => {
     const rec = forStorage(touch({ ...scenario, ...(activeSnapshotId ? { snapshotId: activeSnapshotId } : {}) }));
@@ -95,7 +108,13 @@ export function CalculatorPage() {
     }
     await replaceScenario(newScenario({}, { snapshot }));
   };
-  const swap = () => updateScenario((s) => ({ ...s, attacker: s.defender, defender: s.attacker }));
+  // Swapping hands the attacker's role to a different loadout, so the phase follows it the same way.
+  const swap = () => {
+    const context = phaseForUnit(scenario.context, scenario.defender);
+    const moved = context.phase !== scenario.context.phase;
+    updateScenario((s) => ({ ...s, attacker: s.defender, defender: s.attacker, ...(moved ? { context: { ...s.context, phase: context.phase } } : {}) }));
+    if (moved) notify(t(context.phase === "fight" ? "calc.phase.toFight" : "calc.phase.toShooting"), "info");
+  };
   const onContext = (patch: Partial<ScenarioContext>) => updateScenario((s) => ({ ...s, context: { ...s.context, ...patch } }));
 
   // The picker edits the live scenario as it goes; Cancel restores the snapshot taken here.
@@ -128,7 +147,7 @@ export function CalculatorPage() {
     notify(t("calc.exported", { name }), "success");
   };
 
-  const inputs = useMemo(() => ({ scenario, result: sim.result, snapshot, running: sim.running, error: sim.error, pinned }), [scenario, sim.result, snapshot, sim.running, sim.error, pinned]);
+  const inputs = useMemo(() => ({ scenario, result: sim.result, snapshot, running: sim.running, error: sim.error, pinned, idle: sim.idle }), [scenario, sim.result, snapshot, sim.running, sim.error, pinned, sim.idle]);
 
   const dashActions = (
     <>

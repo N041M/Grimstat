@@ -6,6 +6,7 @@ import type { MatrixMetric } from "../lib/heatmap";
 import type { TurnPlanResult } from "../lib/turn";
 import type { TurnPlanView } from "../components/analyses/TurnTab";
 import type { Headline } from "../lib/headline";
+import type { IdleReason } from "../hooks/useSimulation";
 
 /** Army-level analysis results a dashboard may provide; each key unlocks the widgets that `require` it. */
 export interface AnalysisInputs {
@@ -26,6 +27,8 @@ export interface WidgetProps {
   analyses?: AnalysisInputs;
   /** The headline numbers the user pinned as a baseline, when they did. */
   pinned?: Headline | undefined;
+  /** Why there is no result to show, when that is the reason rather than a run still in flight. */
+  idle?: IdleReason | undefined;
 }
 
 export type WidgetComponent = ComponentType<WidgetProps>;

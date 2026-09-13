@@ -1,5 +1,5 @@
 import { Scenario, ScenarioContext, type ScenarioUnit, type ScenarioModel, type ScenarioWeapon, type ManualToggle, type Snapshot } from "@grimstat/schema";
-import { archetypes, gameSystem } from "@grimstat/game-40k-11e";
+import { archetypes, gameSystem, phaseFor } from "@grimstat/game-40k-11e";
 import { newId, nowIso } from "./ids";
 
 export type Side = "attacker" | "defender";
@@ -48,6 +48,19 @@ export function newScenario(partial: Partial<Scenario> = {}, opts: { snapshot?: 
     extraEffects: [],
     ...partial,
   });
+}
+
+/**
+ * The phase a unit's loadout can act in, given the phase already chosen.
+ *
+ * A unit whose live weapons are all melee has nothing to do in the shooting phase, and a unit whose
+ * live weapons are all ranged has nothing to do in the fight phase. The plugin decides this for the
+ * analyses already. The calculator keeps whatever the player set `charged` to, where the analyses
+ * assume a charge went in.
+ */
+export function phaseForUnit(context: ScenarioContext, unit: ScenarioUnit): ScenarioContext {
+  const next = phaseFor(unit, context).phase ?? context.phase;
+  return next === context.phase ? context : { ...context, phase: next };
 }
 
 export function defaultModel(): ScenarioModel {
