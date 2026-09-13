@@ -3,7 +3,7 @@ import type { Snapshot } from "@grimstat/schema";
 import { boxesByYear, boxesFor, linesForFactions, loadBoxSets, modelsByDatasheet, type ResolvedBox } from "../../lib/boxes";
 import type { BoxSet } from "../../data/boxes";
 import { Dialog } from "../ui";
-import { t } from "../../i18n";
+import { t, tn } from "../../i18n";
 
 /**
  * Putting a boxed set on the shelf.
@@ -57,7 +57,7 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
               {t("collection.box.back")}
             </button>
             <span className="box-source">
-              {picked.box.announced}
+              {picked.box.announced ?? t("collection.box.undated")}
               {" · "}
               <a href={picked.box.source} target="_blank" rel="noreferrer noopener">
                 {t("collection.box.contents")}
@@ -112,7 +112,7 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
               {t("common.cancel")}
             </button>
             <button type="button" className="primary" disabled={models === 0} onClick={() => onAdd(picked, ticked)}>
-              {t("collection.box.add", { models })}
+              {t("collection.box.add", { models: tn(models, "collection.modelCount.one", "collection.modelCount.many", { n: models }) })}
             </button>
           </div>
         </>
@@ -133,14 +133,14 @@ function BoxList({ boxes, onPick }: { boxes: readonly ResolvedBox[]; onPick: (id
   return (
     <>
       {boxesByYear(boxes).map((group) => (
-        <section key={group.year} className="box-year">
-          <h3>{group.year}</h3>
+        <section key={group.year ?? "undated"} className="box-year">
+          <h3>{group.year ?? t("collection.box.undated")}</h3>
           <ul className="box-picker">
             {group.boxes.map((b) => (
               <li key={b.box.id}>
                 <button type="button" onClick={() => onPick(b.box.id)}>
                   <span className="box-name">{b.box.name}</span>
-                  <span className="box-meta mono">{t("collection.box.summary", { models: b.models, armies: b.factionIds.length })}</span>
+                  <span className="box-meta mono">{t("collection.box.summary", { models: tn(b.models, "collection.modelCount.one", "collection.modelCount.many", { n: b.models }), armies: tn(b.factionIds.length, "collection.box.armyCount.one", "collection.box.armyCount.many", { n: b.factionIds.length }) })}</span>
                 </button>
               </li>
             ))}

@@ -69,14 +69,15 @@ export interface BoxSet {
   /**
    * When the contents below were published, as YYYY, YYYY-MM or YYYY-MM-DD.
    *
-   * As precise as the source is and no more. A box announced last month has the day it was
-   * announced on; one from 2004 has the year somebody remembers it by, and inventing a day for it
-   * would be inventing a fact. Sorting and grouping only read the year, so a year is enough.
+   * As precise as the source is and no more, and absent when the source gives none. A box announced
+   * last month has the day it was announced on; one from 2004 has the year it is remembered by; an
+   * older box listed by a shop that never said when it came out has nothing, and is shown apart
+   * rather than filed under a year somebody made up. Sorting and grouping only read the year.
    *
    * It is the announcement rather than the release, because that is the date on the page the
    * contents were read from. A box usually reaches shops within a month or two of it.
    */
-  readonly announced: string;
+  readonly announced?: string;
   readonly lines: readonly BoxLine[];
   /** Where the contents were read from. */
   readonly source: string;
@@ -104,7 +105,7 @@ export const BoxSetSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/),
   name: z.string().min(1),
   kind: z.enum(["combat-patrol", "battleforce", "starter"]),
-  announced: z.string().regex(/^\d{4}(-\d{2}(-\d{2})?)?$/),
+  announced: z.string().regex(/^\d{4}(-\d{2}(-\d{2})?)?$/).optional(),
   lines: z.array(BoxLineSchema).min(1),
   source: z.string().url(),
 });

@@ -225,6 +225,17 @@ describe("ordering the boxes", () => {
     expect(boxesFor(all, snapshot).map((r) => r.box.name)).toEqual(["Alpha", "Zeta"]);
   });
 
+  /**
+   * A shop can list an old box's contents without ever saying when it came out. Filing it under a
+   * year somebody made up would be worse than saying so, and it still belongs in the list.
+   */
+  it("puts a box nobody could date after the dated ones, under its own heading", () => {
+    const undated: BoxSet = { id: "u", name: "Undated", kind: "battleforce", lines: [{ name: "Warden Squad", models: 5 }], source: "test" };
+    const read = boxesFor([undated, dated("a", "Old", "2023-05-01"), dated("b", "New", "2026-02-01")], snapshot);
+    expect(read.map((r) => r.box.name)).toEqual(["New", "Old", "Undated"]);
+    expect(boxesByYear(read).map((g) => g.year)).toEqual(["2026", "2023", undefined]);
+  });
+
   it("groups them under the year they were announced in, newest year first", () => {
     const all = [dated("a", "Old", "2023-05-01"), dated("b", "New", "2026-02-01"), dated("c", "Also new", "2026-09-01")];
     const years = boxesByYear(boxesFor(all, snapshot));
@@ -268,14 +279,14 @@ describe("the list the app ships", () => {
   it("never repeats a name on the same day", () => {
     const seen = new Set<string>();
     for (const b of BOX_SETS) {
-      const key = `${b.name.toLowerCase()}\u0000${b.announced}`;
+      const key = `${b.name.toLowerCase()}\u0000${b.announced ?? ""}`;
       expect(seen.has(key), `${b.name} (${b.announced}) is in the list twice`).toBe(false);
       seen.add(key);
     }
   });
 
-  it("dates every box to something that reads as a date", () => {
-    for (const b of BOX_SETS) expect(Number.isNaN(Date.parse(b.announced)), b.name).toBe(false);
+  it("dates a box to something that reads as a date, where it is dated at all", () => {
+    for (const b of BOX_SETS) if (b.announced) expect(Number.isNaN(Date.parse(b.announced)), b.name).toBe(false);
   });
 
   /** Older boxes are remembered by the year, and inventing a day for one would invent a fact. */
@@ -286,7 +297,7 @@ describe("the list the app ships", () => {
   });
 
   it("reaches back more than fifteen years", () => {
-    const years = BOX_SETS.map((b) => Number(b.announced.slice(0, 4)));
+    const years = BOX_SETS.map((b) => Number(b.announced?.slice(0, 4))).filter((y) => !Number.isNaN(y));
     expect(Math.max(...years) - Math.min(...years)).toBeGreaterThanOrEqual(15);
   });
 

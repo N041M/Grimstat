@@ -158,18 +158,26 @@ export function linesForFactions(read: ResolvedBox, factionIds: readonly string[
  * for a box from years back knows roughly when it was.
  */
 export function boxesFor(boxes: readonly BoxSet[], snapshot: Snapshot): readonly ResolvedBox[] {
+  // An undated box sorts last whichever way the dated ones run, since there is no year to put it
+  // beside and the reader is looking for this year's box at the top.
+  const when = (r: ResolvedBox): string => r.box.announced ?? "";
   return boxes
     .map((b) => resolveBox(b, snapshot))
     .filter((r) => r.lines.some((l) => l.ds))
-    .sort((a, b) => (a.box.announced < b.box.announced ? 1 : a.box.announced > b.box.announced ? -1 : a.box.name.localeCompare(b.box.name)));
+    .sort((a, b) => (when(a) < when(b) ? 1 : when(a) > when(b) ? -1 : a.box.name.localeCompare(b.box.name)));
 }
 
-/** Boxes under the year they were announced in, newest year first. */
-export function boxesByYear(boxes: readonly ResolvedBox[]): readonly { year: string; boxes: readonly ResolvedBox[] }[] {
-  const years: { year: string; boxes: ResolvedBox[] }[] = [];
+/** The year a box belongs under, or nothing when its date was never established. */
+export function yearOf(box: BoxSet): string | undefined {
+  return box.announced?.slice(0, 4);
+}
+
+/** Boxes under the year they were announced in, newest year first, undated ones last. */
+export function boxesByYear(boxes: readonly ResolvedBox[]): readonly { year?: string; boxes: readonly ResolvedBox[] }[] {
+  const years: { year?: string; boxes: ResolvedBox[] }[] = [];
   for (const b of boxes) {
-    const year = b.box.announced.slice(0, 4);
-    const group = years.find((g) => g.year === year) ?? (years.push({ year, boxes: [] }), years[years.length - 1]!);
+    const year = yearOf(b.box);
+    const group = years.find((g) => g.year === year) ?? (years.push({ ...(year ? { year } : {}), boxes: [] }), years[years.length - 1]!);
     group.boxes.push(b);
   }
   return years;

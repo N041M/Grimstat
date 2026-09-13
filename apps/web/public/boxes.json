@@ -992,6 +992,375 @@
           "units": 2
         }
       ]
+    },
+    {
+      "id": "bf-starpulse-cadre",
+      "name": "Battleforce: Starpulse Cadre",
+      "kind": "battleforce",
+      "announced": "2020",
+      "source": "https://store.tngames.ca/products/warhammer-40k-tau-empire-battleforge-starpulse-cadre-56-30",
+      "lines": [
+        {
+          "name": "Commander in Coldstar Battlesuit",
+          "models": 1
+        },
+        {
+          "name": "Crisis Battlesuits",
+          "models": 3,
+          "ownerNames": true
+        },
+        {
+          "name": "Pathfinder Team",
+          "models": 10
+        },
+        {
+          "name": "Strike Team",
+          "models": 10
+        },
+        {
+          "name": "Piranhas",
+          "models": 1
+        },
+        {
+          "name": "Broadside Battlesuits",
+          "models": 1
+        },
+        {
+          "name": "Drones",
+          "models": 14,
+          "ownerNames": true
+        }
+      ]
+    },
+    {
+      "id": "cp-deathwatch-2020",
+      "name": "Combat Patrol: Deathwatch",
+      "kind": "combat-patrol",
+      "announced": "2020-10-26",
+      "source": "https://www.warhammer-community.com/2020/10/26/combat-patrols-an-army-in-a-box/",
+      "lines": [
+        {
+          "name": "Lieutenant",
+          "models": 1
+        },
+        {
+          "name": "Apothecary",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Aggressor Squad",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "cp-space-wolves-2020",
+      "name": "Combat Patrol: Space Wolves",
+      "kind": "combat-patrol",
+      "announced": "2020-10-26",
+      "source": "https://www.warhammer-community.com/2020/10/26/combat-patrols-an-army-in-a-box/",
+      "lines": [
+        {
+          "name": "Lieutenant",
+          "models": 1
+        },
+        {
+          "name": "Invictor Tactical Warsuit",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Reiver Squad",
+          "models": 5
+        }
+      ]
+    },
+    {
+      "id": "cp-adepta-sororitas",
+      "name": "Combat Patrol: Adepta Sororitas",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Canoness",
+          "models": 1
+        },
+        {
+          "name": "Sororitas Rhino",
+          "models": 1
+        },
+        {
+          "name": "Repentia Squad",
+          "models": 5
+        },
+        {
+          "name": "Penitent Engines",
+          "models": 1
+        },
+        {
+          "name": "Arco-flagellants",
+          "models": 3
+        },
+        {
+          "name": "Seraphim Squad",
+          "models": 5
+        },
+        {
+          "name": "Battle Sisters Squad",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "cp-adeptus-mechanicus-early",
+      "name": "Combat Patrol: Adeptus Mechanicus",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Tech-Priest Enginseer",
+          "models": 1
+        },
+        {
+          "name": "Kataphron Destroyers",
+          "models": 3,
+          "or": [
+            "Kataphron Breachers"
+          ]
+        },
+        {
+          "name": "Skitarii Rangers",
+          "models": 10,
+          "or": [
+            "Skitarii Vanguard"
+          ]
+        },
+        {
+          "name": "Onager Dunecrawler",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "cp-black-templars",
+      "name": "Combat Patrol: Black Templars",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Marshal",
+          "models": 1
+        },
+        {
+          "name": "Crusader Squad",
+          "models": 10
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Impulsor",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "cp-blood-angels",
+      "name": "Combat Patrol: Blood Angels",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Librarian",
+          "models": 1
+        },
+        {
+          "name": "Impulsor",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Incursor Squad",
+          "models": 5
+        },
+        {
+          "name": "Aggressor Squad",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "cp-dark-angels",
+      "name": "Combat Patrol: Dark Angels",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Chaplain",
+          "models": 1
+        },
+        {
+          "name": "Redemptor Dreadnought",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Inceptor Squad",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "cp-death-guard",
+      "name": "Combat Patrol: Death Guard",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Typhus",
+          "models": 1
+        },
+        {
+          "name": "Biologus Putrifier",
+          "models": 1
+        },
+        {
+          "name": "Plague Marines",
+          "models": 7
+        },
+        {
+          "name": "Poxwalkers",
+          "models": 30
+        }
+      ]
+    },
+    {
+      "id": "cp-drukhari",
+      "name": "Combat Patrol: Drukhari",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Archon",
+          "models": 1
+        },
+        {
+          "name": "Kabalite Warriors",
+          "models": 10
+        },
+        {
+          "name": "Incubi",
+          "models": 5
+        },
+        {
+          "name": "Raider",
+          "models": 1
+        },
+        {
+          "name": "Ravager",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "cp-necrons-early",
+      "name": "Combat Patrol: Necrons",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Overlord",
+          "models": 1
+        },
+        {
+          "name": "Tomb Blades",
+          "models": 3
+        },
+        {
+          "name": "Immortals",
+          "models": 5
+        },
+        {
+          "name": "Deathmarks",
+          "models": 5
+        },
+        {
+          "name": "Doom Scythe",
+          "models": 1,
+          "or": [
+            "Night Scythe"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cp-orks",
+      "name": "Combat Patrol: Orks",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Warboss in Mega Armour",
+          "models": 1
+        },
+        {
+          "name": "Boyz",
+          "models": 20
+        },
+        {
+          "name": "Deffkoptas",
+          "models": 3
+        },
+        {
+          "name": "Deff Dread",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "cp-space-marines",
+      "name": "Combat Patrol: Space Marines",
+      "kind": "combat-patrol",
+      "source": "https://www.wargamer.com/warhammer-40k/combat-patrol-guide",
+      "lines": [
+        {
+          "name": "Lieutenant in Phobos Armour",
+          "models": 1
+        },
+        {
+          "name": "Infiltrator Squad",
+          "models": 10,
+          "or": [
+            "Incursor Squad"
+          ]
+        },
+        {
+          "name": "Eliminator Squad",
+          "models": 3
+        },
+        {
+          "name": "Suppressor Squad",
+          "models": 3
+        },
+        {
+          "name": "Impulsor",
+          "models": 1
+        }
+      ]
     }
   ]
 }
