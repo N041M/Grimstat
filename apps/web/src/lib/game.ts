@@ -471,6 +471,10 @@ export function opponentScenarioUnit(u: OpponentUnit, state?: UnitState): Scenar
  * died, so this is proportional rather than exact. It is far closer than solving at full strength,
  * which is what a companion would otherwise report in the middle of a game.
  *
+ * A group nobody survived in is left out rather than returned at zero, because a scenario model
+ * group has to hold at least one model. A destroyed unit therefore comes back with no models at
+ * all, which is what the odds panel reads to say there is nothing left to attack.
+ *
  * The model part way through being killed carries `woundsLost`, so it is split out as a group of
  * one at the wounds it has left. Without that a damaged one-model unit reached the solver at its
  * full wounds, and the panel printed one chance of finishing it and a different chance of killing
@@ -481,7 +485,7 @@ export function atStrength(unit: ScenarioUnit, state: UnitState, startingModels:
   const start = Math.max(1, Math.floor(startingModels));
   const hurt = Math.max(0, Math.floor(state.woundsLost));
   if (alive >= start && hurt === 0) return unit;
-  if (alive <= 0) return { ...unit, models: unit.models.map((m) => ({ ...m, count: 0 })), weapons: unit.weapons.map((w) => ({ ...w, count: 0 })) };
+  if (alive <= 0) return { ...unit, models: [], weapons: unit.weapons.map((w) => ({ ...w, count: 0 })) };
 
   /*
    * Fill the groups from the front until the survivors run out, but keep any attached character
@@ -511,13 +515,17 @@ export function atStrength(unit: ScenarioUnit, state: UnitState, startingModels:
    *
    * That model is split out as a group of one at the wounds it has left and listed first, so the
    * solver spends damage on it before the models still at full health.
+   *
+   * Groups nobody survived in are dropped at the end, because a scenario model group has to hold at
+   * least one model.
    */
   const woundedAt = hurt > 0 ? [...order].reverse().find((i) => (kept.get(i) ?? 0) > 0) : undefined;
   const source = woundedAt === undefined ? undefined : whole[woundedAt]!;
-  const models =
+  const models = (
     source === undefined
       ? whole
-      : [{ ...source, count: 1, W: Math.max(1, source.W - hurt) }, ...whole.flatMap((m, i) => (i !== woundedAt ? [m] : m.count > 1 ? [{ ...m, count: m.count - 1 }] : []))];
+      : [{ ...source, count: 1, W: Math.max(1, source.W - hurt) }, ...whole.flatMap((m, i) => (i !== woundedAt ? [m] : m.count > 1 ? [{ ...m, count: m.count - 1 }] : []))]
+  ).filter((m) => m.count > 0);
 
   /*
    * Weapon counts fall with the models carrying them. Each line takes its share of what it started
