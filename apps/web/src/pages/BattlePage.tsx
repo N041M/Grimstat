@@ -1043,8 +1043,9 @@ export function BattlePage() {
                 ) : null}
                 <button type="button" className="battle-view-btn" aria-expanded={cameraOpen} aria-controls="battle-camera" onClick={() => setCameraOpen((on) => !on)} title={t("battle.view.cameraTitle")} aria-label={t("battle.view.camera")}>
                   {/* A camera, not one of the views it offers: the cube glyph is the orbit option
-                      inside the menu, and a control that wears its own contents reads as one. */}
-                  <Icon name="camera" />
+                      inside the menu, and a control that wears its own contents reads as one. Open,
+                      it says how to close rather than turning on the spot. */}
+                  <Icon name={cameraOpen ? "close" : "camera"} />
                 </button>
                 <div className="battle-camera" id="battle-camera" role="group" aria-label={t("battle.view.camera")} hidden={!cameraOpen}>
                   <button type="button" className="battle-view-btn" aria-pressed={view === "orbit"} onClick={() => { setView("orbit"); closeCamera(); }} title={t("battle.view.orbit")} aria-label={t("battle.view.orbit")}>

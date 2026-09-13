@@ -286,11 +286,12 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   /* The control that opens the view's options. A camera rather than one of the views it offers:
-     the cube glyph doubled as the orbit option inside the menu, so the two read as the same thing. */
+     the cube glyph doubled as the orbit option inside the menu, so the two read as the same thing.
+     A cine camera rather than a stills one, because what it points at is a moving view. */
   camera: (
     <>
-      <path d="M1.8 5.2h3l1-1.6h4.4l1 1.6h3v7.2a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z" />
-      <circle cx="8" cy="8.8" r="2.4" />
+      <rect x="1.5" y="4.6" width="9" height="6.8" rx="1.2" />
+      <path d="M10.5 7.3 14.5 5.3v5.4l-4-2z" />
     </>
   ),
   /* The two ways of looking at a table: from an angle, and straight down. */
