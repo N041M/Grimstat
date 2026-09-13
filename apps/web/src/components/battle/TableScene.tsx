@@ -1,9 +1,10 @@
 import { memo, useEffect, useMemo, useRef } from "react";
 import { useThree, type ThreeEvent } from "@react-three/fiber";
 import { BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, EdgesGeometry, EquirectangularReflectionMapping, ExtrudeGeometry, FloatType, PMREMGenerator, RGBAFormat, Shape, ShapeGeometry, Vector3, type DirectionalLight } from "three";
-import type { BoardSize, Objective, TerrainPiece, Vec2, Zone } from "@grimstat/board";
+import type { Aabb2, BoardSize, Objective, TerrainPiece, Vec2, Zone } from "@grimstat/board";
 import { OBJECTIVE_MARKER_RADIUS, OBJECTIVE_RANGE, hasTrait } from "@grimstat/board";
-import { SCENE_COLOURS, SIDE_COLOURS, fromScene, surfaceHeights, terrainAppearance, toScene } from "../../lib/battleScene";
+import { MUSTER_COLOURS, SCENE_COLOURS, SIDE_COLOURS, fromScene, surfaceHeights, terrainAppearance, toScene } from "../../lib/battleScene";
+import type { Muster } from "../../lib/battle";
 import { useDisposable } from "./useDisposable";
 
 /** A press on something on the table, reported with the board point under the pointer. */
@@ -69,12 +70,49 @@ export const Table = memo(function Table({ size, onDown }: { size: BoardSize; on
         <meshStandardMaterial color={SCENE_COLOURS.table} roughness={0.95} />
       </mesh>
       <TableGrid size={size} />
-      <lineSegments geometry={edge} position={[0, 0.02, 0]}>
+      {/* The outline is a flat shape like every other, so it is laid down like every other: without
+          the rotation the rectangle keeps board y as the scene's up and stands on the near edge. */}
+      <lineSegments geometry={edge} rotation={FLAT} position={[0, 0.02, 0]}>
         <lineBasicMaterial color={SCENE_COLOURS.tableEdge} />
       </lineSegments>
+      <Frame area={{ minX: 0, maxX: size.width, minY: 0, maxY: size.depth }} height={size.depth} colour={SCENE_COLOURS.tableEdge} />
     </group>
   );
 });
+
+/**
+ * The frame standing round a table: an upright at each corner and a rim across their tops.
+ *
+ * It says where the play area ends from any angle, which a line lying on the table can only do from
+ * above. The height is the board's own depth, so the frame stays in proportion whatever size is
+ * being played on. Built in scene coordinates directly, since this is the one part of a table that
+ * is not flat and has nothing to gain from being drawn flat and turned.
+ */
+function Frame({ area, height, colour, opacity }: { area: Aabb2; height: number; colour: string; opacity?: number }) {
+  const geometry = useDisposable(() => {
+    // The four corners, as the scene has them: board y runs into −z.
+    const corners: [number, number][] = [
+      [area.minX, -area.minY],
+      [area.maxX, -area.minY],
+      [area.maxX, -area.maxY],
+      [area.minX, -area.maxY],
+    ];
+    const points: number[] = [];
+    for (const [x, z] of corners) points.push(x, 0, z, x, height, z);
+    corners.forEach(([x, z], i) => {
+      const next = corners[(i + 1) % corners.length]!;
+      points.push(x, height, z, next[0], height, next[1]);
+    });
+    const g = new BufferGeometry();
+    g.setAttribute("position", new BufferAttribute(new Float32Array(points), 3));
+    return g;
+  }, [area.minX, area.maxX, area.minY, area.maxY, height]);
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial color={colour} transparent={opacity !== undefined} opacity={opacity ?? 1} />
+    </lineSegments>
+  );
+}
 
 /**
  * A six-inch grid, clipped to the table.
@@ -96,6 +134,65 @@ function TableGrid({ size, step = 6 }: { size: BoardSize; step?: number }) {
     <lineSegments geometry={geometry} position={[0, 0.008, 0]}>
       <lineBasicMaterial color={SCENE_COLOURS.grid} />
     </lineSegments>
+  );
+}
+
+/**
+ * The muster tables: one per side, beyond that side's own board edge.
+ *
+ * Drawn as tables rather than as a marked-off part of the board, because that is what they are —
+ * the shelf the army waits on. Each is painted in its side's colour, so whose army is waiting where
+ * is answered before anything on it is read. They carry no grid: nothing on them is ever measured,
+ * and a grid would only suggest that it is.
+ *
+ * A press is reported the same way the board's is, so putting a unit back is the same gesture as
+ * setting it down.
+ */
+export const MusterTables = memo(function MusterTables({ musters, onDown }: { musters: readonly Muster[]; onDown?: (at: Vec2, event: PointerEvent) => void }) {
+  return (
+    <group>
+      {musters.map((m) => (
+        <MusterSlab key={m.side} muster={m} onDown={onDown} />
+      ))}
+    </group>
+  );
+});
+
+/** Width of the side-coloured stripe along a muster table's inner edge. */
+const MUSTER_STRIPE = 0.6;
+
+function MusterSlab({ muster, onDown }: { muster: Muster; onDown?: (at: Vec2, event: PointerEvent) => void }) {
+  const { area, side } = muster;
+  const width = area.maxX - area.minX;
+  const depth = area.maxY - area.minY;
+  const edge = useDisposable(() => {
+    const flat = new ShapeGeometry(shapeOf([{ x: area.minX, y: area.minY }, { x: area.maxX, y: area.minY }, { x: area.maxX, y: area.maxY }, { x: area.minX, y: area.maxY }]));
+    const edges = new EdgesGeometry(flat);
+    flat.dispose();
+    return edges;
+  }, [area.minX, area.maxX, area.minY, area.maxY]);
+  // The inner edge is the one the board is on, which is the far edge for the near table and the other way round.
+  const innerY = side === "attacker" ? area.maxY - MUSTER_STRIPE / 2 : area.minY + MUSTER_STRIPE / 2;
+  return (
+    <group>
+      <mesh
+        receiveShadow
+        rotation={FLAT}
+        position={[(area.minX + area.maxX) / 2, -0.02, -(area.minY + area.maxY) / 2]}
+        onPointerDown={onDown ? (e) => onDown(boardPoint(e), e.nativeEvent) : undefined}
+      >
+        <planeGeometry args={[width, depth]} />
+        <meshStandardMaterial color={MUSTER_COLOURS[side]} roughness={0.95} />
+      </mesh>
+      {/* A brighter rail along the edge the board is on, so the table has a front to stand behind. */}
+      <mesh rotation={FLAT} position={[(area.minX + area.maxX) / 2, 0.01, -innerY]}>
+        <planeGeometry args={[width, MUSTER_STRIPE]} />
+        <meshBasicMaterial color={SIDE_COLOURS[side]} transparent opacity={0.55} />
+      </mesh>
+      <lineSegments geometry={edge} rotation={FLAT} position={[0, 0.02, 0]}>
+        <lineBasicMaterial color={SIDE_COLOURS[side]} transparent opacity={0.7} />
+      </lineSegments>
+    </group>
   );
 }
 
@@ -320,19 +417,22 @@ function useTableEnvironment(): void {
  * side legible: it is sky above and table below, so an unlit face goes cool and dim rather than
  * black, and nothing is ever a silhouette.
  */
-export function Lighting({ size }: { size: BoardSize }) {
+export function Lighting({ size, frame }: { size: BoardSize; frame?: Aabb2 }) {
   useTableEnvironment();
   const centre = useMemo(() => new Vector3(size.width / 2, 0, -size.depth / 2), [size.width, size.depth]);
   const key = useRef<DirectionalLight>(null);
+  // Everything that has to be lit and has to cast: the board, and the muster tables beside it.
+  const lit = frame ?? { minX: 0, maxX: size.width, minY: 0, maxY: size.depth };
+  const spread = Math.max(lit.maxX - lit.minX, lit.maxY - lit.minY, 1);
 
   /**
-   * The shadow camera is orthographic and has to hold the whole table whatever angle it is seen
-   * from, so it is sized by the table's half-diagonal plus headroom for the tallest ruin. At this
-   * extent a 2048 map is about twenty texels across a 32 mm base, which is enough for a base to
-   * cast a base-shaped shadow rather than a smudge.
+   * The shadow camera is orthographic and has to hold the whole scene whatever angle it is seen
+   * from, so it is sized by its half-diagonal plus headroom for the tallest ruin. At this extent a
+   * 2048 map is a dozen-odd texels across a 32 mm base, which is enough for a base to cast a
+   * base-shaped shadow rather than a smudge.
    */
-  const reach = Math.hypot(size.width, size.depth) / 2 + SHADOW_HEADROOM;
-  const distance = Math.max(size.width, size.depth) * 1.5;
+  const reach = Math.hypot(lit.maxX - lit.minX, lit.maxY - lit.minY) / 2 + SHADOW_HEADROOM;
+  const distance = spread * 1.5;
 
   useEffect(() => {
     const light = key.current;

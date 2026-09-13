@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { MOUSE, OrthographicCamera, PerspectiveCamera, Vector3 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { BoardSize } from "@grimstat/board";
+import type { Aabb2, BoardSize } from "@grimstat/board";
 
 /**
  * `orbit` is the immersive view; `top` is a true orthographic camera looking straight down.
@@ -19,10 +19,18 @@ const ELEVATION = 36;
 /** Headroom the fit allows above the table, so a three-storey ruin is not clipped. */
 const TABLE_HEADROOM = 14;
 
-export function Cameras({ mode, size }: { mode: CameraMode; size: BoardSize }) {
+export function Cameras({ mode, size, frame }: { mode: CameraMode; size: BoardSize; frame?: Aabb2 }) {
   const { gl, set, size: viewport, invalidate } = useThree();
   const controls = useRef<OrbitControls>();
   const centre = useMemo(() => new Vector3(size.width / 2, 0, -size.depth / 2), [size.width, size.depth]);
+  /**
+   * What has to be in shot is more than the play area. A player's units start on the muster
+   * table beside the board, and a view that cut those off would open on an army nobody can see.
+   * The camera still turns about the middle of the board, since that is what is being played on.
+   */
+  const shot = frame ?? { minX: 0, maxX: size.width, minY: 0, maxY: size.depth };
+  const halfX = Math.max(Math.abs(shot.minX - size.width / 2), Math.abs(shot.maxX - size.width / 2));
+  const halfY = Math.max(Math.abs(shot.minY - size.depth / 2), Math.abs(shot.maxY - size.depth / 2));
 
   const perspective = useMemo(() => new PerspectiveCamera(42, 1, 0.5, 600), []);
   const orthographic = useMemo(() => new OrthographicCamera(-1, 1, 1, -1, 0.1, 600), []);
@@ -30,11 +38,11 @@ export function Cameras({ mode, size }: { mode: CameraMode; size: BoardSize }) {
   const aspect = Math.max(viewport.width / Math.max(1, viewport.height), 0.2);
 
   /**
-   * How far back the perspective camera has to sit to hold the whole table.
+   * How far back the perspective camera has to sit to hold the whole scene.
    *
    * Fitting the bounding *sphere* is the easy answer and a bad one: a table is flat and wide, so the
    * sphere is mostly empty air above and below it and the view ends up half-used. This fits the
-   * eight corners of the table's box instead.
+   * eight corners of the scene's box instead, measured about the middle of the board.
    *
    * For a camera on the view axis at distance `t` from the target, a corner `q` (relative to the
    * target) sits at depth `dot(q, forward) + t`, while its sideways and vertical offsets do not
@@ -49,25 +57,25 @@ export function Cameras({ mode, size }: { mode: CameraMode; size: BoardSize }) {
     const tanH = tanV * aspect;
 
     let needed = 1;
-    for (const cx of [0, size.width]) {
-      for (const cz of [0, -size.depth]) {
+    for (const qx of [-halfX, halfX]) {
+      for (const qz of [-halfY, halfY]) {
         for (const cy of [0, TABLE_HEADROOM]) {
-          const q = new Vector3(cx, cy, cz).sub(new Vector3(size.width / 2, 0, -size.depth / 2));
+          const q = new Vector3(qx, cy, qz);
           const depth = q.dot(forward);
           needed = Math.max(needed, Math.abs(q.dot(right)) / tanH - depth, Math.abs(q.dot(up)) / tanV - depth);
         }
       }
     }
     return needed * 1.04;
-  }, [size.width, size.depth, aspect, perspective.fov]);
+  }, [halfX, halfY, aspect, perspective.fov]);
 
   useEffect(() => {
     perspective.aspect = aspect;
     perspective.updateProjectionMatrix();
 
-    // The orthographic frustum holds the table exactly, then grows on the axis the pane has to spare.
-    let halfWidth = (size.width / 2) * 1.06;
-    let halfDepth = (size.depth / 2) * 1.06;
+    // The orthographic frustum holds the scene exactly, then grows on the axis the pane has to spare.
+    let halfWidth = halfX * 1.06;
+    let halfDepth = halfY * 1.06;
     if (halfWidth / halfDepth < aspect) halfWidth = halfDepth * aspect;
     else halfDepth = halfWidth / aspect;
     orthographic.left = -halfWidth;
@@ -75,7 +83,7 @@ export function Cameras({ mode, size }: { mode: CameraMode; size: BoardSize }) {
     orthographic.top = halfDepth;
     orthographic.bottom = -halfDepth;
     orthographic.updateProjectionMatrix();
-  }, [perspective, orthographic, aspect, size.width, size.depth]);
+  }, [perspective, orthographic, aspect, halfX, halfY]);
 
   // Swap the active camera, put it somewhere sensible, and rebuild the controls around it.
   useEffect(() => {

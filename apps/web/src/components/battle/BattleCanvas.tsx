@@ -3,11 +3,11 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { ModelHull, ReachNode, Vec2, Vec3 } from "@grimstat/board";
 import type { BattleState, BattleUnit, Tape } from "../../lib/battle";
-import { anchorOf, deployVerdict, dragVerdict, findModel, findUnit, groupMoveVerdict, indexOf, modelMoveVerdict, placeUnit, translateUnit, unitHulls, type GroupMember, type GroupMove, type Side } from "../../lib/battle";
+import { anchorOf, deployVerdict, dragVerdict, findModel, findUnit, groupMoveVerdict, indexOf, modelMoveVerdict, muster, musterAt, musterVerdict, placeUnit, sceneFrame, translateUnit, unitHulls, type GroupMember, type GroupMove, type Side } from "../../lib/battle";
 import { fromScene, toScene } from "../../lib/battleScene";
 import { centre } from "../../lib/layoutEdit";
 import { Cameras, type CameraMode } from "./Cameras";
-import { Lighting, Objectives, Table, Terrain, Zones } from "./TableScene";
+import { Lighting, MusterTables, Objectives, Table, Terrain, Zones } from "./TableScene";
 import { Ghost, UnitTokens, livePositions } from "./UnitTokens";
 import { silhouetteFor, type SilhouetteId } from "../../lib/silhouettes";
 import { MeasureLine, MeasureMarker, PathLine, Protractor, ReachOverlay, SightRays, TapeObject, TurnRing } from "./Overlays";
@@ -33,6 +33,8 @@ export interface DragState {
   readonly group?: readonly GroupMove[];
   /** The group would not go across as a body and has been fitted into the ground it is over. */
   readonly spaced?: boolean;
+  /** A deployment drag held over the unit's muster table: dropping it there takes it off the board. */
+  readonly toMuster?: boolean;
 }
 
 /**
@@ -97,6 +99,8 @@ export interface BattleCanvasProps {
   dragMode?: "move" | "deploy";
   /** A deployment drag was released somewhere legal: set the unit down as a block centred there. */
   onDeploy?(unitId: string, at: Vec2): void;
+  /** A deployment drag was released on the unit's own muster table: stand it there, off the board. */
+  onMuster?(unitId: string, at: Vec2): void;
   /** The side whose deployment zone should be lit. */
   highlightZone?: Side;
   /** Present while the terrain tool is active; absent, terrain and objectives are scenery. */
@@ -135,6 +139,10 @@ export function BattleCanvas(props: BattleCanvasProps) {
   );
 }
 
+/** Rungs the staging labels cycle through, and the gap between them in inches. */
+const MUSTER_RUNGS = 3;
+const MUSTER_RUNG = 2.4;
+
 /** The models of a selection, in table order, skipping any in reserve. */
 function membersOf(state: BattleState, ids: ReadonlySet<string>): GroupMember[] {
   return state.units.flatMap((u) => (u.reserve ? [] : u.models.filter((m) => ids.has(m.id)).map((m) => ({ unitId: u.id, modelId: m.id }))));
@@ -171,7 +179,7 @@ type Held =
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, groupIds, onBoxSelect, boxSelect, addToSelection, onMoveGroup, marqueeRef, turnRing, onTurn, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, groupIds, onBoxSelect, boxSelect, addToSelection, onMoveGroup, marqueeRef, turnRing, onTurn, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, onMuster, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
@@ -184,11 +192,14 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
   /** The tape's free end while a measurement is in progress. */
   const [aim, setAim] = useState<Vec2 | undefined>();
   const index = useMemo(() => indexOf(state), [state]);
+  /** The muster tables beside the board, and the extent of everything the camera has to hold. */
+  const musters = useMemo(() => [muster(state, "attacker"), muster(state, "defender")], [state]);
+  const frame = useMemo(() => sceneFrame(state), [state]);
 
   // The window listeners are registered once and read the latest of everything through this ref,
   // rather than being torn down and re-added on every render — which, during a drag, is every frame.
-  const latest = useRef({ state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, groupIds, onBoxSelect, onMoveGroup, onTurn });
-  latest.current = { state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, groupIds, onBoxSelect, onMoveGroup, onTurn };
+  const latest = useRef({ state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, onMuster, groupIds, onBoxSelect, onMoveGroup, onTurn });
+  latest.current = { state, index, editing, measureFrom, onMeasureHover, onMove, onDrag, dragMode, onDeploy, onMuster, groupIds, onBoxSelect, onMoveGroup, onTurn };
 
   // A tape with no first mark has no free end.
   useEffect(() => {
@@ -219,7 +230,9 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       const model = unit && findModel(unit, modelId);
       if (!unit || !model) return;
       // Deploying moves the whole block, so the offset is to the block's centre, not the model's.
-      if (latest.current.dragMode === "deploy") {
+      // A unit on its muster table is always picked up by the block: there is nothing else a drag
+      // of it could mean, and the press that took it has already put the deploy tool in hand.
+      if (latest.current.dragMode === "deploy" || unit.reserve) {
         const n = unit.models.length || 1;
         const cx = unit.models.reduce((s, m) => s + m.hull.pos.x, 0) / n;
         const cy = unit.models.reduce((s, m) => s + m.hull.pos.y, 0) / n;
@@ -474,13 +487,16 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       if (!unit) return;
       const model = what.modelId ? findModel(unit, what.modelId) : undefined;
       if (what.modelId && !model) return;
-      const deploying = latest.current.dragMode === "deploy";
+      const deploying = latest.current.dragMode === "deploy" || !!unit.reserve;
       const at = pointAt(e, deploying ? 0 : (model?.hull ?? anchorOf(unit)).pos.z);
       if (!at) return;
       const to = { x: at.x + what.offset.x, y: at.y + what.offset.y };
+      // Held over its own muster table, a deployment drag is a withdrawal, so the block goes back on
+      // the shelf rather than being refused for standing outside the deployment zone.
+      const toMuster = deploying && musterAt(now, to) === unit.side;
       // A whole unit travels as a body, judged by where its leading model would stand.
-      const verdict = deploying ? deployVerdict(now, unit, to, idx) : model ? modelMoveVerdict(now, unit, model, to, idx) : dragVerdict(now, unit, to, idx);
-      const next: DragState = { unitId: what.unitId, ...(deploying || !model ? {} : { modelId: model.id }), to, at: verdict.at, legal: verdict.ok, cost: verdict.cost, path: verdict.path, problems: verdict.problems };
+      const verdict = toMuster ? musterVerdict(now, unit, to) : deploying ? deployVerdict(now, unit, to, idx) : model ? modelMoveVerdict(now, unit, model, to, idx) : dragVerdict(now, unit, to, idx);
+      const next: DragState = { unitId: what.unitId, ...(deploying || !model ? {} : { modelId: model.id }), to, at: verdict.at, legal: verdict.ok, cost: verdict.cost, path: verdict.path, problems: verdict.problems, ...(toMuster ? { toMuster: true } : {}) };
       pending.current = next;
       setDrag(next);
       report?.(next);
@@ -541,7 +557,8 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
       }
       const result = pending.current;
       if (result?.legal && result.at) {
-        if (latest.current.dragMode === "deploy") latest.current.onDeploy?.(result.unitId, { x: result.at.x, y: result.at.y });
+        if (result.toMuster) latest.current.onMuster?.(result.unitId, { x: result.at.x, y: result.at.y });
+        else if (latest.current.dragMode === "deploy" || findUnit(latest.current.state, result.unitId)?.reserve) latest.current.onDeploy?.(result.unitId, { x: result.at.x, y: result.at.y });
         else if (result.group) latest.current.onMoveGroup?.(result.group);
         else if (result.cost !== undefined) latest.current.onMove(result.unitId, result.at, result.cost, result.modelId, result.path);
       }
@@ -582,9 +599,10 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
 
   return (
     <>
-      <Cameras mode={cameraMode} size={state.layout.size} />
-      <Lighting size={state.layout.size} />
+      <Cameras mode={cameraMode} size={state.layout.size} frame={frame} />
+      <Lighting size={state.layout.size} frame={frame} />
       <Table size={state.layout.size} onDown={onDown} />
+      <MusterTables musters={musters} onDown={onDown} />
       <Zones zones={state.zones} highlight={highlightZone} />
       <Terrain pieces={state.layout.pieces} selectedId={editing?.pieceId} onPick={editing ? pickPiece : undefined} />
       <Objectives objectives={state.layout.objectives} selectedId={editing?.objectiveId} onPick={editing ? pickObjective : undefined} />
@@ -662,6 +680,19 @@ function LabelProjector({ labelsRef, units }: { labelsRef: RefObject<HTMLDivElem
   const { camera, size } = useThree();
   const scratch = useMemo(() => new Vector3(), []);
 
+  /**
+   * How high each label floats above its unit.
+   *
+   * On the board a unit has room around it and the label sits just over the model. A staging table
+   * is one shallow row of blocks, so from a low angle every label on it lands at the same screen
+   * height and they stack into an unreadable pile. Units waiting there take their label up a short
+   * ladder instead, cycling so that no two neighbours in the row are ever on the same rung.
+   */
+  const lifts = useMemo(() => {
+    const rung = { attacker: 0, defender: 0 };
+    return units.map((u) => (u.reserve ? (rung[u.side]++ % MUSTER_RUNGS) * MUSTER_RUNG : 0));
+  }, [units]);
+
   useFrame(() => {
     const host = labelsRef.current;
     if (!host) return;
@@ -669,15 +700,11 @@ function LabelProjector({ labelsRef, units }: { labelsRef: RefObject<HTMLDivElem
     for (let i = 0; i < units.length && i < children.length; i++) {
       const unit = units[i]!;
       const el = children[i] as HTMLElement;
-      if (unit.reserve) {
-        el.style.visibility = "hidden";
-        continue;
-      }
       const anchor = anchorOf(unit);
       // The label follows the token, which may still be on its way.
       const live = unit.models[0] ? livePositions.get(unit.models[0].id) : undefined;
       const pos = live ?? anchor.pos;
-      scratch.set(pos.x, pos.z + anchor.height + 0.6, -pos.y).project(camera);
+      scratch.set(pos.x, pos.z + anchor.height + 0.6 + (lifts[i] ?? 0), -pos.y).project(camera);
       const behind = scratch.z > 1;
       el.style.visibility = behind ? "hidden" : "visible";
       if (behind) continue;

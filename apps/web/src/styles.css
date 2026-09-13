@@ -5822,6 +5822,13 @@ button.val-row:hover {
 .battle-label.defender {
   border-color: rgba(184, 69, 47, 0.85);
 }
+/* A unit waiting on a staging table: the same label, drawn small, since a shallow row of them is
+   read at a glance rather than measured against. */
+.battle-label.waiting {
+  font-size: 9px;
+  padding: 2px 4px;
+  background: rgba(21, 22, 26, 0.85);
+}
 
 .battle-panel {
   border-left: 1px solid var(--line);

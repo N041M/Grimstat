@@ -13,8 +13,8 @@
  * than enforced, because the rules only ask for it once the whole unit has finished moving.
  */
 
-import type { CoherencyReport, Footprint, ModelHull, ReachNode, ReachOptions, ReachResult, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
-import { COHERENCY_RANGE, LAYOUTS, MOVE_RULES, TOUCH, TerrainIndex, canStand, chargeGeometry, circleBase, coherency, coreSegment, coverFor, distance, edgeZones, footReach, heightForKeywords, horizontalGap, inEngagementRange, inZone, onBoard, ovalBase, pointInPolygon, reachable, segPolygonDistance, sight, unitDistance } from "@grimstat/board";
+import type { Aabb2, CoherencyReport, Footprint, ModelHull, ReachNode, ReachOptions, ReachResult, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
+import { COHERENCY_RANGE, LAYOUTS, MOVE_RULES, TOUCH, TerrainIndex, bounds, canStand, chargeGeometry, circleBase, coherency, coreSegment, coverFor, distance, edgeZones, footReach, heightForKeywords, horizontalGap, inBox, inEngagementRange, inZone, onBoard, ovalBase, pointInPolygon, reachable, segPolygonDistance, sight, unitDistance } from "@grimstat/board";
 import type { ModelProfile, Roster, Snapshot } from "@grimstat/schema";
 import { unitClassFor, type UnitClassId } from "./unitArt";
 
@@ -52,7 +52,7 @@ export interface BattleUnit {
   readonly oc: number;
   readonly keywords: readonly string[];
   readonly models: readonly BattleModel[];
-  /** Not on the table yet: waiting in reserve to be deployed. Its models' positions mean nothing. */
+  /** Not on the board: standing on its side's muster table, waiting to be deployed. */
   readonly reserve?: boolean;
 }
 
@@ -131,9 +131,28 @@ export function formation(count: number, spacing: number): Vec2[] {
   return out;
 }
 
+/** How far apart the model centres of a unit stand when it is set down as a block. */
+const blockSpacing = (unit: BattleUnit): number => Math.max(1.2, unit.models[0] ? unit.models[0].hull.foot.r * 2 + 0.6 : 1.6);
+
+/**
+ * How much floor a unit takes up as a block, measured to the outside of the outermost bases.
+ *
+ * The muster table shelves by this, so it has to be the extent the block really has: an oval base
+ * is as long as it is whatever way it is turned, which is `footReach` rather than the radius the
+ * spacing is worked out from.
+ */
+export function blockSize(unit: BattleUnit): { readonly width: number; readonly depth: number } {
+  const spacing = blockSpacing(unit);
+  const count = Math.max(1, unit.models.length);
+  const perRow = Math.max(1, Math.ceil(Math.sqrt(count)));
+  const rows = Math.ceil(count / perRow);
+  const reach = unit.models[0] ? footReach(unit.models[0].hull.foot) : 0.8;
+  return { width: (perRow - 1) * spacing + 2 * reach, depth: (rows - 1) * spacing + 2 * reach };
+}
+
 /** Put a unit's models in a block centred on `at`, keeping each model's height and base. */
 export function placeUnit(unit: BattleUnit, at: Vec2, z = 0): BattleUnit {
-  const spacing = Math.max(1.2, unit.models[0] ? unit.models[0].hull.foot.r * 2 + 0.6 : 1.6);
+  const spacing = blockSpacing(unit);
   const offsets = formation(unit.models.length, spacing);
   return {
     ...unit,
@@ -552,6 +571,152 @@ export function applyGroupMove(state: BattleState, moves: readonly GroupMove[]):
   return { ...state, units: state.units.map((u) => moves.filter((m) => m.unitId === u.id).reduce((unit, m) => applyModelMove(unit, m.modelId, m.at, m.cost, m.path), u)) };
 }
 
+/* ---- the muster table -------------------------------------------------------------------------- */
+
+/*
+ * The ground beside the board where a side's units stand before they are deployed.
+ *
+ * A unit that is not on the board is still somewhere. On a real table it is on the shelf beside
+ * you, in a case or on a tray, and deploying it means picking it up from there and putting it down
+ * in your zone — it does not appear in the middle of the play area. So each side gets a table of
+ * its own beyond its own board edge, every unit has a berth on it, and a unit withdrawn from the
+ * board goes back to that berth.
+ *
+ * The muster table is not part of the play area and the geometry kernel is never asked about it. A
+ * model standing there blocks nothing, sees nothing and threatens nobody: `deployedUnits` leaves
+ * reserves out of every query, which is still all that `reserve` means. The only thing that has
+ * changed is that a reserve unit now has somewhere to be.
+ */
+
+/** Clear floor between the play area and a muster table, in inches. */
+const MUSTER_GAP = 4;
+/** Space left around each block on the muster table, so neighbours can be told apart and picked up. */
+const MUSTER_PAD = 1.5;
+/** The shallowest a muster table is drawn, since a side with nothing waiting still has a table. */
+const MUSTER_MIN_DEPTH = 10;
+
+export interface Muster {
+  readonly side: Side;
+  /** The table's footprint in board inches. It lies wholly outside the play area. */
+  readonly area: Aabb2;
+  /** Where each of the side's units stands when it is off the board, by unit id. */
+  readonly berths: ReadonlyMap<string, Vec2>;
+}
+
+/** Laid out once per state, since every drag over the table asks for it again. */
+const musters = new WeakMap<BattleState, Map<Side, Muster>>();
+
+/**
+ * A side's muster table and the berth of every one of its units.
+ *
+ * Berths are shelved: blocks in army order, left to right, wrapping to a new row when the next one
+ * would hang off the end, and the table ends up as deep as the rows it needed. It is laid out from
+ * the whole force rather than from what happens to be off the board, so the table keeps its size as
+ * units are deployed and a withdrawn unit goes back to the spot it left. The defender's berths run
+ * the other way along x, since that player reads the table from the far edge.
+ */
+export function muster(state: BattleState, side: Side): Muster {
+  let byside = musters.get(state);
+  if (!byside) musters.set(state, (byside = new Map()));
+  const had = byside.get(side);
+  if (had) return had;
+  const made = shelve(state, side);
+  byside.set(side, made);
+  return made;
+}
+
+/** A row of blocks on the muster table, filled left to right until the next one will not fit. */
+interface Shelf {
+  readonly blocks: { readonly unit: BattleUnit; readonly size: { readonly width: number; readonly depth: number } }[];
+  width: number;
+  depth: number;
+}
+
+function shelve(state: BattleState, side: Side): Muster {
+  const { width, depth } = state.layout.size;
+  const room = width - 2 * MUSTER_PAD;
+  const shelves: Shelf[] = [];
+  for (const unit of unitsOf(state, side)) {
+    const size = blockSize(unit);
+    let shelf = shelves[shelves.length - 1];
+    if (!shelf || (shelf.blocks.length > 0 && shelf.width + MUSTER_PAD + size.width > room)) {
+      shelf = { blocks: [], width: 0, depth: 0 };
+      shelves.push(shelf);
+    }
+    shelf.width += (shelf.blocks.length > 0 ? MUSTER_PAD : 0) + size.width;
+    shelf.depth = Math.max(shelf.depth, size.depth);
+    shelf.blocks.push({ unit, size });
+  }
+
+  // Local coordinates: x across the table from the side's own left, y away from the board. Each row
+  // is centred on the table, so a small force stands in the middle of its shelf rather than in a
+  // corner of it.
+  const berths = new Map<string, Vec2>();
+  let y = MUSTER_PAD;
+  for (const shelf of shelves) {
+    let x = (width - shelf.width) / 2;
+    for (const { unit, size } of shelf.blocks) {
+      const local = { x: x + size.width / 2, y: y + shelf.depth / 2 };
+      berths.set(unit.id, side === "attacker" ? { x: local.x, y: -MUSTER_GAP - local.y } : { x: width - local.x, y: depth + MUSTER_GAP + local.y });
+      x += size.width + MUSTER_PAD;
+    }
+    y += shelf.depth + MUSTER_PAD;
+  }
+
+  const used = Math.max(MUSTER_MIN_DEPTH, y);
+  const area =
+    side === "attacker"
+      ? { minX: 0, maxX: width, minY: -MUSTER_GAP - used, maxY: -MUSTER_GAP }
+      : { minX: 0, maxX: width, minY: depth + MUSTER_GAP, maxY: depth + MUSTER_GAP + used };
+  return { side, area, berths };
+}
+
+/** Where this unit stands when it is off the board. The middle of the table for a unit with no berth. */
+export function berthOf(state: BattleState, unit: BattleUnit): Vec2 {
+  const home = muster(state, unit.side);
+  return home.berths.get(unit.id) ?? { x: (home.area.minX + home.area.maxX) / 2, y: (home.area.minY + home.area.maxY) / 2 };
+}
+
+/** The muster table a point on the floor belongs to, if it belongs to either. */
+export function musterAt(state: BattleState, at: Vec2): Side | undefined {
+  if (inBox(at, muster(state, "attacker").area)) return "attacker";
+  if (inBox(at, muster(state, "defender").area)) return "defender";
+  return undefined;
+}
+
+/** Everything there is to look at: the play area with both muster tables beside it. */
+export function sceneFrame(state: BattleState): Aabb2 {
+  const { width, depth } = state.layout.size;
+  const near = muster(state, "attacker").area;
+  const far = muster(state, "defender").area;
+  return { minX: Math.min(0, near.minX, far.minX), maxX: Math.max(width, near.maxX, far.maxX), minY: Math.min(0, near.minY), maxY: Math.max(depth, far.maxY) };
+}
+
+/** Is the model's whole base inside this rectangle? */
+function wholly(h: ModelHull, area: Aabb2): boolean {
+  const core = coreSegment(h);
+  const box = bounds([core.a, core.b]);
+  const r = h.foot.r;
+  return box.minX - r >= area.minX && box.minY - r >= area.minY && box.maxX + r <= area.maxX && box.maxY + r <= area.maxY;
+}
+
+/**
+ * May this unit stand here on its muster table?
+ *
+ * Less is asked than of a deployment: there is no terrain off the board, nothing is in anyone's
+ * engagement range and nothing is spent. The block has to fit on the table and not stand on top of
+ * another unit waiting there.
+ */
+export function musterVerdict(state: BattleState, unit: BattleUnit, at: Vec2): MoveVerdict {
+  const placed = placeUnit(unit, at);
+  const area = muster(state, unit.side).area;
+  const waiting = state.units.filter((u) => u.id !== unit.id && u.reserve && u.side === unit.side).flatMap(unitHulls);
+  const problems: string[] = [];
+  if (placed.models.some((m) => !wholly(m.hull, area))) problems.push("battle.problem.offMuster");
+  if (placed.models.some((m) => waiting.some((other) => horizontalGap(m.hull, other) <= 0))) problems.push("battle.problem.musterTaken");
+  return { ok: problems.length === 0, at: { x: at.x, y: at.y, z: 0 }, cost: 0, problems };
+}
+
 /* ---- deployment -------------------------------------------------------------------------------- */
 
 /** The zone a side deploys into. */
@@ -581,8 +746,14 @@ export function deployUnit(unit: BattleUnit, at: Vec2): BattleUnit {
   return { ...placed, reserve: false, models: placed.models.map((m) => ({ ...m, from: undefined, spent: 0, route: undefined })) };
 }
 
-/** Take a unit off the table and back into reserve. */
-export const withdrawUnit = (unit: BattleUnit): BattleUnit => ({ ...unit, reserve: true });
+/** Stand a unit on its muster table as a block centred on `at`, fresh: nothing moved, nothing spent. */
+export function musterUnit(unit: BattleUnit, at: Vec2): BattleUnit {
+  const placed = placeUnit(unit, at);
+  return { ...placed, reserve: true, models: placed.models.map((m) => ({ ...m, from: undefined, spent: 0, route: undefined })) };
+}
+
+/** Take a unit off the table and put it back in its berth on its side's muster table. */
+export const withdrawUnit = (state: BattleState, unit: BattleUnit): BattleUnit => musterUnit(unit, berthOf(state, unit));
 
 /** An angle brought back into (−π, π]. */
 const wrapAngle = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
@@ -611,7 +782,8 @@ export function rotateVerdict(state: BattleState, unit: BattleUnit, by: number, 
   return { ok: !problems.length, unit: turned, problems };
 }
 
-export const clearDeployment = (state: BattleState): BattleState => ({ ...state, units: state.units.map(withdrawUnit) });
+/** Take every unit off the board and back to its berth on its own muster table. */
+export const clearDeployment = (state: BattleState): BattleState => ({ ...state, units: state.units.map((u) => withdrawUnit(state, u)) });
 
 /**
  * Put every reserve unit of a side somewhere legal in its zone.
@@ -767,7 +939,7 @@ function sampleUnit(side: Side, i: number): BattleUnit {
   };
 }
 
-/** The sample force for one side, in reserve. */
+/** The sample force for one side, off the board. */
 export const sampleForce = (side: Side): BattleUnit[] => SAMPLE.map((_, i) => sampleUnit(side, i));
 
 /** A layout, its zones and the units given, as they are: nothing is placed. */
@@ -781,12 +953,12 @@ export function battleWith(layout: TerrainLayout, units: readonly BattleUnit[]):
  *
  * Each side is spread in one row along its zone, evenly across the table's width. A unit that
  * cannot stand where the row puts it (terrain, a crowded row, a zone of another shape) is
- * auto-deployed instead, and stays in reserve if it fits nowhere. The units keep their identity,
- * so a force built from an army survives the reset.
+ * auto-deployed instead, and stays on its muster table if it fits nowhere. The units keep their
+ * identity, so a force built from an army survives being deployed and withdrawn again.
  */
 export function freshDeployment(state: BattleState): BattleState {
   const { width, depth } = state.layout.size;
-  let next: BattleState = { ...state, units: state.units.map(withdrawUnit) };
+  let next: BattleState = clearDeployment(state);
   const index = indexOf(state);
   for (const side of ["attacker", "defender"] as const) {
     const mine = unitsOf(next, side);
@@ -800,16 +972,17 @@ export function freshDeployment(state: BattleState): BattleState {
   return next;
 }
 
-/** A layout, its zones and a sample force per side, spread across each deployment zone. */
+/** A layout, its zones and a sample force per side, standing on each side's muster table. */
 export function sampleBattle(layout: TerrainLayout = LAYOUTS[1] ?? LAYOUTS[0]!): BattleState {
   const units: BattleUnit[] = [];
   for (let i = 0; i < SAMPLE.length; i++) units.push(sampleUnit("attacker", i), sampleUnit("defender", i));
-  return freshDeployment(battleWith(layout, units));
+  return clearDeployment(battleWith(layout, units));
 }
 
-/** Give one side a different force. The other side's units are untouched, and the new ones arrive in reserve. */
+/** Give one side a different force. The other side is untouched; the new units arrive on the muster table. */
 export function withForce(state: BattleState, side: Side, units: readonly BattleUnit[]): BattleState {
-  return { ...state, units: [...state.units.filter((u) => u.side !== side), ...units.map((u) => ({ ...u, side, reserve: true }))] };
+  const next: BattleState = { ...state, units: [...state.units.filter((u) => u.side !== side), ...units.map((u) => ({ ...u, side, reserve: true }))] };
+  return { ...next, units: next.units.map((u) => (u.side === side ? withdrawUnit(next, u) : u)) };
 }
 
 /* ---- a force from an army ---------------------------------------------------------------------- */
@@ -860,9 +1033,9 @@ const profileMove = (p: ModelProfile | undefined): number | undefined => (p === 
  *
  * Model counts come from the army; base sizes and Move from each model's profile on the datasheet,
  * with the class of the unit (from its keywords) standing in where the datasheet names no base.
- * A unit whose datasheet is not in the snapshot is left out. Everything arrives in reserve, to be
- * deployed; a unit embarked in a transport or held in reserves is listed like any other, since the
- * table plans deployment rather than enforcing it.
+ * A unit whose datasheet is not in the snapshot is left out. Everything arrives off the board, to
+ * be deployed from the muster table; a unit embarked in a transport or held in reserves is listed
+ * like any other, since the table plans deployment rather than enforcing it.
  */
 export function unitsFromRoster(roster: Roster, snapshot: Snapshot, side: Side): BattleUnit[] {
   const sheets = new Map(snapshot.data.datasheets.map((d) => [d.id, d] as const));

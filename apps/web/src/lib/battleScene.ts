@@ -67,6 +67,15 @@ export const SCENE_COLOURS = {
 export const SIDE_COLOURS = { attacker: "#3d6fb5", defender: "#b8452f" } as const;
 
 /**
+ * The staging tables, each in its side's colour taken down to table level.
+ *
+ * A muster table is the one place on the floor that belongs to one player outright, so it is
+ * painted rather than marked. The colour is darkened well below the side colour itself, because the models
+ * standing on it are that colour too and a table in the same tone would swallow them.
+ */
+export const MUSTER_COLOURS = { attacker: "#1a2f4c", defender: "#4d1d14" } as const;
+
+/**
  * How a terrain piece should look. Height and traits carry the meaning, so the renderer never has to
  * be told separately what a piece is.
  */

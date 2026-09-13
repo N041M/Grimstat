@@ -190,8 +190,11 @@ function LiveToken({ modelId, at, route, children }: { modelId: string; at: Vec3
  * Pressing one selects and picks up that model rather than its unit, because a unit is a handful of models that
  * spread, screen and string out, and a token you can only move as a body cannot do any of it. The
  * press reports where on the table it landed, so a drag can keep the model under the finger that
- * took it rather than snapping its centre to the pointer. Units in reserve have no tokens: they are
- * not on the table.
+ * took it rather than snapping its centre to the pointer.
+ *
+ * A unit that is not deployed is drawn too, standing on its side's muster table. It is off the
+ * board and takes no part in anything measured there, but it is a thing on a table that can be
+ * picked up, which is the whole point of deploying from a shelf rather than out of a list.
  */
 export const UnitTokens = memo(function UnitTokens({
   units,
@@ -220,36 +223,34 @@ export const UnitTokens = memo(function UnitTokens({
 }) {
   return (
     <group>
-      {units
-        .filter((unit) => !unit.reserve)
-        .map((unit) => (
-          <group key={unit.id}>
-            {unit.models.map((m, i, all) => (
-              <LiveToken key={m.id} modelId={m.id} at={m.hull.pos} route={m.route}>
-                <group
-                  onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-                    e.stopPropagation();
-                    const p = fromScene(e.point.x, e.point.y, e.point.z);
-                    // A press with Shift, Ctrl or ⌘ adds to the selection rather than picking the model up.
-                    // The toolbar's Add toggle says the same thing for a finger, which has no modifiers.
-                    const additive = e.nativeEvent.shiftKey || e.nativeEvent.ctrlKey || e.nativeEvent.metaKey || !!addToSelection;
-                    onSelect?.(unit.id, m.id, additive);
-                    if (!additive) onGrab?.(unit.id, m.id, { x: p.x, y: p.y });
-                  }}
-                  onPointerOver={(e: ThreeEvent<PointerEvent>) => {
-                    e.stopPropagation();
-                    document.body.style.cursor = draggable ? "grab" : "pointer";
-                  }}
-                  onPointerOut={() => {
-                    document.body.style.cursor = "";
-                  }}
-                >
-                  <TokenBody hull={m.hull} kind={kindOf(unit, i, all)} pose={i} colour={SIDE_COLOURS[unit.side]} selected={m.id === activeModelId || (unit.id === selectedId && !activeModelId) || !!groupIds?.has(m.id)} warn={incoherent?.has(m.id)} />
-                </group>
-              </LiveToken>
-            ))}
-          </group>
-        ))}
+      {units.map((unit) => (
+        <group key={unit.id}>
+          {unit.models.map((m, i, all) => (
+            <LiveToken key={m.id} modelId={m.id} at={m.hull.pos} route={m.route}>
+              <group
+                onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                  e.stopPropagation();
+                  const p = fromScene(e.point.x, e.point.y, e.point.z);
+                  // A press with Shift, Ctrl or ⌘ adds to the selection rather than picking the model up.
+                  // The toolbar's Add toggle says the same thing for a finger, which has no modifiers.
+                  const additive = e.nativeEvent.shiftKey || e.nativeEvent.ctrlKey || e.nativeEvent.metaKey || !!addToSelection;
+                  onSelect?.(unit.id, m.id, additive);
+                  if (!additive) onGrab?.(unit.id, m.id, { x: p.x, y: p.y });
+                }}
+                onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+                  e.stopPropagation();
+                  document.body.style.cursor = draggable ? "grab" : "pointer";
+                }}
+                onPointerOut={() => {
+                  document.body.style.cursor = "";
+                }}
+              >
+                <TokenBody hull={m.hull} kind={kindOf(unit, i, all)} pose={i} colour={SIDE_COLOURS[unit.side]} selected={m.id === activeModelId || (unit.id === selectedId && !activeModelId) || !!groupIds?.has(m.id)} warn={incoherent?.has(m.id)} />
+              </group>
+            </LiveToken>
+          ))}
+        </group>
+      ))}
     </group>
   );
 });
