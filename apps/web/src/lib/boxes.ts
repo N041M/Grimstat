@@ -47,6 +47,16 @@ export interface ResolvedLine {
   /** The datasheets the line's kit could have been built as instead, that this snapshot knows. */
   readonly alternatives: readonly Datasheet[];
   /**
+   * The same unit on other armies' lists.
+   *
+   * A Rhino is a Rhino. Space Marines, Grey Knights, the Sisters and half a dozen others each field
+   * one, and the rules give each of them their own sheet, so the shelf counts them apart even though
+   * the model on it is the same plastic. A box settles which sheet its own Rhino is, and this says
+   * who else fields one, so a reader who plays two armies can see why their Rhino is filed where it
+   * is rather than wondering where it went.
+   */
+  readonly alsoIn: readonly Datasheet[];
+  /**
    * The box left this one to its owner, so it is waiting for them to say what it is rather than
    * missing from the data. A screen has to tell the two apart: one asks the player a question, the
    * other tells them their snapshot is behind.
@@ -113,15 +123,18 @@ export function resolveBox(box: BoxSet, snapshot: Snapshot): ResolvedBox {
     // Nothing to look up for a line the box leaves to its owner: the models are real, the datasheet
     // is a question, and guessing one from the word on the sprue is how drones become the wrong unit.
     if (line.ownerNames) {
-      lines.push({ line, models: line.models ?? 0, alternatives: [], needsName: true });
+      lines.push({ line, models: line.models ?? 0, alternatives: [], alsoIn: [], needsName: true });
       return;
     }
     const ds = best(named[i]!);
     const alternatives = (line.or ?? []).map((n) => best(candidates(snapshot, n))).filter((d): d is Datasheet => !!d);
+    // One sheet per faction among the rest: a dozen Chapters' worth of the same Rhino is a fact
+    // about the rules, not something a reader needs listed a dozen times.
+    const alsoIn = ds ? named[i]!.filter((d) => d.factionId !== ds.factionId).filter((d, j, all) => all.findIndex((o) => o.factionId === d.factionId) === j) : [];
     const n = ds ? (line.models ?? (line.units ?? 1) * unitSize(ds)) : (line.models ?? 0);
     if (!ds) unknown.push(line.name);
     else if (!factionIds.includes(ds.factionId)) factionIds.push(ds.factionId);
-    lines.push({ line, ...(ds ? { ds } : {}), models: n, alternatives, needsName: false });
+    lines.push({ line, ...(ds ? { ds } : {}), models: n, alternatives, alsoIn, needsName: false });
     if (ds) models += n;
   });
   return { box, lines, unknown, toName: lines.filter((l) => l.needsName), factionIds, models };
@@ -189,7 +202,7 @@ export function modelsByDatasheet(lines: readonly ResolvedLine[]): ReadonlyMap<s
  * are counted against.
  */
 export function nameLine(line: ResolvedLine, ds: Datasheet): ResolvedLine {
-  return { ...line, ds, needsName: false, alternatives: [] };
+  return { ...line, ds, needsName: false, alternatives: [], alsoIn: [] };
 }
 
 /**

@@ -82,6 +82,7 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
                       <span className="box-count mono">{l.models}</span>
                       {l.ds!.name}
                       {l.alternatives.length ? <span className="box-or">{t("collection.box.or", { units: l.alternatives.map((a) => a.name).join(", ") })}</span> : null}
+                      {l.alsoIn.length ? <span className="box-or">{t("collection.box.alsoIn", { armies: l.alsoIn.map((a) => factionName(a.factionId)).join(", ") })}</span> : null}
                     </li>
                   ))}
               </ul>

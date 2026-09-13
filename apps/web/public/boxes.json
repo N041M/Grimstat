@@ -1,6 +1,121 @@
 {
   "boxes": [
     {
+      "id": "set-battle-for-macragge",
+      "name": "Battle for Macragge",
+      "kind": "starter",
+      "announced": "2004",
+      "source": "https://www.wargamer.com/warhammer-40k/starter-set",
+      "lines": [
+        {
+          "name": "Tactical Squad",
+          "models": 10
+        },
+        {
+          "name": "Termagants",
+          "models": 10
+        },
+        {
+          "name": "Genestealers",
+          "models": 6
+        },
+        {
+          "name": "Spore Mines",
+          "models": 8
+        },
+        {
+          "name": "Imperial Navy Pilot",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "set-assault-on-black-reach",
+      "name": "Assault on Black Reach",
+      "kind": "starter",
+      "announced": "2008",
+      "source": "https://www.wargamer.com/warhammer-40k/starter-set",
+      "lines": [
+        {
+          "name": "Tactical Squad",
+          "models": 10
+        },
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Dreadnought",
+          "models": 1
+        },
+        {
+          "name": "Boyz",
+          "models": 20
+        },
+        {
+          "name": "Nobz",
+          "models": 5
+        },
+        {
+          "name": "Warboss",
+          "models": 1
+        },
+        {
+          "name": "Deffkoptas",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "set-dark-vengeance",
+      "name": "Dark Vengeance",
+      "kind": "starter",
+      "announced": "2012",
+      "source": "https://www.wargamer.com/warhammer-40k/starter-set",
+      "lines": [
+        {
+          "name": "Tactical Squad",
+          "models": 10
+        },
+        {
+          "name": "Deathwing Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Ravenwing Command Squad",
+          "models": 3
+        },
+        {
+          "name": "Librarian",
+          "models": 1
+        },
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Chaplain",
+          "models": 1
+        },
+        {
+          "name": "Helbrute",
+          "models": 1
+        },
+        {
+          "name": "Chosen",
+          "models": 6
+        },
+        {
+          "name": "Cultist Mob",
+          "models": 20
+        },
+        {
+          "name": "Chaos Lord",
+          "models": 1
+        }
+      ]
+    },
+    {
       "id": "bf-penitent-crusade-host",
       "name": "Battleforce: Penitent Crusade Host",
       "kind": "battleforce",

@@ -105,6 +105,41 @@ describe("a line the box leaves to its owner", () => {
   });
 });
 
+/**
+ * A Rhino is a Rhino. Several armies field one, each off its own sheet, so the shelf counts them
+ * apart even though the model is the same plastic.
+ */
+describe("a unit more than one army fields", () => {
+  const shared = (faction: string, name: string) => {
+    const copy = structuredClone(snapshot);
+    const from = copy.data.datasheets.find((d) => d.name === "Ashen Crusher")!;
+    copy.data.datasheets.push({ ...from, id: `${from.id}:${faction}`, factionId: faction, name });
+    return copy;
+  };
+
+  it("names the other armies that field it, one per army", () => {
+    const snap = shared("faction:verdant-swarm", "Ashen Crusher");
+    const read = resolveBox(box([{ name: "Warden Squad", models: 5 }, { name: "Ashen Crusher", models: 1 }]), snap);
+    const crusher = read.lines[1]!;
+    // The box is Ashen Wardens, so the Wardens' sheet is the one it counts against.
+    expect(crusher.ds!.factionId).toBe("faction:ashen-wardens");
+    expect(crusher.alsoIn.map((d) => d.factionId)).toEqual(["faction:verdant-swarm"]);
+  });
+
+  it("says nothing about a unit only one army fields", () => {
+    const read = resolveBox(box([{ name: "Warden Squad", models: 5 }]), snapshot);
+    expect(read.lines[0]!.alsoIn).toEqual([]);
+  });
+
+  it("counts it once against the army whose box it is, not once per army", () => {
+    const snap = shared("faction:verdant-swarm", "Ashen Crusher");
+    const read = resolveBox(box([{ name: "Warden Squad", models: 5 }, { name: "Ashen Crusher", models: 1 }]), snap);
+    expect(read.factionIds).toEqual(["faction:ashen-wardens"]);
+    expect(modelsByDatasheet(read.lines).size).toBe(2);
+    expect(read.models).toBe(6);
+  });
+});
+
 describe("a box holding more than one army", () => {
   const twoArmies = box([
     { name: "Warden Squad", models: 10 },
@@ -239,8 +274,20 @@ describe("the list the app ships", () => {
     }
   });
 
-  it("dates every box to a day that reads as one", () => {
+  it("dates every box to something that reads as a date", () => {
     for (const b of BOX_SETS) expect(Number.isNaN(Date.parse(b.announced)), b.name).toBe(false);
+  });
+
+  /** Older boxes are remembered by the year, and inventing a day for one would invent a fact. */
+  it("takes a year on its own, for a box whose day nobody recorded", () => {
+    expect(BoxFileSchema.safeParse({ boxes: [{ ...BOX_SETS[0], announced: "2004" }] }).success).toBe(true);
+    expect(BoxFileSchema.safeParse({ boxes: [{ ...BOX_SETS[0], announced: "2004-09" }] }).success).toBe(true);
+    expect(BoxFileSchema.safeParse({ boxes: [{ ...BOX_SETS[0], announced: "sometime" }] }).success).toBe(false);
+  });
+
+  it("reaches back more than fifteen years", () => {
+    const years = BOX_SETS.map((b) => Number(b.announced.slice(0, 4)));
+    expect(Math.max(...years) - Math.min(...years)).toBeGreaterThanOrEqual(15);
   });
 
   /** The synthetic snapshot shares no unit with the real world, so none of these can place. */

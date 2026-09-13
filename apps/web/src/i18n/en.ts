@@ -661,6 +661,7 @@ export const en = {
   "collection.box.contents": "Contents",
   "collection.box.summary": "{models} models · {armies} armies",
   "collection.box.or": "or {units}",
+  "collection.box.alsoIn": "also fielded by {armies}",
   "collection.box.toName": "You decide what these are",
   "collection.box.unknown": "Not in your data",
   "collection.box.add": "Add {models} models",

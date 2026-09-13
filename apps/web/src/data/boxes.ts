@@ -55,7 +55,7 @@ export interface BoxLine {
   readonly ownerNames?: true;
 }
 
-export type BoxKind = "combat-patrol" | "battleforce";
+export type BoxKind = "combat-patrol" | "battleforce" | "starter";
 
 export interface BoxSet {
   readonly id: string;
@@ -67,15 +67,18 @@ export interface BoxSet {
   readonly name: string;
   readonly kind: BoxKind;
   /**
-   * The day the contents below were announced, as YYYY-MM-DD.
+   * When the contents below were published, as YYYY, YYYY-MM or YYYY-MM-DD.
    *
-   * The announcement rather than the release, because that is the date on the page the contents were
-   * read from. A box usually reaches shops within a month or two of it, which is near enough to sort
-   * by and to tell two boxes of the same name apart, and it is the date this list can stand behind.
+   * As precise as the source is and no more. A box announced last month has the day it was
+   * announced on; one from 2004 has the year somebody remembers it by, and inventing a day for it
+   * would be inventing a fact. Sorting and grouping only read the year, so a year is enough.
+   *
+   * It is the announcement rather than the release, because that is the date on the page the
+   * contents were read from. A box usually reaches shops within a month or two of it.
    */
   readonly announced: string;
   readonly lines: readonly BoxLine[];
-  /** The announcement the contents were read from. */
+  /** Where the contents were read from. */
   readonly source: string;
 }
 
@@ -100,8 +103,8 @@ export const BoxLineSchema = z
 export const BoxSetSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/),
   name: z.string().min(1),
-  kind: z.enum(["combat-patrol", "battleforce"]),
-  announced: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  kind: z.enum(["combat-patrol", "battleforce", "starter"]),
+  announced: z.string().regex(/^\d{4}(-\d{2}(-\d{2})?)?$/),
   lines: z.array(BoxLineSchema).min(1),
   source: z.string().url(),
 });
