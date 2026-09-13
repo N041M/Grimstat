@@ -18,15 +18,22 @@
  */
 
 import type { Datasheet, Snapshot } from "@grimstat/schema";
-import { RosterImportContext } from "@grimstat/adapters";
+import { nameIndexOf } from "@grimstat/adapters";
 import { normaliseName } from "@grimstat/snapshot";
 import type { BoxLine, BoxSet } from "../data/boxes";
 
-/** The words of a name that carry it, in a fixed order: case, punctuation and joiners are noise. */
+/**
+ * The words of a name that carry it, in a fixed order.
+ *
+ * Case, punctuation and the joiners the sources disagree about are noise, and so is a plural: an
+ * announcement writes "a Broadside Battlesuit" where the datasheet is "Broadside Battlesuits", and
+ * reporting that as a unit the player does not have would be a lie about their data. Both sides lose
+ * the same trailing letter, so whatever it does to a word it does to both.
+ */
 const words = (s: string): string =>
-  [...new Set(normaliseName(s).split(" ").filter((w) => w && w !== "of" && w !== "the"))].sort().join(" ");
+  [...new Set(normaliseName(s).split(" ").filter((w) => w && w !== "of" && w !== "the").map((w) => w.replace(/s$/, "")))].sort().join(" ");
 
-/** Two names for the same datasheet: the same spelling, or the same words in another order. */
+/** Two names for the same datasheet: the same spelling, or the same words whatever their order. */
 export function sameUnitName(a: string, b: string): boolean {
   return normaliseName(a) === normaliseName(b) || (words(a) !== "" && words(a) === words(b));
 }
@@ -71,34 +78,52 @@ export function unitSize(ds: Datasheet): number {
   return Math.max(1, ds.models.length > 1 ? ds.models.length : 1);
 }
 
-/** The datasheet a box line names, or nothing when this snapshot has no sheet by that name. */
-function named(ctx: RosterImportContext, name: string): Datasheet | undefined {
-  const hit = ctx.matchDatasheet(name);
-  return hit && sameUnitName(hit.name, name) ? hit : undefined;
+/** Every datasheet in the snapshot that goes by this name, in whatever faction. */
+function candidates(snapshot: Snapshot, name: string): readonly Datasheet[] {
+  return nameIndexOf(snapshot).names.filter((n) => sameUnitName(n.ds.name, name)).map((n) => n.ds);
 }
 
-/** Read a box against a snapshot: which datasheets its lines name, and how many models each brings. */
+/**
+ * Read a box against a snapshot: which datasheets its lines name, and how many models each brings.
+ *
+ * The same unit name often sits in more than one faction's list — Legionaries and Havocs are on both
+ * the Chaos Space Marines and the Chaos Daemons sheets — so a line read on its own picks a faction
+ * by accident. An Iron Warriors box filed its Legionaries under Daemons that way, and the army tick
+ * a player uses to split a box would have offered them the wrong army to tick.
+ *
+ * So the box is read as a whole first. Each faction is scored by how many of the box's lines it
+ * could account for, and every line then takes the candidate from the best-scoring faction that
+ * offers it. A box of one army resolves to that army, because it is the only one that explains all
+ * of the lines; a line that exists in no other faction still resolves to its own.
+ */
 export function resolveBox(box: BoxSet, snapshot: Snapshot): ResolvedBox {
-  const ctx = new RosterImportContext(snapshot);
+  const named = box.lines.map((line) => (line.ownerNames ? [] : candidates(snapshot, line.name)));
+  const score = new Map<string, number>();
+  for (const cands of named) {
+    for (const id of new Set(cands.map((d) => d.factionId))) score.set(id, (score.get(id) ?? 0) + 1);
+  }
+  const best = (cands: readonly Datasheet[]): Datasheet | undefined =>
+    [...cands].sort((a, b) => (score.get(b.factionId) ?? 0) - (score.get(a.factionId) ?? 0))[0];
+
   const lines: ResolvedLine[] = [];
   const unknown: string[] = [];
   const factionIds: string[] = [];
   let models = 0;
-  for (const line of box.lines) {
+  box.lines.forEach((line, i) => {
     // Nothing to look up for a line the box leaves to its owner: the models are real, the datasheet
     // is a question, and guessing one from the word on the sprue is how drones become the wrong unit.
     if (line.ownerNames) {
       lines.push({ line, models: line.models ?? 0, alternatives: [], needsName: true });
-      continue;
+      return;
     }
-    const ds = named(ctx, line.name);
-    const alternatives = (line.or ?? []).map((n) => named(ctx, n)).filter((d): d is Datasheet => !!d);
+    const ds = best(named[i]!);
+    const alternatives = (line.or ?? []).map((n) => best(candidates(snapshot, n))).filter((d): d is Datasheet => !!d);
     const n = ds ? (line.models ?? (line.units ?? 1) * unitSize(ds)) : (line.models ?? 0);
     if (!ds) unknown.push(line.name);
     else if (!factionIds.includes(ds.factionId)) factionIds.push(ds.factionId);
     lines.push({ line, ...(ds ? { ds } : {}), models: n, alternatives, needsName: false });
     if (ds) models += n;
-  }
+  });
   return { box, lines, unknown, toName: lines.filter((l) => l.needsName), factionIds, models };
 }
 
@@ -117,6 +142,25 @@ export function linesForFactions(read: ResolvedBox, factionIds: readonly string[
 /** Boxes a snapshot can actually place: at least one line of the box names a datasheet it has. */
 export function boxesFor(boxes: readonly BoxSet[], snapshot: Snapshot): readonly ResolvedBox[] {
   return boxes.map((b) => resolveBox(b, snapshot)).filter((r) => r.lines.some((l) => l.ds));
+}
+
+/**
+ * What a set of lines adds, summed per datasheet.
+ *
+ * A box can name the same unit twice — two squads of the same troops, a character that comes in two
+ * of its halves — and the shelf counts one number per datasheet. Handing the lines to the shelf one
+ * at a time would read the record it is adding to once and write each line against that same
+ * reading, so the last line would land and the ones before it would be lost. Summing first is what
+ * makes "add this box" mean all of it.
+ */
+export function modelsByDatasheet(lines: readonly ResolvedLine[]): ReadonlyMap<string, { ds: Datasheet; models: number }> {
+  const out = new Map<string, { ds: Datasheet; models: number }>();
+  for (const l of lines) {
+    if (!l.ds || l.models <= 0) continue;
+    const had = out.get(l.ds.id);
+    out.set(l.ds.id, { ds: l.ds, models: (had?.models ?? 0) + l.models });
+  }
+  return out;
 }
 
 /**

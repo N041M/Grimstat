@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import type { BoxSet } from "../data/boxes";
 import { BOX_SETS } from "../data/boxes";
-import { boxesFor, linesForFactions, nameLine, resolveBox, unitSize } from "./boxes";
+import { boxesFor, linesForFactions, modelsByDatasheet, nameLine, resolveBox, unitSize } from "./boxes";
 
 const snapshot = loadSyntheticSnapshot();
 const ds = (id: string) => snapshot.data.datasheets.find((d) => d.id === `ds:${id}`)!;
@@ -121,6 +121,53 @@ describe("a box holding more than one army", () => {
 
   it("gives nothing when no army is ticked", () => {
     expect(linesForFactions(resolveBox(twoArmies, snapshot), [])).toEqual([]);
+  });
+});
+
+describe("what a box adds to the shelf", () => {
+  /**
+   * The shelf counts one number per datasheet. Two lines of the same unit handed over separately
+   * would each be added to the count read before either of them landed, so the first would be lost.
+   */
+  it("sums a unit a box names more than once", () => {
+    const read = resolveBox(box([{ name: "Warden Squad", models: 10 }, { name: "Warden Squad", models: 5 }]), snapshot);
+    expect(read.lines).toHaveLength(2);
+    const totals = modelsByDatasheet(read.lines);
+    expect(totals.size).toBe(1);
+    expect(totals.get("ds:ashen-wardens:warden-squad")!.models).toBe(15);
+  });
+
+  it("leaves out what it could not place and what is not labelled yet", () => {
+    const read = resolveBox(box([
+      { name: "Warden Squad", models: 5 },
+      { name: "Void Hammer Squad", models: 3 },
+      { name: "Drones", models: 8, ownerNames: true },
+    ]), snapshot);
+    expect([...modelsByDatasheet(read.lines).values()].map((v) => [v.ds.name, v.models])).toEqual([["Warden Squad", 5]]);
+  });
+
+  it("counts a labelled line once it has been named", () => {
+    const read = resolveBox(box([{ name: "Drones", models: 8, ownerNames: true }]), snapshot);
+    const named = nameLine(read.toName[0]!, ds("verdant-swarm:thornlings"));
+    expect(modelsByDatasheet([named]).get("ds:verdant-swarm:thornlings")!.models).toBe(8);
+  });
+});
+
+describe("a line written two ways at once", () => {
+  it("counts the models it states rather than working them out from units", () => {
+    const read = resolveBox(box([{ name: "Warden Squad", models: 3, units: 2 }]), snapshot);
+    expect(read.lines[0]!.models).toBe(3);
+  });
+
+  /**
+   * There is no datasheet to ask how big a unit is, so a line left to its owner has to give its
+   * models outright. The seed list is checked for this; the behaviour is pinned here so the zero is
+   * a known answer rather than a surprise.
+   */
+  it("adds nothing for a line left to its owner that counts units instead of models", () => {
+    const read = resolveBox(box([{ name: "Drones", units: 2, ownerNames: true }]), snapshot);
+    expect(read.lines[0]!.models).toBe(0);
+    expect(modelsByDatasheet(read.lines).size).toBe(0);
   });
 });
 

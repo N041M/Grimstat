@@ -8,6 +8,8 @@ import { nowIso } from "../lib/ids";
 import { compositionBounds } from "../lib/roster";
 import { fmtInt, pct } from "../lib/format";
 import { addModels, asCount, byFaction, canField, collectionTotals, commitCount, coverage, rosterNeeds, tidyEntry, type Shortfall } from "../lib/collection";
+import { linesForFactions, modelsByDatasheet, type ResolvedBox } from "../lib/boxes";
+import { BoxDialog } from "../components/collection/BoxDialog";
 import { UnitArt } from "../components/UnitArt";
 import { Badge, Dialog, Empty, Icon, useConfirm } from "../components/ui";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead, ProportionBar } from "../components/kit";
@@ -45,7 +47,7 @@ export function CollectionPage() {
   const [entries, setEntries] = useState<CollectionEntryRecord[] | undefined>(undefined);
   const [rosters, setRosters] = useState<Roster[]>([]);
   const [query, setQuery] = useState("");
-  const [dialog, setDialog] = useState<"add" | "fill" | undefined>(undefined);
+  const [dialog, setDialog] = useState<"add" | "fill" | "box" | undefined>(undefined);
 
   useEffect(() => {
     let alive = true;
@@ -108,6 +110,29 @@ export function CollectionPage() {
   );
 
   /**
+   * Put a box's models on the shelf, for the armies the reader ticked.
+   *
+   * The lines are summed per datasheet before anything is written. A box can name the same unit
+   * twice, and writing each line against the count read before either landed would keep only the
+   * last of them.
+   */
+  const addBox = useCallback(
+    async (read: ResolvedBox, factionIds: readonly string[]) => {
+      const now = nowIso();
+      let added = 0;
+      for (const { ds, models } of modelsByDatasheet(linesForFactions(read, factionIds)).values()) {
+        const had = await db.collection.get(ds.id);
+        await db.collection.put(addModels(had, ds, factionName(ds.factionId), models, now));
+        added += models;
+      }
+      notifyStoreChanged("collection");
+      setDialog(undefined);
+      notify(t("collection.box.added", { models: added, name: read.box.name }), "success");
+    },
+    [factionName, notify],
+  );
+
+  /**
    * Top the collection up to what an army fields.
    *
    * Filling adds only what is missing: an army that fields ten of a squad you already own ten of
@@ -166,6 +191,10 @@ export function CollectionPage() {
             <button type="button" className="primary" disabled={!snapshot} onClick={() => setDialog("add")}>
               <Icon name="plus" />
               {t("collection.add")}
+            </button>
+            <button type="button" disabled={!snapshot} onClick={() => setDialog("box")}>
+              <Icon name="plus" />
+              {t("collection.box")}
             </button>
             <button type="button" disabled={!snapshot || rosters.length === 0} onClick={() => setDialog("fill")}>
               <Icon name="file" />
@@ -253,6 +282,7 @@ export function CollectionPage() {
           </>
         )}
 
+        <BoxDialog open={dialog === "box" && !!snapshot} onClose={() => setDialog(undefined)} snapshot={snapshot} onAdd={(read, ids) => void addBox(read, ids)} />
         <AddDialog open={dialog === "add" && !!snapshot} onClose={() => setDialog(undefined)} datasheets={snapshot?.data.datasheets ?? []} factionName={factionName} owned={entries ?? []} onAdd={(ds, models) => void add(ds, models)} />
 
         <Dialog open={dialog === "fill" && !!snapshot} onClose={() => setDialog(undefined)} title={t("collection.fillTitle")}>

@@ -12,6 +12,12 @@
  * at: the line says what the announcement said, and `units` covers the entries written as "a Krieg
  * Command Squad" rather than as a number of models.
  *
+ * A line is named as the datasheets name it, which is not always as the announcement does: a box
+ * saying "Sternguard Veterans" is a Sternguard Veteran Squad, and one saying "Chaos Terminators"
+ * means the Chaos Terminator Squad, the bare name being Emperor's Children's and World Eaters'. The
+ * names below were checked against a full snapshot; a unit that is simply not in one is left as the
+ * announcement wrote it and reported when it cannot be placed.
+ *
  * It is deliberately a seed rather than a catalogue. Boxes are released faster than a list in a
  * repository can follow them, so the collection screen reads this and any box the player has
  * entered or imported through the same shape.
@@ -68,7 +74,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     kind: "combat-patrol",
     source: IRON_WARRIORS,
     lines: [
-      { name: "Chaos Terminators", models: 5 },
+      { name: "Chaos Terminator Squad", models: 5 },
       { name: "Havocs", models: 5 },
       { name: "Legionaries", models: 10 },
       { name: "Warpsmith", models: 1 },
@@ -98,7 +104,7 @@ export const BOX_SETS: readonly BoxSet[] = [
       { name: "Von Ryan's Leapers", models: 3 },
       { name: "Hormagaunts", models: 10 },
       { name: "Termagants", models: 10 },
-      { name: "Tyranid Warriors", models: 3 },
+      { name: "Tyranid Warriors", models: 3, ownerNames: true },
       { name: "Hive Tyrant", models: 1, or: ["The Swarmlord", "Hive Tyrant with Wings"] },
     ],
   },
@@ -111,7 +117,7 @@ export const BOX_SETS: readonly BoxSet[] = [
       { name: "Lord Discordant on Helstalker", models: 1 },
       { name: "Obliterators", models: 2 },
       { name: "Venomcrawler", models: 1 },
-      { name: "Chaos Cultists", models: 20 },
+      { name: "Cultist Mob", models: 20 },
       { name: "Legionaries", models: 10 },
     ],
   },
@@ -135,7 +141,7 @@ export const BOX_SETS: readonly BoxSet[] = [
     kind: "battleforce",
     source: SEVEN,
     lines: [
-      { name: "Fulgrim, Daemon Primarch of Slaanesh", models: 1 },
+      { name: "Fulgrim", models: 1 },
       { name: "Flawless Blades", models: 6 },
       { name: "Noise Marines", models: 6 },
     ],
@@ -191,8 +197,8 @@ export const BOX_SETS: readonly BoxSet[] = [
       { name: "Captain", models: 1 },
       // The announcement names the retinue without counting it, so the datasheet counts it.
       { name: "Company Heroes", units: 1 },
-      { name: "Sternguard Veterans", models: 5 },
-      { name: "Hellblasters", models: 5 },
+      { name: "Sternguard Veteran Squad", models: 5 },
+      { name: "Hellblaster Squad", models: 5 },
       { name: "Ballistus Dreadnought", models: 1 },
       { name: "Redemptor Dreadnought", models: 1 },
     ],
@@ -218,10 +224,10 @@ export const BOX_SETS: readonly BoxSet[] = [
     source: SEVEN,
     lines: [
       { name: "Lord Commissar", models: 1 },
-      { name: "Death Korps of Krieg Command Squad", units: 1 },
+      { name: "Krieg Command Squad", units: 1 },
       { name: "Death Korps of Krieg", models: 20 },
-      { name: "Death Korps of Krieg Combat Engineers", units: 1 },
-      { name: "Death Korps of Krieg Heavy Weapons Squad", units: 2 },
+      { name: "Krieg Combat Engineers", units: 1 },
+      { name: "Krieg Heavy Weapons Squad", units: 2 },
     ],
   },
 ];

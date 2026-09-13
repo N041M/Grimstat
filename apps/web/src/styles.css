@@ -2609,6 +2609,99 @@ body.sheet-open {
   flex-direction: column;
   animation: sheet-in 0.2s ease-out;
 }
+/* ---- adding a boxed set to the collection ----
+   A list of boxes, then one box's contents grouped by the army each line belongs to. The armies
+   carry the ticks, because a box split with a friend puts half its models on somebody else's shelf. */
+.box-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.box-picker button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.box-picker button:hover {
+  background: var(--hover);
+}
+.box-name {
+  font-weight: 600;
+}
+.box-meta {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.box-source {
+  font: 400 11px/1 var(--mono);
+  color: var(--muted);
+}
+.box-army {
+  margin-bottom: 14px;
+}
+.box-army-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.box-lines {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 26px;
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+}
+.box-lines li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+/* The counts line up so the box reads as a list of quantities rather than a paragraph. */
+.box-count {
+  min-width: 2.2em;
+  text-align: right;
+  color: var(--muted);
+}
+.box-or {
+  color: var(--faint);
+  font-size: 11px;
+}
+/* What the box did not settle: lines waiting to be named, and units this data has never heard of. */
+.box-aside {
+  margin: 14px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.box-aside h3 {
+  margin: 0 0 4px;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 /* ---- navigation drawer (phones): the rail's list, slid in from the edge it lives on ---- */
 .sheet.sheet-left {
   right: auto;
