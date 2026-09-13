@@ -24,7 +24,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sheet, useConfirm, useEdgeFade } from "./components/ui";
 import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, useBarHostRef } from "./components/shell";
 import { mayReplaceScenario, setReplaceScenarioGuard } from "./components/shell/ContextColumn";
-import { swStore, useOnline, useServiceWorker } from "./lib/sw";
+import { useOnline } from "./lib/sw";
 import { t } from "./i18n";
 
 export function App() {
@@ -32,7 +32,6 @@ export function App() {
   const theme = useTheme();
   const { ready, notices, dismissNotice, replaceScenario, notify, scenario } = useApp();
   const { confirm, dialog: confirmDialog } = useConfirm();
-  const sw = useServiceWorker();
   const online = useOnline();
   // On a phone the drawer carries navigation and on a tablet the rail does. Both widths put the
   // context column in a sheet, which is what `compact` is for.
@@ -177,17 +176,6 @@ export function App() {
         <Sheet open={sheet} onClose={closeSheet} label={contextEyebrow(route)} className="ctx-sheet">
           <ContextColumn route={route} param={param} inSheet />
         </Sheet>
-      ) : null}
-      {sw.needRefresh ? (
-        <div className="update-banner" role="status">
-          <span>{t("shell.updateReady")}</span>
-          <button type="button" className="primary sm" onClick={() => void swStore.update()}>
-            {t("shell.updateReload")}
-          </button>
-          <button type="button" className="ghost sm" onClick={() => swStore.dismiss()}>
-            {t("shell.updateLater")}
-          </button>
-        </div>
       ) : null}
       {notices.length ? (
         <div className="notice-layer">

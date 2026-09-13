@@ -186,7 +186,7 @@ export default defineConfig({
     cspPlugin(),
     react(),
     VitePWA({
-      registerType: "prompt",
+      registerType: "autoUpdate",
       manifest: {
         name: "Grimstat",
         short_name: "Grimstat",
