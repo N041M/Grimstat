@@ -6,7 +6,7 @@ import { useApp } from "../../state/AppContext";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { ImportCancelledError, importClient } from "../../worker/importClient";
 import { BROWSER_GAME_SYSTEM_ID, BROWSER_SOURCES, DEFAULT_WAHAPEDIA_MIRROR, IDLE_PROGRESS, MIRRORED_SOURCE, WAHAPEDIA_MIRROR_SETTING, classifyError, errorMessage, hasMirror, importRequestFor, isRunning, reduceProgress, refreshRequestFor, wahapediaMirrorBase, type BrowserSourceId, type ImportErrorKind, type ImportRequest, type ImportSelection, type SourceProgress } from "../../lib/importProgress";
-import { freshnessOf, latestRefFor, type Freshness } from "../../lib/sourceFreshness";
+import { freshnessOf, knownAfterFetch, latestRefFor, type Freshness } from "../../lib/sourceFreshness";
 import { fmtDay, fmtInt } from "../../lib/format";
 import { PanelHead, PillChip, ProportionBar } from "../kit";
 import { t, type I18nKey } from "../../i18n";
@@ -208,7 +208,7 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
       await refreshSnapshots();
       await setActiveSnapshot(snapshot.id);
       notify(t("data.fetch.doneNotice", { label: snapshot.label ?? snapshot.id }), "success");
-      setFreshness((f) => ({ checkedAt: new Date().toISOString(), latest: { ...f.latest, ...Object.fromEntries(snapshot.sources.filter((src) => src.ref).map((src) => [src.adapter, src.ref!])) } }));
+      setFreshness((f) => ({ ...f, latest: knownAfterFetch(f.latest, req.sources, snapshot.sources) }));
       if (alive.current) dispatch({ type: "done", summary });
     } catch (e) {
       if (!alive.current) return;
