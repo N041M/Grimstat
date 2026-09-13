@@ -19,7 +19,7 @@ export function create11eKeywordRegistry(rules: RulesParams = RULES): KeywordReg
 
   r.register("RAPID FIRE", (kw, c) => {
     if (c.rangeBand === "half") c.mods.add({ channel: CH.attacks, op: "add", value: numVal(kw.value), source: "Rapid Fire" });
-  });
+  }, { sample: "Rapid Fire 1" });
   r.register("BLAST", (_kw, c) => {
     const bonus = Math.floor(c.targetModelCount / rules.blastPerModels);
     if (bonus > 0) c.mods.add({ channel: CH.attacks, op: "add", value: bonus, source: "Blast" });
@@ -34,17 +34,17 @@ export function create11eKeywordRegistry(rules: RulesParams = RULES): KeywordReg
     if (c.weaponKind !== "melee") return;
     const bonus = Math.floor(c.targetModelCount / rules.blastPerModels) * numVal(kw.value);
     if (bonus > 0) c.mods.add({ channel: CH.attacks, op: "add", value: bonus, source: "Cleave" });
-  });
+  }, { sample: "Cleave 1" });
   r.register("HEAVY", (_kw, c) => {
     if (c.stationary) c.mods.add({ channel: CH.hitRoll, op: "add", value: 1, source: "Heavy" });
   });
   r.register("TORRENT", (_kw, c) => c.mods.add({ channel: CH.autoHit, op: "flag", value: true, source: "Torrent" }));
-  r.register("TWIN-LINKED", (_kw, c) => c.mods.add({ channel: CH.rerollWound, op: "reroll", value: "failed", source: "Twin-linked" }));
+  r.register("TWIN-LINKED", (_kw, c) => c.mods.add({ channel: CH.rerollWound, op: "reroll", value: "failed", source: "Twin-linked" }), { sample: "Twin-linked" });
   r.register("LETHAL HITS", (_kw, c) => c.mods.add({ channel: CH.lethal, op: "flag", value: true, source: "Lethal Hits" }));
   r.register("SUSTAINED HITS", (kw, c) => {
     const v = kw.value ?? 1;
     c.mods.add({ channel: CH.sustained, op: "set", value: typeof v === "string" && !/^\d+$/.test(v) ? v : numVal(v), source: "Sustained Hits" });
-  });
+  }, { sample: "Sustained Hits 1" });
   r.register("DEVASTATING WOUNDS", (_kw, c) => c.mods.add({ channel: CH.devastating, op: "flag", value: true, source: "Devastating Wounds" }));
   r.register(
     "ANTI",
@@ -54,11 +54,11 @@ export function create11eKeywordRegistry(rules: RulesParams = RULES): KeywordReg
       if (!cond || !evaluateCondition(cond, c)) return;
       c.mods.add({ channel: CH.critWound, op: "cap", value: numVal(kw.value, 6), source: `Anti-${target} ${numVal(kw.value, 6)}+` });
     },
-    { ownsKeyword: true },
+    { ownsKeyword: true, sample: "Anti-infantry 4+" },
   );
   r.register("MELTA", (kw, c) => {
     if (c.rangeBand === "half") c.mods.add({ channel: CH.damage, op: "add", value: numVal(kw.value), source: "Melta" });
-  });
+  }, { sample: "Melta 2" });
   r.register("LANCE", (_kw, c) => {
     if (c.charged && c.weaponKind === "melee") c.mods.add({ channel: CH.woundRoll, op: "add", value: 1, source: "Lance" });
   });

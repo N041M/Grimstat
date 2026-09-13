@@ -230,6 +230,15 @@ describe("runScenario", () => {
     close(noCharge.expectedDamage, 10 * (2 / 3) * (1 / 2) * (1 / 2));
     close(charge.expectedDamage, 10 * (2 / 3) * (4 / 6) * (1 / 2));
   });
+  it("snap shooting applies to ranged weapons only", () => {
+    const sword: ScenarioWeapon = { name: "sword", count: 5, kind: "melee", range: null, A: "2", skill: 3, S: 4, AP: 1, D: "1", keywords: [], enabled: true };
+    const plain = runScenario(scenario(unit([], [sword]), marines(), { phase: "fight" }));
+    const snapped = runScenario(scenario(unit([], [sword]), marines(), { phase: "fight", snapShooting: true }));
+    close(snapped.expectedDamage, plain.expectedDamage);
+    // The same control still holds for a ranged weapon: only unmodified 6s hit.
+    const shot = runScenario(scenario(unit([], [gun()]), marines(), { snapShooting: true }));
+    close(shot.expectedDamage, 10 * (1 / 6) * (1 / 2) * (1 / 3));
+  });
   it("archetypes run and coverage reports unknown keywords", () => {
     const att = archetypes.find((a) => a.id === "bolter-squad")!.unit;
     const def = archetypes.find((a) => a.id === "led-squad")!.unit;
