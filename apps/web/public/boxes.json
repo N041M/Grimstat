@@ -1993,6 +1993,18 @@
         {
           "name": "Wartrakk",
           "models": 1
+        },
+        {
+          "name": "Bigboss",
+          "models": 1
+        },
+        {
+          "name": "Bannernob",
+          "models": 1
+        },
+        {
+          "name": "Big Mek Dakkarig",
+          "models": 1
         }
       ]
     },
@@ -2479,6 +2491,114 @@
         {
           "name": "Warboss",
           "models": 1
+        }
+      ]
+    },
+    {
+      "id": "bf-march-of-iron",
+      "name": "Battleforce: Iron Hands \u2013 March of Iron Strike Force",
+      "kind": "battleforce",
+      "announced": "2022-12-26",
+      "source": "https://www.warhammer-community.com/en-gb/articles/6FXYKaAt/start-your-new-year-new-army-project-with-four-more-space-marine-battleforces/",
+      "lines": [
+        {
+          "name": "Redemptor Dreadnought",
+          "models": 2
+        },
+        {
+          "name": "Techmarine",
+          "models": 1
+        },
+        {
+          "name": "Iron Father Feirros",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "bf-warforged-strike-force",
+      "name": "Battleforce: Salamanders \u2013 Warforged Strike Force",
+      "kind": "battleforce",
+      "announced": "2022-12-26",
+      "source": "https://www.warhammer-community.com/en-gb/articles/6FXYKaAt/start-your-new-year-new-army-project-with-four-more-space-marine-battleforces/",
+      "lines": [
+        {
+          "name": "Adrax Agatone",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 20
+        },
+        {
+          "name": "Eradicator Squad",
+          "models": 3
+        },
+        {
+          "name": "Aggressor Squad",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "bf-storm-of-chogoris",
+      "name": "Battleforce: White Scars \u2013 Storm of Chogoris",
+      "kind": "battleforce",
+      "announced": "2022-12-26",
+      "source": "https://www.warhammer-community.com/en-gb/articles/6FXYKaAt/start-your-new-year-new-army-project-with-four-more-space-marine-battleforces/",
+      "lines": [
+        {
+          "name": "Outrider Squad",
+          "models": 6
+        },
+        {
+          "name": "Invader ATV",
+          "models": 2
+        },
+        {
+          "name": "Chaplain on Bike",
+          "models": 1
+        },
+        {
+          "name": "Kor'sarro Khan",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "bf-scions-of-macragge",
+      "name": "Battleforce: Space Marines \u2013 Scions of Macragge",
+      "kind": "battleforce",
+      "announced": "2022-12-26",
+      "source": "https://www.warhammer-community.com/en-gb/articles/6FXYKaAt/start-your-new-year-new-army-project-with-four-more-space-marine-battleforces/",
+      "lines": [
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Hellblaster Squad",
+          "models": 10
+        },
+        {
+          "name": "Bladeguard Veteran Squad",
+          "models": 3
+        },
+        {
+          "name": "Marneus Calgar",
+          "models": 1
+        },
+        {
+          "name": "Chief Librarian Tigurius",
+          "models": 1
+        },
+        {
+          "name": "Victrix Honour Guard",
+          "models": 2
         }
       ]
     }
