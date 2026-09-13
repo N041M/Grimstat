@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import type { BattleSize, Roster } from "@grimstat/schema";
+import { useState, type ReactNode } from "react";
+import type { BattleSize, Diagnostic, Roster } from "@grimstat/schema";
 import type { SaveStatus } from "../../hooks/useRosterEditor";
 import type { PointsBarModel } from "../../lib/pointsBar";
 import { hrefFor } from "../../router";
@@ -7,7 +7,8 @@ import { BATTLE_SIZE_ORDER } from "../../lib/roster";
 import { PageHeader } from "../shell";
 import { PointsBar } from "./PointsBar";
 import { battleSizeKey } from "../../pages/ArmiesPage";
-import { Icon } from "../ui";
+import { Icon, Popover } from "../ui";
+import { DiagnosticItem } from "./DiagnosticItem";
 import { t, tn, type I18nKey } from "../../i18n";
 
 export type EditorMode = "unit" | "export" | "history";
@@ -30,6 +31,10 @@ interface Props {
   savedAt: string | undefined;
   errors: number;
   warns: number;
+  /** Every check the army failed, listed under the count in the header.  */
+  diagnostics: Diagnostic[];
+  /** Jump to the unit a diagnostic points at. */
+  onSelectUnit: (index: number) => void;
   mode: EditorMode;
   onMode: (m: EditorMode) => void;
   onRename: (name: string) => void;
@@ -55,8 +60,47 @@ function statusLabel(status: SaveStatus, savedAt: string | undefined): string {
   }
 }
 
+/**
+ * The header's "1 error · 1 warning". Reading a count and then hunting for what it refers to is a
+ * step nobody wants, so the count opens the list of checks it is counting, and a check that names a
+ * unit selects it.
+ */
+function IssueCount({ text, bad, diagnostics, onSelectUnit }: { text: string; bad: boolean; diagnostics: Diagnostic[]; onSelectUnit: (index: number) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!diagnostics.length) return <span className="roster-issues">{text}</span>;
+  return (
+    <Popover
+      open={open}
+      onClose={() => setOpen(false)}
+      label={t("roster.issues.listTitle")}
+      className="roster-issues-pop"
+      trigger={
+        <button type="button" className={`roster-issues as-button ${bad ? "bad" : ""}`.trim()} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {text}
+        </button>
+      }
+    >
+      <div className="stack">
+        <strong>{t("roster.issues.listTitle")}</strong>
+        <ul className="val-list" role="list">
+          {diagnostics.map((d, i) => (
+            <DiagnosticItem
+              key={`${d.code}:${d.path ?? i}`}
+              d={d}
+              onSelectUnit={(index) => {
+                setOpen(false);
+                onSelectUnit(index);
+              }}
+            />
+          ))}
+        </ul>
+      </div>
+    </Popover>
+  );
+}
+
 /** Editor header: editable name, the army's context line, the points bar, the detachment chips and the view tabs. */
-export function RosterHeader({ roster, factionName, points, status, savedAt, errors, warns, mode, onMode, onRename, onBattleSize, onPointsLimit, onAddUnit, tab, onTab, children }: Props) {
+export function RosterHeader({ roster, factionName, points, status, savedAt, errors, warns, diagnostics, onSelectUnit, mode, onMode, onRename, onBattleSize, onPointsLimit, onAddUnit, tab, onTab, children }: Props) {
   const issueText = errors || warns ? [errors ? tn(errors, "roster.issues.error.one", "roster.issues.error.many") : "", warns ? tn(warns, "roster.issues.warn.one", "roster.issues.warn.many") : ""].filter(Boolean).join(" · ") : t("roster.issues.none");
   const toggle = (m: EditorMode) => onMode(mode === m ? "unit" : m);
 
@@ -89,7 +133,7 @@ export function RosterHeader({ roster, factionName, points, status, savedAt, err
         {statusLabel(status, savedAt)}
       </span>
       <span aria-hidden="true">·</span>
-      <span className={errors ? "roster-issues bad" : "roster-issues"}>{issueText}</span>
+      <IssueCount text={issueText} bad={errors > 0} diagnostics={diagnostics} onSelectUnit={onSelectUnit} />
     </span>
   );
 

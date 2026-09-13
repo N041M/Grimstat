@@ -756,6 +756,7 @@ export const en = {
   "roster.head.more": "Show army details",
   "roster.head.less": "Hide army details",
   "roster.issues.none": "No issues",
+  "roster.issues.listTitle": "Army checks",
   "roster.issues.error.one": "1 error",
   "roster.issues.error.many": "{n} errors",
   "roster.issues.warn.one": "1 warning",
