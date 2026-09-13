@@ -134,7 +134,7 @@ export function NavDrawer({ open, onClose, route, theme, offline }: { open: bool
         <span className="rail-mark-diamond" aria-hidden="true" />
         <span className="nav-drawer-brand">{t("nav.name")}</span>
         <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
-        <span className="nav-drawer-palette">{t("palette.openHint")}</span>
+        <span className="nav-drawer-palette">{t("nav.search")}</span>
       </button>
       <nav className="nav-drawer-list" aria-label={t("nav.label")}>
         {RAIL_ENTRIES.map((e) => (

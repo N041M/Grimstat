@@ -4,6 +4,7 @@ export const en = {
   "nav.label": "Main navigation",
   "nav.name": "Grimstat",
   "nav.open": "Menu",
+  "nav.search": "Search",
   "nav.calculator": "Calculator",
   "nav.scenarios": "Scenarios",
   "nav.data": "Data",
