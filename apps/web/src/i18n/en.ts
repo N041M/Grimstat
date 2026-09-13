@@ -6,6 +6,7 @@ export const en = {
   "nav.scenarios": "Scenarios",
   "nav.data": "Data",
   "nav.about": "About",
+  "nav.more": "More",
   "shell.loading": "Starting…",
   "shell.noSnapshot": "No data snapshot loaded",
   "theme.dark": "Theme: dark",

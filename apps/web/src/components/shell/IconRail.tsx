@@ -1,8 +1,9 @@
 import { useCallback, useRef, useState } from "react";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { hrefFor, type Route } from "../../router";
 import type { ThemePreference, useTheme } from "../../theme";
 import { useApp } from "../../state/AppContext";
-import { menuKeys, useDismiss } from "../ui";
+import { Sheet, menuKeys, useDismiss } from "../ui";
 import { t, type I18nKey } from "../../i18n";
 
 export interface RailEntry {
@@ -25,6 +26,20 @@ export const RAIL_ENTRIES: readonly RailEntry[] = [
   { route: "data", glyph: "D", labelKey: "nav.data" },
   { route: "about", glyph: "?", labelKey: "nav.about" },
 ];
+
+/**
+ * What the bottom bar shows on a phone. Ten destinations and a theme control do not fit across a
+ * phone, and the row used to run off the edge with the last item half drawn. These four sit in the
+ * bar and the rest are one tap away under More; whichever page you are on joins them, so the bar
+ * always says where you are.
+ */
+const PHONE_ROUTES: readonly Route[] = ["calculator", "armies", "collection", "battle"];
+
+function phoneEntries(route: Route): readonly RailEntry[] {
+  const primary = RAIL_ENTRIES.filter((e) => PHONE_ROUTES.includes(e.route));
+  const here = RAIL_ENTRIES.find((e) => e.route === route);
+  return here && !primary.includes(here) ? [...primary.slice(0, PHONE_ROUTES.length - 1), here] : primary;
+}
 
 const PREFERENCES: Array<{ value: ThemePreference; key: I18nKey }> = [
   { value: "light", key: "theme.optionLight" },
@@ -80,7 +95,10 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
  */
 export function IconRail({ route, theme, offline }: { route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean }) {
   const { solveState, openPalette } = useApp();
+  const phone = useMediaQuery("(max-width: 899px)");
+  const [moreOpen, setMoreOpen] = useState(false);
   const pending = solveState === "pending";
+  const entries = phone ? phoneEntries(route) : RAIL_ENTRIES;
   return (
     <div className="rail">
       <button type="button" className="rail-mark" onClick={() => openPalette()} title={t("palette.openHint")} aria-label={t("palette.open")} aria-haspopup="dialog">
@@ -88,7 +106,7 @@ export function IconRail({ route, theme, offline }: { route: Route; theme: Retur
         <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
       </button>
       <nav className="rail-nav" aria-label={t("nav.label")}>
-        {RAIL_ENTRIES.map((e) => (
+        {entries.map((e) => (
           <a key={e.route} className="rail-item" href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
             <span className="rail-glyph" aria-hidden="true">
               {e.glyph}
@@ -105,7 +123,45 @@ export function IconRail({ route, theme, offline }: { route: Route; theme: Retur
           {t("shell.offline")}
         </span>
       ) : null}
-      <ThemeControl theme={theme} />
+      {phone ? (
+        <>
+          <button type="button" className="rail-item rail-more" aria-haspopup="dialog" aria-expanded={moreOpen} onClick={() => setMoreOpen(true)}>
+            <span className="rail-glyph" aria-hidden="true">
+              ⋯
+            </span>
+            <span className="rail-label" aria-hidden="true">
+              {t("nav.more")}
+            </span>
+          </button>
+          <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} label={t("nav.more")} className="rail-sheet">
+            <nav className="rail-sheet-grid" aria-label={t("nav.label")}>
+              {RAIL_ENTRIES.map((e) => (
+                <a key={e.route} className="rail-sheet-item" href={hrefFor(e.route)} aria-current={route === e.route ? "page" : undefined} onClick={() => setMoreOpen(false)}>
+                  <span className="rail-sheet-glyph" aria-hidden="true">
+                    {e.glyph}
+                  </span>
+                  {t(e.labelKey)}
+                </a>
+              ))}
+            </nav>
+            <div className="rail-sheet-theme">
+              {PREFERENCES.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  className={theme.preference === p.value ? "sm primary" : "sm"}
+                  aria-pressed={theme.preference === p.value}
+                  onClick={() => theme.setPreference(p.value)}
+                >
+                  {t(p.key)}
+                </button>
+              ))}
+            </div>
+          </Sheet>
+        </>
+      ) : (
+        <ThemeControl theme={theme} />
+      )}
     </div>
   );
 }

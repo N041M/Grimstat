@@ -7302,14 +7302,15 @@ button.battle-scope-btn:hover {
   }
 }
 @media (max-width: 899px) {
+  /* Five destinations rather than ten, so each one can be a real touch target with a readable label. */
   .rail-item {
     flex-direction: column;
     justify-content: center;
     gap: 3px;
     width: auto;
-    min-width: 34px;
-    height: 44px;
-    padding: 0 3px;
+    min-width: 48px;
+    height: 46px;
+    padding: 0 6px;
     margin: 0;
     overflow: visible;
   }
@@ -7319,10 +7320,45 @@ button.battle-scope-btn:hover {
   .rail-label {
     opacity: 1;
     color: inherit;
-    font: 500 7px/1 var(--mono);
+    font: 500 9px/1 var(--mono);
     letter-spacing: 0.04em;
     transition: none;
     text-transform: uppercase;
+    max-width: 9ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Everywhere else the rail can go, one tap away. */
+  .rail-sheet-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px;
+  }
+  .rail-sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 10px;
+    border-radius: 8px;
+    background: var(--fill);
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 13px;
+  }
+  .rail-sheet-item[aria-current="page"] {
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+  }
+  .rail-sheet-glyph {
+    font: 500 13px/1 var(--mono);
+    width: 1.2em;
+    text-align: center;
+  }
+  .rail-sheet-theme {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
   }
   .rail-offline {
     margin-bottom: 0;
