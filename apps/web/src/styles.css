@@ -10208,17 +10208,16 @@ body.battle-focused .battle-stage {
    Both are drawn, stacked in one box, and the one that applies is the one at full size. Replacing
    the glyph outright swapped it between two frames, which reads as a flicker rather than as the
    state changing. */
+/* One grid cell holding both, so the box is the size of an icon and each is centred in it. Pinning
+   them to the corner of a box written down here left them a pixel high and left of centre, because
+   the box said 16px and an icon is 14. */
 .icon-swap {
-  position: relative;
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
+  display: inline-grid;
+  place-items: center;
   flex: none;
 }
 .icon-swap > .icon {
-  position: absolute;
-  top: 0;
-  left: 0;
+  grid-area: 1 / 1;
   transition:
     opacity 140ms ease,
     transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
