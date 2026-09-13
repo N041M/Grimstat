@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { NARROW_QUERY, useMediaQuery } from "./hooks/useMediaQuery";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "./hooks/useMediaQuery";
 import { useApp } from "./state/AppContext";
 import { navigate, useRouteInfo } from "./router";
 import { useTheme } from "./theme";
@@ -20,7 +20,7 @@ import { DataPage } from "./pages/DataPage";
 import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { Sheet } from "./components/ui";
+import { Sheet, useEdgeFade } from "./components/ui";
 import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, useBarHostRef } from "./components/shell";
 import { swStore, useOnline, useServiceWorker } from "./lib/sw";
 import { t } from "./i18n";
@@ -31,16 +31,34 @@ export function App() {
   const { ready, notices, dismissNotice, replaceScenario, notify } = useApp();
   const sw = useServiceWorker();
   const online = useOnline();
-  const narrow = useMediaQuery(NARROW_QUERY);
+  // On a phone the drawer carries navigation and on a tablet the rail does. Both widths put the
+  // context column in a sheet, which is what `compact` is for.
+  const phone = useMediaQuery(PHONE_QUERY);
+  const compact = useMediaQuery(COMPACT_QUERY);
+  const tablet = compact && !phone;
   const [sheet, setSheet] = useState(false);
   const [nav, setNav] = useState(false);
-  const barHostRef = useBarHostRef();
+  // The bar's action strip scrolls when a page has more actions than the width takes, and it is
+  // only mounted at compact widths, so the fade is set up again whenever that changes.
+  const setBarHost = useBarHostRef();
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const barHostRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      barRef.current = el;
+      setBarHost(el);
+    },
+    [setBarHost],
+  );
+  useEdgeFade(barRef, compact);
 
   // The context sheet is per-screen; leaving the screen closes it.
   useEffect(() => setSheet(false), [route, param]);
   useEffect(() => {
-    if (!narrow) setSheet(false);
-  }, [narrow]);
+    if (!compact) setSheet(false);
+  }, [compact]);
+  useEffect(() => {
+    if (!phone) setNav(false);
+  }, [phone]);
 
   // Permalinks: "#s=<token>" opens the scenario in the calculator (on load and when pasted later).
   useEffect(() => {
@@ -97,15 +115,17 @@ export function App() {
   );
 
   return (
-    <div className={`shell ${narrow ? "narrow" : ""}`.trim()}>
-      {narrow ? null : <IconRail route={route} theme={theme} offline={!online} />}
-      {narrow ? null : <ContextColumn route={route} param={param} />}
+    <div className={["shell", compact ? "compact" : "", phone ? "phone" : "", tablet ? "tablet" : ""].filter(Boolean).join(" ")}>
+      {phone ? null : <IconRail route={route} theme={theme} offline={!online} stacked={tablet} />}
+      {compact ? null : <ContextColumn route={route} param={param} />}
       <main className="main-region">
-        {narrow ? (
+        {compact ? (
           <div className="ctx-bar">
-            <button type="button" className="ctx-bar-nav" onClick={() => setNav(true)} aria-haspopup="dialog" aria-expanded={nav} aria-label={t("nav.open")}>
-              <span aria-hidden="true">☰</span>
-            </button>
+            {phone ? (
+              <button type="button" className="ctx-bar-nav" onClick={() => setNav(true)} aria-haspopup="dialog" aria-expanded={nav} aria-label={t("nav.open")}>
+                <span aria-hidden="true">☰</span>
+              </button>
+            ) : null}
             <button type="button" className="ctx-bar-btn" onClick={() => setSheet(true)} aria-haspopup="dialog" aria-expanded={sheet} aria-label={t("ctxcol.openSheet")}>
               {contextEyebrow(route)}
               <span aria-hidden="true">⌄</span>
@@ -116,13 +136,11 @@ export function App() {
         ) : null}
         {page}
       </main>
-      {narrow ? (
-        <>
-          <NavDrawer open={nav} onClose={() => setNav(false)} route={route} theme={theme} offline={!online} />
-          <Sheet open={sheet} onClose={() => setSheet(false)} label={contextEyebrow(route)} className="ctx-sheet">
-            <ContextColumn route={route} param={param} inSheet />
-          </Sheet>
-        </>
+      {phone ? <NavDrawer open={nav} onClose={() => setNav(false)} route={route} theme={theme} offline={!online} /> : null}
+      {compact ? (
+        <Sheet open={sheet} onClose={() => setSheet(false)} label={contextEyebrow(route)} className="ctx-sheet">
+          <ContextColumn route={route} param={param} inSheet />
+        </Sheet>
       ) : null}
       {sw.needRefresh ? (
         <div className="update-banner" role="status">

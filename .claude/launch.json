@@ -4,9 +4,25 @@
     {
       "name": "grimstat-web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeArgs": [
+        "dev"
+      ],
       "port": 5174,
       "autoPort": true
+    },
+    {
+      "name": "grimstat-lan",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@grimstat/web",
+        "preview",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "4173"
+      ],
+      "port": 4173
     }
   ]
 }

@@ -1372,6 +1372,30 @@ export const en = {
   "battle.force.missing": "That army is no longer stored.",
   "battle.force.noSnapshot": "No data snapshot is loaded, so an army cannot be put on the table.",
   "battle.deploy.selectedDeployedTouch": "Drag it to reposition, or send it back with the × beside its name.",
+  "battle.recentre": "Recentre",
+  "battle.recentre.title": "Put the camera back where the view opened",
+  // battle: what each cluster of table controls acts on, for the rule between them and for anyone
+  // reading the toolbar with a screen reader.
+  "battle.actions.plan": "Planned move",
+  "battle.actions.history": "Undo",
+  "battle.actions.turn": "Turn",
+  "battle.actions.selection": "Selection",
+  "battle.actions.view": "View",
+  "battle.actions.board": "The board",
+  "battle.view.camera": "Camera",
+  "battle.view.cameraTitle": "Which way the view looks at the table, and putting it back",
+  "battle.focus.on": "Focus",
+  "battle.focus.off": "Leave focus",
+  "battle.focus.onTitle": "Give the table the whole screen",
+  "battle.focus.offTitle": "Show the navigation and the panel again",
+
+  // battle: the wording for a finger. Each of these has a keyboard-and-mouse twin above, and the
+  // page picks between them on (pointer: coarse).
+  "battle.moveHintTouch": "Tap or drag to plan where the selected model goes, and the unit moves when you approve the plan.",
+  "battle.unitHintTouch": "Tap the table to plan a move for the whole unit, which moves when you approve the plan.",
+  "battle.group.moveHintTouch": "Tap or drag to plan where the selection goes. Models that cannot keep their place in the formation are fitted into the space beside it.",
+  "battle.deploy.armedTouch": "Tap inside the zone to set {name} down.",
+  "battle.deploy.hintTouch": "Pick a unit from its muster table, then tap inside its deployment zone to set it down. Drag a deployed unit back to the table to take it off the board.",
 
   "analyses.title": "Analyses",
   "analyses.tabs": "Analysis views",

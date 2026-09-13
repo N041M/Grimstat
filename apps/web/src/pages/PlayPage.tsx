@@ -6,7 +6,7 @@ import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
 import { useGame, useWakeLock } from "../hooks/useGame";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
-import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
+import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { atStrength, modelsLeft, opponentScenarioUnit, woundsLeft, NEW_UNIT_STATE, type OpponentUnit, type UnitState } from "../lib/game";
 import { rosterHostEntries } from "../lib/unitSet";
 import { navigate, useRouteInfo } from "../router";
@@ -55,7 +55,7 @@ export function PlayPage() {
   const [games, setGames] = useState<GameRecord[] | undefined>(undefined);
   const [view, setView] = usePersistedSetting<PlayView>("play.view", "units", parseView);
   const [focus, setFocus] = usePersistedSetting<boolean>("play.focus", false, (raw) => (typeof raw === "boolean" ? raw : undefined));
-  const narrow = useMediaQuery(NARROW_QUERY);
+  const compact = useMediaQuery(COMPACT_QUERY);
   const [roster, setRoster] = useState<Roster | undefined>(undefined);
   const [rosterSnapshot, setRosterSnapshot] = useState<Snapshot | undefined>(undefined);
   const version = useStoreVersion("games");
@@ -64,13 +64,16 @@ export function PlayPage() {
   useWakeLock(!!game.game && !game.state.over);
 
   /**
-   * Focus mode: on a phone the navigation bar sits under the thumb that is tapping "next phase" all
-   * game, and leaving the screen mid-turn loses the player's place. While it is on the rail is
-   * hidden and the only way off the screen is the deliberate control in the bar.
+   * Focus mode: at the table the navigation sits under the thumb that is tapping "next phase" all
+   * game, and leaving the screen mid-turn loses the player's place. While it is on the rail and the
+   * top bar are both hidden and the only way off the screen is the deliberate control in the foot.
+   *
+   * It follows the same width as the rest of the compact shell, so a tablet propped beside the
+   * board has it too.
    *
    * The class goes on the document because the rail belongs to the shell, not to this page.
    */
-  const focused = focus && narrow && !!game.game;
+  const focused = focus && compact && !!game.game;
   useEffect(() => {
     if (!focused) return;
     document.body.classList.add("play-focused");

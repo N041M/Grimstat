@@ -71,10 +71,79 @@ export function Switch({ checked, onChange, label, description, disabled }: { ch
   );
 }
 
+/**
+ * Marks which ends of a sideways-scrolling strip have more content beyond them, as
+ * `data-fade="start"`, `"end"` or `"both"`. The CSS fades the ends that are marked.
+ *
+ * The fade has to follow the scroll rather than be painted once. A strip that always faded its
+ * right edge went on fading it after it had been scrolled to the end, where there is nothing more
+ * to say, and never faded the left, where by then there was. Fading both ends unconditionally is
+ * no better: it dims the first tab of a strip nobody has scrolled yet.
+ *
+ * `watch` re-runs the setup when the element itself is replaced — the phone bar's action strip is
+ * only mounted at compact widths, so it comes and goes with them.
+ */
+export function useEdgeFade(ref: RefObject<HTMLElement | null>, watch?: unknown): void {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      /*
+       * Where the first and last children sit, rather than `scrollLeft` against `scrollWidth`.
+       * These strips carry side padding — the tab bar 16px, the battle toolbar 4 — and a strip
+       * with padding rests at a `scrollLeft` of exactly that, never 0, so reading the number
+       * directly reported content hidden off the left of a strip nobody had scrolled.
+       */
+      const first = el.firstElementChild;
+      const last = el.lastElementChild;
+      if (!first || !last) {
+        el.removeAttribute("data-fade");
+        return;
+      }
+      const box = el.getBoundingClientRect();
+      const start = first.getBoundingClientRect().left < box.left - 1;
+      const end = last.getBoundingClientRect().right > box.right + 1;
+      const mark = start && end ? "both" : start ? "start" : end ? "end" : "";
+      if (mark) el.setAttribute("data-fade", mark);
+      else el.removeAttribute("data-fade");
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    // Its own width, and the width of what it holds: the actions change with the screen, and the
+    // tabs change with the army.
+    const resize = new ResizeObserver(update);
+    resize.observe(el);
+    const mutate = new MutationObserver(update);
+    mutate.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => {
+      el.removeEventListener("scroll", update);
+      resize.disconnect();
+      mutate.disconnect();
+    };
+  }, [ref, watch]);
+}
+
+/**
+ * Keeps the selected tab in view in a tab bar too wide for the screen. Below 900px `.tabbar`
+ * scrolls sideways, so a screen reopened on its last tab would otherwise start with that tab off
+ * the edge. Give the bar a ref and pass whatever changes when the tab does.
+ */
+export function useTabInView(ref: RefObject<HTMLElement | null>, value: string): void {
+  useEffect(() => {
+    const bar = ref.current;
+    if (!bar || bar.scrollWidth <= bar.clientWidth) return;
+    // A tab strip marks its own with `aria-selected`; the battle table's tools are toggles and
+    // mark theirs with `aria-pressed`. Either way there is one.
+    const tab = bar.querySelector<HTMLElement>('[aria-selected="true"], [aria-pressed="true"]');
+    tab?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [ref, value]);
+}
+
 /** Roving-tabindex tab strip: the selected tab is in the Tab order, the arrow keys move between tabs. */
 export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: Array<{ id: T; label: string }>; value: T; onChange: (v: T) => void; label: string }) {
   const id = useId();
   const list = useRef<HTMLDivElement>(null);
+  useEdgeFade(list, value);
   const onKeyDown = (e: ReactKeyboardEvent) => {
     const i = tabs.findIndex((tb) => tb.id === value);
     let next: number | undefined;
@@ -131,7 +200,7 @@ export function numOrNull(v: string): number | null {
 
 // ---------- icons (16px line icons, currentColor) ----------
 
-export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn";
+export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse" | "target" | "cube" | "plan" | "camera";
 
 const PATHS: Record<IconName, ReactNode> = {
   export: (
@@ -198,6 +267,54 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M8 6.5v3M8 11.2v.3" />
     </>
   ),
+  /* Four corners opening outwards, and the same four closing inwards: what a video player and a
+     map both use for full screen, so it needs no label to be understood. */
+  expand: (
+    <>
+      <path d="M6 2H2v4" />
+      <path d="M10 2h4v4" />
+      <path d="M6 14H2v-4" />
+      <path d="M10 14h4v-4" />
+    </>
+  ),
+  collapse: (
+    <>
+      <path d="M2 6h4V2" />
+      <path d="M14 6h-4V2" />
+      <path d="M2 10h4v4" />
+      <path d="M14 10h-4v4" />
+    </>
+  ),
+  /* The control that opens the view's options. A camera rather than one of the views it offers:
+     the cube glyph doubled as the orbit option inside the menu, so the two read as the same thing.
+     A cine camera rather than a stills one, because what it points at is a moving view. */
+  camera: (
+    <>
+      <rect x="1.5" y="4.6" width="9" height="6.8" rx="1.2" />
+      <path d="M10.5 7.3 14.5 5.3v5.4l-4-2z" />
+    </>
+  ),
+  /* The two ways of looking at a table: from an angle, and straight down. */
+  cube: (
+    <>
+      <path d="M8 1.9 13.8 5v6L8 14.1 2.2 11V5z" />
+      <path d="M2.2 5 8 8.1 13.8 5" />
+      <path d="M8 8.1v6" />
+    </>
+  ),
+  plan: (
+    <>
+      <path d="M2.4 2.4h11.2v11.2H2.4z" />
+      <path d="M2.4 8h11.2M8 2.4v11.2" />
+    </>
+  ),
+  /* A sight on the middle of something: what recentring the camera does. */
+  target: (
+    <>
+      <circle cx="8" cy="8" r="4.2" />
+      <path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2" />
+    </>
+  ),
 };
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {
@@ -205,6 +322,22 @@ export function Icon({ name, className }: { name: IconName; className?: string }
     <svg className={`icon ${className ?? ""}`.trim()} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       {PATHS[name]}
     </svg>
+  );
+}
+
+/**
+ * Two icons in one box, crossing over between them.
+ *
+ * A button whose glyph changes with its state otherwise replaces it between one frame and the
+ * next, which reads as a flicker rather than as the state changing. Both are drawn, stacked, and
+ * the one that applies is the one at full size.
+ */
+export function IconSwap({ from, to, on }: { from: IconName; to: IconName; on: boolean }) {
+  return (
+    <span className={`icon-swap ${on ? "is-on" : ""}`.trim()} aria-hidden="true">
+      <Icon name={from} />
+      <Icon name={to} />
+    </span>
   );
 }
 

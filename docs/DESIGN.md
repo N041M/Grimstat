@@ -4,9 +4,14 @@ Working name (placeholder): **Grimstat**. It is a free, unofficial fan tool and 
 
 > **Live:** https://n041m.github.io/Grimstat/ (GitHub Pages, deployed from `master`).
 >
-> **Build status (11 Sep 2026):** The app has been rebuilt to the design handoff (light-first
-> paper/ink palette, icon rail, context column, command palette, phone reduction) and the army
-> builder gained Statistics and Arsenal tabs. Charts follow the visualisation rules: a shared hover
+> **Build status (13 Sep 2026):** The app has been rebuilt to the design handoff (light-first
+> paper/ink palette, icon rail, context column, command palette) and the army builder gained
+> Statistics and Arsenal tabs. The shell has three widths. From 1040px up it is the rail, the
+> context column and the page side by side. Between 760 and 1039px the rail stands in the page with
+> each destination named, and the context column opens as a sheet. Below that, and on any screen
+> under 500px tall, navigation moves into a drawer and the page has the width to itself. Every
+> control below 1040px is at least 40px high, and the ones a thumb reaches for without looking are
+> 44. Charts follow the visualisation rules: a shared hover
 > readout rather than browser tooltips, a cumulative reading beside the density one, sequential
 > ramps quantised so neighbouring classes stay separable, and status colour reserved for status.
 >

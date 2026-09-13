@@ -10,6 +10,7 @@ import { loadSampleSnapshot } from "../../lib/snapshotSource";
 import { fmt, fmtInt, fmtRelative } from "../../lib/format";
 import { buildGroups, flattenGroups, stepIndex, type PaletteGroupId, type PaletteItem } from "../../lib/palette";
 import { trapTab } from "../ui";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { RAIL_ENTRIES } from "./IconRail";
 import { requestNew } from "./ContextColumn";
 import { t } from "../../i18n";
@@ -89,6 +90,7 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
   }, [paletteOpen]);
 
   const close = useCallback(() => closePalette(), [closePalette]);
+  const coarse = useMediaQuery("(pointer: coarse)");
 
   const commands = useMemo<Command[]>(() => {
     const out: Command[] = [];
@@ -288,9 +290,17 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
               setActive(0);
             }}
           />
-          <span className="pal-esc" aria-hidden="true">
-            esc
-          </span>
+          {/* Esc is the way out on a keyboard. Touch needs a control to press, because the
+              backdrop that also closes the palette is not visible as one. */}
+          {coarse ? (
+            <button type="button" className="pal-close" onClick={close} aria-label={t("common.close")}>
+              <span aria-hidden="true">×</span>
+            </button>
+          ) : (
+            <span className="pal-esc" aria-hidden="true">
+              esc
+            </span>
+          )}
         </div>
         <div className="pal-results" ref={listRef} role="listbox" aria-label={t("palette.results")}>
           {groups.map((g) => (

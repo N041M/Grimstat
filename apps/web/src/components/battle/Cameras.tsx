@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { MOUSE, OrthographicCamera, PerspectiveCamera, Vector3 } from "three";
+import { MOUSE, OrthographicCamera, PerspectiveCamera, TOUCH, Vector3 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Aabb2, BoardSize } from "@grimstat/board";
 
@@ -19,9 +19,25 @@ const ELEVATION = 36;
 /** Headroom the fit allows above the table, so a three-storey ruin is not clipped. */
 const TABLE_HEADROOM = 14;
 
-export function Cameras({ mode, size, frame }: { mode: CameraMode; size: BoardSize; frame?: Aabb2 }) {
+/** How long the camera takes to travel back to the framing the view opened on. */
+const RECENTRE_MS = 420;
+
+/**
+ * The canvas height the orbit was tuned at, in CSS pixels.
+ *
+ * OrbitControls turns the view by the fraction of the canvas height a drag covers, so one
+ * full-height drag is always a full turn however tall the canvas is. A phone gives the table about
+ * 480px where a desktop gives it 820, which turned the same finger travel almost twice as far. The
+ * speed is scaled by the height against this figure, so a given drag turns the table by the same
+ * amount on every screen. It only ever slows the turn down: a canvas taller than this keeps 1.
+ */
+const ROTATE_REFERENCE = 800;
+
+export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; size: BoardSize; frame?: Aabb2; recentre?: number }) {
   const { gl, set, size: viewport, invalidate } = useThree();
   const controls = useRef<OrbitControls>();
+  /** Where the view opens: what `recentre` travels back to. */
+  const home = useRef<{ position: Vector3; target: Vector3; zoom: number } | undefined>(undefined);
   const centre = useMemo(() => new Vector3(size.width / 2, 0, -size.depth / 2), [size.width, size.depth]);
   /**
    * What has to be in shot is more than the play area. A player's units start on the muster
@@ -36,6 +52,7 @@ export function Cameras({ mode, size, frame }: { mode: CameraMode; size: BoardSi
   const orthographic = useMemo(() => new OrthographicCamera(-1, 1, 1, -1, 0.1, 600), []);
 
   const aspect = Math.max(viewport.width / Math.max(1, viewport.height), 0.2);
+  const viewportHeight = Math.max(1, viewport.height);
 
   /**
    * How far back the perspective camera has to sit to hold the whole scene.
@@ -114,9 +131,24 @@ export function Cameras({ mode, size, frame }: { mode: CameraMode; size: BoardSi
     next.enableRotate = mode === "orbit";
     // Straight down there is nothing to orbit, so the left button pans and a drag still moves the view.
     next.mouseButtons.LEFT = mode === "orbit" ? MOUSE.ROTATE : MOUSE.PAN;
+    /*
+     * The same decision for a finger. OrbitControls starts one finger on rotate, which does nothing
+     * at all in the top-down view, where rotating is off — the view could only be panned with two
+     * fingers. One finger pans there, exactly as the left button does.
+     */
+    next.touches.ONE = mode === "orbit" ? TOUCH.ROTATE : TOUCH.PAN;
+    next.touches.TWO = TOUCH.DOLLY_PAN;
+    next.rotateSpeed = Math.min(1, viewportHeight / ROTATE_REFERENCE);
+    /*
+     * Panning and pinching are left alone. A pan is measured so the table keeps up with the finger
+     * that is dragging it, and a pinch by the ratio between the two fingers; both are already the
+     * same gesture at any size, and slowing either would leave the table lagging behind the hand.
+     */
     const onChange = () => invalidate();
     next.addEventListener("change", onChange);
     next.update();
+    // The framing the view opens on, kept so `recentre` can travel back to it.
+    home.current = { position: camera.position.clone(), target: centre.clone(), zoom: camera.zoom };
     controls.current = next;
     // Publish the controls so the rest of the scene can suspend them — dragging a unit and orbiting
     // the camera are the same gesture, and only one of them can have it.
@@ -127,7 +159,50 @@ export function Cameras({ mode, size, frame }: { mode: CameraMode; size: BoardSi
       set({ controls: null as unknown as never });
       next.dispose();
     };
-  }, [mode, perspective, orthographic, centre, distance, gl, set, invalidate]);
+  }, [mode, perspective, orthographic, centre, distance, viewportHeight, gl, set, invalidate]);
+
+  /**
+   * Two fingers can carry the board off the screen, and nothing on a table of dark ground says
+   * which way it went. Bumping `recentre` travels the camera back to where the view opened.
+   *
+   * It flies rather than cuts. A cut leaves the player to work out what just happened to the view
+   * they were looking at; watching it travel says where the board went and which way it came back.
+   */
+  useEffect(() => {
+    if (!recentre) return;
+    const next = controls.current;
+    const to = home.current;
+    if (!next || !to) return;
+    // OrbitControls types its subject as an Object3D; here it is always one of the two cameras
+    // above, and both carry a zoom and a projection matrix.
+    const camera = next.object as PerspectiveCamera | OrthographicCamera;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      camera.position.copy(to.position);
+      next.target.copy(to.target);
+      camera.zoom = to.zoom;
+      camera.updateProjectionMatrix();
+      next.update();
+      invalidate();
+      return;
+    }
+    const from = { position: camera.position.clone(), target: next.target.clone(), zoom: camera.zoom };
+    const start = performance.now();
+    let frame = 0;
+    const fly = () => {
+      const k = Math.min(1, (performance.now() - start) / RECENTRE_MS);
+      // Decelerating, so it arrives rather than stops.
+      const e = 1 - Math.pow(1 - k, 3);
+      camera.position.lerpVectors(from.position, to.position, e);
+      next.target.lerpVectors(from.target, to.target, e);
+      camera.zoom = from.zoom + (to.zoom - from.zoom) * e;
+      camera.updateProjectionMatrix();
+      next.update();
+      invalidate();
+      if (k < 1) frame = requestAnimationFrame(fly);
+    };
+    frame = requestAnimationFrame(fly);
+    return () => cancelAnimationFrame(frame);
+  }, [recentre, invalidate]);
 
   useFrame(() => controls.current?.update());
   return null;

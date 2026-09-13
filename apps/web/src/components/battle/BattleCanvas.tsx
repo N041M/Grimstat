@@ -57,6 +57,8 @@ export interface TerrainEditing {
 export interface BattleCanvasProps {
   state: BattleState;
   cameraMode: CameraMode;
+  /** Bumped to put the camera back where the view opened. */
+  recentre?: number;
   selectedId?: string;
   /** The model the reach overlay and the next table click belong to. */
   activeModelId?: string;
@@ -179,7 +181,7 @@ type Held =
  * same tick the unit is grabbed. A React state change is a tick too late: the camera has already
  * started to swing.
  */
-function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, groupIds, onBoxSelect, boxSelect, addToSelection, onMoveGroup, marqueeRef, turnRing, onTurn, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, onMuster, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
+function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoherent, reach, reachBudget, rays, path, planned, groupIds, onBoxSelect, boxSelect, addToSelection, onMoveGroup, marqueeRef, turnRing, onTurn, tapes, onTapeRemove, tapesRef, measureFrom, onMeasureHover, canDrag = true, dragMode = "move", onDeploy, onMuster, highlightZone, editing, labelsRef, readoutRef, onSelect, onMove, onDrag, onTableDown }: BattleCanvasProps) {
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const camera = useThree((s) => s.camera);
   const canvas = useThree((s) => s.gl.domElement);
@@ -599,7 +601,7 @@ function Scene({ state, cameraMode, selectedId, activeModelId, incoherent, reach
 
   return (
     <>
-      <Cameras mode={cameraMode} size={state.layout.size} frame={frame} />
+      <Cameras mode={cameraMode} size={state.layout.size} frame={frame} recentre={recentre} />
       <Lighting size={state.layout.size} frame={frame} />
       <Table size={state.layout.size} onDown={onDown} />
       <MusterTables musters={musters} onDown={onDown} />

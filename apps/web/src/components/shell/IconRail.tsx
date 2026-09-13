@@ -83,14 +83,17 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
  * The 56px icon rail: brand mark (opens the command palette, carries the solve-state dot),
  * one single-letter item per route, theme control pinned to the bottom. Pointing at it or
  * tabbing into it widens it over the page to name each item, since a letter on its own says
- * little — see `.rail` in styles.css. Below 900px the same markup lays itself out as a bottom
- * bar, where every item keeps a permanent label under its glyph.
+ * little — see `.rail` in styles.css.
+ *
+ * `stacked` is the tablet rail. It stands in the page at 78px rather than hanging over it, and
+ * every item shows its name under its letter at all times. A tablet has no pointer to hover with,
+ * so the labels have to be there without one.
  */
-export function IconRail({ route, theme, offline }: { route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean }) {
+export function IconRail({ route, theme, offline, stacked }: { route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean; stacked?: boolean }) {
   const { solveState, openPalette } = useApp();
   const pending = solveState === "pending";
   return (
-    <div className="rail">
+    <div className={stacked ? "rail rail-stacked" : "rail"}>
       <button type="button" className="rail-mark" onClick={() => openPalette()} title={t("palette.openHint")} aria-label={t("palette.open")} aria-haspopup="dialog">
         <span className="rail-mark-diamond" aria-hidden="true" />
         <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />

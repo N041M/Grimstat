@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { ModelHull, ReachNode, TerrainLayout, Vec2, Vec3 } from "@grimstat/board";
 import { reachable } from "@grimstat/board";
 import { PageHeader } from "../components/shell";
@@ -8,13 +9,13 @@ import { LayoutLibrary } from "../components/battle/LayoutLibrary";
 import { LayoutPicker } from "../components/battle/LayoutPicker";
 import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
-import { useMediaQuery } from "../hooks/useMediaQuery";
+import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
 import { db } from "../db";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
 import { canRedo, canUndo, canUndoUnits, editorReducer, initialEditor } from "../lib/battleEditor";
-import { Badge, Tabs, useConfirm } from "../components/ui";
+import { Badge, Icon, IconSwap, useConfirm, useDismiss, useEdgeFade, useTabInView } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
 import { silhouetteFor, type SilhouetteId } from "../lib/silhouettes";
 import {
@@ -156,13 +157,107 @@ export function BattlePage() {
   const { confirm, dialog } = useConfirm();
   /** A finger has no Shift, no ⌘ and no arrow keys, so the table offers those as buttons instead. */
   const coarse = useMediaQuery("(pointer: coarse)");
+  const compact = useMediaQuery(COMPACT_QUERY);
+  const [focus, setFocus] = usePersistedSetting<boolean>("battle.focus", false, (raw) => (typeof raw === "boolean" ? raw : undefined));
+
+  /**
+   * Focus: the table takes the whole screen. The shell goes, the page's title goes, and so does the
+   * panel beside or beneath the table, which leaves the tools, the table and the controls over it.
+   *
+   * It is for the widths where the table is short of room. Above 1040px the table already has
+   * 850×820 with the panel next to it, and there is nothing to win.
+   *
+   * The class goes on the document because the rail and the top bar belong to the shell rather than
+   * to this page — the same arrangement the Play screen uses.
+   */
+  const focused = focus && compact;
+  useEffect(() => {
+    if (!focused) return;
+    document.body.classList.add("battle-focused");
+    return () => document.body.classList.remove("battle-focused");
+  }, [focused]);
+
+  /**
+   * Full screen takes the browser's own chrome as well. It needs a gesture and may be refused —
+   * Safari on iPhone has no Fullscreen API at all — so the mode works with or without it.
+   */
+  const wentFullscreen = useRef(false);
+
+  /**
+   * Entering and leaving focus moves nearly everything on the screen at once, so the browser
+   * animates between the two rather than cutting. A view transition takes the whole page rather
+   * than each part of it, which is what this needs: the bar, the title, the rail, the panel and the
+   * table itself all change together.
+   *
+   * `flushSync` because the browser wants the new layout inside the callback, and React would
+   * otherwise still be holding the old one. Where the API is missing the change is simply made.
+   */
+  const withTransition = useCallback((change: () => void) => {
+    const start = document.startViewTransition?.bind(document);
+    if (!start || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      change();
+      return;
+    }
+    start(() => flushSync(change));
+  }, []);
+  // In focus the toolbar is one row along the foot of the table, so it scrolls and its ends fade.
+  // Which buttons it holds changes with the tool, which the hook's own observer picks up.
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  useEdgeFade(toolbarRef, focused);
+  const toolstripRef = useRef<HTMLDivElement>(null);
+  useEdgeFade(toolstripRef, focused);
+  /*
+   * The camera's options fold away. Which way the view looks and putting it back are settings
+   * rather than things done every few seconds, and a column of four marks down the edge of the
+   * table is four marks of board covered for the whole game to save one press now and then.
+   */
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const cameraRef = useRef<HTMLDivElement>(null);
+  const closeCamera = useCallback(() => setCameraOpen(false), []);
+  useDismiss(cameraRef, cameraOpen, closeCamera);
+  const toggleFocus = useCallback(() => {
+    const next = !focus;
+    withTransition(() => setFocus(next));
+    try {
+      if (next && !document.fullscreenElement) {
+        void document.documentElement
+          .requestFullscreen?.()
+          .then(() => {
+            wentFullscreen.current = true;
+          })
+          .catch(() => undefined);
+      } else if (!next && document.fullscreenElement) {
+        wentFullscreen.current = false;
+        void document.exitFullscreen?.().catch(() => undefined);
+      }
+    } catch {
+      // Refused by the browser. Giving the table the screen is the part that matters.
+    }
+  }, [focus, setFocus, withTransition]);
+
+  // Leaving full screen by the browser's own gesture leaves focus too, so the two cannot disagree
+  // about which one the screen is in.
+  useEffect(() => {
+    const on = () => {
+      if (document.fullscreenElement) return;
+      if (!wentFullscreen.current) return;
+      wentFullscreen.current = false;
+      setFocus(false);
+    };
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, [setFocus]);
   const [editor, dispatch] = useReducer(editorReducer, undefined, () => initialEditor(sampleBattle()));
   const state = editor.battle;
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [activeModelId, setActiveModelId] = useState<string | undefined>();
   const [targetId, setTargetId] = useState<string | undefined>();
   const [tool, setTool] = useState<BattleTool>("select");
+  // The tool in hand scrolls itself into view, so it is never the one off the edge of the strip.
+  useTabInView(toolstripRef, tool);
   const [view, setView] = useState<CameraMode>("orbit");
+  /** Bumped to put the camera back where the view opened; see `Cameras`. */
+  const [recentre, setRecentre] = useState(0);
   const [drag, setDrag] = useState<DragState | undefined>();
   /** Whether `drag` is a live gesture (the readout follows the pointer) or a refused click. */
   const [dragging, setDragging] = useState(false);
@@ -859,32 +954,28 @@ export function BattlePage() {
       <PageHeader
         title={t("battle.title")}
         subtitle={t("battle.subtitle", { layout: layout.name, w: layout.size.width, d: layout.size.depth, units: state.units.length })}
-        actions={
-          <>
-            <Tabs tabs={TOOLS.map((x) => ({ id: x.id, label: t(x.label) }))} value={tool} onChange={setTool} label={t("battle.tool")} />
-            <Tabs
-              tabs={[
-                { id: "orbit" as const, label: t("battle.view.orbit") },
-                { id: "top" as const, label: t("battle.view.top") },
-              ]}
-              value={view}
-              onChange={setView}
-              label={t("battle.view")}
-            />
-            <button type="button" className="ghost sm" onClick={() => void resetDeployment()}>
-              {t("battle.reset")}
-            </button>
-          </>
-        }
       />
 
       <div className="battle-body">
         <div className="battle-stage">
           {/* Everything the keys do to the table, as buttons over it: a finger has no ⌘ and no arrows,
               and a mouse user should not have to learn a chord to approve a move. */}
-          <div className="battle-toolbar" role="group" aria-label={t("battle.table.actions")} hidden={!webgl}>
+          <div className="battle-toolbar" role="group" aria-label={t("battle.table.actions")} hidden={!webgl} ref={toolbarRef}>
+            {/* One cluster per thing the controls act on — the plan, the history, the facing, the
+                selection, the view — with a rule between them. Nine controls in one undivided row
+                read as nine unrelated things; in five clusters the eye finds the one it wants. */}
+            {tool === "select" ? (
+              <div className="battle-group" role="group" aria-label={t("battle.actions.plan")}>
+                <button type="button" className="sm" disabled={!plan} onClick={approvePlan}>
+                  {t("battle.plan.approve")}
+                </button>
+                <button type="button" className="ghost sm" disabled={!plan} onClick={() => setPlan(undefined)}>
+                  {t("battle.plan.discard")}
+                </button>
+              </div>
+            ) : null}
             {tool === "terrain" ? (
-              <div className="battle-hist" role="group" aria-label={t("battle.terrain.history")}>
+              <div className="battle-group" role="group" aria-label={t("battle.terrain.history")}>
                 <button type="button" className="ghost sm" disabled={!canUndo(editor)} onClick={() => dispatch({ type: "undo" })} title={t("battle.terrain.undo")} aria-label={t("battle.terrain.undo")}>
                   ↶
                 </button>
@@ -893,50 +984,90 @@ export function BattlePage() {
                 </button>
               </div>
             ) : (
-              <button type="button" className="ghost sm" disabled={!canUndoUnits(editor)} onClick={undoUnits} title={t("battle.undoMove.title")}>
-                {t("battle.undoMove")}
-              </button>
+              <div className="battle-group" role="group" aria-label={t("battle.actions.history")}>
+                <button type="button" className="ghost sm" disabled={!canUndoUnits(editor)} onClick={undoUnits} title={t("battle.undoMove.title")}>
+                  {t("battle.undoMove")}
+                </button>
+              </div>
             )}
-            {tool === "select" ? (
-              <>
-                <button type="button" className="sm" disabled={!plan} onClick={approvePlan}>
-                  {t("battle.plan.approve")}
-                </button>
-                <button type="button" className="ghost sm" disabled={!plan} onClick={() => setPlan(undefined)}>
-                  {t("battle.plan.discard")}
-                </button>
-              </>
-            ) : null}
             {tool === "select" || tool === "deploy" ? (
-              <>
+              <div className="battle-group" role="group" aria-label={t("battle.actions.turn")}>
                 <button type="button" className="ghost sm" disabled={!canTurn} onClick={() => rotateSelection(ROTATE_STEP)} title={t("battle.rotate.left")} aria-label={t("battle.rotate.left")}>
                   ⟲
                 </button>
                 <button type="button" className="ghost sm" disabled={!canTurn} onClick={() => rotateSelection(-ROTATE_STEP)} title={t("battle.rotate.right")} aria-label={t("battle.rotate.right")}>
                   ⟳
                 </button>
-              </>
+              </div>
             ) : null}
-            {tool === "select" ? (
-              <>
-                <button type="button" className={`sm ${boxSelect ? "" : "ghost"}`.trim()} aria-pressed={boxSelect} onClick={() => setBoxSelect((on) => !on)} title={t("battle.boxSelect.title")}>
-                  {t("battle.boxSelect")}
-                </button>
-                <button type="button" className={`sm ${addSelect ? "" : "ghost"}`.trim()} aria-pressed={addSelect} onClick={() => setAddSelect((on) => !on)} title={t("battle.addToSelection.title")}>
-                  {t("battle.addToSelection")}
-                </button>
-              </>
-            ) : null}
-            <button type="button" className="ghost sm" disabled={!selectedId && !grouped} onClick={clearSelection}>
-              {t("battle.group.clear")}
-            </button>
+            <div className="battle-group" role="group" aria-label={t("battle.actions.selection")}>
+              {tool === "select" ? (
+                <>
+                  <button type="button" className={`sm ${boxSelect ? "" : "ghost"}`.trim()} aria-pressed={boxSelect} onClick={() => setBoxSelect((on) => !on)} title={t("battle.boxSelect.title")}>
+                    {t("battle.boxSelect")}
+                  </button>
+                  <button type="button" className={`sm ${addSelect ? "" : "ghost"}`.trim()} aria-pressed={addSelect} onClick={() => setAddSelect((on) => !on)} title={t("battle.addToSelection.title")}>
+                    {t("battle.addToSelection")}
+                  </button>
+                </>
+              ) : null}
+              <button type="button" className="ghost sm" disabled={!selectedId && !grouped} onClick={clearSelection}>
+                {t("battle.group.clear")}
+              </button>
+            </div>
+            <div className="battle-group" role="group" aria-label={t("battle.actions.board")}>
+              <button type="button" className="ghost sm" onClick={() => void resetDeployment()}>
+                {t("battle.reset")}
+              </button>
+            </div>
+
           </div>
+          {/* Everything that acts on the table is on the table, at every width. Which tool is in hand
+              along the head, what acts on the view in the corner, and what acts on the units in the
+              row along the foot. The page header keeps the table's name and nothing else. */}
+          {webgl ? (
+            <div className="battle-head">
+              <div className="battle-toolstrip" role="group" aria-label={t("battle.tool")} ref={toolstripRef}>
+                {TOOLS.map((x) => (
+                  <button key={x.id} type="button" className={`sm ${tool === x.id ? "" : "ghost"}`.trim()} aria-pressed={tool === x.id} onClick={() => setTool(x.id)}>
+                    {t(x.label)}
+                  </button>
+                ))}
+              </div>
+              <div className="battle-view-tools" ref={cameraRef}>
+                {/* Full screen first: it is the one here that is pressed mid-game. */}
+                {compact ? (
+                  <button type="button" className="battle-view-btn battle-fullscreen" aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")} aria-label={t(focused ? "battle.focus.off" : "battle.focus.on")}>
+                    <IconSwap from="expand" to="collapse" on={focused} />
+                  </button>
+                ) : null}
+                <button type="button" className="battle-view-btn" aria-expanded={cameraOpen} aria-controls="battle-camera" onClick={() => setCameraOpen((on) => !on)} title={t("battle.view.cameraTitle")} aria-label={t("battle.view.camera")}>
+                  {/* A camera, not one of the views it offers: the cube glyph is the orbit option
+                      inside the menu, and a control that wears its own contents reads as one. Open,
+                      it says how to close rather than turning on the spot. */}
+                  <IconSwap from="camera" to="close" on={cameraOpen} />
+                </button>
+                <div className="battle-camera" id="battle-camera" role="group" aria-label={t("battle.view.camera")} hidden={!cameraOpen}>
+                  <button type="button" className="battle-view-btn" aria-pressed={view === "orbit"} onClick={() => { setView("orbit"); closeCamera(); }} title={t("battle.view.orbit")} aria-label={t("battle.view.orbit")}>
+                    <Icon name="cube" />
+                  </button>
+                  <button type="button" className="battle-view-btn" aria-pressed={view === "top"} onClick={() => { setView("top"); closeCamera(); }} title={t("battle.view.top")} aria-label={t("battle.view.top")}>
+                    <Icon name="plan" />
+                  </button>
+                  <button type="button" className="battle-view-btn" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre")}>
+                    <Icon name="target" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {webgl ? (
             <ErrorBoundary compact resetKey={layout.id}>
               <Suspense fallback={<p className="muted battle-loading">{t("battle.loading")}</p>}>
                 <BattleCanvas
                   state={state}
                   cameraMode={view}
+                  recentre={recentre}
                   selectedId={selectedId}
                   activeModelId={activeModelId}
                   incoherent={incoherent}
@@ -1212,7 +1343,7 @@ function MovePanel({
         </div>
       ) : (
         <>
-          <p className="muted small">{group.length >= 2 ? t("battle.group.moveHint") : activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
+          <p className="muted small">{group.length >= 2 ? t(coarse ? "battle.group.moveHintTouch" : "battle.group.moveHint") : activeModel ? t(coarse ? "battle.moveHintTouch" : "battle.moveHint") : t(coarse ? "battle.unitHintTouch" : "battle.unitHint")}</p>
           {activeModel && coarse ? null : <p className="muted small">{activeModel ? t("battle.nudgeHint") : t("battle.pickModel")}</p>}
           <div className="battle-actions">
             <button type="button" className="ghost sm" onClick={() => onRotate(ROTATE_STEP)} title={t("battle.rotate.left")} aria-label={t("battle.rotate.left")}>
@@ -1320,7 +1451,7 @@ function BattlePanel({
       {tool === "deploy" ? (
         <section className="battle-section">
           <h2>{t("battle.deploy.title")}</h2>
-          <p className="muted small">{t("battle.deploy.hint")}</p>
+          <p className="muted small">{t(coarse ? "battle.deploy.hintTouch" : "battle.deploy.hint")}</p>
           <div className="battle-actions wrap">
             <button type="button" className="sm" onClick={onDeployAll}>
               {t("battle.deploy.everything")}
@@ -1366,7 +1497,7 @@ function BattlePanel({
               </ul>
             </div>
           ))}
-          {selected ? <p className="muted small">{selected.reserve ? t("battle.deploy.armed", { name: t(selected.name as I18nKey) }) : t(coarse ? "battle.deploy.selectedDeployedTouch" : "battle.deploy.selectedDeployed")}</p> : null}
+          {selected ? <p className="muted small">{selected.reserve ? t(coarse ? "battle.deploy.armedTouch" : "battle.deploy.armed", { name: t(selected.name as I18nKey) }) : t(coarse ? "battle.deploy.selectedDeployedTouch" : "battle.deploy.selectedDeployed")}</p> : null}
           {drag && !drag.legal ? (
             <ul className="battle-problems left">
               {drag.problems.map((p) => (

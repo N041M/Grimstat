@@ -6,7 +6,7 @@ import { hrefFor, navigate } from "../router";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
 import { ALL_FACTIONS, CODEX_COMPARE_KEY, CODEX_DIFF_KEY, CODEX_FACTION_KEY, codexFactions, codexGroups, COMPARE_CAP, effectiveFaction, parseCompareSet, parseFaction, parseFlag, sheetsById, sizeBounds, toggleCompare, type CodexView } from "../lib/codex";
 import { ContextSlot, PageHeader } from "../components/shell";
-import { Empty, Icon, Popover } from "../components/ui";
+import { Empty, Icon, Popover, useTabInView, useEdgeFade } from "../components/ui";
 import { CodexBrowser } from "../components/codex/CodexBrowser";
 import { CodexLanding } from "../components/codex/CodexLanding";
 import { DatasheetCard } from "../components/codex/DatasheetCard";
@@ -152,6 +152,10 @@ export function CodexPage({ id }: { id: string | undefined }) {
     body = <CodexLanding snapshot={snapshot} factions={factions} factionId={factionId} onFaction={setStoredFaction} query={query} onQuery={setQuery} groups={groups} compare={compare} onToggleCompare={toggle} onPick={showSheets} />;
   }
 
+  const tabbar = useRef<HTMLDivElement>(null);
+  useTabInView(tabbar, view);
+  useEdgeFade(tabbar, view);
+
   return (
     <>
       {snapshot ? (
@@ -160,7 +164,7 @@ export function CodexPage({ id }: { id: string | undefined }) {
         </ContextSlot>
       ) : null}
       <PageHeader className="tabbed" title={title} subtitle={subtitle} actions={actions}>
-        <div className="tabbar" role="tablist" aria-label={t("codex.tabs")}>
+        <div className="tabbar" role="tablist" aria-label={t("codex.tabs")} ref={tabbar}>
           <button type="button" role="tab" id="codex-tab-sheets" aria-selected={view === "sheets"} aria-controls="codex-panel" className={`tabbar-tab ${view === "sheets" ? "on" : ""}`.trim()} onClick={showSheets}>
             {t("codex.tab.sheets")}
           </button>
