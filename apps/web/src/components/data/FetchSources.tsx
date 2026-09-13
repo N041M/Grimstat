@@ -1,11 +1,12 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useReducer, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { SOURCES } from "@grimstat/adapters";
 import type { SourceRef } from "@grimstat/schema";
 import { db } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { ImportCancelledError, importClient } from "../../worker/importClient";
-import { BROWSER_SOURCES, DEFAULT_WAHAPEDIA_MIRROR, IDLE_PROGRESS, MIRRORED_SOURCE, WAHAPEDIA_MIRROR_SETTING, classifyError, errorMessage, hasMirror, importRequestFor, isRunning, reduceProgress, type BrowserSourceId, type ImportErrorKind, type ImportSelection, type SourceProgress } from "../../lib/importProgress";
+import { BROWSER_GAME_SYSTEM_ID, BROWSER_SOURCES, DEFAULT_WAHAPEDIA_MIRROR, IDLE_PROGRESS, MIRRORED_SOURCE, WAHAPEDIA_MIRROR_SETTING, classifyError, errorMessage, hasMirror, importRequestFor, isRunning, reduceProgress, refreshRequestFor, wahapediaMirrorBase, type BrowserSourceId, type ImportErrorKind, type ImportRequest, type ImportSelection, type SourceProgress } from "../../lib/importProgress";
+import { freshnessOf, latestRefFor, type Freshness } from "../../lib/sourceFreshness";
 import { fmtDay, fmtInt } from "../../lib/format";
 import { PanelHead, PillChip, ProportionBar } from "../kit";
 import { t, type I18nKey } from "../../i18n";
@@ -13,6 +14,9 @@ import { t, type I18nKey } from "../../i18n";
 export const CLI_IMPORT_COMMAND = "pnpm cli import --system wh40k-11e --out data/snapshots";
 export const README_URL = "https://github.com/N041M/Grimstat#getting-started";
 const SETTING_KEY = "data.fetch.selection";
+const FRESHNESS_KEY = "data.fetch.freshness";
+/** A check older than this is made again when the panel opens; a fetch refreshes it for free. */
+const RECHECK_AFTER_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_SELECTION: ImportSelection = { sources: { "mfm-yaml": true, "bsdata-json": true, "wahapedia-csv": true }, factionFilter: "" };
 
 /** The card deck: every source a browser can reach, Wahapedia through its mirror. */
@@ -24,6 +28,23 @@ function parseSelection(raw: unknown): ImportSelection | undefined {
   const r = raw as { sources?: unknown; factionFilter?: unknown };
   const src = r.sources && typeof r.sources === "object" ? (r.sources as Record<string, unknown>) : {};
   return { sources: { "mfm-yaml": src["mfm-yaml"] !== false, "bsdata-json": src["bsdata-json"] !== false, "wahapedia-csv": src["wahapedia-csv"] !== false }, factionFilter: typeof r.factionFilter === "string" ? r.factionFilter : "" };
+}
+
+/** What upstream said its sources were at, the last time anything asked. */
+interface FreshnessRecord {
+  checkedAt?: string;
+  latest: Partial<Record<CardSourceId, string>>;
+}
+
+const NO_FRESHNESS: FreshnessRecord = { latest: {} };
+
+function parseFreshness(raw: unknown): FreshnessRecord | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as { checkedAt?: unknown; latest?: unknown };
+  const src = r.latest && typeof r.latest === "object" ? (r.latest as Record<string, unknown>) : {};
+  const latest: Partial<Record<CardSourceId, string>> = {};
+  for (const id of BROWSER_SOURCES) if (typeof src[id] === "string") latest[id] = src[id] as string;
+  return { ...(typeof r.checkedAt === "string" ? { checkedAt: r.checkedAt } : {}), latest };
 }
 
 const NAME_KEY: Record<CardSourceId, I18nKey> = { "mfm-yaml": "data.fetch.source.mfm-yaml", "bsdata-json": "data.fetch.source.bsdata-json", "wahapedia-csv": "data.fetch.source.wahapedia-csv" };
@@ -93,7 +114,13 @@ export function cardModel(id: CardSourceId, progress: SourceProgress | undefined
   return { status: t("data.source.notFetched"), live: false, fraction: 0, detail: SOURCES[id].role, when: "–" };
 }
 
-function SourceCard({ id, model, selectable, selected, disabled, onSelect, footer }: { id: CardSourceId; model: CardModel; selectable: boolean; selected?: boolean; disabled?: boolean; onSelect?: (on: boolean) => void; footer?: ReactNode }) {
+/** "up to date", "update available", or nothing at all until something has asked. */
+function FreshnessPill({ state }: { state: Freshness }) {
+  if (state === "unknown") return null;
+  return <span className={`src-fresh ${state}`}>{state === "current" ? t("data.source.upToDate") : t("data.source.updateReady")}</span>;
+}
+
+function SourceCard({ id, model, freshness, selectable, selected, disabled, onSelect, onRefresh, footer }: { id: CardSourceId; model: CardModel; freshness: Freshness; selectable: boolean; selected?: boolean; disabled?: boolean; onSelect?: (on: boolean) => void; onRefresh?: () => void; footer?: ReactNode }) {
   return (
     <article className="src-card">
       <div className="src-card-top">
@@ -101,7 +128,10 @@ function SourceCard({ id, model, selectable, selected, disabled, onSelect, foote
           <div className="src-card-name">{sourceName(id)}</div>
           <div className="src-card-kind">{t(KIND_KEY[id])}</div>
         </div>
-        <span className={`src-pill ${model.live ? "live" : ""}`.trim()}>{model.status}</span>
+        <span className="src-card-state">
+          <FreshnessPill state={freshness} />
+          <span className={`src-pill ${model.live ? "live" : ""}`.trim()}>{model.status}</span>
+        </span>
       </div>
       <ProportionBar value={model.fraction} height={5} tone={model.live ? "accent" : "ink"} />
       <div className="src-card-foot">
@@ -110,7 +140,12 @@ function SourceCard({ id, model, selectable, selected, disabled, onSelect, foote
       </div>
       {selectable ? (
         <div className="src-card-select">
-          <PillChip label={selected ? t("data.source.included") : t("data.source.excluded")} on={!!selected} title={disabled ? t("data.fetch.busy") : SOURCES[id].attribution} onChange={(on) => !disabled && onSelect?.(on)} />
+          <PillChip label={t("data.source.include")} on={!!selected} title={disabled ? t("data.fetch.busy") : SOURCES[id].attribution} onChange={(on) => !disabled && onSelect?.(on)} />
+          {onRefresh ? (
+            <button type="button" className="sm src-card-fetch" disabled={disabled} onClick={onRefresh} title={t("data.fetch.oneHint")}>
+              {t("data.fetch.one")}
+            </button>
+          ) : null}
           <span className="src-card-size">{selectable && id !== "wahapedia-csv" ? sourceSize(id as BrowserSourceId) : ""}</span>
         </div>
       ) : null}
@@ -132,6 +167,8 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   const { refreshSnapshots, setActiveSnapshot, notify, rawSnapshot } = useApp();
   const [selection, setSelection] = usePersistedSetting<ImportSelection>(SETTING_KEY, DEFAULT_SELECTION, parseSelection);
   const [mirror, setMirror] = usePersistedSetting<string>(WAHAPEDIA_MIRROR_SETTING, DEFAULT_WAHAPEDIA_MIRROR, (raw) => (typeof raw === "string" ? raw : undefined));
+  const [freshness, setFreshness, freshnessLoaded] = usePersistedSetting<FreshnessRecord>(FRESHNESS_KEY, NO_FRESHNESS, parseFreshness);
+  const [checking, setChecking] = useState(false);
   const [progress, dispatch] = useReducer(reduceProgress, IDLE_PROGRESS);
   const clientRunning = useSyncExternalStore(subscribeToImport, importIsRunning);
   const alive = useRef(true);
@@ -154,12 +191,11 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   const pointsOnly = selection.sources["mfm-yaml"] && !selection.sources["bsdata-json"];
   const datasheetCount = rawSnapshot?.data.datasheets.length;
 
-  const start = useCallback(async () => {
-    const req = importRequestFor(selection, undefined, mirror);
-    if (!req.sources.length) {
-      notify(t("data.fetch.select"), "error");
-      return;
-    }
+  /**
+   * The one path both buttons take: run, store, activate, and record what each source came back at
+   * so the freshness badges are right without asking upstream again.
+   */
+  const runRequest = useCallback(async (req: ImportRequest) => {
     const client = importClient();
     if (client.running) {
       notify(t("data.fetch.busy"), "info");
@@ -175,6 +211,7 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
       await refreshSnapshots();
       await setActiveSnapshot(snapshot.id);
       notify(t("data.fetch.doneNotice", { label: snapshot.label ?? snapshot.id }), "success");
+      setFreshness((f) => ({ checkedAt: new Date().toISOString(), latest: { ...f.latest, ...Object.fromEntries(snapshot.sources.filter((src) => src.ref).map((src) => [src.adapter, src.ref!])) } }));
       if (alive.current) dispatch({ type: "done", summary });
     } catch (e) {
       if (!alive.current) return;
@@ -184,7 +221,57 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
       }
       dispatch({ type: "error", message: errorMessage(e), kind: classifyError(e) });
     }
-  }, [selection, mirror, notify, refreshSnapshots, setActiveSnapshot]);
+  }, [notify, refreshSnapshots, setActiveSnapshot, setFreshness]);
+
+  const start = useCallback(async () => {
+    const req = importRequestFor(selection, undefined, mirror);
+    if (!req.sources.length) {
+      notify(t("data.fetch.select"), "error");
+      return;
+    }
+    await runRequest(req);
+  }, [selection, mirror, notify, runRequest]);
+
+  /** One card's own button: fetch that source and merge it over the snapshot already in hand. */
+  const refreshOne = useCallback(
+    async (id: BrowserSourceId) => {
+      if (!rawSnapshot) {
+        notify(t("data.fetch.oneNeedsSnapshot"), "error");
+        return;
+      }
+      await runRequest(refreshRequestFor(id, selection, { data: rawSnapshot.data, sources: rawSnapshot.sources, fetchedAt: rawSnapshot.createdAt }, undefined, mirror));
+    },
+    [rawSnapshot, selection, mirror, notify, runRequest],
+  );
+
+  /** Ask each source what version it is serving. One small request each, none of them the source itself. */
+  const checkUpdates = useCallback(async () => {
+    setChecking(true);
+    const latest: Partial<Record<BrowserSourceId, string>> = {};
+    await Promise.all(
+      CARD_SOURCES.map(async (id) => {
+        try {
+          const ref = await latestRefFor(id, { fetch: (url) => fetch(url), ...(id === MIRRORED_SOURCE && hasMirror(mirror) ? { mirror: wahapediaMirrorBase(mirror, BROWSER_GAME_SYSTEM_ID) } : {}) });
+          if (ref) latest[id] = ref;
+        } catch {
+          // A source that will not say stays unknown rather than failing the check for the others.
+        }
+      }),
+    );
+    if (!alive.current) return;
+    setFreshness({ checkedAt: new Date().toISOString(), latest });
+    setChecking(false);
+  }, [mirror, setFreshness]);
+
+  // Opening the page on a snapshot nobody has checked in a while is the moment the answer matters.
+  const autoChecked = useRef(false);
+  useEffect(() => {
+    if (autoChecked.current || !freshnessLoaded || !rawSnapshot || checking) return;
+    const last = freshness.checkedAt ? Date.parse(freshness.checkedAt) : 0;
+    if (Number.isFinite(last) && Date.now() - last < RECHECK_AFTER_MS) return;
+    autoChecked.current = true;
+    void checkUpdates();
+  }, [freshnessLoaded, rawSnapshot, freshness.checkedAt, checking, checkUpdates]);
 
   const cancel = useCallback(() => {
     importClient().cancel();
@@ -198,6 +285,12 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   return (
     <section className="src-block" aria-labelledby="data-fetch-h">
       <PanelHead id="data-fetch-h" title={t("data.fetch.title")} />
+      <div className="src-check">
+        <button type="button" className="sm" disabled={checking || running} onClick={() => void checkUpdates()}>
+          {checking ? t("data.fetch.checking") : t("data.fetch.check")}
+        </button>
+        {freshness.checkedAt ? <span className="small muted">{t("data.fetch.checkedAt", { when: fmtDay(freshness.checkedAt) })}</span> : null}
+      </div>
       <div className="src-cards">
         {CARD_SOURCES.map((id) => {
           const stored = rawSnapshot?.sources.find((s) => s.adapter === id);
@@ -208,6 +301,8 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
               key={id}
               id={id}
               model={model}
+              freshness={freshnessOf(id, stored?.ref, freshness.latest[id])}
+              onRefresh={rawSnapshot && !needsMirror ? () => void refreshOne(id) : undefined}
               selectable={!needsMirror}
               selected={!needsMirror && selection.sources[id]}
               disabled={running}

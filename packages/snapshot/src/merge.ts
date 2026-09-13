@@ -625,3 +625,39 @@ function firstCopyPoints(rules: PriceRule[]): number | undefined {
   const tier = first ? [...first.tiers].sort((a, b) => a.models - b.models)[0] : undefined;
   return tier?.points;
 }
+
+// ---- refreshing one source over a stored snapshot -----------------------------------------------
+
+/** The adapter id a stored snapshot takes while it stands in as the base of a single-source refresh. */
+export const BASE_ADAPTER = "snapshot-base";
+
+export interface MergeBase {
+  data: SnapshotData;
+  /** The adapters the stored snapshot was built from, in any order. */
+  adapters: string[];
+  fetchedAt: string;
+}
+
+/**
+ * Merge freshly fetched parts over a snapshot that is already stored, so one source can be updated
+ * without downloading the others again.
+ *
+ * The base stands for every source it still holds, so it takes the rank of the best of them in each
+ * precedence list. Refreshing BSData therefore leaves Wahapedia's rules text and MFM's points where
+ * they are, because both outrank BSData for the fields they own, while BSData's own fields are taken
+ * from the fresh copy. A base holding nothing but the refreshed source ranks last.
+ */
+export function mergeOntoBase(base: MergeBase, parts: MergePart[], policyIn: Partial<MergePolicy> = {}): MergeResult {
+  const policy: MergePolicy = { ...DEFAULT_MERGE_POLICY, ...policyIn };
+  const refreshed = new Set(parts.map((p) => p.sourceRef.adapter));
+  const remaining = base.adapters.filter((a) => !refreshed.has(a));
+  const withBase = (order: string[]): string[] => {
+    const ranks = remaining.map((a) => order.indexOf(a)).filter((i) => i >= 0);
+    const at = ranks.length ? Math.min(...ranks) : order.length;
+    const out = [...order];
+    out.splice(at, 0, BASE_ADAPTER);
+    return out;
+  };
+  const basePart: MergePart = { ...base.data, sourceRef: { adapter: BASE_ADAPTER, fetchedAt: base.fetchedAt } };
+  return mergeSources([basePart, ...parts], { ...policy, pointsPrecedence: withBase(policy.pointsPrecedence), textPrecedence: withBase(policy.textPrecedence) });
+}

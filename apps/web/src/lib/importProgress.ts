@@ -1,4 +1,5 @@
 import type { SourceId } from "@grimstat/adapters";
+import type { SnapshotData, SourceRef } from "@grimstat/schema";
 
 /**
  * Pure model behind the Data page's "Fetch from community sources" panel: which sources a browser can
@@ -71,6 +72,17 @@ export interface ImportRequest {
   /** Base URL of the Wahapedia mirror, already narrowed to this game system. */
   wahapediaMirror?: string;
   label: string;
+  /**
+   * The snapshot a single-source refresh builds on: its data stands in for every source that is not
+   * being fetched, and its source list is carried over minus the ones this run replaces.
+   */
+  base?: ImportBase;
+}
+
+export interface ImportBase {
+  data: SnapshotData;
+  sources: SourceRef[];
+  fetchedAt: string;
 }
 
 /** Comma-separated, trimmed, lower-cased, empty terms dropped. */
@@ -115,6 +127,21 @@ export function importRequestFor(sel: ImportSelection, now = new Date(), mirror?
   if (sources.includes(MIRRORED_SOURCE) && mirror) req.wahapediaMirror = wahapediaMirrorBase(mirror, BROWSER_GAME_SYSTEM_ID);
   return req;
 }
+
+/**
+ * One source's own Fetch button: that source alone, merged over the snapshot in hand. The label says
+ * which source moved, so the snapshot list reads as a history of what was updated when.
+ */
+export function refreshRequestFor(id: BrowserSourceId, sel: ImportSelection, base: ImportBase, now = new Date(), mirror?: string): ImportRequest {
+  const filter = id === "bsdata-json" && catalogueTerms(sel.factionFilter).length ? sel.factionFilter.trim() : undefined;
+  const req: ImportRequest = { gameSystemId: BROWSER_GAME_SYSTEM_ID, sources: [id], label: `${SOURCE_LABEL[id]} ${now.toISOString().slice(0, 10)}`, base };
+  if (filter) req.catalogueFilter = filter;
+  if (id === MIRRORED_SOURCE && mirror) req.wahapediaMirror = wahapediaMirrorBase(mirror, BROWSER_GAME_SYSTEM_ID);
+  return req;
+}
+
+/** Short names for the snapshot label a single-source refresh writes. */
+const SOURCE_LABEL: Record<BrowserSourceId, string> = { "mfm-yaml": "MFM updated", "bsdata-json": "BSData updated", "wahapedia-csv": "Rules text updated" };
 
 export interface SourceCounts {
   factions: number;

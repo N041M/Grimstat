@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { wahapediaUrlFor } from "@grimstat/adapters";
-import { IDLE_PROGRESS, WAHAPEDIA_DEV_PROXY, WAHAPEDIA_EDITIONS, catalogueFilter, catalogueTerms, classifyError, fetchedLabel, hasMirror, importRequestFor, isRunning, reduceProgress, wahapediaMirrorBase, type ImportProgress, type ImportSummary, type SourceCounts } from "./importProgress";
+import { IDLE_PROGRESS, WAHAPEDIA_DEV_PROXY, WAHAPEDIA_EDITIONS, catalogueFilter, catalogueTerms, classifyError, fetchedLabel, hasMirror, importRequestFor, isRunning, refreshRequestFor, reduceProgress, wahapediaMirrorBase, type ImportProgress, type ImportSummary, type SourceCounts } from "./importProgress";
 
 const COUNTS: SourceCounts = { factions: 1, datasheets: 2, abilities: 3, detachments: 4, enhancements: 5, stratagems: 6, priceRules: 7, wargearPrices: 8 };
 const SUMMARY: ImportSummary = { snapshotId: "snap_20260910_abcdef01", label: "Fetched 2026-09-10", checksum: "abcdef01", counts: COUNTS, conflicts: 0, sources: [{ adapter: "mfm-yaml", ref: "mfm-v1" }], elapsedMs: 1234 };
@@ -136,5 +136,28 @@ describe("the dev proxy", () => {
 
   it("points the mirror base at the proxy's own directory for the edition", () => {
     expect(wahapediaMirrorBase(WAHAPEDIA_DEV_PROXY, "wh40k-11e")).toBe("/wahapedia/wh40k-11e/");
+  });
+});
+
+describe("refreshRequestFor", () => {
+  const base = { data: {} as never, sources: [{ adapter: "mfm-yaml", fetchedAt: "2026-01-01T00:00:00.000Z" }], fetchedAt: "2026-01-01T00:00:00.000Z" };
+  const sel = { sources: { "mfm-yaml": true, "bsdata-json": true, "wahapedia-csv": true }, factionFilter: "orks" };
+
+  it("asks for the one source and carries the snapshot to merge it over", () => {
+    const req = refreshRequestFor("mfm-yaml", sel, base, new Date("2026-09-13T00:00:00.000Z"));
+    expect(req.sources).toEqual(["mfm-yaml"]);
+    expect(req.base).toBe(base);
+    expect(req.label).toBe("MFM updated 2026-09-13");
+    expect(req.catalogueFilter).toBeUndefined();
+  });
+
+  it("keeps the faction filter for the source the filter applies to", () => {
+    const req = refreshRequestFor("bsdata-json", sel, base, new Date("2026-09-13T00:00:00.000Z"));
+    expect(req.catalogueFilter).toBe("orks");
+  });
+
+  it("passes the mirror only to the mirrored source", () => {
+    expect(refreshRequestFor("wahapedia-csv", sel, base, new Date(), "https://example.test/mirror/").wahapediaMirror).toContain("https://example.test/mirror/");
+    expect(refreshRequestFor("mfm-yaml", sel, base, new Date(), "https://example.test/mirror/").wahapediaMirror).toBeUndefined();
   });
 });

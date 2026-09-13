@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SnapshotData, type PriceRule, type Stratagem } from "@grimstat/schema";
-import { mergeSources, type MergePart, type PartialDatasheet } from "./merge";
+import { mergeOntoBase, mergeSources, type MergePart, type PartialDatasheet } from "./merge";
 
 const FETCHED_AT = "2026-01-01T00:00:00.000Z";
 
@@ -81,5 +81,46 @@ describe("mergeSources: datasheets without a model profile", () => {
     const merged = mergeSources([...stub, part("wahapedia-csv", { datasheets: [datasheet({ models: [MODEL] })] })], { dropStubs: false });
     expect(merged.data.datasheets[0]!.models).toEqual([MODEL]);
     expect(merged.warnings.some((w) => w.includes("placeholder profile"))).toBe(false);
+  });
+});
+
+describe("mergeOntoBase: refreshing one source over a stored snapshot", () => {
+  const base = (over: Partial<MergePart>) =>
+    mergeSources([part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })], ...over })]).data;
+
+  it("keeps what a source the refresh did not touch had ranked higher", () => {
+    // Wahapedia outranks BSData for rules text, so a BSData refresh must not overwrite its effect.
+    const stored = mergeSources([
+      part("wahapedia-csv", { stratagems: [stratagem({ effect: "Everything explodes." })] }),
+      part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })] }),
+    ]).data;
+    const merged = mergeOntoBase(
+      { data: stored, adapters: ["wahapedia-csv", "bsdata-json"], fetchedAt: FETCHED_AT },
+      [part("bsdata-json", { stratagems: [stratagem({ effect: "It fizzles." })], datasheets: [datasheet({ models: [MODEL] })] })],
+    );
+    expect(merged.data.stratagems[0]!.effect).toBe("Everything explodes.");
+  });
+
+  it("takes the refreshed source's own value where it is the authority", () => {
+    // MFM owns points, so refreshing MFM over a stored snapshot must move the price.
+    const stored = mergeSources([
+      part("mfm-yaml", { datasheets: [datasheet({})], priceRules: [RULE] }),
+      part("bsdata-json", { datasheets: [datasheet({ models: [MODEL] })] }),
+    ]).data;
+    const merged = mergeOntoBase(
+      { data: stored, adapters: ["mfm-yaml", "bsdata-json"], fetchedAt: FETCHED_AT },
+      [part("mfm-yaml", { datasheets: [datasheet({})], priceRules: [{ ...RULE, tiers: [{ models: 5, points: 75 }] }] })],
+    );
+    expect(merged.data.priceRules[0]!.tiers).toEqual([{ models: 5, points: 75 }]);
+    expect(merged.data.datasheets[0]!.models).toEqual([MODEL]);
+  });
+
+  it("keeps the entities no fresh part mentions", () => {
+    const stored = base({ stratagems: [stratagem({ effect: "Everything explodes." })] });
+    const merged = mergeOntoBase({ data: stored, adapters: ["bsdata-json"], fetchedAt: FETCHED_AT }, [
+      part("wahapedia-csv", { datasheets: [datasheet({ models: [MODEL] })] }),
+    ]);
+    expect(merged.data.stratagems).toHaveLength(1);
+    expect(() => SnapshotData.parse(merged.data)).not.toThrow();
   });
 });
