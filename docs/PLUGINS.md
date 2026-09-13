@@ -20,7 +20,7 @@ Channels and their caps live in `channels.ts` (`hit-roll` is capped ±1, `skill`
 
 ## 2. A new unit ability (Tier-2, no code)
 
-Ability rows carry `effects: EffectRecord[]`. Add them in an override pack (YAML merge patch keyed by ability id) and re-import. Nothing else changes.
+Ability rows carry `effects: EffectRecord[]`. Add them in an override pack (YAML merge patch keyed by ability id) and re-import, and nothing else changes.
 
 ```yaml
 - entity: ability
@@ -39,7 +39,7 @@ Generic phrasings ("re-roll a hit roll of 1", "-1 Damage", "Feel No Pain 5+") ar
 
 ## 3. A new data source
 
-An adapter is a function that parses upstream files into `Partial<SnapshotData>` plus a `SourceRef`. Register it in `packages/adapters/src/sources.ts` with its licence and attribution, and give it a precedence rank in `packages/snapshot` so conflicts resolve deterministically. Adapters do not bundle upstream data. They fetch it on the user's machine.
+An adapter is a function that parses upstream files into `Partial<SnapshotData>` plus a `SourceRef`. Register it in `packages/adapters/src/sources.ts` with its licence and attribution, and give it a precedence rank in `packages/snapshot` so conflicts resolve deterministically. Adapters fetch upstream data on the user's machine rather than bundling it.
 
 ## 4. A new dashboard widget
 
@@ -53,7 +53,7 @@ host.registries.widgets.set("kill-curve", {
 });
 ```
 
-Widgets read the shared selection context (current scenario, result, snapshot, roster) and do not call the engine themselves. The worker calls it.
+Widgets read the shared selection context (current scenario, result, snapshot, roster) and never call the engine themselves, since the worker does that.
 
 ## 5. A new edition of 40k
 

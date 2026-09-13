@@ -101,7 +101,7 @@ const api: ImportWorkerApi = {
       );
       if (ctl.signal.aborted) throw abortError();
       const parts = settled.filter((p): p is AdapterOutput => p !== undefined);
-      if (!parts.length) throw new Error("Every source failed. There is nothing to merge.");
+      if (!parts.length) throw new Error("Every source failed, so there is nothing to merge.");
       emit({ type: "merging" });
       const merge = mergeSources(parts);
       // a catalogue filter limits the structure source; drop the factions the points source added on its own

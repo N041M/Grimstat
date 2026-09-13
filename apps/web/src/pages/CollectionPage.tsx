@@ -33,7 +33,7 @@ const modelsWord = (n: number): string => tn(n, "collection.modelCount.one", "co
  * question — which of them could actually be put on a table this weekend — so the page is counts
  * first (models owned, models painted) and then a straight answer per stored army.
  *
- * Counting is per datasheet and per model. A collection does not record loadouts. The same ten bodies are
+ * Counting is per datasheet and per model. A collection does not record loadouts, because the same ten bodies are
  * ten bodies however they are armed, and a count that tried to follow wargear would be wrong the
  * first time a unit was rebuilt.
  */

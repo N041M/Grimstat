@@ -11,7 +11,7 @@ An **unofficial, fan-made, local-first** statistics dashboard and army builder f
 
 ## Data policy
 
-This repository contains **no Games Workshop rules text, datasheets, points or artwork**. The app ships *importers* only. Game data is fetched onto the user's own machine from community sources (BSData, the online Munitorum Field Manual, Wahapedia CSV export) on first run and cached locally. Imported data lives in `data/` which is git-ignored.
+This repository contains **no Games Workshop rules text, datasheets, points or artwork**. The app ships only *importers*, and game data is fetched onto the user's own machine from community sources (BSData, the online Munitorum Field Manual, Wahapedia CSV export) on first run and cached locally. Imported data lives in `data/` which is git-ignored.
 
 Warhammer 40,000 and all associated marks are the property of Games Workshop Limited. This project is not affiliated with, endorsed by, or sponsored by Games Workshop.
 
