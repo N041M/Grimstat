@@ -15,7 +15,7 @@ import { db } from "../db";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
 import { canRedo, canUndo, canUndoUnits, editorReducer, initialEditor } from "../lib/battleEditor";
-import { Badge, Icon, useConfirm, useDismiss, useEdgeFade, useTabInView } from "../components/ui";
+import { Badge, Icon, IconSwap, useConfirm, useDismiss, useEdgeFade, useTabInView } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
 import { silhouetteFor, type SilhouetteId } from "../lib/silhouettes";
 import {
@@ -1038,14 +1038,14 @@ export function BattlePage() {
                 {/* Full screen first: it is the one here that is pressed mid-game. */}
                 {compact ? (
                   <button type="button" className="battle-view-btn battle-fullscreen" aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")} aria-label={t(focused ? "battle.focus.off" : "battle.focus.on")}>
-                    <Icon name={focused ? "collapse" : "expand"} />
+                    <IconSwap from="expand" to="collapse" on={focused} />
                   </button>
                 ) : null}
                 <button type="button" className="battle-view-btn" aria-expanded={cameraOpen} aria-controls="battle-camera" onClick={() => setCameraOpen((on) => !on)} title={t("battle.view.cameraTitle")} aria-label={t("battle.view.camera")}>
                   {/* A camera, not one of the views it offers: the cube glyph is the orbit option
                       inside the menu, and a control that wears its own contents reads as one. Open,
                       it says how to close rather than turning on the spot. */}
-                  <Icon name={cameraOpen ? "close" : "camera"} />
+                  <IconSwap from="camera" to="close" on={cameraOpen} />
                 </button>
                 <div className="battle-camera" id="battle-camera" role="group" aria-label={t("battle.view.camera")} hidden={!cameraOpen}>
                   <button type="button" className="battle-view-btn" aria-pressed={view === "orbit"} onClick={() => { setView("orbit"); closeCamera(); }} title={t("battle.view.orbit")} aria-label={t("battle.view.orbit")}>

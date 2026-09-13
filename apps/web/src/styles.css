@@ -10203,3 +10203,39 @@ body.battle-focused .battle-stage {
     --battle-mark-box: 38px;
   }
 }
+
+/* ---------- A glyph that changes with its state ----------
+   Both are drawn, stacked in one box, and the one that applies is the one at full size. Replacing
+   the glyph outright swapped it between two frames, which reads as a flicker rather than as the
+   state changing. */
+.icon-swap {
+  position: relative;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.icon-swap > .icon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition:
+    opacity 140ms ease,
+    transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.icon-swap > .icon:first-child {
+  opacity: 1;
+  transform: scale(1);
+}
+.icon-swap > .icon:last-child {
+  opacity: 0;
+  transform: scale(0.55);
+}
+.icon-swap.is-on > .icon:first-child {
+  opacity: 0;
+  transform: scale(0.55);
+}
+.icon-swap.is-on > .icon:last-child {
+  opacity: 1;
+  transform: scale(1);
+}

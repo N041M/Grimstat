@@ -325,6 +325,22 @@ export function Icon({ name, className }: { name: IconName; className?: string }
   );
 }
 
+/**
+ * Two icons in one box, crossing over between them.
+ *
+ * A button whose glyph changes with its state otherwise replaces it between one frame and the
+ * next, which reads as a flicker rather than as the state changing. Both are drawn, stacked, and
+ * the one that applies is the one at full size.
+ */
+export function IconSwap({ from, to, on }: { from: IconName; to: IconName; on: boolean }) {
+  return (
+    <span className={`icon-swap ${on ? "is-on" : ""}`.trim()} aria-hidden="true">
+      <Icon name={from} />
+      <Icon name={to} />
+    </span>
+  );
+}
+
 // ---------- dismissable layers ----------
 
 /** Calls `onDismiss` on Escape or on a pointer-down outside `ref` while `active`. */
