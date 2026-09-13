@@ -141,9 +141,11 @@ export function NavDrawer({ open, onClose, route, theme, offline }: { open: bool
   return (
     <Sheet open={open} onClose={onClose} side="left" label={t("nav.label")} className="nav-drawer">
       <div className="nav-drawer-head">
-        <span className="rail-mark-diamond" aria-hidden="true" />
+        <span className="rail-mark" aria-hidden="true">
+          <span className="rail-mark-diamond" />
+          <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
+        </span>
         <span className="nav-drawer-brand">{t("nav.name")}</span>
-        <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
         <button type="button" className="nav-drawer-close" onClick={onClose} aria-label={t("common.close")}>
           <span aria-hidden="true">×</span>
         </button>

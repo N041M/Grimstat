@@ -304,6 +304,8 @@ code,
     transition: none;
   }
 }
+/* The mark: one tile, one diamond, the solve dot on its corner. The same everywhere it appears, so
+   the rail and the phone drawer show the reader the same thing. */
 .rail-mark {
   width: 30px;
   height: 30px;
@@ -314,12 +316,14 @@ code,
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 14px;
-  /* Centres the mark in the collapsed rail's 56px and keeps it there once the rail opens. */
-  margin-left: calc((var(--rail-w) - 30px) / 2);
   cursor: pointer;
   position: relative;
   flex: none;
+}
+.rail > .rail-mark {
+  margin-bottom: 14px;
+  /* Centres the mark in the collapsed rail's 56px and keeps it there once the rail opens. */
+  margin-left: calc((var(--rail-w) - 30px) / 2);
   align-self: flex-start;
 }
 .rail-mark:hover {
@@ -339,6 +343,9 @@ code,
   height: 8px;
   border-radius: 50%;
   border: 2px solid var(--rail);
+}
+.nav-drawer-head .rail-dot {
+  border-color: var(--panel);
 }
 .rail-dot.current {
   background: var(--good);
