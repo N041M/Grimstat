@@ -2,6 +2,7 @@
   "name": "@grimstat/cli",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "bin": { "grimstat": "./src/main.ts" },
   "scripts": { "start": "tsx src/main.ts" },

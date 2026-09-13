@@ -4,22 +4,45 @@ An **unofficial, fan-made, local-first** statistics dashboard and army builder f
 
 **Live app:** https://n041m.github.io/Grimstat/ (deployed from `master` by GitHub Actions, and it all runs in your browser with nothing uploaded).
 
-- Models unit-vs-unit and army-vs-army interactions with exact probability distributions (Monte Carlo fallback).
-- Army builder with 11th-edition validation (Detachment Points, Leader/Support, tiered points).
-- A Codex: every datasheet of your snapshot laid out like a codex page, and any two to six side by side with the best value of each row marked.
+- **Calculator** — one unit against another with exact probability distributions rather than averages: the whole damage curve, models slain, kill chance, damage per 100 points, and a what-if panel that ranks which single change moves the result most. Monte Carlo is the fallback, used only where an exact answer is out of reach.
+- **Army builder** — 11th-edition validation while you type: Detachment Points, Leader and Support attachment, tiered unit costs, enhancements, transport capacity.
+- **Codex** — every datasheet of your snapshot laid out like a codex page, and any two to six of them side by side with the best value in each row marked.
+- **Battle table** — a 3D board with line of sight cast as real rays between model hulls, measurement that counts the vertical gap, per-model movement, and terrain.
+- **Collection** — the models you own, counted per datasheet and filled in a box at a time from a catalogue of 223 boxed sets. What is on the shelf then shows up in the codex and beside the units in a list.
+- **Meta** — an army measured against the published tournament lists of its faction: which units the field takes, where this list has more or fewer or none, and the lists it most resembles.
 - Everything that changes with a codex, dataslate or edition lives in **data or a plugin** rather than in core code.
+
+## What it looks like
+
+These use the sample data this repository ships — invented units with invented profiles — because no Games Workshop data is published here. Loading your own snapshot replaces it.
+
+**Calculator.** The damage distribution, models slain, the what-if ranking, and the rules toggles that change the roll.
+
+![The calculator: expected damage, a damage distribution chart, a models-slain table, a what-if panel and a column of rules toggles](docs/screenshots/calculator.png)
+
+**Battle table.** Two deployment zones, terrain, and eight units on a 60×44" board.
+
+![The 3D battle table showing terrain blocks, a red and a blue deployment zone, and labelled units](docs/screenshots/battle.png)
+
+**Codex.** Every datasheet of the active snapshot, grouped by role.
+
+![The codex landing page showing datasheet cards grouped into characters, battleline and other datasheets](docs/screenshots/codex.png)
 
 ## Data policy
 
 This repository contains **no Games Workshop rules text, datasheets, points or artwork**. The app ships only *importers*, and game data is fetched onto the user's own machine from community sources (BSData, the online Munitorum Field Manual, Wahapedia CSV export) on first run and cached locally. Imported data lives in `data/` which is git-ignored.
 
-The one thing shipped here that describes a product is `apps/web/public/boxes.json`, which lists boxed sets and how many models of each unit are in them, so a collection can be filled in a box at a time. It carries no rules, no points and no profiles, and every entry names the published page its contents were read from.
+The one thing shipped here that describes a product is `apps/web/public/boxes.json`: 223 boxed sets from 1999 to 2026, 1113 lines and 5081 models, so a collection can be filled in a box at a time. It carries no rules, no points and no profiles — a line is a unit name and a number of models — and every entry names the published page its contents were read from. The unit names are checked against a real snapshot so they resolve against the data you load, and the lines that match nothing are reported rather than dropped.
 
 Warhammer 40,000 and all associated marks are the property of Games Workshop Limited. This project is not affiliated with, endorsed by, or sponsored by Games Workshop.
 
 ## Licence
 
-The source is published to be read and checked, not to be reused: see [LICENSE](LICENSE). The boxed-set catalogue has its own terms in [LICENSE-DATA](LICENSE-DATA), which claim the compilation rather than the facts in it. Corrections and additions are welcome under both.
+The source is published to be read and checked, not to be reused. [LICENSE](LICENSE) reserves all rights. You may read it, run it locally to audit what the app does with your data, use the hosted app for your own play, and send changes back. Without written permission you may not copy, adapt or redistribute the source or any substantial part of it, host or deploy a service derived from it, or fold any part of it into another product — whether that product is free or paid, published or not.
+
+The boxed-set catalogue has separate terms in [LICENSE-DATA](LICENSE-DATA), which claim the compilation and not the facts in it. That a given box holds ten of a unit is a fact about a product somebody else sells, and facts are nobody's property.
+
+Corrections and additions are welcome under both.
 
 ## Layout
 
