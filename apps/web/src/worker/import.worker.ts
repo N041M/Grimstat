@@ -3,7 +3,7 @@ import * as Comlink from "comlink";
 import type { Snapshot } from "@grimstat/schema";
 import { SOURCES, fetchSource, type AdapterOutput, type FetchLike, type ParseOptions } from "@grimstat/adapters";
 import { buildSnapshot, mergeSources, pruneFactionsWithoutDatasheets } from "@grimstat/snapshot";
-import { catalogueFilter, type BrowserSourceId, type ImportEvent, type ImportRequest, type ImportSummary, type SourceCounts } from "../lib/importProgress";
+import { MIRRORED_SOURCE, catalogueFilter, type BrowserSourceId, type ImportEvent, type ImportRequest, type ImportSummary, type SourceCounts } from "../lib/importProgress";
 
 /**
  * Browser-side counterpart of `apps/cli/src/commands/import.ts`: fetch every selected source straight from
@@ -51,11 +51,14 @@ function tidy(err: unknown): Error {
 async function fetchAndParse(id: BrowserSourceId, request: ImportRequest, fetchedAt: string, signal: AbortSignal, emit: (e: ImportEvent) => void): Promise<AdapterOutput> {
   const fetchImpl: FetchLike = (url, init) => fetch(url, { ...(init ?? {}), signal });
   const filter = id === "bsdata-json" ? catalogueFilter(request.catalogueFilter ?? "") : undefined;
+  // Wahapedia's own server sends no CORS headers, so the browser reads a mirror of its export.
+  const mirror = id === MIRRORED_SOURCE && request.wahapediaMirror ? [request.wahapediaMirror] : undefined;
   let fetched: Awaited<ReturnType<typeof fetchSource>>;
   try {
     fetched = await fetchSource(id, fetchImpl, {
       onProgress: ({ index, total }) => emit({ type: "downloading", source: id, index, total }),
       ...(filter ? { filter } : {}),
+      ...(mirror ? { urls: mirror } : {}),
     });
   } catch (e) {
     if (!signal.aborted) emit({ type: "failed", source: id, message: e instanceof Error ? e.message : String(e) });
@@ -82,11 +85,23 @@ const api: ImportWorkerApi = {
     };
     try {
       const fetchedAt = new Date().toISOString();
-      const parts = await Promise.all(request.sources.map((id) => fetchAndParse(id, request, fetchedAt, ctl.signal, emit))).catch((e: unknown) => {
-        ctl.abort(); // stop the other source's downloads too
-        throw e;
-      });
+      // A mirror is something the user set up, and it can be missing or stale in ways the other two
+      // sources are not. Wahapedia failing costs the snapshot its rules text; failing the whole run
+      // over it would cost the snapshot entirely, so the run goes on without it and says so.
+      const settled = await Promise.all(
+        request.sources.map(async (id) => {
+          try {
+            return await fetchAndParse(id, request, fetchedAt, ctl.signal, emit);
+          } catch (e) {
+            if (id === MIRRORED_SOURCE && !ctl.signal.aborted) return undefined;
+            ctl.abort(); // stop the other source's downloads too
+            throw e;
+          }
+        }),
+      );
       if (ctl.signal.aborted) throw abortError();
+      const parts = settled.filter((p): p is AdapterOutput => p !== undefined);
+      if (!parts.length) throw new Error("Every source failed. There is nothing to merge.");
       emit({ type: "merging" });
       const merge = mergeSources(parts);
       // a catalogue filter limits the structure source; drop the factions the points source added on its own

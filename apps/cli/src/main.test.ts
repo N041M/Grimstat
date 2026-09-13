@@ -1,7 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { WAHAPEDIA_TABLES } from "@grimstat/adapters";
 import { main } from "./main";
 
 /**
@@ -35,6 +36,7 @@ function workDir(): string {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -84,5 +86,68 @@ describe("the usage text", () => {
     });
     expect(await main(["help"])).toBe(0);
     expect(text).toContain("diff     <a.json> <b.json> [--limit n]");
+    expect(text).toContain("mirror   [--system wh40k-11e] [--out data/mirror] [--delay ms] [--quiet]");
+  });
+});
+
+/** Every request Wahapedia's mirror made, so the test can check the URLs and the user agent. */
+interface Call {
+  url: string;
+  userAgent: string | undefined;
+}
+
+/** Stand in for Wahapedia: each table answers with a one-row pipe-separated file naming itself. */
+function stubWahapedia(): Call[] {
+  const calls: Call[] = [];
+  vi.stubGlobal("fetch", async (url: string, init?: { headers?: Record<string, string> }) => {
+    calls.push({ url, userAgent: init?.headers?.["user-agent"] });
+    return { ok: true, status: 200, text: async () => `name|id\n${url.split("/").pop()}|1\n` };
+  });
+  return calls;
+}
+
+describe("mirror", () => {
+  it("writes one directory per edition, holding the tables and a meta.json", async () => {
+    const dir = workDir();
+    const calls = stubWahapedia();
+    expect(await main(["mirror", "--system", "wh40k-11e", "--system", "wh40k-10e", "--out", dir, "--delay", "0", "--quiet"])).toBe(0);
+
+    for (const system of ["wh40k-11e", "wh40k-10e"]) {
+      expect(readFileSync(join(dir, system, "Datasheets.csv"), "utf8")).toContain("Datasheets.csv");
+      expect(readFileSync(join(dir, system, "Stratagems.csv"), "utf8")).toContain("Stratagems.csv");
+      const meta = JSON.parse(readFileSync(join(dir, system, "meta.json"), "utf8")) as { fetchedAt: string; gameSystemId: string; source: { id: string; url: string; attribution: string; licence: string }; tables: string[] };
+      expect(meta.gameSystemId).toBe(system);
+      expect(Number.isNaN(Date.parse(meta.fetchedAt))).toBe(false);
+      expect(meta.source.id).toBe("wahapedia-csv");
+      expect(meta.source.attribution).toContain("Wahapedia");
+      expect(meta.source.licence).toBeTruthy();
+      expect(meta.tables).toHaveLength(WAHAPEDIA_TABLES.length);
+      expect(meta.tables).toContain("Stratagems.csv");
+      expect(meta.tables.every((t) => t.endsWith(".csv"))).toBe(true);
+    }
+    // The editions come from the two upstream exports, and every request says who is calling.
+    expect(calls.filter((c) => c.url.includes("wh40k11ed")).length).toBe(WAHAPEDIA_TABLES.length);
+    expect(calls.filter((c) => c.url.includes("wh40k10ed")).length).toBe(WAHAPEDIA_TABLES.length);
+    expect(calls.every((c) => (c.userAgent ?? "").startsWith("Grimstat/"))).toBe(true);
+  });
+
+  it("carries the attribution on the dataset's front page", async () => {
+    const dir = workDir();
+    stubWahapedia();
+    expect(await main(["mirror", "--out", dir, "--delay", "0", "--quiet"])).toBe(0);
+    const readme = readFileSync(join(dir, "README.md"), "utf8");
+    expect(readme).toContain("Powered by Wahapedia");
+    expect(readme).toContain("https://wahapedia.ru");
+    // One --system was given, so only that edition is there.
+    expect(existsSync(join(dir, "wh40k-11e", "meta.json"))).toBe(true);
+    expect(existsSync(join(dir, "wh40k-10e"))).toBe(false);
+  });
+
+  it("refuses a game system Wahapedia has no export for, and a delay that is not a number", async () => {
+    const calls = stubWahapedia();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(await main(["mirror", "--system", "wh40k-9e", "--out", workDir()])).toBe(1);
+    expect(await main(["mirror", "--delay", "soon", "--out", workDir()])).toBe(1);
+    expect(calls).toHaveLength(0);
   });
 });

@@ -6,11 +6,55 @@ import type { SourceId } from "@grimstat/adapters";
  * the error classification shown to the user. No DOM, no worker, no I/O — see importProgress.test.ts.
  */
 
-/** Sources whose hosts send CORS headers (raw.githubusercontent.com / api.github.com). Wahapedia does not. */
-export type BrowserSourceId = Extract<SourceId, "mfm-yaml" | "bsdata-json">;
-export const BROWSER_SOURCES: readonly BrowserSourceId[] = ["mfm-yaml", "bsdata-json"];
+/**
+ * Sources a browser can reach.
+ *
+ * MFM YAML and BSData JSON come from raw.githubusercontent.com and api.github.com, which send CORS
+ * headers. Wahapedia's own server does not, so it is reached through a mirror, which is a copy of its CSV
+ * export in a dataset repository, served over raw.githubusercontent.com like the other two. Wahapedia
+ * is the only source carrying stratagems, enhancements and rules text, so without a mirror an import
+ * made here produces a snapshot with none of them.
+ */
+export type BrowserSourceId = Extract<SourceId, "mfm-yaml" | "bsdata-json" | "wahapedia-csv">;
+export const BROWSER_SOURCES: readonly BrowserSourceId[] = ["mfm-yaml", "bsdata-json", "wahapedia-csv"];
+/** The source that needs a mirror, and is left out of a run that has none configured. */
+export const MIRRORED_SOURCE = "wahapedia-csv" satisfies BrowserSourceId;
 /** MFM YAML and BSData JSON only carry 11th-edition data. */
 export const BROWSER_GAME_SYSTEM_ID = "wh40k-11e";
+
+/** Where the app looks for the mirror, and the setting the Data page keeps it in. */
+export const WAHAPEDIA_MIRROR_SETTING = "data.fetch.wahapediaMirror";
+
+/** The editions Wahapedia publishes an export for, and so the directories a mirror holds. */
+export const WAHAPEDIA_EDITIONS = ["wh40k-11e", "wh40k-10e"] as const;
+
+/**
+ * The dev server's path for Wahapedia. It proxies the request, so the browser reads it from this
+ * origin and the CORS question never arises. See the `server.proxy` block in `vite.config.ts`.
+ */
+export const WAHAPEDIA_DEV_PROXY = "/wahapedia/";
+
+/**
+ * Where a run looks for Wahapedia by default, which is somewhere on this origin either way.
+ *
+ * Running locally there is a server in front of the app and it proxies the request. A built site has
+ * no server, so the Pages build copies Wahapedia's export in beside the app and it is read from
+ * there. Both need no setup at all; the field is for pointing somewhere else, such as a mirror
+ * somebody else published.
+ */
+export const DEFAULT_WAHAPEDIA_MIRROR = import.meta.env.DEV ? WAHAPEDIA_DEV_PROXY : `${import.meta.env.BASE_URL}wahapedia/`.replace(/\/{2,}/g, "/");
+
+/**
+ * The mirror's base for one edition, with one trailing slash. The relay writes a directory per game
+ * system, so one dataset repository holds both editions.
+ */
+export function wahapediaMirrorBase(url: string, gameSystemId: string): string {
+  const root = url.trim().replace(/\/+$/, "");
+  return `${root}/${gameSystemId}/`;
+}
+
+/** Whether a mirror has been configured. A blank setting leaves Wahapedia out of the run. */
+export const hasMirror = (url: string | undefined): boolean => !!url && url.trim().length > 0;
 
 export interface ImportSelection {
   sources: Record<BrowserSourceId, boolean>;
@@ -24,6 +68,8 @@ export interface ImportRequest {
   sources: BrowserSourceId[];
   /** Comma-separated catalogue name terms; absent = every catalogue. */
   catalogueFilter?: string;
+  /** Base URL of the Wahapedia mirror, already narrowed to this game system. */
+  wahapediaMirror?: string;
   label: string;
 }
 
@@ -55,12 +101,18 @@ export function fetchedLabel(now: Date, filter?: string): string {
   return terms.length ? `${base} · ${filter!.trim()}` : base;
 }
 
-/** Selection → worker request. Sources keep the canonical order (points first, like the CLI). */
-export function importRequestFor(sel: ImportSelection, now = new Date()): ImportRequest {
-  const sources = BROWSER_SOURCES.filter((id) => sel.sources[id]);
+/**
+ * Selection → worker request. Sources keep the canonical order (points first, like the CLI).
+ *
+ * Wahapedia is dropped when no mirror is configured, so the button still runs and produces the
+ * snapshot the other two sources can make between them.
+ */
+export function importRequestFor(sel: ImportSelection, now = new Date(), mirror?: string): ImportRequest {
+  const sources = BROWSER_SOURCES.filter((id) => sel.sources[id] && (id !== MIRRORED_SOURCE || hasMirror(mirror)));
   const filter = sel.sources["bsdata-json"] && catalogueTerms(sel.factionFilter).length ? sel.factionFilter.trim() : undefined;
   const req: ImportRequest = { gameSystemId: BROWSER_GAME_SYSTEM_ID, sources, label: fetchedLabel(now, filter) };
   if (filter) req.catalogueFilter = filter;
+  if (sources.includes(MIRRORED_SOURCE) && mirror) req.wahapediaMirror = wahapediaMirrorBase(mirror, BROWSER_GAME_SYSTEM_ID);
   return req;
 }
 

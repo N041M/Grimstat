@@ -1,0 +1,61 @@
+# The relay behind the Wahapedia half of the app's "fetch from community sources" button.
+#
+# Once a week it copies Wahapedia's CSV export for both editions (one request at a time, under a
+# named user agent) and pushes the tables to a separate dataset repository, which the app fetches at
+# runtime. It publishes one directory per game system, holding the export's own files
+# (Datasheets.csv, Stratagems.csv and the rest) plus a meta.json recording when they were fetched.
+# The web app needs this because wahapedia.ru sends no Access-Control-Allow-Origin header, so a
+# browser cannot read it. raw.githubusercontent.com does send one.
+#
+# The dataset is a copy of Wahapedia's own CSV export and carries their attribution requirement:
+# "Powered by Wahapedia", https://wahapedia.ru. The CLI writes that line into the dataset's README,
+# and anyone redistributing the files keeps it with them.
+#
+# Setup, once: create an empty public repository for the dataset, set the repository variable
+# WAHAPEDIA_REPO to "owner/name", and add a secret WAHAPEDIA_TOKEN holding a fine-grained token with
+# contents read/write on that repository. Without the variable the job does not run, so nothing is
+# published by default.
+name: Wahapedia mirror
+
+on:
+  schedule:
+    - cron: "41 5 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    if: ${{ vars.WAHAPEDIA_REPO != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check out the dataset repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.WAHAPEDIA_REPO }}
+          token: ${{ secrets.WAHAPEDIA_TOKEN }}
+          path: mirror
+      - name: Copy the Wahapedia tables
+        run: pnpm cli mirror --system wh40k-11e --system wh40k-10e --out mirror
+      - name: Publish the dataset
+        working-directory: mirror
+        run: |
+          git config user.name "grimstat-wahapedia"
+          git config user.email "grimstat-wahapedia@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing new."
+          else
+            git commit -m "Wahapedia $(date -u +%F)"
+            git push
+          fi

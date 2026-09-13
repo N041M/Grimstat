@@ -54,3 +54,24 @@ describe("sources registry", () => {
     await expect(fetchSource("mfm-yaml", fetch)).rejects.toThrow(/HTTP 404/);
   });
 });
+
+describe("the Wahapedia mirror", () => {
+  it("reads every table from the mirror's base instead of wahapedia.ru", async () => {
+    const { fetch, calls } = stubFetch({ ".csv": "a|b|\n1|2|\n" });
+    const base = "https://raw.githubusercontent.com/someone/mirror/main/wh40k-11e/";
+    const res = await fetchSource("wahapedia-csv", fetch, { urls: [base] });
+    expect(calls.every((u) => u.startsWith(base))).toBe(true);
+    expect(calls.some((u) => u.includes("wahapedia.ru"))).toBe(false);
+    expect(calls).toContain(`${base}Stratagems.csv`);
+    expect(calls).toContain(`${base}Datasheets.csv`);
+    expect(res.url).toBe(base);
+    expect(Object.keys(res.files)).toContain("Stratagems.csv");
+  });
+
+  it("takes a base with no trailing slash", async () => {
+    const { fetch, calls } = stubFetch({ ".csv": "a|\n1|\n" });
+    await fetchSource("wahapedia-csv", fetch, { urls: ["https://x/y"] });
+    expect(calls).toContain("https://x/y/Datasheets.csv");
+    expect(calls.every((u) => u.startsWith("https://x/y/"))).toBe(true);
+  });
+});
