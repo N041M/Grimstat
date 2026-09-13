@@ -51,8 +51,6 @@ export const en = {
   "ctxcol.addUnit": "+ Add unit",
   "ctxcol.addSource": "+ Add source",
   "ctxcol.openRepo": "Open repository",
-  "ctxcol.noScenarios": "No saved scenarios yet.",
-  "ctxcol.noArmies": "No armies yet.",
   "ctxcol.noUnits": "No units in the set yet.",
   "ctxcol.noSources": "No sources on the active snapshot.",
   "ctxcol.localOverrides": "Local overrides",

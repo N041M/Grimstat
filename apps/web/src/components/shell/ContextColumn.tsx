@@ -184,8 +184,8 @@ function ScenariosBody({ inSheet }: BodyProps) {
   }, []);
   return (
     <ContextFrame eyebrow={t("ctxcol.scenarios")} meta={String(items.length)} inSheet={inSheet}>
+      {/* An empty list needs no caption here: the page body already says so, and the row below acts. */}
       <ContextList>
-        {items.length === 0 ? <ContextEmpty>{t("ctxcol.noScenarios")}</ContextEmpty> : null}
         {items.map((s) => (
           <ContextRow
             key={s.id}
@@ -240,7 +240,6 @@ function ArmiesBody({ param, inSheet }: BodyProps) {
   return (
     <ContextFrame eyebrow={t("ctxcol.armies")} meta={String(items.length)} inSheet={inSheet}>
       <ContextList>
-        {rows.length === 0 ? <ContextEmpty>{t("ctxcol.noArmies")}</ContextEmpty> : null}
         {rows.map(({ r, value }) => (
           <ContextRow key={r.id} name={r.name} value={value} meta={tn(r.units.length, "ctxcol.unit", "ctxcol.units", { n: r.units.length })} selected={param === r.id} href={hrefFor("armies", r.id)} />
         ))}
