@@ -1066,6 +1066,7 @@ export const en = {
   "roster.inspector.opened": "Opened “{name}” in the calculator as {side}.",
   "roster.inspector.openFailed": "Could not build the unit for the calculator.",
   "roster.inspector.cost": "{base} base · {wargear} wargear · {enhancement} enhancement",
+  "roster.inspector.owned": "{n} owned",
   "roster.inspector.copy": "copy #{n}",
 
   "roster.diagnostics": "Diagnostics",
@@ -2282,6 +2283,7 @@ export const en = {
   "codex.wargearPrice": "+{n} pts",
   "codex.landing.lede": "Every datasheet of the active snapshot, laid out like a codex page. Open one to read it, or mark several and put them side by side.",
   "codex.landing.count": "{n} datasheets",
+  "codex.card.owned": "{n} owned",
   "codex.card.compare": "Add {name} to compare",
   "codex.card.uncompare": "Remove {name} from compare",
   "codex.cmp.aria": "Datasheets side by side",

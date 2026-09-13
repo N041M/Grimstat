@@ -7,6 +7,7 @@ import { fmtInt } from "../../lib/format";
 import { DiagnosticItem } from "./DiagnosticItem";
 import { Field, Icon, Switch } from "../ui";
 import { t, tn } from "../../i18n";
+import { useOwnedModels } from "../../hooks/useOwnedModels";
 
 interface Props {
   unit: RosterUnit;
@@ -144,6 +145,7 @@ function GroupEditor({ group, profileName, bounds, items, onChange }: { group: M
 /** Focused side panel for one unit: sticky title + cost, sections, footer actions. */
 export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues, onChange, onOpenInCalculator, onDuplicate, onRemove, onClose }: Props) {
   const ds = datasheets.get(unit.datasheetId);
+  const owned = useOwnedModels().get(unit.datasheetId) ?? 0;
   const isCharacter = ds ? isCharacterSheet(ds) : false;
 
   const items = useMemo<WargearItem[]>(() => {
@@ -222,6 +224,9 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
           {ds?.name ?? unit.datasheetId}
           {ds?.role ? ` · ${ds.role}` : ""}
           {` · ${tn(modelCountOf(unit), "roster.units.model", "roster.units.models", { n: modelCountOf(unit) })}`}
+          {/* What the shelf holds of this datasheet, so a list can be read against the models that
+              exist without leaving the page it is being written on. */}
+          {owned > 0 ? <span className={owned < modelCountOf(unit) ? "insp-owned short" : "insp-owned"}>{` · ${t("roster.inspector.owned", { n: owned })}`}</span> : null}
           {cost && cost.copyIndex > 1 ? ` · ${t("roster.inspector.copy", { n: cost.copyIndex })}` : ""}
         </div>
         {cost ? (

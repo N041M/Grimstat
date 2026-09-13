@@ -7328,8 +7328,18 @@ button.battle-scope-btn:hover {
   margin-right: 2px;
 }
 .codex-card-points {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   font: 500 11px/1.3 var(--mono);
   color: var(--ink);
+}
+/* What the shelf already holds, beside what the unit costs. Quieter than the points, because it
+   answers a question the reader did not come to the codex to ask. */
+.codex-card-owned {
+  font-weight: 400;
+  color: var(--muted);
 }
 .codex-card-cmp {
   position: absolute;
@@ -10542,4 +10552,13 @@ body.battle-focused .battle-stage {
 .icon-swap.is-on > .icon:last-child {
   opacity: 1;
   transform: scale(1);
+}
+
+/* The shelf's answer beside a unit in a list: how many of it are owned, and a mark when that is
+   fewer than the list is asking for. Quiet either way — it is a note, not a problem to solve here. */
+.insp-owned {
+  color: var(--muted);
+}
+.insp-owned.short {
+  color: var(--accent);
 }

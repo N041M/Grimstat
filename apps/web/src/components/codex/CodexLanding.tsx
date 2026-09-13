@@ -5,8 +5,9 @@ import { COMPARE_CAP, representativeProfile, sizeBounds, unitFigures, type Codex
 import { hrefFor } from "../../router";
 import { CodexTools, GROUP_KEY, NoMatch, pointsText, sizeText } from "./shared";
 import { t } from "../../i18n";
+import { useOwnedModels } from "../../hooks/useOwnedModels";
 
-function SheetCard({ ds, snapshot, inCompare, full, onToggle, onPick }: { ds: Datasheet; snapshot: Snapshot; inCompare: boolean; full: boolean; onToggle: () => void; onPick: () => void }) {
+function SheetCard({ ds, snapshot, owned, inCompare, full, onToggle, onPick }: { ds: Datasheet; snapshot: Snapshot; owned: number; inCompare: boolean; full: boolean; onToggle: () => void; onPick: () => void }) {
   const rep = representativeProfile(ds);
   const fig = unitFigures(ds, snapshot);
   const label = t(inCompare ? "codex.card.uncompare" : "codex.card.compare", { name: ds.name });
@@ -44,7 +45,10 @@ function SheetCard({ ds, snapshot, inCompare, full, onToggle, onPick }: { ds: Da
             </span>
           </span>
         ) : null}
-        <span className="codex-card-points">{pointsText(fig.minPoints, fig.maxPoints)}</span>
+        <span className="codex-card-points">
+          {pointsText(fig.minPoints, fig.maxPoints)}
+          {owned > 0 ? <span className="codex-card-owned">{t("codex.card.owned", { n: owned })}</span> : null}
+        </span>
       </a>
       <button type="button" className="codex-card-cmp" aria-pressed={inCompare} aria-label={label} title={!inCompare && full ? t("codex.compareFull", { n: COMPARE_CAP }) : label} disabled={!inCompare && full} onClick={onToggle}>
         {inCompare ? "✓" : "+"}
@@ -74,6 +78,8 @@ interface Props {
 export function CodexLanding({ snapshot, factions, factionId, onFaction, query, onQuery, groups, compare, onToggleCompare, onPick }: Props) {
   const total = groups.reduce((s, g) => s + g.sheets.length, 0);
   const full = compare.length >= COMPARE_CAP;
+  // What the shelf holds, so a unit already owned says so while it is being browsed.
+  const owned = useOwnedModels();
   return (
     <div className="codex-landing">
       <p className="codex-lede">{t("codex.landing.lede")}</p>
@@ -93,7 +99,7 @@ export function CodexLanding({ snapshot, factions, factionId, onFaction, query, 
           </h2>
           <div className="codex-cards">
             {g.sheets.map((d) => (
-              <SheetCard key={d.id} ds={d} snapshot={snapshot} inCompare={compare.includes(d.id)} full={full} onToggle={() => onToggleCompare(d.id)} onPick={onPick} />
+              <SheetCard key={d.id} ds={d} snapshot={snapshot} owned={owned.get(d.id) ?? 0} inCompare={compare.includes(d.id)} full={full} onToggle={() => onToggleCompare(d.id)} onPick={onPick} />
             ))}
           </div>
         </section>
