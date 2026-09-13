@@ -91,7 +91,6 @@ export const en = {
   "common.moreActions": "More actions",
   "common.done": "Done",
   "common.confirm": "Confirm",
-  "calc.swap": "Swap",
   "calc.swap.title": "Swap the attacker and the defender",
   "calc.pin": "Pin result",
   "calc.unpin": "Unpin",

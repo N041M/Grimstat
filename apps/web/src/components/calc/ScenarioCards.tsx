@@ -174,17 +174,21 @@ export function ScenarioCards({
     <div className="calc-ctx">
       <div className="calc-ctx-lede">
         <input className="calc-ctx-name" type="text" value={name} aria-label={t("scenario.name")} onChange={(e) => onRename(e.target.value)} />
+        {/*
+         * Swap sits with the other scenario-wide actions rather than on the rule between the two
+         * cards. That rule moves whenever the cards differ in height, which is every time this
+         * button is pressed, so it used to slide out from under the pointer mid-click. The lede is
+         * a single input and a single line of status, so its height never changes.
+         */}
+        <button type="button" className="calc-ctx-swap" onClick={onSwap} title={t("calc.swap.title")} aria-label={t("calc.swap.title")}>
+          <span aria-hidden="true">⇅</span>
+        </button>
         <button type="button" className="calc-ctx-new" onClick={onNew} title={t("scenario.newScenario")} aria-label={t("scenario.newScenario")}>
           +
         </button>
         <div className="calc-ctx-status">{status}</div>
       </div>
       <UnitCard unit={attacker} side="attacker" showWeapons onEdit={() => onEdit("attacker")} />
-      <div className="calc-swap-row">
-        <button type="button" className="calc-swap" onClick={onSwap} title={t("calc.swap.title")}>
-          <span aria-hidden="true">⇅</span> {t("calc.swap")}
-        </button>
-      </div>
       <UnitCard unit={defender} side="defender" showWeapons={fightPhase} onEdit={() => onEdit("defender")} />
       {coverage ? <CoverageBlock coverage={coverage} /> : <div className="calc-ctx-filler" />}
       <div className="calc-ctx-actions">

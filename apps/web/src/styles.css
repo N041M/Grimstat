@@ -3455,7 +3455,7 @@ a.btn:hover {
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 6px;
 }
@@ -3477,11 +3477,14 @@ a.btn:hover {
   border-color: var(--line);
   background: var(--panel);
 }
-.calc-ctx-new {
+.calc-ctx-new,
+.calc-ctx-swap {
   flex: none;
   width: 22px;
   height: 22px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
   border: 1px solid var(--line);
   border-radius: var(--radius-input);
@@ -3490,9 +3493,13 @@ a.btn:hover {
   font: 400 13px/1 var(--font);
   cursor: pointer;
 }
-.calc-ctx-new:hover:not(:disabled) {
+.calc-ctx-new:hover:not(:disabled),
+.calc-ctx-swap:hover:not(:disabled) {
   border-color: var(--ink);
   color: var(--ink);
+}
+.calc-ctx-swap:active {
+  background: var(--hover);
 }
 .calc-ctx-status {
   grid-column: 1 / -1;
