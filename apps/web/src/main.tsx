@@ -18,8 +18,26 @@ import { swStore } from "./lib/sw";
  * the new build does not have. Rosters, games and snapshots are written to the database as they
  * change, so a reload keeps them.
  */
+/**
+ * How often a tab that is being looked at asks whether there is a newer build.
+ *
+ * The browser asks on its own when a page is navigated to, and not while a tab simply sits there, so
+ * a tab left open all day stays on the build it started with. Asking costs one revalidation of the
+ * worker script, which is a couple of hundred bytes.
+ */
+const UPDATE_EVERY_MS = 60 * 60 * 1000;
+
 registerSW({
   immediate: true,
+  onRegisteredSW: (_url, registration) => {
+    if (!registration) return;
+    const look = (): void => {
+      if (!document.hidden) void registration.update();
+    };
+    // Coming back to the tab is the moment a stale build is about to be used again.
+    document.addEventListener("visibilitychange", look);
+    window.setInterval(look, UPDATE_EVERY_MS);
+  },
   onOfflineReady: () => swStore.offlineReady(),
 });
 

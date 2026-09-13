@@ -636,6 +636,7 @@ export const en = {
   "about.edition": "edition {e}",
   "about.plugins": "Loaded plugins",
   "about.plan": "Entitlements plan",
+  "about.build": "Build",
   "about.buildDetails": "Build details",
   "about.legalTitle": "Legal",
 

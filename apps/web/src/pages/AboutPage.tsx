@@ -14,6 +14,7 @@ import { t, type I18nKey } from "../i18n";
  * guarded with `typeof` so the module still loads anywhere nothing defines them.
  */
 const TESTS = typeof __GS_TESTS__ === "number" ? String(__GS_TESTS__) : undefined;
+const BUILD = typeof __GS_BUILD__ === "string" ? __GS_BUILD__ : "dev";
 const PACKAGES = typeof __GS_PACKAGES__ === "number" ? String(__GS_PACKAGES__) : undefined;
 const BUNDLE = typeof __GS_BUNDLE__ === "string" ? __GS_BUNDLE__ : undefined;
 
@@ -140,6 +141,8 @@ export function AboutPage() {
               <dd>{plugins.map((p) => `${p.id}@${p.version} (${p.kind})`).join(", ")}</dd>
               <dt>{t("about.plan")}</dt>
               <dd>{currentPlan()}</dd>
+              <dt>{t("about.build")}</dt>
+              <dd>{BUILD}</dd>
             </dl>
           </details>
         </section>

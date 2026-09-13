@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { gzipSync } from "node:zlib";
@@ -6,6 +7,21 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+
+/**
+ * Which build this is, so the About page can say it and a reader can tell it apart from the one
+ * their browser had before. The workflow runner has the commit in the environment; a local build
+ * asks git for it and says "dev" when there is no repository to ask.
+ */
+function buildId(): string {
+  const fromCi = process.env.GITHUB_SHA;
+  if (fromCi) return fromCi.slice(0, 7);
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || "dev";
+  } catch {
+    return "dev";
+  }
+}
 
 /** Deployed under a sub-path on GitHub Pages (e.g. "/Grimstat/"); "/" for local dev. */
 const base = process.env.VITE_BASE ?? "/";
@@ -180,6 +196,7 @@ export default defineConfig({
     __GS_TESTS__: JSON.stringify(countTests()),
     __GS_PACKAGES__: JSON.stringify(countPackages()),
     __GS_BUNDLE__: JSON.stringify(BUNDLE_TOKEN),
+    __GS_BUILD__: JSON.stringify(buildId()),
   },
   plugins: [
     bundleSizePlugin(),

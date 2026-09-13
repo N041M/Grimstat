@@ -6,3 +6,5 @@ declare const __GS_TESTS__: number;
 declare const __GS_PACKAGES__: number;
 /** The built bundle's size, or the placeholder token while running the dev server. */
 declare const __GS_BUNDLE__: string;
+/** The commit this build came from, or "dev" for a build made outside the repository. */
+declare const __GS_BUILD__: string;
