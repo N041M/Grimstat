@@ -2398,6 +2398,8 @@ body.sheet-open {
 .nav-drawer-head {
   display: flex;
   align-items: flex-start;
+  /* Search and the close button are different actions, so they are not shoulder to shoulder. */
+  gap: 14px;
   padding-right: 6px;
 }
 .nav-drawer-close {
@@ -2422,7 +2424,7 @@ body.sheet-open {
   gap: 8px;
   flex: 1;
   min-width: 0;
-  padding: 6px 8px 12px 14px;
+  padding: 6px 0 12px 14px;
   background: transparent;
   border: 0;
   border-radius: 0;
