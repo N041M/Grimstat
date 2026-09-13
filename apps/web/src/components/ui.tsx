@@ -198,7 +198,7 @@ export function numOrNull(v: string): number | null {
 
 // ---------- icons (16px line icons, currentColor) ----------
 
-export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse";
+export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse" | "target";
 
 const PATHS: Record<IconName, ReactNode> = {
   export: (
@@ -281,6 +281,13 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M14 6h-4V2" />
       <path d="M2 10h4v4" />
       <path d="M14 10h-4v4" />
+    </>
+  ),
+  /* A sight on the middle of something: what recentring the camera does. */
+  target: (
+    <>
+      <circle cx="8" cy="8" r="4.2" />
+      <path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2" />
     </>
   ),
 };

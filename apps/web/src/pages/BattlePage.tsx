@@ -1019,20 +1019,22 @@ export function BattlePage() {
                 {t("battle.group.clear")}
               </button>
             </div>
-            {/* Two fingers can carry the board off the screen, and a table of dark ground gives no
-                clue which way it went. This is the way back. */}
-            <div className="battle-group" role="group" aria-label={t("battle.actions.view")}>
-              <button type="button" className="ghost sm" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre.title")}>
-                {t("battle.recentre")}
-              </button>
-            </div>
+
           </div>
-          {/* Where a video player and a map both put it: the far corner of the picture, on its own,
-              clear of the row of controls. The way in and the way out are the same button. */}
-          {compact && webgl ? (
-            <button type="button" className="battle-fullscreen" aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")} aria-label={t(focused ? "battle.focus.off" : "battle.focus.on")}>
-              <Icon name={focused ? "collapse" : "expand"} />
-            </button>
+          {/* Split by what a control acts on. These two act on the view, so they sit in the corner of
+              the picture, which is where a video player and a map both put them. Everything that
+              acts on the units is in the row along the foot, under the thumb. */}
+          {webgl ? (
+            <div className="battle-view-tools" role="group" aria-label={t("battle.actions.view")}>
+              <button type="button" className="battle-view-btn" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre")}>
+                <Icon name="target" />
+              </button>
+              {compact ? (
+                <button type="button" className="battle-view-btn battle-fullscreen" aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")} aria-label={t(focused ? "battle.focus.off" : "battle.focus.on")}>
+                  <Icon name={focused ? "collapse" : "expand"} />
+                </button>
+              ) : null}
+            </div>
           ) : null}
           {webgl ? (
             <ErrorBoundary compact resetKey={layout.id}>

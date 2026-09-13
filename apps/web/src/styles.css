@@ -7870,15 +7870,20 @@ button.battle-scope-btn:hover {
 
 /* The table's own controls, over the near edge of the board. Everything a keyboard does to the
    selection has a button here, so a finger can play the table too. */
+/*
+ * Everything that acts on the units, along the foot of the table: the plan, the history, the
+ * facing, the selection. The foot because that is where the thumb is, and because the top of the
+ * board is the half a player is looking at. What acts on the view is in the corner instead —
+ * `.battle-view-tools` below.
+ */
 .battle-toolbar {
   position: absolute;
   z-index: 4;
-  top: 8px;
   left: 8px;
-  max-width: calc(100% - 16px);
-  width: fit-content;
+  right: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  width: auto;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 4px;
@@ -7956,7 +7961,7 @@ button.battle-scope-btn:hover {
   position: absolute;
   z-index: 4;
   left: 50%;
-  bottom: 12px;
+  bottom: calc(62px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   max-width: calc(100% - 24px);
   margin: 0;
@@ -8039,12 +8044,10 @@ button.battle-scope-btn:hover {
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
 }
-/* The toolbar shares the top of the table with the full-screen control, so it stops short of it.
-   It is one row that scrolls rather than three that wrap: wrapped, it covered 130px of a 487px
-   board, and the rule between two clusters ended up at the start of a line instead of between
-   them. `useEdgeFade` fades whichever end has more beyond it. */
+/* One row that scrolls rather than several that wrap. Wrapped, it covered 130px of a 487px board,
+   and the rule between two clusters ended up at the start of a line instead of between them.
+   `useEdgeFade` fades whichever end has more beyond it. */
 .shell.compact .battle-toolbar {
-  max-width: calc(100% - 54px);
   flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
@@ -8060,9 +8063,9 @@ button.battle-scope-btn:hover {
 .shell.compact .battle-group > button {
   scroll-snap-align: start;
 }
-/* The 40px floor every other control gets would square this one off; its target is the box around
-   it instead, which is the 44 a thumb needs. */
-.shell.compact .battle-fullscreen {
+/* The 40px floor every other control gets would square these off; their target is the box around
+   each instead, which is the 44 a thumb needs. */
+.shell.compact .battle-view-btn {
   min-height: 0;
   height: 30px;
 }
@@ -9885,40 +9888,24 @@ body.battle-focused .battle-body {
 body.battle-focused .battle-stage {
   border-bottom: 0;
 }
-/*
- * The toolbar moves to the foot of the table. Over the top it wrapped to three rows and covered
- * the far half of the board, which is the half focus was meant to hand back. Along the bottom it
- * is one row, within reach of the thumb, over ground that is behind the near deployment zone.
- */
-body.battle-focused .battle-toolbar {
-  top: auto;
-  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-  left: 8px;
-  right: 8px;
-  width: auto;
-  max-width: none;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  scroll-snap-type: x proximity;
-}
-body.battle-focused .battle-toolbar::-webkit-scrollbar {
-  display: none;
-}
-body.battle-focused .battle-toolbar button {
-  flex: none;
-  scroll-snap-align: start;
-}
+/* The action row is along the foot at every width, so focus has nothing to move. */
 
 /* ---------- Battle: the full-screen control ----------
    The far corner of the picture, away from the row of controls, so it reads as something done to
    the view rather than to the units on it. It carries its own light ink for the same reason the
    toolbar does: the table is dark under both themes. */
-.battle-fullscreen {
+/* What acts on the view: recentring it, and giving it the screen. */
+.battle-view-tools {
   position: absolute;
   z-index: 5;
   top: 8px;
   right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.battle-view-btn {
+  position: relative;
   width: 30px;
   height: 30px;
   min-height: 0;
@@ -9932,36 +9919,71 @@ body.battle-focused .battle-toolbar button {
   color: #e6e8ec;
   cursor: pointer;
 }
-/* The mark is 30px so it sits lightly on the board; the target around it is the 44 a thumb needs. */
-.battle-fullscreen::after {
+/* Each mark is 30px so it sits lightly on the board; the target around it is the 44 a thumb needs. */
+.battle-view-btn::after {
   content: "";
   position: absolute;
   inset: -7px;
 }
-.battle-fullscreen:hover:not(:disabled) {
+.battle-view-btn:hover:not(:disabled) {
   background: rgba(21, 22, 26, 0.88);
   color: #ffffff;
 }
-/* It stays in that corner in focus as well. A control that moves when it is used is a control you
-   have to find twice, and the corner is free there anyway: focus sends the toolbar to the foot. */
+/* The corner is the corner in focus as well. A control that moves when it is used is one you have
+   to find twice. */
 
 /* ---------- Entering and leaving the battle table's focus ----------
    The whole screen changes at once — the bar, the title, the rail, the panel and the table — so the
-   browser animates between the two states rather than cutting. The default half-second is slow for
-   a control you press to get on with something, and the page's own reduced-motion rule cannot reach
-   a view transition's pseudo-elements, so that is stated again here. */
-::view-transition-group(root) {
-  animation-duration: 220ms;
+   browser animates between the two states rather than cutting.
+
+   Naming the three parts that survive the change is what makes it read as one movement. Without a
+   name they are inside the page's own snapshot, and the browser can only dissolve the whole of the
+   old layout into the whole of the new one: the table appears at both sizes at once and the result
+   pops. Named, each is lifted out and carried from where it was to where it is going — the table
+   grows into the room the chrome leaves, and the toolbar travels to the foot rather than fading
+   out of one corner and into another.
+
+   The mark keeps its corner throughout, so naming it holds it still and crisp instead of dissolving
+   it along with the page.
+
+   The page's own reduced-motion rule cannot reach a view transition's pseudo-elements, so it is
+   stated again at the end. */
+.battle-stage {
+  view-transition-name: battle-table;
 }
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 220ms;
-  animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+.battle-toolbar {
+  view-transition-name: battle-tools;
+}
+.battle-view-tools {
+  view-transition-name: battle-view;
+}
+::view-transition-group(*) {
+  animation-duration: 320ms;
+  /* Decelerating: it arrives rather than stops. */
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* The table's two snapshots are the same scene at two sizes. Holding the old one at full strength
+   while the new one arrives shows the board twice; the old one goes early and the growth carries
+   the eye instead. */
+::view-transition-old(battle-table) {
+  animation-duration: 140ms;
+}
+::view-transition-new(battle-table) {
+  animation-duration: 260ms;
+}
+::view-transition-old(battle-view),
+::view-transition-new(battle-view) {
+  animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(root),
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
     animation-duration: 0.001s !important;
   }
 }
