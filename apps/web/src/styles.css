@@ -476,7 +476,11 @@ code,
 .rail-nav-fill {
   flex: 1;
 }
-.rail-item-foot {
+/*
+ * Named against the rail so it outranks `.rail-stacked .rail-item`, whose margin shorthand sets all
+ * four sides and would otherwise put the foot item back in the run of destinations.
+ */
+.rail .rail-item-foot {
   margin-top: auto;
 }
 .rail-theme {
