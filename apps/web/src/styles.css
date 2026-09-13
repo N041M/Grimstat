@@ -8090,7 +8090,10 @@ button.battle-scope-btn:hover {
 .ctx-row.inert:hover {
   background: transparent;
 }
-.confirm-dialog .dialog-inner {
+/* A confirm is narrower than a general dialog. The width belongs on the dialog, which is the box
+   that gets drawn: on the inner it left the panel at its full 520px with the contents stopping
+   100px short of the right edge, so every confirm had a margin down one side and not the other. */
+dialog.dialog.confirm-dialog {
   width: min(94vw, 420px);
 }
 .confirm-body {
