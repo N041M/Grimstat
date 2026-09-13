@@ -3247,7 +3247,10 @@ a.btn:hover {
 /* hero header: eyebrow + 56px figure, four secondary metrics right-aligned */
 .hero {
   display: flex;
-  align-items: flex-end;
+  /* `safe` is what keeps a wrapped tile row from being cut off: when the tiles need two rows and
+     the block is taller than the panel, alignment falls back to the top edge rather than growing
+     upwards past it, which put the first row's labels out of view. */
+  align-items: safe flex-end;
   justify-content: space-between;
   gap: 16px;
   height: 100%;
@@ -3261,6 +3264,8 @@ a.btn:hover {
   text-transform: uppercase;
   letter-spacing: 0.13em;
   color: var(--faint);
+  /* Two lines of eyebrow above the figure reads as a mistake; let the row wrap instead. */
+  white-space: nowrap;
 }
 .hero-value-row {
   display: flex;
@@ -3281,7 +3286,7 @@ a.btn:hover {
 }
 .hero-stats {
   display: flex;
-  gap: 26px;
+  gap: 18px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
