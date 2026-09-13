@@ -1865,7 +1865,7 @@ export const en = {
   "data.fetch.pointsOnly": "The MFM alone yields points without datasheets, so tick BSData as well to get units.",
   "data.fetch.run": "Fetch and build snapshot",
   "data.fetch.one": "Fetch this",
-  "data.fetch.oneHint": "Fetch this source and merge it into the snapshot you have",
+  "data.fetch.oneHint": "Update this source in the snapshot you have",
   "data.fetch.oneNeedsSnapshot": "Build a snapshot first, then a single source can be updated in it.",
   "data.fetch.check": "Check for updates",
   "data.fetch.checking": "Checking…",

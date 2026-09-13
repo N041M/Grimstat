@@ -8,7 +8,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORPUS_FORMAT, CORPUS_VERSION, stringifyPublishedListsFile, type StoredPublishedList } from "@grimstat/adapters";
-import { db, exportAll, importAll, type ExportBundle, type GameRecord, type RosterVersionRecord } from "./db";
+import { db, exportAll, importAll, putSourceFiles, readSourceFiles, type ExportBundle, type GameRecord, type RosterVersionRecord } from "./db";
 import { importPastedList, listPublishedLists } from "./lib/publishedLists";
 import { CorpusIncomplete, fetchPublishedCorpus, type FetchText } from "./lib/corpusFetch";
 
@@ -210,12 +210,52 @@ const game = (id: string): GameRecord => ({
 
 const version = (id: string): RosterVersionRecord => ({ id, rosterId: "r1", revision: 4, updatedAt: "2026-09-11T00:00:00.000Z", json: '{"id":"r1"}' });
 
+/* ---- the files each source was downloaded as --------------------------------------------------- */
+
+describe("the downloaded files", () => {
+  const files = { "meta.yaml": "version: 1", "orks.yaml": "units: []" };
+  const rec = { gameSystemId: "wh40k-11e", adapter: "mfm-yaml", files, url: "https://mfm.test/", fetchedAt: "2026-09-13T00:00:00.000Z" };
+
+  it("comes back with where it came from and when", async () => {
+    expect(await putSourceFiles(rec)).toBe(true);
+    const back = await readSourceFiles("wh40k-11e", "mfm-yaml");
+    expect(back).toMatchObject({ url: "https://mfm.test/", fetchedAt: "2026-09-13T00:00:00.000Z", files });
+  });
+
+  it("keeps one record per source per game system", async () => {
+    await putSourceFiles(rec);
+    await putSourceFiles({ ...rec, url: "https://elsewhere.test/", fetchedAt: "2026-09-14T00:00:00.000Z", files: { "meta.yaml": "version: 2" } });
+    await putSourceFiles({ ...rec, gameSystemId: "wh40k-10e" });
+    expect(await db.sourceFiles.toArray()).toHaveLength(2);
+    expect((await readSourceFiles("wh40k-11e", "mfm-yaml"))!.url).toBe("https://elsewhere.test/");
+    expect((await readSourceFiles("wh40k-10e", "mfm-yaml"))!.url).toBe("https://mfm.test/");
+  });
+
+  it("is absent when a source has never been fetched, or has no files", async () => {
+    expect(await readSourceFiles("wh40k-11e", "bsdata-json")).toBeUndefined();
+    await putSourceFiles({ ...rec, adapter: "bsdata-json", files: {} });
+    expect(await readSourceFiles("wh40k-11e", "bsdata-json")).toBeUndefined();
+  });
+
+  it("keeps nothing when the browser is out of room", async () => {
+    // The snapshot is already stored by the time this is written, so a refusal costs the next fetch
+    // a download rather than costing the import.
+    const quota = Object.assign(new Error("quota"), { name: "QuotaExceededError" });
+    vi.spyOn(db.sourceFiles, "put").mockRejectedValueOnce(quota);
+    expect(await putSourceFiles(rec)).toBe(false);
+    expect(await readSourceFiles("wh40k-11e", "mfm-yaml")).toBeUndefined();
+  });
+});
+
 describe("the backup bundle", () => {
-  it("carries every store but the one the app works out again", async () => {
+  it("carries every store but the ones the app can produce again", async () => {
+    // `publishedResolved` is worked out from the lists and the snapshot. `sourceFiles` holds the
+    // downloads the snapshots were built from, which are larger than everything else here.
+    const derived = ["publishedResolved", "sourceFiles"];
     const bundle = await exportAll();
     const carried = Object.keys(bundle.stores).sort();
     const stored = db.tables.map((t) => t.name).sort();
-    expect(stored.filter((name) => name !== "publishedResolved")).toEqual(carried);
+    expect(stored.filter((name) => !derived.includes(name))).toEqual(carried);
   });
 
   it("brings recorded games and army history back", async () => {

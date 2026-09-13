@@ -161,6 +161,38 @@ export interface CollectionEntryRecord {
   updatedAt: string;
 }
 
+/**
+ * The files one source was last downloaded as.
+ *
+ * Fetching a single source has to produce the same snapshot as fetching all of them, and the only
+ * way to get every field from the source that owns it is to merge all the sources together. A
+ * snapshot records which sources built it but not which of them supplied each field, so it cannot
+ * stand in for the sources that are not being fetched. Keeping their files here means the merge can
+ * run over all three every time.
+ *
+ * Where the files came from and when is recorded alongside. That is what says whether these are the
+ * files a given snapshot was built from. A record whose `fetchedAt` and `url` match a snapshot's
+ * entry for that source is the download that snapshot came out of.
+ *
+ * The store holds one record per source per game system and replaces it on every fetch, so it stays
+ * a handful of records. It is left out of a backup. The files can be downloaded again, and they are
+ * several times the size of everything else put together.
+ */
+export interface SourceFilesRecord {
+  /** `${gameSystemId}|${adapter}` */
+  key: string;
+  gameSystemId: string;
+  adapter: string;
+  /** File name, as the adapter expects it, to file content. */
+  files: Record<string, string>;
+  url: string;
+  ref?: string;
+  /** The timestamp the parse was stamped with, which is what a snapshot's source list records. */
+  fetchedAt: string;
+}
+
+export const sourceFilesKey = (gameSystemId: string, adapter: string): string => `${gameSystemId}|${adapter}`;
+
 export type { OverrideRecord } from "./lib/overrides";
 export { overrideKey } from "./lib/overrides";
 
@@ -178,6 +210,7 @@ export class GrimstatDb extends Dexie {
   games!: Table<GameRecord, string>;
   unitPresets!: Table<UnitPresetRecord, string>;
   collection!: Table<CollectionEntryRecord, string>;
+  sourceFiles!: Table<SourceFilesRecord, string>;
 
   constructor(name = "grimstat") {
     super(name);
@@ -316,6 +349,23 @@ export class GrimstatDb extends Dexie {
       unitPresets: "id, name, factionId, updatedAt",
       collection: "id, factionId, updatedAt",
     });
+    // v11: the files each source was last downloaded as, so fetching one does not download the rest.
+    this.version(11).stores({
+      snapshots: "id, gameSystemId, updatedAt",
+      scenarios: "id, name, updatedAt, snapshotId",
+      layouts: "id",
+      settings: "key",
+      rosters: "id, name, factionId, snapshotId, updatedAt",
+      rosterVersions: "id, rosterId, updatedAt",
+      overrides: "&key, entity, id, updatedAt",
+      terrainLayouts: "id, name, updatedAt",
+      publishedLists: "id, faction, placing, importedAt",
+      publishedResolved: "&key, snapshotId, recordId",
+      games: "id, rosterId, updatedAt",
+      unitPresets: "id, name, factionId, updatedAt",
+      collection: "id, factionId, updatedAt",
+      sourceFiles: "key, gameSystemId, adapter",
+    });
   }
 }
 
@@ -328,6 +378,36 @@ export async function getSetting<T>(key: string): Promise<T | undefined> {
 
 export async function setSetting(key: string, value: unknown): Promise<void> {
   await db.settings.put({ key, value });
+}
+
+/** The files a source was last downloaded as, or nothing when it has not been fetched on this machine. */
+export async function readSourceFiles(gameSystemId: string, adapter: string): Promise<SourceFilesRecord | undefined> {
+  const rec = await db.sourceFiles.get(sourceFilesKey(gameSystemId, adapter));
+  // A record written by a half-finished write, or edited by hand in a backup, is treated as absent.
+  if (!rec || !rec.files || typeof rec.files !== "object" || !Object.keys(rec.files).length) return undefined;
+  return rec;
+}
+
+/**
+ * Keep the files a fetch came back with, replacing whatever that source held before.
+ *
+ * The browser refuses a write once its quota is full. Keeping the files only saves work on the next
+ * fetch, so a refusal leaves that source with nothing kept and the import carries on. The next fetch
+ * of that source downloads what it needs.
+ */
+export async function putSourceFiles(rec: Omit<SourceFilesRecord, "key">): Promise<boolean> {
+  const full: SourceFilesRecord = { ...rec, key: sourceFilesKey(rec.gameSystemId, rec.adapter) };
+  try {
+    await db.sourceFiles.put(full);
+    return true;
+  } catch {
+    try {
+      await db.sourceFiles.delete(full.key);
+    } catch {
+      /* nothing more to try */
+    }
+    return false;
+  }
 }
 
 /**
@@ -435,6 +515,8 @@ export interface ExportBundle {
     games?: GameRecord[];
     /** Added with db v10; absent in older bundles. */
     rosterVersions?: RosterVersionRecord[];
+    // `sourceFiles` is left out on purpose. It holds the downloads the snapshots were built from,
+    // which are larger than everything else here and can be downloaded again.
     // `publishedResolved` is left out on purpose. It is worked out again from the lists and the
     // active snapshot, so carrying it would only make a backup bigger.
   };
