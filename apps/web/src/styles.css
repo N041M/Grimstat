@@ -1016,9 +1016,17 @@ code,
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.6rem;
 }
-/* Two columns that fold to one on the container's width — for panels the user can resize. */
+/*
+ * Two columns that fold to one on the container's width — for panels the user can resize.
+ *
+ * Used by What if, whose rows are a name, a bar and a number. 190px let the pair stay side by side
+ * until each column was a third of that, by which point nine of the twenty-six names were cut to
+ * "Re-roll all faile…" — the column folded long after it had stopped being readable. Measured, the
+ * names all fit at a 400px column and the first is clipped at 372px, so folding at 400px hands the
+ * single column the full width at the moment two columns stop working.
+ */
 .grid-2.grid-fold {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
 }
 @media (max-width: 899px) {
   .grid-2 {
