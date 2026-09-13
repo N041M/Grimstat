@@ -198,7 +198,7 @@ export function numOrNull(v: string): number | null {
 
 // ---------- icons (16px line icons, currentColor) ----------
 
-export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn";
+export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse";
 
 const PATHS: Record<IconName, ReactNode> = {
   export: (
@@ -263,6 +263,24 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M8 2.5 14 13H2z" />
       <path d="M8 6.5v3M8 11.2v.3" />
+    </>
+  ),
+  /* Four corners opening outwards, and the same four closing inwards: what a video player and a
+     map both use for full screen, so it needs no label to be understood. */
+  expand: (
+    <>
+      <path d="M6 2H2v4" />
+      <path d="M10 2h4v4" />
+      <path d="M6 14H2v-4" />
+      <path d="M10 14h4v-4" />
+    </>
+  ),
+  collapse: (
+    <>
+      <path d="M2 6h4V2" />
+      <path d="M14 6h-4V2" />
+      <path d="M2 10h4v4" />
+      <path d="M14 10h-4v4" />
     </>
   ),
 };

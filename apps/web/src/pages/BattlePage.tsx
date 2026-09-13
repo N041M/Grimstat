@@ -14,7 +14,7 @@ import { db } from "../db";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
 import { canRedo, canUndo, canUndoUnits, editorReducer, initialEditor } from "../lib/battleEditor";
-import { Badge, Tabs, useConfirm, useEdgeFade } from "../components/ui";
+import { Badge, Icon, Tabs, useConfirm, useEdgeFade } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
 import { silhouetteFor, type SilhouetteId } from "../lib/silhouettes";
 import {
@@ -998,14 +998,14 @@ export function BattlePage() {
             <button type="button" className="ghost sm" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre.title")}>
               {t("battle.recentre")}
             </button>
-            {/* The way in and the way out are the same control, and it is over the table, which is
-                the one thing focus keeps on screen. */}
-            {compact ? (
-              <button type="button" className={`sm ${focused ? "" : "ghost"}`.trim()} aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")}>
-                {t(focused ? "battle.focus.off" : "battle.focus.on")}
-              </button>
-            ) : null}
           </div>
+          {/* Where a video player and a map both put it: the far corner of the picture, on its own,
+              clear of the row of controls. The way in and the way out are the same button. */}
+          {compact && webgl ? (
+            <button type="button" className="battle-fullscreen" aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")} aria-label={t(focused ? "battle.focus.off" : "battle.focus.on")}>
+              <Icon name={focused ? "collapse" : "expand"} />
+            </button>
+          ) : null}
           {webgl ? (
             <ErrorBoundary compact resetKey={layout.id}>
               <Suspense fallback={<p className="muted battle-loading">{t("battle.loading")}</p>}>
