@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import type { UnitCost } from "@grimstat/resolver";
 import { groupBounds, hasWargear, isCharacterSheet, modelCountOf, toggleWargear, unitDisplayName, weaponBaseNames, type ModelGroup } from "../../lib/roster";
@@ -32,9 +32,27 @@ function GroupEditor({ group, profileName, bounds, items, onChange }: { group: M
   const [other, setOther] = useState("");
   const known = new Set(items.map((i) => i.name.toLowerCase()));
   const extras = group.wargear.filter((w) => !known.has(w.toLowerCase()));
+  /*
+   * The count field holds what is typed and commits it when the box is left or Enter is pressed.
+   *
+   * Clamping each keystroke against the unit's smallest legal size rejected the first digit of any
+   * larger number, and a rejected keystroke changed nothing, so React re-rendered nothing and the
+   * box went on showing a figure the unit did not have. Selecting the 5 of a five-model squad and
+   * typing 1 left the field reading 1 beside five models.
+   */
+  const [text, setText] = useState(String(group.count));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setText(String(group.count));
+  }, [group.count, editing]);
   const setCount = (raw: number) => {
     const n = Math.min(bounds.max ?? Number.POSITIVE_INFINITY, Math.max(bounds.min, Math.floor(raw) || bounds.min));
+    setText(String(n));
     if (n !== group.count) onChange({ ...group, count: n });
+  };
+  const commitCount = () => {
+    const n = Number(text);
+    setCount(text.trim() === "" || !Number.isFinite(n) ? group.count : n);
   };
   const addOther = () => {
     const v = other.trim();
@@ -56,7 +74,23 @@ function GroupEditor({ group, profileName, bounds, items, onChange }: { group: M
           <button type="button" className="sm" onClick={() => setCount(group.count - 1)} disabled={fixed || group.count <= bounds.min} aria-label={t("roster.inspector.fewer")}>
             −
           </button>
-          <input type="number" min={bounds.min} max={bounds.max} value={group.count} readOnly={fixed} aria-label={t("roster.inspector.count", { name: profileName })} onChange={(e) => setCount(Number(e.target.value))} />
+          <input
+            type="number"
+            min={bounds.min}
+            max={bounds.max}
+            value={text}
+            readOnly={fixed}
+            aria-label={t("roster.inspector.count", { name: profileName })}
+            onFocus={() => setEditing(true)}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={() => {
+              commitCount();
+              setEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitCount();
+            }}
+          />
           <button type="button" className="sm" onClick={() => setCount(group.count + 1)} disabled={fixed || (bounds.max !== undefined && group.count >= bounds.max)} aria-label={t("roster.inspector.more")}>
             +
           </button>

@@ -40,7 +40,7 @@ export function SummaryTiles({ result, running, pinned }: WidgetProps) {
         <div className="hero-value-row">
           <span className="hero-value">{now ? fmt(now.expectedDamage, 1) : dash}</span>
           {/* The exact backend has no confidence interval; the backend and timing live in the dock. */}
-          <span className="hero-ci">{result?.ciHalfWidth !== undefined ? t("hero.ci", { v: fmt(result.ciHalfWidth, 2) }) : result ? "" : running ? t("results.running") : t("hero.noResult")}</span>
+          <span className="hero-ci" {...(result?.ciHalfWidth !== undefined ? { title: t("hero.ci.title", { v: fmt(result.ciHalfWidth, 2) }) } : {})}>{result?.ciHalfWidth !== undefined ? t("hero.ci", { v: fmt(result.ciHalfWidth, 2) }) : result ? "" : running ? t("results.running") : t("hero.noResult")}</span>
         </div>
         {heroDelta !== undefined ? (
           <div className="hero-delta mono" title={t("hero.pinDelta.title")}>

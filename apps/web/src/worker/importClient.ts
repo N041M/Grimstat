@@ -9,6 +9,19 @@ export class ImportCancelledError extends Error {
   }
 }
 
+/** What a run in flight rejects with when the worker itself fails to load or to answer. */
+export class ImportFailedError extends Error {
+  override readonly name = "ImportFailedError";
+  constructor(options?: ErrorOptions) {
+    super("The import stopped. Try again.", options);
+  }
+}
+
+/** What the browser said about a worker that failed. */
+function failureDetail(e: Event): string {
+  return "message" in e && typeof e.message === "string" && e.message ? e.message : e.type;
+}
+
 /**
  * Owns the import Web Worker. One run at a time; `cancel()` terminates the worker outright (the only
  * way to interrupt a synchronous parse) and rejects the pending run with ImportCancelledError. The
@@ -22,10 +35,28 @@ export class ImportClient {
 
   private ensure(): Comlink.Remote<ImportWorkerApi> {
     if (!this.proxy) {
-      this.worker = new Worker(new URL("./import.worker.ts", import.meta.url), { type: "module", name: "grimstat-import" });
-      this.proxy = Comlink.wrap<ImportWorkerApi>(this.worker);
+      const worker = new Worker(new URL("./import.worker.ts", import.meta.url), { type: "module", name: "grimstat-import" });
+      // A worker that fails to load or throws on its own never answers, so the run waiting on it is
+      // rejected here. The listener ignores a worker this client has already replaced.
+      const failed = (e: Event): void => {
+        if (this.worker === worker) this.stop(new ImportFailedError({ cause: failureDetail(e) }));
+      };
+      worker.addEventListener("error", failed);
+      worker.addEventListener("messageerror", failed);
+      this.worker = worker;
+      this.proxy = Comlink.wrap<ImportWorkerApi>(worker);
     }
     return this.proxy;
+  }
+
+  /** Drop the worker and reject the run in flight, if there is one. */
+  private stop(e: Error): void {
+    const p = this.pending;
+    this.pending = undefined;
+    this.respawn();
+    if (!p) return;
+    p.reject(e);
+    this.announce();
   }
 
   private respawn(): void {
@@ -78,12 +109,8 @@ export class ImportClient {
   }
 
   cancel(): void {
-    const p = this.pending;
-    if (!p) return;
-    this.pending = undefined;
-    this.respawn();
-    p.reject(new ImportCancelledError());
-    this.announce();
+    if (!this.pending) return;
+    this.stop(new ImportCancelledError());
   }
 
   dispose(): void {

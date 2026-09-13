@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import type { Scenario, Snapshot } from "@grimstat/schema";
 import { db, getSetting, setSetting } from "../db";
 import { useApp } from "../state/AppContext";
 import { isStoredEntry, resolveStored, toStored, type StoredUnitEntry, type UnitEntry, type UnitSetDescriptor } from "../lib/unitSet";
+import { pendingWrite } from "./usePersistedSetting";
 import { t } from "../i18n";
-
-const WRITE_DEBOUNCE_MS = 250;
 
 /**
  * Every hook on the same key mirrors the same set, so editing the Matrix's attackers also updates
@@ -74,7 +73,7 @@ export function useUnitSet(key: string): UnitSetState {
   const { snapshot, scenario, withOverrides } = useApp();
   const [entries, setEntriesState] = useState<UnitEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const timer = useRef<number | undefined>(undefined);
+  const writer = useMemo(() => pendingWrite<UnitEntry[]>((k, v) => setSetting(k, toStored(v))), []);
   const instance = useRef(0);
   if (!instance.current) instance.current = nextInstanceId++;
   const envRef = useRef<UnitSetEnv>({ snapshot, scenario, withOverrides });
@@ -116,12 +115,26 @@ export function useUnitSet(key: string): UnitSetState {
     };
   }, [key]);
 
+  // No cleanup here: the next change restarts the wait by itself, and a set still waiting has to
+  // survive an unmount for the effect below to write it. Each Analyses tab is a component of its
+  // own, so switching tab unmounts the set that was just edited.
   useEffect(() => {
-    if (!loaded) return;
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => void setSetting(key, toStored(entries)).catch(() => undefined), WRITE_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer.current);
-  }, [entries, loaded, key]);
+    if (!loaded) {
+      writer.cancel();
+      return;
+    }
+    writer.schedule(key, entries);
+  }, [entries, loaded, key, writer]);
+
+  // Save on unmount / page hide so a quick navigation never loses the last edit.
+  useEffect(() => {
+    const onHide = () => void writer.flush();
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      void writer.flush();
+    };
+  }, [writer]);
 
   const setEntries = useCallback(
     (next: SetStateAction<UnitEntry[]>) =>

@@ -16,7 +16,7 @@ export function run(input: EngineInput): EngineOutput {
   if (input.backend === "mc") return runMonteCarlo(input);
   const exact = runExact(input);
   if (exact) return exact;
-  if (input.backend === "exact") throw new Error("Exact backend refused: state space too large");
+  if (input.backend === "exact") throw new Error("Exact backend refused: this target is too large to solve exactly");
   const mc = runMonteCarlo(input);
   mc.warnings.push("Exact computation infeasible for this target; used Monte Carlo.");
   return mc;

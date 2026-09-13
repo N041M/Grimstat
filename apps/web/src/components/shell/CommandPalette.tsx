@@ -12,7 +12,7 @@ import { buildGroups, flattenGroups, stepIndex, type PaletteGroupId, type Palett
 import { trapTab } from "../ui";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { RAIL_ENTRIES } from "./IconRail";
-import { requestNew } from "./ContextColumn";
+import { mayReplaceScenario, requestNew } from "./ContextColumn";
 import { t } from "../../i18n";
 
 /** Scenarios, armies and units are long lists; the palette shows the most recent / first few. */
@@ -71,7 +71,7 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
     setQuery("");
     setActive(0);
     let alive = true;
-    const byRecent = <T extends { updatedAt: string }>(all: T[]) => all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, 40);
+    const byRecent = <T extends { updatedAt: string }>(all: T[]) => all.sort((a, b) => (a.updatedAt === b.updatedAt ? 0 : a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, 40);
     void db.scenarios
       .toArray()
       .then((all) => {
@@ -116,7 +116,11 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
         hint: dmg === undefined ? fmtRelative(s.updatedAt) : t("palette.dmgHint", { v: fmt(dmg, 1) }),
         run: () => {
           close();
-          void replaceScenario(s, s.snapshotId).then(() => navigate("calculator"));
+          void mayReplaceScenario().then(async (ok) => {
+            if (!ok) return;
+            await replaceScenario(s, s.snapshotId);
+            navigate("calculator");
+          });
         },
       });
     }
@@ -162,7 +166,11 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
       label: t("palette.newScenario"),
       run: () => {
         close();
-        void replaceScenario(newScenario()).then(() => navigate("calculator"));
+        void mayReplaceScenario().then(async (ok) => {
+          if (!ok) return;
+          await replaceScenario(newScenario({}, { snapshot }));
+          navigate("calculator");
+        });
       },
     });
     out.push({
@@ -256,6 +264,9 @@ export function CommandPalette({ theme }: { theme: ReturnType<typeof useTheme> }
       if (panelRef.current) trapTab(e, panelRef.current);
     } else if (e.key === "Escape") {
       e.preventDefault();
+      // The palette is the layer on top, so Escape closes it and goes no further. Without this the
+      // same keypress also reached the screen behind it and closed whatever it had open.
+      e.stopPropagation();
       close();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();

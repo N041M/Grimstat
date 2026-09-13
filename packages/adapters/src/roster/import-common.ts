@@ -276,6 +276,14 @@ export function profileGroups(ds: Datasheet, total: number): RosterUnit["models"
   return out;
 }
 
+/**
+ * Most copies of one item a single model is written out with. Every copy becomes its own entry in the
+ * model group, so a count taken straight from the file decides how much memory the import takes. No model
+ * in the game carries twenty of anything, so a higher count means the line was mis-read or the file is
+ * not a real one.
+ */
+export const MAX_COPIES = 20;
+
 /** A wargear entry as a list dialect writes it: how many models carry it and how many copies each carrier has. */
 export interface WargearItem {
   name: string;

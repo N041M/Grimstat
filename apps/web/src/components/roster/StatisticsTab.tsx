@@ -42,8 +42,8 @@ const TARGET_KEY: Record<StatTargetId, I18nKey> = {
 
 /** Role | Units | Models | Points | Share of the list (bar + %). */
 const ROLE_COLUMNS = "minmax(140px,1.6fr) 74px 78px 82px minmax(120px,1.2fr)";
-/** Target | bar | damage | per 100 pts. */
-const OUTPUT_COLUMNS = "minmax(120px,1fr) minmax(80px,2fr) 92px 92px";
+/** Target | share of it removed (bar + %) | damage | per 100 pts. */
+const OUTPUT_COLUMNS = "minmax(120px,1fr) minmax(120px,1.8fr) 92px 92px";
 /** Unit | Points | Models | Wounds | OC | damage per 100 pts | Effective wounds | Trade | Durability. */
 const UNIT_COLUMNS = "minmax(100px,2.4fr) 54px 52px 56px 40px 76px 54px 52px 82px";
 /** Attacker points | bar | wounds lost | models lost. */
@@ -80,6 +80,16 @@ function Pending({ n }: { n: number }) {
   return (
     <span className="stat-pending" role="status" aria-live="polite">
       {tn(n, "roster.stats.solving.one", "roster.stats.solving.many")}
+    </span>
+  );
+}
+
+/** The same quiet status for the one run that measures the whole army at once. */
+function PendingOutput({ busy }: { busy: boolean }) {
+  if (!busy) return null;
+  return (
+    <span className="stat-pending" role="status" aria-live="polite">
+      {t("roster.stats.solvingOutput")}
     </span>
   );
 }
@@ -169,32 +179,38 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
     () =>
       composition.rows.map((r) => {
         const s = solve.get(r.id);
+        const destroyed = s?.pointsSlain[target];
         return {
           ...r,
           damagePer100: s && r.points > 0 ? (s.damage[target] / r.points) * 100 : undefined,
           durability: s?.pointsToRemove,
           effectiveWounds: s?.effectiveWounds,
-          // Enemy points destroyed per point spent. Nothing to divide without a points value, and
-          // nothing to report at all for a unit with no weapons switched on, so the cell shows a dash rather than a zero.
-          trade: s?.armed && r.points > 0 ? s.pointsSlain[target] / r.points : undefined,
+          // Enemy points destroyed per point spent. Nothing to divide without a points value on
+          // either side, and nothing to report at all for a unit with no weapons switched on, so the
+          // cell shows a dash rather than a zero.
+          trade: s?.armed && r.points > 0 && destroyed !== undefined ? destroyed / r.points : undefined,
         };
       }),
     [composition.rows, solve, target],
   );
   const sorted = useMemo(() => sortStatRows(rows, sort), [rows, sort]);
 
-  /** Army-wide expected damage per target archetype, summed from the same runs the table uses. */
-  const output = useMemo(() => {
-    const out = STAT_TARGET_IDS.map((id) => {
-      let total = 0;
-      for (const r of composition.rows) total += solve.get(r.id)?.damage[id] ?? 0;
-      return { id, total, per100: composition.points > 0 ? (total / composition.points) * 100 : 0 };
-    });
-    // The bar encodes damage per point rather than the raw total, because per-point output is the figure
-    // that decides a list and the eye follows the bar rather than the number beside it. Both are shown.
-    const max = Math.max(...out.map((o) => o.per100), 0);
-    return out.map((o) => ({ ...o, fraction: max > 0 ? o.per100 / max : 0 }));
-  }, [composition.rows, composition.points, solve]);
+  /**
+   * What the whole army takes off one of each target archetype, from the joint run.
+   *
+   * The bar reads the share of the target removed rather than damage per point. Damage is now held
+   * to what the target carries, so a per-point bar would rank the archetypes by how much there is
+   * to shoot at. The share answers the question the section is asked instead. It says whether the
+   * list can clear one of these in a round.
+   */
+  const output = useMemo(
+    () =>
+      STAT_TARGET_IDS.map((id) => {
+        const o = solve.output(id);
+        return { id, damage: o?.damage, removed: o?.removed ?? 0, per100: o && composition.points > 0 ? (o.damage / composition.points) * 100 : undefined };
+      }),
+    [composition.points, solve],
+  );
 
   /** Points of shooting the army absorbs, plus its two extremes. */
   const durability = useMemo(() => {
@@ -222,20 +238,11 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
     return seen > 0 ? total : undefined;
   }, [rows]);
 
-  /** Points destroyed per point spent, weighted by what each unit costs. */
+  /** Enemy points the army destroys against the chosen target, against what the whole list costs. */
   const trade = useMemo(() => {
-    let destroyed = 0;
-    let spent = 0;
-    let seen = 0;
-    for (const r of rows) {
-      const s = solve.get(r.id);
-      if (!s || !s.armed || r.points <= 0) continue;
-      destroyed += s.pointsSlain[target];
-      spent += r.points;
-      seen++;
-    }
-    return { destroyed: seen > 0 ? destroyed : undefined, ratio: spent > 0 ? destroyed / spent : undefined };
-  }, [rows, solve, target]);
+    const destroyed = solve.output(target)?.pointsSlain;
+    return { destroyed, ratio: destroyed !== undefined && composition.points > 0 ? destroyed / composition.points : undefined };
+  }, [composition.points, solve, target]);
 
   /** The casualty curve, built only from the units the worker has measured. */
   const casualty = useMemo(() => {
@@ -336,11 +343,11 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
       </Section>
 
       {/* ---------- 2. Output ---------- */}
-      <Section title={t("roster.stats.output")} aside={<Pending n={solve.pending} />} note={t("roster.stats.output.note")}>
+      <Section title={t("roster.stats.output")} aside={<PendingOutput busy={solve.pendingOutput} />} note={t("roster.stats.output.note")}>
         <GridTable columns={OUTPUT_COLUMNS} label={t("roster.stats.output.aria")} className="stat-table">
           <GridHead>
             <GridHeadCell>{t("roster.stats.col.target")}</GridHeadCell>
-            <GridHeadCell>{t("roster.stats.col.relativePer100")}</GridHeadCell>
+            <GridHeadCell>{t("roster.stats.col.removed")}</GridHeadCell>
             <GridHeadCell align="end">{t("roster.stats.col.damage")}</GridHeadCell>
             <GridHeadCell align="end">{t("roster.stats.col.damagePer100")}</GridHeadCell>
           </GridHead>
@@ -348,13 +355,16 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
             <GridRow key={o.id} className="stat-row static" title={TARGET_DETAIL[o.id]}>
               <GridCell>{t(TARGET_KEY[o.id])}</GridCell>
               <GridCell>
-                <ProportionBar value={o.fraction} tone="ink" height={8} title={`${fmt(o.per100, 2)} ${t("roster.stats.col.damagePer100Short")}`} />
+                <span className="stat-share">
+                  <ProportionBar value={o.removed} tone="ink" height={8} title={pct(o.removed, 0)} />
+                  <span className="stat-share-pct">{o.damage === undefined ? "—" : pct(o.removed, 0)}</span>
+                </span>
               </GridCell>
-              <GridCell align="end" mono>
-                {fmt(o.total, 1)}
+              <GridCell align="end" mono tone={o.damage === undefined ? "faint" : "ink"}>
+                {num(o.damage, 1)}
               </GridCell>
-              <GridCell align="end" mono tone="muted">
-                {fmt(o.per100, 2)}
+              <GridCell align="end" mono tone={o.per100 === undefined ? "faint" : "muted"}>
+                {num(o.per100)}
               </GridCell>
             </GridRow>
           ))}
@@ -459,8 +469,8 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
               <GridCell tone={sat?.cheapestNames.length ? "ink" : "faint"} className="stat-combo">
                 <span title={sat?.cheapestNames.join(" + ")}>{sat?.cheapestNames.length ? sat.cheapestNames.join(" + ") : "—"}</span>
               </GridCell>
-              <GridCell align="end" mono tone={sat?.cheapestPoints === undefined ? "faint" : "muted"}>
-                {sat?.cheapestPoints === undefined ? "—" : fmtInt(sat.cheapestPoints)}
+              <GridCell align="end" mono tone={Number.isFinite(sat?.cheapestPoints) ? "muted" : "faint"}>
+                {Number.isFinite(sat?.cheapestPoints) ? fmtInt(sat?.cheapestPoints) : "—"}
               </GridCell>
             </GridRow>
           ))}
@@ -479,7 +489,7 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
         }
       >
         <div className="stat-tiles">
-          <Tile label={t("roster.stats.metric.trade")} value={num(trade.ratio)} title={t("roster.stats.trade.caption")} />
+          <Tile label={t("roster.stats.metric.trade")} value={num(trade.ratio)} title={t("roster.stats.metric.tradeTitle", { target: t(TARGET_KEY[target]) })} />
           <Tile label={t("roster.stats.metric.destroyed")} value={trade.destroyed === undefined ? "—" : fmt(trade.destroyed, 1)} title={t("roster.stats.metric.destroyedTitle", { target: t(TARGET_KEY[target]) })} />
         </div>
         <div onKeyDown={onKey}>

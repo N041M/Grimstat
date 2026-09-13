@@ -106,6 +106,12 @@ export function parsePipeCsv(text: string, opts: PipeCsvOptions = {}): PipeCsvRe
   }
 
   const header = (records.shift() ?? []).map((h) => h.trim());
+  const headerCounts = new Map<string, number>();
+  for (const h of header) headerCounts.set(h, (headerCounts.get(h) ?? 0) + 1);
+  for (const [h, count] of headerCounts) if (count > 1) warnings.push(`header: column "${h}" appears ${count} times, only the last one is read`);
+  // Assigning to `__proto__` on a plain object replaces the prototype instead of adding a field, so a
+  // column by that name never reaches the rows.
+  if (headerCounts.has("__proto__")) warnings.push(`header: column "__proto__" cannot be stored and is dropped`);
   const rows: Record<string, string>[] = [];
   records.forEach((rec, idx) => {
     if (rec.length !== header.length) {

@@ -27,6 +27,8 @@ export interface EditorState {
   readonly future: readonly TerrainLayout[];
   /** The units as they stood before each recorded unit action, oldest first. */
   readonly unitsPast: readonly (readonly BattleUnit[])[];
+  /** The drag in progress has already recorded its step, so the rest of it refines that one. */
+  readonly dragged: boolean;
 }
 
 export type EditorAction =
@@ -40,10 +42,17 @@ export type EditorAction =
   /** Put the units back as they stood before the last recorded unit action. */
   | { type: "undoUnits" }
   /**
-   * An edit to the terrain. Recorded unless told otherwise — a drag records its first move and not
-   * the hundreds that follow, so one gesture is one step back.
+   * An edit to the terrain. Recorded unless told otherwise.
+   *
+   * `record: "drag"` is one frame of a gesture. The step is recorded on the first frame that
+   * actually changes the layout and the hundreds after it refine that step, so one gesture is one
+   * step back. Which frame that is can only be decided here. With snapping on, the opening frames
+   * of a careful drag ask for the piece's own position back and change nothing at all, so a caller
+   * that claimed the step on the first frame it sent would leave the whole drag unrecorded.
    */
-  | { type: "layout"; change: (layout: TerrainLayout) => TerrainLayout; record?: boolean }
+  | { type: "layout"; change: (layout: TerrainLayout) => TerrainLayout; record?: boolean | "drag" }
+  /** The drag is over. The next one records a step of its own. */
+  | { type: "endDrag" }
   /**
    * The layout as the library just stored it: same table, possibly a new id or name. Not an edit, so
    * not recorded — and not a fork, even when the table was a shipped layout a moment ago. The
@@ -62,7 +71,7 @@ export const UNIT_HISTORY_CAP = 30;
 /** What a shipped layout is called once it has been touched. The copy is the user's to rename. */
 export const FORK_SUFFIX = " (edited)";
 
-export const initialEditor = (battle: BattleState): EditorState => ({ battle, past: [], future: [], unitsPast: [] });
+export const initialEditor = (battle: BattleState): EditorState => ({ battle, past: [], future: [], unitsPast: [], dragged: false });
 
 export const canUndo = (s: EditorState): boolean => s.past.length > 0;
 export const canRedo = (s: EditorState): boolean => s.future.length > 0;
@@ -97,9 +106,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       // so the four that come with the app stay as a place to start from.
       const layout = isBuiltIn(current.id) ? copyLayout(next, `${next.name}${FORK_SUFFIX}`) : next;
       const battle = withLayout(state.battle, layout);
-      if (action.record === false) return { ...state, battle };
-      return { ...state, battle, past: push(state.past, current), future: [] };
+      const dragging = action.record === "drag";
+      const record = dragging ? !state.dragged : action.record !== false;
+      if (!record) return { ...state, battle };
+      return { ...state, battle, past: push(state.past, current), future: [], dragged: dragging };
     }
+
+    case "endDrag":
+      return state.dragged ? { ...state, dragged: false } : state;
 
     case "adopt": {
       const same = action.layout.id === state.battle.layout.id;

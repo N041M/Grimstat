@@ -137,9 +137,90 @@ describe("bsdata-json adapter (synthetic fixture)", () => {
     expect(staging.unresolvedLinks[0]).toMatchObject({ name: "Some Missing Allies" });
   });
 
+  it("skips rows without a name and reads the rest of the catalogue", () => {
+    const char = (name: string, text: string) => ({ name, $text: text });
+    const unit = {
+      name: "Bramble Host",
+      id: "se-bramble-host",
+      type: "unit",
+      profiles: [
+        { id: "p-nameless", typeName: "Unit", characteristics: [char("T", "4"), char("Sv", "5+"), char("W", "1")] },
+        { id: "p-bramble", name: "Bramble", typeName: "Unit", characteristics: [char("M", '6"'), char("T", "4"), char("Sv", "5+"), char("W", "1"), char("LD", "7+"), char("OC", "1")] },
+      ],
+      rules: [{ id: "r-nameless", description: "no name" }, { id: "r-thorns", name: "Thorns", description: "Hurts." }],
+    };
+    const detachment = {
+      name: "Detachment",
+      id: "se-detachments",
+      type: "upgrade",
+      selectionEntries: [{ name: "Bramble Tide", id: "se-bramble-tide", type: "upgrade", costs: [{ typeId: "ct-dp", value: 2 }], rules: [{ id: "r-det-nameless", description: "no name" }] }],
+    };
+    const cat = {
+      catalogue: {
+        name: "Xenos - Bramble Court",
+        id: "cat-bramble",
+        costTypes: [{ id: "ct-pts", name: "pts" }, { id: "ct-nameless" }, { id: "ct-dp", name: "Detachment Points" }],
+        selectionEntries: [unit, detachment],
+      },
+    };
+    const r = parse({ "Xenos - Bramble Court.json": JSON.stringify(cat) });
+    expect(r.datasheets!.map((d) => d.name)).toEqual(["Bramble Host"]);
+    expect(r.datasheets![0]!.models!.map((m) => m.name)).toEqual(["Bramble"]);
+    expect(r.abilities!.map((a) => a.name)).toEqual(["Thorns"]);
+    expect(r.detachments!.map((d) => `${d.name}:${d.dp}`)).toEqual(["Bramble Tide:2"]);
+    expect(r.detachments![0]!.ruleAbilityIds).toEqual([]);
+    expect(r.warnings).toContain("Xenos - Bramble Court.json: cost type without a name, ignored");
+    expect(r.warnings).toContain("profile without a name (skipped): Bramble Host");
+    expect(r.warnings).toContain("rule without a name (skipped): Bramble Host");
+    expect(r.warnings).toContain("detachment rule without a name (skipped): Bramble Court/Bramble Tide");
+  });
+
   it("ignores non-BSData JSON", () => {
     const r = parse({ "tree.json": '{"sha":"x","tree":[]}', "bad.json": "{" });
     expect(r.warnings).toHaveLength(3);
     expect(r.datasheets).toEqual([]);
+  });
+});
+
+/**
+ * A catalogue of `units` datasheets, each with a unit profile, `abilities` abilities of its own, and
+ * the pair of core abilities the reader has to weigh against each other.
+ */
+function syntheticCatalogue(units: number, abilities: number): Record<string, string> {
+  const entries = [];
+  for (let u = 0; u < units; u++) {
+    const profiles: unknown[] = [
+      { id: `p-u${u}`, name: `Synthetic Unit ${u}`, typeName: "Unit", characteristics: [{ name: "M", $text: '6"' }, { name: "T", $text: "4" }, { name: "Sv", $text: "3+" }, { name: "W", $text: "2" }, { name: "LD", $text: "6+" }, { name: "OC", $text: "2" }] },
+      { id: `p-u${u}-fnp`, name: "Feel No Pain 5+", typeName: "Abilities", characteristics: [{ name: "Description", $text: "Ignore some of it." }] },
+    ];
+    for (let a = 0; a < abilities; a++) profiles.push({ id: `p-u${u}-a${a}`, name: `Ability ${u}-${a}`, typeName: "Abilities", characteristics: [{ name: "Description", $text: "Add 1 to the hit roll." }] });
+    entries.push({
+      name: `Synthetic Unit ${u}`,
+      id: `se-u${u}`,
+      type: "unit",
+      costs: [{ name: "pts", typeId: "ct-pts", value: 100 }],
+      categoryLinks: [{ name: "Faction: Synthetics", id: `cl-u${u}`, targetId: "cat-faction", primary: true }],
+      profiles,
+      rules: [{ id: `r-u${u}`, name: "Feel No Pain", description: "Named without a value." }],
+      constraints: [{ id: `cn-u${u}`, field: "selections", scope: "parent", type: "min", value: 5 }],
+    });
+  }
+  const catalogue = { name: "Xenos - Synthetics", id: "cat-synthetics", costTypes: [{ id: "ct-pts", name: "pts" }], categoryEntries: [{ id: "cat-faction", name: "Faction: Synthetics" }], selectionEntries: entries };
+  return { "Xenos - Synthetics.json": JSON.stringify({ catalogue }) };
+}
+
+describe("a catalogue the size of the shipped snapshot", () => {
+  const out = parse(syntheticCatalogue(1700, 2));
+
+  it("reads every datasheet's own abilities, however many came before it", () => {
+    expect(out.datasheets).toHaveLength(1700);
+    expect(out.abilities!.filter((a) => a.scope === "datasheet")).toHaveLength(1700 * 2);
+    // The last datasheet gets two abilities of its own and the valued core ability. The value-less
+    // one of the same keyword is dropped, which needs every ability emitted so far to be in reach.
+    const last = out.datasheets!.at(-1)!;
+    expect(last.abilityIds).toHaveLength(3);
+    expect(last.abilityIds).toContain("ab:core:feel-no-pain:5");
+    expect(last.abilityIds).toContain("ab:synthetics:synthetic-unit-1699:ability-1699-1");
+    expect(last.abilityIds).not.toContain("ab:core:feel-no-pain");
   });
 });

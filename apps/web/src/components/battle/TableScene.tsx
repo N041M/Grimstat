@@ -3,12 +3,13 @@ import { useThree, type ThreeEvent } from "@react-three/fiber";
 import { BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, EdgesGeometry, EquirectangularReflectionMapping, ExtrudeGeometry, FloatType, PMREMGenerator, RGBAFormat, Shape, ShapeGeometry, Vector3, type DirectionalLight } from "three";
 import type { Aabb2, BoardSize, Objective, TerrainPiece, Vec2, Zone } from "@grimstat/board";
 import { OBJECTIVE_MARKER_RADIUS, OBJECTIVE_RANGE, hasTrait } from "@grimstat/board";
-import { MUSTER_COLOURS, SCENE_COLOURS, SIDE_COLOURS, fromScene, surfaceHeights, terrainAppearance, toScene } from "../../lib/battleScene";
+import { MUSTER_COLOURS, SCENE_COLOURS, SIDE_COLOURS, surfaceHeights, terrainAppearance, toScene } from "../../lib/battleScene";
 import type { Muster } from "../../lib/battle";
+import { pressOf, type Press } from "./press";
 import { useDisposable } from "./useDisposable";
 
-/** A press on something on the table, reported with the board point under the pointer. */
-export type PickHandler = (id: string, at: Vec2) => void;
+/** A press on something on the table, reported so the point can be read at any height. */
+export type PickHandler = (id: string, press: Press) => void;
 
 /**
  * A board polygon as a three.js `Shape`.
@@ -33,12 +34,6 @@ const FLAT: [number, number, number] = [-Math.PI / 2, 0, 0];
 /** Height the shadow camera allows for above the table, so a three-storey ruin still casts. */
 const SHADOW_HEADROOM = 16;
 
-/** The board point under a pointer event. */
-function boardPoint(e: ThreeEvent<PointerEvent>): Vec2 {
-  const p = fromScene(e.point.x, e.point.y, e.point.z);
-  return { x: p.x, y: p.y };
-}
-
 /** Handlers that set the cursor while something interactive is under the pointer. */
 const cursorOn = (cursor: string) => ({
   onPointerOver: (e: ThreeEvent<PointerEvent>) => {
@@ -56,7 +51,7 @@ const cursorOn = (cursor: string) => ({
  * Only presses are reported. A measuring tape takes deliberate picks, and a drag does not go through
  * here at all — it casts against a plane from window events, which has no gaps.
  */
-export const Table = memo(function Table({ size, onDown }: { size: BoardSize; onDown?: (at: Vec2, event: PointerEvent) => void }) {
+export const Table = memo(function Table({ size, onDown }: { size: BoardSize; onDown?: (press: Press) => void }) {
   const edge = useDisposable(() => {
     const flat = new ShapeGeometry(shapeOf([{ x: 0, y: 0 }, { x: size.width, y: 0 }, { x: size.width, y: size.depth }, { x: 0, y: size.depth }]));
     const edges = new EdgesGeometry(flat);
@@ -65,7 +60,7 @@ export const Table = memo(function Table({ size, onDown }: { size: BoardSize; on
   }, [size.width, size.depth]);
   return (
     <group>
-      <mesh receiveShadow rotation={FLAT} position={[size.width / 2, -0.02, -size.depth / 2]} onPointerDown={onDown ? (e) => onDown(boardPoint(e), e.nativeEvent) : undefined}>
+      <mesh receiveShadow rotation={FLAT} position={[size.width / 2, -0.02, -size.depth / 2]} onPointerDown={onDown ? (e) => onDown(pressOf(e)) : undefined}>
         <planeGeometry args={[size.width, size.depth]} />
         <meshStandardMaterial color={SCENE_COLOURS.table} roughness={0.95} />
       </mesh>
@@ -148,7 +143,7 @@ function TableGrid({ size, step = 6 }: { size: BoardSize; step?: number }) {
  * A press is reported the same way the board's is, so putting a unit back is the same gesture as
  * setting it down.
  */
-export const MusterTables = memo(function MusterTables({ musters, onDown }: { musters: readonly Muster[]; onDown?: (at: Vec2, event: PointerEvent) => void }) {
+export const MusterTables = memo(function MusterTables({ musters, onDown }: { musters: readonly Muster[]; onDown?: (press: Press) => void }) {
   return (
     <group>
       {musters.map((m) => (
@@ -161,7 +156,7 @@ export const MusterTables = memo(function MusterTables({ musters, onDown }: { mu
 /** Width of the side-coloured stripe along a muster table's inner edge. */
 const MUSTER_STRIPE = 0.6;
 
-function MusterSlab({ muster, onDown }: { muster: Muster; onDown?: (at: Vec2, event: PointerEvent) => void }) {
+function MusterSlab({ muster, onDown }: { muster: Muster; onDown?: (press: Press) => void }) {
   const { area, side } = muster;
   const width = area.maxX - area.minX;
   const depth = area.maxY - area.minY;
@@ -179,7 +174,7 @@ function MusterSlab({ muster, onDown }: { muster: Muster; onDown?: (at: Vec2, ev
         receiveShadow
         rotation={FLAT}
         position={[(area.minX + area.maxX) / 2, -0.02, -(area.minY + area.maxY) / 2]}
-        onPointerDown={onDown ? (e) => onDown(boardPoint(e), e.nativeEvent) : undefined}
+        onPointerDown={onDown ? (e) => onDown(pressOf(e)) : undefined}
       >
         <planeGeometry args={[width, depth]} />
         <meshStandardMaterial color={MUSTER_COLOURS[side]} roughness={0.95} />
@@ -229,7 +224,7 @@ const TerrainSolid = memo(function TerrainSolid({ piece, selected, onPick }: { p
         ? {
             onPointerDown: (e: ThreeEvent<PointerEvent>) => {
               e.stopPropagation();
-              onPick(piece.id, boardPoint(e));
+              onPick(piece.id, pressOf(e));
             },
             ...cursorOn("grab"),
           }
@@ -316,7 +311,7 @@ const ObjectiveMarker = memo(function ObjectiveMarker({ objective: o, selected, 
         ? {
             onPointerDown: (e: ThreeEvent<PointerEvent>) => {
               e.stopPropagation();
-              onPick(o.id, boardPoint(e));
+              onPick(o.id, pressOf(e));
             },
             ...cursorOn("grab"),
           }

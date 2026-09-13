@@ -230,7 +230,7 @@ function ArmySource({ snapshot, single, onAdd }: { snapshot: Snapshot | undefine
     let alive = true;
     void db.rosters.toArray().then((all) => {
       if (!alive) return;
-      const sorted = all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+      const sorted = all.sort((a, b) => (a.updatedAt === b.updatedAt ? 0 : a.updatedAt < b.updatedAt ? 1 : -1));
       setRosters(sorted);
       setRosterId((cur) => cur || sorted[0]?.id || "");
     });

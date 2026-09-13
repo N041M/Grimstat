@@ -2948,6 +2948,24 @@ table.data .metric-col {
 table.data tr.row-best td {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
+/*
+ * A place held with the rows either side of it, because the run cannot put one of them above
+ * another. The rank reads "=4" and a rule runs down the leading edge of the cell; the rules on
+ * neighbouring rows meet across the row border, so a block of them reads as one place at a glance.
+ * A ranking with nothing tied in it carries no rule and looks exactly as it did.
+ */
+table.data td.rank-tied {
+  position: relative;
+}
+table.data td.rank-tied::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 0;
+  width: 2px;
+  background: var(--mid);
+}
 .hbar-track.signed {
   position: relative;
 }

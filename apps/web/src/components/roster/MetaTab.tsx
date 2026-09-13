@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { Roster, Snapshot } from "@grimstat/schema";
 import { usePublishedField } from "../../hooks/usePublishedField";
 import { closest, detachmentField, dispositionField, fieldRows, peersFor, sideBySide, tallyOf, type DetachmentFilter, type FieldCount, type FieldNote, type PlacingFilter } from "../../lib/meta";
+import { webHref } from "../../lib/publishedLists";
 import { fmt, fmtInt, ordinal } from "../../lib/format";
 import { hrefFor } from "../../router";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead, ProportionBar, SelectBox } from "../kit";
@@ -182,6 +183,7 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
               </GridHead>
               {near.map((n) => {
                 const r = n.peer.record;
+                const href = webHref(r.source.url);
                 return (
                   <GridRow key={r.id} className={`meta-row ${chosen?.peer.record.id === r.id ? "current" : ""}`.trim()} onClick={() => setNearId(r.id)} title={r.heading}>
                     <GridCell className="meta-near">
@@ -201,12 +203,12 @@ export function MetaTab({ roster, snapshot }: { roster: Roster; snapshot: Snapsh
                       {r.placing ? ordinal(r.placing) : "—"}
                     </GridCell>
                     <GridCell tone="muted" className="meta-source">
-                      {r.source.url ? (
-                        <a href={r.source.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                      {href ? (
+                        <a href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
                           {r.source.title ?? r.source.url}
                         </a>
                       ) : (
-                        (r.source.title ?? "—")
+                        (r.source.title ?? r.source.url ?? "—")
                       )}
                     </GridCell>
                     <GridCell className="meta-share">

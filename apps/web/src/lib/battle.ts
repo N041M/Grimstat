@@ -13,7 +13,7 @@
  * than enforced, because the rules only ask for it once the whole unit has finished moving.
  */
 
-import type { Aabb2, CoherencyReport, Footprint, ModelHull, ReachNode, ReachOptions, ReachResult, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
+import type { Aabb2, BoardSize, CoherencyReport, Footprint, ModelHull, ReachNode, ReachOptions, ReachResult, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
 import { COHERENCY_RANGE, LAYOUTS, MOVE_RULES, TOUCH, TerrainIndex, bounds, canStand, chargeGeometry, circleBase, coherency, coreSegment, coverFor, distance, edgeZones, footReach, heightForKeywords, horizontalGap, inBox, inEngagementRange, inZone, onBoard, ovalBase, pointInPolygon, reachable, segPolygonDistance, sight, unitDistance } from "@grimstat/board";
 import type { ModelProfile, Roster, Snapshot } from "@grimstat/schema";
 import { unitClassFor, type UnitClassId } from "./unitArt";
@@ -108,7 +108,9 @@ export function endMove(unit: BattleUnit): BattleUnit {
   return { ...unit, models: unit.models.map((m) => ({ ...m, from: undefined, spent: 0 })) };
 }
 
-export const indexOf = (state: BattleState): TerrainIndex => new TerrainIndex(state.layout.pieces);
+/** The terrain of a table, ready to be asked about. It is built from the layout's pieces alone. */
+export const indexOfLayout = (layout: TerrainLayout): TerrainIndex => new TerrainIndex(layout.pieces);
+export const indexOf = (state: BattleState): TerrainIndex => indexOfLayout(state.layout);
 
 /* ---- placement --------------------------------------------------------------------------------- */
 
@@ -212,6 +214,82 @@ export function modelReach(state: BattleState, unit: BattleUnit, model: BattleMo
 }
 
 /**
+ * A model's base as the movement search sees it, as text.
+ *
+ * The facing is in here only for an oval base. A round one covers the same ground whichever way the
+ * model is turned, which is why turning a squad of infantry cannot change where any of it can walk.
+ */
+const baseSignature = (h: ModelHull): string => `${h.pos.x} ${h.pos.y} ${h.pos.z} ${h.height} ` + (h.foot.kind === "circle" ? `c${h.foot.r}` : `o${h.foot.r} ${h.foot.half} ${h.facing}`);
+
+/**
+ * What a reach search would read off the table, as one string.
+ *
+ * The page searches again whenever the battle state changes, and while the turn ring is in hand that
+ * is every frame. This is everything the search depends on apart from the terrain: the table's size,
+ * whose reach is being asked for and what it has left, and where every model on the board stands. A
+ * caller holding the last string and the last answer can tell that nothing has moved and keep the
+ * answer it has. The terrain is left out because callers hold a `TerrainIndex` built from it, and
+ * comparing that is cheaper than describing the pieces.
+ */
+export function reachSignature(state: BattleState, unit: BattleUnit, model?: BattleModel): string {
+  const parts = [`${state.layout.size.width} ${state.layout.size.depth}`, `${unit.id} ${unit.side}`, model?.id ?? "", `${model ? remainingMove(unit, model) : unit.move}`, unit.keywords.join(",")];
+  for (const u of deployedUnits(state)) {
+    // Whose models these are decides whether the mover has to go round them or stay clear of them.
+    parts.push(`${u.id} ${u.side}`);
+    for (const m of u.models) parts.push(baseSignature(m.hull));
+  }
+  return parts.join("|");
+}
+
+/** The table a move is judged against, and everything on it the mover has to get past. */
+interface Standing {
+  readonly index: TerrainIndex;
+  readonly board: BoardSize;
+  readonly keywords: readonly string[];
+  readonly blockers: readonly ModelHull[];
+  readonly enemies: readonly ModelHull[];
+}
+
+/**
+ * The verdict for a move whose search has already been made.
+ *
+ * `landed` is the node the model stops on, and nothing when the search never got within `SNAP` of
+ * where the move was sent. A move that cannot be made is still judged against the spot it was aimed
+ * at, so the player is told everything wrong with it rather than only that it is out of range.
+ */
+function landing(model: BattleModel, to: Vec2, reach: ReachResult, landed: number | undefined, world: Standing): MoveVerdict {
+  const node = landed === undefined ? undefined : reach.nodes[landed];
+  const problems: string[] = [];
+  if (!node) problems.push("battle.problem.tooFar");
+
+  const at: Vec3 = node ? node.at : { x: to.x, y: to.y, z: model.hull.pos.z };
+  const moved: ModelHull = { ...model.hull, pos: at };
+  if (!onBoard(moved, world.board)) problems.push("battle.problem.offTable");
+  if (!canStand(moved, at, world.index, { keywords: world.keywords, blockers: world.blockers })) problems.push("battle.problem.blocked");
+  if (world.enemies.some((e) => inEngagementRange(moved, e))) problems.push("battle.problem.engagement");
+
+  return { ok: problems.length === 0, at: node ? at : undefined, cost: node?.cost, path: node ? reach.pathTo(landed!) : undefined, problems };
+}
+
+/**
+ * Which node of a finished search a move sent to `to` stops on.
+ *
+ * The cheapest node within `SNAP` is the one a search told to stop at `to` would have stopped at,
+ * since the search settles nodes in order of what they cost and stops at the first that qualifies.
+ * So a search of everywhere the model can go answers for any destination, which is what lets a drag
+ * search once and read the answer on every later frame.
+ */
+function stopAt(reach: ReachResult, to: Vec2): number | undefined {
+  let best: number | undefined;
+  for (let i = 0; i < reach.nodes.length; i++) {
+    const node = reach.nodes[i]!;
+    if (Math.hypot(node.at.x - to.x, node.at.y - to.y) > SNAP) continue;
+    if (best === undefined || node.cost < reach.nodes[best]!.cost) best = i;
+  }
+  return best;
+}
+
+/**
  * Can this one model go here, and what does it cost?
  *
  * Coherency is deliberately **not** a problem. The rules ask for it once the unit has finished
@@ -221,26 +299,16 @@ export function modelReach(state: BattleState, unit: BattleUnit, model: BattleMo
  */
 export function modelMoveVerdict(state: BattleState, unit: BattleUnit, model: BattleModel, to: Vec2, index = indexOf(state)): MoveVerdict {
   const { enemies, blockers } = obstacles(state, unit);
-  const others = unitHulls(unit).filter((h) => h !== model.hull);
-  const problems: string[] = [];
+  const around = [...blockers, ...unitHulls(unit).filter((h) => h !== model.hull)];
 
   const reach = reachable(model.hull, remainingMove(unit, model), index, {
     keywords: unit.keywords,
     enemies,
-    blockers: [...blockers, ...others],
+    blockers: around,
     board: state.layout.size,
     until: (at) => Math.hypot(at.x - to.x, at.y - to.y) <= SNAP,
   });
-  const landed = reach.stoppedAt === undefined ? undefined : reach.nodes[reach.stoppedAt];
-  if (!landed) problems.push("battle.problem.tooFar");
-
-  const at: Vec3 = landed ? landed.at : { x: to.x, y: to.y, z: model.hull.pos.z };
-  const moved: ModelHull = { ...model.hull, pos: at };
-  if (!onBoard(moved, state.layout.size)) problems.push("battle.problem.offTable");
-  if (!canStand(moved, at, index, { keywords: unit.keywords, blockers: [...blockers, ...others] })) problems.push("battle.problem.blocked");
-  if (enemies.some((e) => inEngagementRange(moved, e))) problems.push("battle.problem.engagement");
-
-  return { ok: problems.length === 0, at: landed ? at : undefined, cost: landed?.cost, path: landed ? reach.pathTo(reach.stoppedAt!) : undefined, problems };
+  return landing(model, to, reach, reach.stoppedAt, { index, board: state.layout.size, keywords: unit.keywords, blockers: around, enemies });
 }
 
 /** Apply a model's move, remembering where it started, what it spent, and the way it went. */
@@ -353,6 +421,21 @@ export function groupMoveVerdict(state: BattleState, members: readonly GroupMemb
 }
 
 /**
+ * The name a group's searches are remembered under, for one of the two searchers.
+ *
+ * Both look for everywhere a member can go with the whole group lifted off the table, and for a
+ * group taken from one side whose units are all on the board they look for exactly the same ground,
+ * so they share what they find. A selection reaching across both sides counts a different set of
+ * models as enemies in each, and one taking in a unit still on its muster table counts a different
+ * set as blockers, so those keep their answers apart.
+ */
+function searchKey(state: BattleState, members: readonly GroupMember[], ids: ReadonlySet<string>, searcher: "body" | "fit"): string {
+  const units = [...new Set(members.map((m) => m.unitId))].map((id) => findUnit(state, id));
+  const alike = units.every((u) => u && !u.reserve && u.side === units[0]!.side);
+  return `${alike ? "group" : searcher} ${[...ids].sort().join(" ")}`;
+}
+
+/**
  * A piece a unit walks round rather than over: one too tall to be stepped across.
  *
  * The threshold is the movement search's own, so a crater is ground and a building is a building,
@@ -393,13 +476,32 @@ function standsInside(hull: ModelHull | undefined, index: TerrainIndex, sentInto
  * too and would otherwise block each other's starting and finishing spots, and the members are then
  * checked against each other where they land. The group goes only if every model can; the problems
  * are the union of theirs.
+ *
+ * The searches go through `everywhere`, so a drag makes them on its first frame and reads the same
+ * answers on all the rest. Each covers the model's whole remaining Move instead of stopping where
+ * the pointer is, and `stopAt` reads the destination out of it.
  */
 function slideGroup(state: BattleState, members: readonly GroupMember[], by: Vec2, index: TerrainIndex): GroupVerdict {
   const ids = new Set(members.map((m) => m.modelId));
-  const without = (except: string): BattleState => ({
-    ...state,
-    units: state.units.map((u) => ({ ...u, models: u.models.filter((m) => !ids.has(m.id) || m.id === except) })),
-  });
+  const key = searchKey(state, members, ids, "body");
+  const stays = (u: BattleUnit): ModelHull[] => u.models.filter((m) => !ids.has(m.id)).map((m) => m.hull);
+  const worlds = new Map<string, Standing>();
+  /** The table as this member's unit sees it, with the whole group lifted off it. */
+  const worldFor = (unit: BattleUnit): Standing => {
+    let had = worlds.get(unit.id);
+    if (!had) {
+      const others = deployedUnits(state);
+      had = {
+        index,
+        board: state.layout.size,
+        keywords: unit.keywords,
+        blockers: [...others.filter((u) => u.id !== unit.id).flatMap(stays), ...stays(unit)],
+        enemies: others.filter((u) => u.side !== unit.side).flatMap(stays),
+      };
+      worlds.set(unit.id, had);
+    }
+    return had;
+  };
   const moves: GroupMove[] = [];
   const landed: ModelHull[] = [];
   const problems: string[] = [];
@@ -407,11 +509,13 @@ function slideGroup(state: BattleState, members: readonly GroupMember[], by: Vec
     if (!problems.includes(p)) problems.push(p);
   };
   for (const member of members) {
-    const world = without(member.modelId);
-    const unit = findUnit(world, member.unitId);
+    const unit = findUnit(state, member.unitId);
     const model = unit && findModel(unit, member.modelId);
     if (!unit || !model) continue;
-    const verdict = modelMoveVerdict(world, unit, model, { x: model.hull.pos.x + by.x, y: model.hull.pos.y + by.y }, index);
+    const world = worldFor(unit);
+    const to = { x: model.hull.pos.x + by.x, y: model.hull.pos.y + by.y };
+    const reach = everywhere(state, model, remainingMove(unit, model), index, { keywords: unit.keywords, enemies: world.enemies, blockers: world.blockers, board: state.layout.size }, key);
+    const verdict = landing(model, to, reach, stopAt(reach, to), world);
     if (verdict.ok && verdict.at && verdict.cost !== undefined) {
       moves.push({ ...member, at: verdict.at, cost: verdict.cost, path: verdict.path });
       landed.push({ ...model.hull, pos: verdict.at });
@@ -500,8 +604,7 @@ function everywhere(state: BattleState, model: BattleModel, budget: number, inde
 function fitGroup(state: BattleState, members: readonly GroupMember[], by: Vec2, index: TerrainIndex, sentInto: ReadonlySet<string>): GroupVerdict | undefined {
   const ids = new Set(members.map((m) => m.modelId));
   const blockers = deployedUnits(state).flatMap((u) => u.models.filter((m) => !ids.has(m.id)).map((m) => m.hull));
-  // What the searches below depend on, beyond the model and the state: who else is moving.
-  const key = [...ids].sort().join(" ");
+  const key = searchKey(state, members, ids, "fit");
 
   // A route is at least as long as the straight line it covers, so a model whose Move cannot bring
   // it within the slack of its place in the formation cannot be fitted at all. Saying so here costs

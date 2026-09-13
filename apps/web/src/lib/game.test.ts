@@ -28,14 +28,25 @@ describe("advance", () => {
     expect(s.round).toBe(2);
   });
 
-  it("pays a command point at the start of each turn", () => {
+  /**
+   * Each player gains a command point at the start of their own command phase in every battle
+   * round. The game opens in the player's first command phase, which no handover starts, so that
+   * round's point has to be in hand from the beginning.
+   */
+  it("pays a command point for every command phase, the first one included", () => {
     let s = newGameState();
-    expect(s.you.cp).toBe(0);
-    for (let i = 0; i < PHASES.length; i++) s = advance(s);
-    expect(s.them.cp).toBe(1);
-    expect(s.you.cp).toBe(0);
-    for (let i = 0; i < PHASES.length; i++) s = advance(s);
     expect(s.you.cp).toBe(1);
+    expect(s.them.cp).toBe(0);
+    const turn = () => {
+      for (let i = 0; i < PHASES.length; i++) s = advance(s);
+    };
+    turn();
+    expect(s).toMatchObject({ active: "them", round: 1, you: { cp: 1 }, them: { cp: 1 } });
+    turn();
+    expect(s).toMatchObject({ active: "you", round: 2, you: { cp: 2 }, them: { cp: 1 } });
+    // Five battle rounds, five points each.
+    for (let i = 0; i < 7; i++) turn();
+    expect(s).toMatchObject({ round: 5, you: { cp: 5 }, them: { cp: 5 } });
   });
 
   it("clears the flags of the player whose turn begins, and leaves the other alone", () => {
@@ -72,6 +83,11 @@ describe("applyDamage", () => {
   it("treats a single-wound unit one model at a time", () => {
     expect(applyDamage(NEW_UNIT_STATE, 3, 1, 10)).toMatchObject({ modelsLost: 3, woundsLost: 0 });
   });
+
+  it("leaves a unit the player marked destroyed destroyed", () => {
+    const gone = { ...NEW_UNIT_STATE, destroyed: true };
+    expect(applyDamage(gone, 1, 10, 1)).toBe(gone);
+  });
 });
 
 describe("applyHeal", () => {
@@ -103,7 +119,10 @@ describe("scoring", () => {
   const secondaries: Secondary[] = [
     { id: "s1", name: "Hold the line" },
     { id: "s2", name: "Capped one", cap: 10 },
+    { id: "s3", name: "Capped fifteen", cap: 15 },
   ];
+
+  const scoreEachRound = (points: number, secondaryId: string): GameState => [1, 2, 3, 4, 5].reduce((s, round) => applyAction(s, { kind: "score", side: "you", points, round, secondaryId }), newGameState());
 
   it("adds primary and secondary separately", () => {
     let s = newGameState();
@@ -139,6 +158,18 @@ describe("scoring", () => {
     expect(totalsFor(s.you, secondaries).byRound.get(1)).toBe(7);
   });
 
+  /**
+   * The summary prints the capped total in its header and the per-round points down a column, so a
+   * cap that only reached the total left the two disagreeing on one panel.
+   */
+  it("applies a secondary's cap to the rounds as well as the total", () => {
+    const s = scoreEachRound(6, "s3");
+    const t = totalsFor(s.you, secondaries);
+    expect(t.secondary).toBe(15);
+    expect([1, 2, 3, 4, 5].map((r) => t.byRound.get(r) ?? 0)).toEqual([6, 6, 3, 0, 0]);
+    expect([...t.byRound.values()].reduce((a, b) => a + b, 0)).toBe(t.total);
+  });
+
   it("forgets a secondary's points when it is removed", () => {
     let s = newGameState();
     s = run(s, { kind: "addSecondary", secondary: secondaries[0]! }, { kind: "score", side: "you", points: 4, secondaryId: "s1" }, { kind: "removeSecondary", id: "s1" });
@@ -156,8 +187,9 @@ describe("command points", () => {
 
   it("spending a stratagem deducts its cost", () => {
     let s = newGameState();
+    const opening = s.you.cp;
     s = run(s, { kind: "cp", side: "you", delta: 4 }, { kind: "spendStratagem", side: "you", cp: 2, name: "Hold Fast" });
-    expect(s.you.cp).toBe(2);
+    expect(s.you.cp).toBe(opening + 2);
   });
 });
 
@@ -194,6 +226,16 @@ describe("destroy", () => {
     s = applyAction(s, { kind: "destroy", target: { side: "you", id: "u1" }, destroyed: false });
     expect(s.units["u1"]).toMatchObject({ destroyed: false, modelsLost: 0, woundsLost: 0 });
   });
+
+  it("stays destroyed when more wounds are applied to it", () => {
+    let s = newGameState();
+    s = run(
+      s,
+      { kind: "destroy", target: { side: "them", id: "e1" }, destroyed: true },
+      { kind: "damage", target: { side: "them", id: "e1" }, wounds: 1, profileWounds: 10, models: 1 },
+    );
+    expect(s.opponentUnits["e1"]?.destroyed).toBe(true);
+  });
 });
 
 describe("summarise", () => {
@@ -211,6 +253,16 @@ describe("summarise", () => {
     expect(summarise(log, base).cpSpent).toEqual({ you: 3, them: 0 });
   });
 
+  it("counts a command point spent on the scoreboard, and ignores one gained there", () => {
+    const log = [logEntry(base, "cp", "spent one", { amount: -1, side: "you" }), logEntry(base, "cp", "gained one", { amount: 1, side: "you" })];
+    expect(summarise(log, base).cpSpent).toEqual({ you: 1, them: 0 });
+  });
+
+  it("takes wounds put back off what the other side dealt", () => {
+    const log = [logEntry(base, "damage", "hit them", { amount: 6, side: "them", unitId: "e1" }), logEntry(base, "damage", "healed", { amount: -2, side: "them", unitId: "e1" })];
+    expect(summarise(log, base).dealt).toEqual({ you: 4, them: 0 });
+  });
+
   it("pairs an accepted estimate with what was applied", () => {
     const log = [logEntry(base, "damage", "shot", { amount: 5, side: "them", unitId: "e1", predicted: 6.2 })];
     expect(summarise(log, base).estimates).toEqual([{ predicted: 6.2, actual: 5, unitId: "e1" }]);
@@ -221,6 +273,15 @@ describe("summarise", () => {
     const rounds = summarise([], scored).rounds;
     expect(rounds.find((r) => r.round === 1)?.scored).toEqual({ you: 5, them: 0 });
     expect(rounds.find((r) => r.round === 2)?.scored).toEqual({ you: 0, them: 3 });
+  });
+
+  it("caps a secondary in the per-round column, so the rounds add up to the final score", () => {
+    const capped: Secondary = { id: "s3", name: "Capped fifteen", cap: 15 };
+    let s = applyAction(base, { kind: "addSecondary", secondary: capped });
+    for (const round of [1, 2, 3, 4, 5]) s = applyAction(s, { kind: "score", side: "you", points: 6, round, secondaryId: capped.id });
+    const rounds = summarise([], s).rounds;
+    expect(rounds.map((r) => r.scored.you)).toEqual([6, 6, 3, 0, 0]);
+    expect(rounds.reduce((n, r) => n + r.scored.you, 0)).toBe(totalsFor(s.you, s.secondaries).total);
   });
 
   it("ignores lines that carry no number", () => {
@@ -278,5 +339,63 @@ describe("atStrength", () => {
     // Only when the squad is gone does the character start taking them.
     const wiped = applyDamage(NEW_UNIT_STATE, 20, 2, 11);
     expect(atStrength(led, wiped, 11).models.map((m) => m.count)).toEqual([0, 0, 1]);
+  });
+
+  /**
+   * The model part way through being killed is the next one to be removed. Leaving it at its full
+   * wounds is what let a damaged tank reach the solver untouched.
+   */
+  it("gives the model being damaged the wounds it has left", () => {
+    const hurt = applyDamage(NEW_UNIT_STATE, 3, 2, 10);
+    const now = atStrength(unit, hurt, 10);
+    expect(now.models.map((m) => `${m.name}x${m.count}@${m.W}`)).toEqual(["Trooperx1@1", "Sergeantx1@2", "Trooperx7@2"]);
+    expect(now.models.reduce((s, m) => s + m.count * m.W, 0)).toBe(woundsLeft(hurt, 2, 10));
+  });
+
+  it("wounds a one-model unit without waiting for it to lose the model", () => {
+    const tank = { ...unit, models: [{ name: "Tank", count: 1, T: 11, Sv: 2, W: 14, isCharacter: false, keywords: [] }] };
+    const hurt = applyDamage(NEW_UNIT_STATE, 13, 14, 1);
+    expect(atStrength(tank, hurt, 1).models).toEqual([expect.objectContaining({ count: 1, W: 1 })]);
+  });
+
+  it("wounds the squad before the character it is protecting", () => {
+    const led = { ...unit, models: [...unit.models, { name: "Captain", count: 1, T: 4, Sv: 3, W: 2, isCharacter: true, keywords: [] }] };
+    const hurt = applyDamage(NEW_UNIT_STATE, 17, 2, 11);
+    const now = atStrength(led, hurt, 11);
+    expect(now.models.map((m) => `${m.name}x${m.count}@${m.W}`)).toEqual(["Trooperx1@1", "Sergeantx1@2", "Captainx1@2"]);
+  });
+
+  /**
+   * Weapon counts used to be floored at one per line, so the last model of a twenty-strong squad
+   * was still firing a rifle and all three of its special weapons.
+   */
+  it("never leaves a squad more weapons than the models still carrying them", () => {
+    const gun = { kind: "ranged" as const, range: 24, A: "1", skill: 3, S: 4, AP: 0, D: "1", keywords: [], enabled: true };
+    const squad = {
+      ...unit,
+      models: [{ name: "Trooper", count: 20, T: 3, Sv: 5, W: 1, isCharacter: false, keywords: [] }],
+      weapons: [
+        { ...gun, name: "Rifle", count: 17 },
+        { ...gun, name: "Special A", count: 1 },
+        { ...gun, name: "Special B", count: 1 },
+        { ...gun, name: "Special C", count: 1 },
+      ],
+    };
+    const now = atStrength(squad, applyDamage(NEW_UNIT_STATE, 19, 1, 20), 20);
+    expect(now.models.reduce((s, m) => s + m.count, 0)).toBe(1);
+    expect(now.weapons.map((w) => `${w.name}x${w.count}`)).toEqual(["Riflex1", "Special Ax0", "Special Bx0", "Special Cx0"]);
+  });
+
+  it("keeps both lines when every model carries a gun and a blade", () => {
+    const squad = {
+      ...unit,
+      models: [{ name: "Trooper", count: 10, T: 4, Sv: 3, W: 1, isCharacter: false, keywords: [] }],
+      weapons: [
+        { name: "Bolt pistol", count: 10, kind: "ranged" as const, range: 12, A: "1", skill: 3, S: 4, AP: 0, D: "1", keywords: [], enabled: true },
+        { name: "Chainsword", count: 10, kind: "melee" as const, range: null, A: "3", skill: 3, S: 4, AP: 0, D: "1", keywords: [], enabled: true },
+      ],
+    };
+    const now = atStrength(squad, applyDamage(NEW_UNIT_STATE, 1, 1, 10), 10);
+    expect(now.weapons.map((w) => w.count)).toEqual([9, 9]);
   });
 });

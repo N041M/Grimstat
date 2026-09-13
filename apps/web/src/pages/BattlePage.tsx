@@ -1,12 +1,13 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import type { ModelHull, ReachNode, TerrainLayout, Vec2, Vec3 } from "@grimstat/board";
+import type { ModelHull, ReachNode, TerrainIndex, TerrainLayout, Vec2, Vec3 } from "@grimstat/board";
 import { reachable } from "@grimstat/board";
 import { PageHeader } from "../components/shell";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { TerrainPanel } from "../components/battle/TerrainPanel";
 import { LayoutLibrary } from "../components/battle/LayoutLibrary";
 import { LayoutPicker } from "../components/battle/LayoutPicker";
+import { inSelection } from "../components/battle/selection";
 import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
 import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
@@ -37,7 +38,7 @@ import {
   freshDeployment,
   hasMoved,
   incoherentModels,
-  indexOf,
+  indexOfLayout,
   modelMoveVerdict,
   modelReach,
   moveOf,
@@ -48,6 +49,7 @@ import {
   groupMoveVerdict,
   type GroupMember,
   type GroupMove,
+  reachSignature,
   remainingMove,
   replaceUnit,
   resetMove,
@@ -78,7 +80,21 @@ import { t, type I18nKey } from "../i18n";
 import { newId } from "../lib/ids";
 
 /** three.js and the whole scene live behind this boundary: nobody who never opens Battle downloads it. */
-const BattleCanvas = lazy(() => import("../components/battle/BattleCanvas").then((m) => ({ default: m.BattleCanvas })));
+const loadBattleCanvas = () => import("../components/battle/BattleCanvas").then((m) => ({ default: m.BattleCanvas }));
+let battleCanvas = lazy(loadBattleCanvas);
+
+/**
+ * A fresh payload for the table's chunk.
+ *
+ * React remembers that a `lazy` payload was rejected and throws the same failure for every later
+ * render of it, so one chunk that did not arrive leaves the table broken for the rest of the session
+ * however many times Try again is pressed. Asking for a new payload imports the chunk again, which
+ * is what makes the retry mean anything.
+ */
+function freshBattleCanvas(): typeof battleCanvas {
+  battleCanvas = lazy(loadBattleCanvas);
+  return battleCanvas;
+}
 
 /**
  * WebGL can be missing (old hardware, a blocked context, a headless browser). Ask before drawing.
@@ -126,6 +142,9 @@ const ROTATE_STEP = Math.PI / 12;
 /** The two sides, in the order the panels list them. */
 const SIDES = ["attacker", "defender"] as const;
 
+/** An empty reach, kept as one array so its identity does not change from render to render. */
+const NO_REACH: readonly ReachNode[] = [];
+
 /** What the army select calls the sample force. Every other option is a stored army's id. */
 const SAMPLE_FORCE = "sample";
 const parseForceId = (raw: unknown): string | undefined => (typeof raw === "string" && raw ? raw : undefined);
@@ -144,6 +163,18 @@ const REFUSAL_MS = 4000;
 const inField = (target: EventTarget | null): boolean => {
   const el = target as HTMLElement | null;
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+};
+
+/**
+ * Is something open over the table? Keys typed under it belong to it.
+ *
+ * A sheet or a dialog covers the table at narrow widths, and it puts the focus on its own panel
+ * rather than in a field. Backspace there is a reflex to go back rather than an instruction to
+ * delete whatever happens to be selected on the table behind it.
+ */
+const underOverlay = (target: EventTarget | null): boolean => {
+  if (document.querySelector("dialog[open], [role='dialog'][aria-modal='true']")) return true;
+  return target instanceof Element && !!target.closest("[role='dialog']");
 };
 
 /**
@@ -212,6 +243,8 @@ export function BattlePage() {
    * table is four marks of board covered for the whole game to save one press now and then.
    */
   const [cameraOpen, setCameraOpen] = useState(false);
+  // The chunk the table lives in, so a retry can ask for it again rather than re-render the failure.
+  const [Canvas, setCanvas] = useState(() => battleCanvas);
   const cameraRef = useRef<HTMLDivElement>(null);
   const closeCamera = useCallback(() => setCameraOpen(false), []);
   useDismiss(cameraRef, cameraOpen, closeCamera);
@@ -299,7 +332,9 @@ export function BattlePage() {
   const forceOf = (side: Side) => (side === "attacker" ? attackerForce : defenderForce);
 
   const { layout, units } = state;
-  const index = useMemo(() => indexOf(state), [state]);
+  // The index depends on the terrain alone. Keyed on the whole state it was a new object after every
+  // change to the units, which gave every search that takes it a reason to run again.
+  const index = useMemo(() => indexOfLayout(layout), [layout]);
   const editable = !isBuiltIn(layout.id);
   const selected = findUnit(state, selectedId);
   const activeModel = selected && findModel(selected, activeModelId);
@@ -352,7 +387,7 @@ export function BattlePage() {
     void refreshLibrary();
   }, [refreshLibrary, layoutsVersion]);
 
-  const editLayout = useCallback((change: (layout: TerrainLayout) => TerrainLayout, record = true) => dispatch({ type: "layout", change, record }), []);
+  const editLayout = useCallback((change: (layout: TerrainLayout) => TerrainLayout, record: boolean | "drag" = true) => dispatch({ type: "layout", change, record }), []);
   /**
    * Change one unit. `record` puts the positions as they stand on the unit history, for the things a
    * player would expect to be able to take back: a deployment, a withdrawal, an approved move. A turn
@@ -511,19 +546,34 @@ export function BattlePage() {
   );
 
   /**
+   * The last reach searched, and the table it was searched against.
+   *
+   * A state change that moved nothing can be answered with the search already made. The overlay
+   * turns the answer into a region the width of the table, so a new array holding the same cells
+   * costs a flood fill, a mask and a texture upload on every frame the turn ring is dragged.
+   */
+  const searched = useRef<{ index: TerrainIndex; signature: string; nodes: readonly ReachNode[] }>();
+
+  /**
    * Where the selection can go: one model's own reach when a model is active, otherwise the whole
-   * unit's, measured from the model that leads it. Recomputed when something moves, not while the
-   * pointer moves.
+   * unit's, measured from the model that leads it. It is searched again when something moves. A drag
+   * of the pointer does not move anything, and neither does turning the selection on the spot.
    */
   const reach: readonly ReachNode[] = useMemo(() => {
-    if (!selected || selected.reserve || tool !== "select") return [];
-    if (activeModel) return modelReach(state, selected, activeModel, index);
-    return reachable(anchorOf(selected), selected.move, index, {
-      keywords: selected.keywords,
-      enemies: enemyHulls(state, selected.side),
-      blockers: otherHulls(state, selected.id),
-      board: state.layout.size,
-    }).nodes;
+    if (!selected || selected.reserve || tool !== "select") return NO_REACH;
+    const signature = reachSignature(state, selected, activeModel);
+    const had = searched.current;
+    if (had && had.index === index && had.signature === signature) return had.nodes;
+    const nodes = activeModel
+      ? modelReach(state, selected, activeModel, index)
+      : reachable(anchorOf(selected), selected.move, index, {
+          keywords: selected.keywords,
+          enemies: enemyHulls(state, selected.side),
+          blockers: otherHulls(state, selected.id),
+          board: state.layout.size,
+        }).nodes;
+    searched.current = { index, signature, nodes };
+    return nodes;
   }, [selected, activeModel, tool, index, state]);
 
   const upperFloor = useMemo(() => reach.filter((n) => n.at.z > 0.5).length, [reach]);
@@ -718,7 +768,10 @@ export function BattlePage() {
         }
         return;
       }
-      setGroupIds(new Set());
+      // A press on a model that is already selected with others keeps them all. Dragging any one of
+      // them moves the whole selection, which is what it is for, and the press that starts that drag
+      // cannot be the press that breaks it up.
+      if (!inSelection(groupIds, modelId)) setGroupIds(new Set());
       setSelectedId(id);
       setActiveModelId(modelId);
     },
@@ -801,17 +854,11 @@ export function BattlePage() {
   }, []);
 
   /**
-   * The terrain tool's half of the canvas. A drag records its first move as the undoable step and
-   * the rest as refinements of it, so one gesture is one step back.
+   * The terrain tool's half of the canvas. A drag's frames are marked as a drag, and the editor
+   * records the first of them that actually moves something, so one gesture is one step back.
    */
-  const dragRecorded = useRef(false);
   const editing: TerrainEditing | undefined = useMemo(() => {
     if (tool !== "terrain") return undefined;
-    const record = () => {
-      const first = !dragRecorded.current;
-      dragRecorded.current = true;
-      return first;
-    };
     return {
       pieceId: terrainId,
       objectiveId,
@@ -823,11 +870,9 @@ export function BattlePage() {
         setObjectiveId(id);
         setTerrainId(undefined);
       },
-      onMovePiece: (id, at) => editLayout((l) => (snapOn ? placePieceSnapped(l, id, at) : placePiece(l, id, at)), record()),
-      onMoveObjective: (id, at) => editLayout((l) => moveObjective(l, id, snapOn ? snapPoint(at) : at), record()),
-      onDrop: () => {
-        dragRecorded.current = false;
-      },
+      onMovePiece: (id, at) => editLayout((l) => (snapOn ? placePieceSnapped(l, id, at) : placePiece(l, id, at)), "drag"),
+      onMoveObjective: (id, at) => editLayout((l) => moveObjective(l, id, snapOn ? snapPoint(at) : at), "drag"),
+      onDrop: () => dispatch({ type: "endDrag" }),
     };
   }, [tool, terrainId, objectiveId, snapOn, editLayout]);
 
@@ -835,11 +880,12 @@ export function BattlePage() {
    * Keys. Arrows nudge whatever is selected — a terrain piece or objective by half an inch (two with
    * Shift), the active model by half an inch along a route the movement search approves. Delete
    * removes, R rotates, Escape clears, and undo is the platform's own chord. Nothing fires while a
-   * field has focus: those keys belong to the field.
+   * field has focus or while something is open over the table: those keys belong to the field or to
+   * whatever is covering the table.
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (inField(e.target)) return;
+      if (inField(e.target) || underOverlay(e.target)) return;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 
       if ((e.metaKey || e.ctrlKey) && key === "z") {
@@ -1062,9 +1108,9 @@ export function BattlePage() {
             </div>
           ) : null}
           {webgl ? (
-            <ErrorBoundary compact resetKey={layout.id}>
+            <ErrorBoundary compact resetKey={layout.id} onRetry={() => setCanvas(() => freshBattleCanvas())}>
               <Suspense fallback={<p className="muted battle-loading">{t("battle.loading")}</p>}>
-                <BattleCanvas
+                <Canvas
                   state={state}
                   cameraMode={view}
                   recentre={recentre}

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
 import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, Line, LineBasicMaterial } from "three";
-import type { BoardSize, ModelHull, ReachNode, Vec2, Vec3 } from "@grimstat/board";
+import type { BoardSize, ModelHull, ReachNode, Vec3 } from "@grimstat/board";
 import { footReach } from "@grimstat/board";
-import { SCENE_COLOURS, fromScene, toScene, writeScene } from "../../lib/battleScene";
+import { SCENE_COLOURS, toScene, writeScene } from "../../lib/battleScene";
+import { pressOf, type Press } from "./press";
 import { reachMask, type ReachMask } from "../../lib/reachMask";
 import { SILHOUETTE_FIT, SILHOUETTE_OVERHANG } from "../../lib/silhouettes";
 import { useDisposable } from "./useDisposable";
@@ -90,7 +91,7 @@ const FIGURE_REACH = SILHOUETTE_FIT * SILHOUETTE_OVERHANG;
  * on the table: by its base, not by a key. The knob shows which way the model faces, so a round
  * base has a direction the eye can read.
  */
-export function TurnRing({ hull, onGrab }: { hull: ModelHull; onGrab: (at: Vec2) => void }) {
+export function TurnRing({ hull, onGrab }: { hull: ModelHull; onGrab: (press: Press) => void }) {
   const [hot, setHot] = useState(false);
   const inner = footReach(hull.foot) * FIGURE_REACH + RING_GAP;
   const outer = inner + RING_BAND;
@@ -103,8 +104,7 @@ export function TurnRing({ hull, onGrab }: { hull: ModelHull; onGrab: (at: Vec2)
         rotation={[-Math.PI / 2, 0, 0]}
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation();
-          const p = fromScene(e.point.x, e.point.y, e.point.z);
-          onGrab({ x: p.x, y: p.y });
+          onGrab(pressOf(e));
         }}
         onPointerOver={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation();

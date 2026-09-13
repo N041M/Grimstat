@@ -6,10 +6,10 @@ import { useApp } from "../state/AppContext";
 import { hrefFor, useRouteInfo } from "../router";
 import { download } from "../lib/download";
 import { nowIso } from "../lib/ids";
-import { abilityOverride, describeEffect, editingAfterRemove, effectToForm, fnpOverride, mergeOverrides, noEffectOverride, overrideKey, parseOverridePack, toPack, toRecord, type EffectForm as EffectFormState } from "../lib/overrides";
+import { abilityOverride, describeEffect, editorFor, effectToForm, fnpOverride, mergeOverrides, noEffectOverride, overrideKey, parseOverridePack, patchBeyondEffects, toPack, toRecord, withEffect, withPatch, withoutEffect, type EditorState, type EffectForm as EffectFormState } from "../lib/overrides";
 import { AbilitySearch, useAbilitySearch, tierLabel, tierTitle, type AbilityHit } from "../components/overrides/AbilitySearch";
 import { EffectForm } from "../components/overrides/EffectForm";
-import { OverridesList, RawPatchEditor } from "../components/overrides/OverridesList";
+import { OverridesList, RawPatchEditor, patchSummary } from "../components/overrides/OverridesList";
 import { Badge, Empty, Field, useConfirm } from "../components/ui";
 import { PageHeader } from "../components/shell";
 import { t } from "../i18n";
@@ -23,15 +23,6 @@ export function OverridesPill({ compact }: { compact?: boolean }) {
       {overrideStatus.missing ? <Badge tone="warn">{t("overrides.missingPill", { n: overrideStatus.missing })}</Badge> : null}
     </span>
   );
-}
-
-interface EditorState {
-  abilityId: string;
-  abilityName: string;
-  effects: EffectRecord[];
-  note: string;
-  /** Index of the effect being edited in place. */
-  editing: number | undefined;
 }
 
 export function OverridesPage() {
@@ -60,9 +51,7 @@ export function OverridesPage() {
   const derived = useMemo(() => (rawAbility ? abilityEffects(rawAbility) : undefined), [rawAbility]);
 
   function select(hit: AbilityHit) {
-    const patch = hit.override?.patch;
-    const effects = patch && Array.isArray(patch["effects"]) ? (patch["effects"] as EffectRecord[]) : [];
-    setEditor({ abilityId: hit.ability.id, abilityName: hit.ability.name, effects, note: hit.override?.note ?? "", editing: undefined });
+    setEditor(editorFor(hit.ability, hit.override));
     setRawEdit(undefined);
   }
 
@@ -73,28 +62,31 @@ export function OverridesPage() {
     notify(t("overrides.saved", { name: label }), "success");
   };
 
+  // The override Save would store. An editor that has nothing to say about the ability leaves the
+  // patch empty, and Save stays disabled until an effect is added or a quick action has run.
+  const pending = useMemo(() => (editor ? abilityOverride({ id: editor.abilityId, name: editor.abilityName }, editor.effects, editor.note, editor.patch) : undefined), [editor]);
+  const kept = editor ? patchBeyondEffects(editor.patch) : undefined;
+
   const saveEditor = async () => {
-    if (!editor) return;
-    await persist(abilityOverride({ id: editor.abilityId, name: editor.abilityName }, editor.effects, editor.note), editor.abilityName);
+    if (!editor || !pending || !Object.keys(pending.patch).length) return;
+    await persist(pending, editor.abilityName);
+    setEditor(withPatch(editor, pending.patch, pending.note ?? ""));
   };
   const quickFnp = async () => {
     if (!editor) return;
-    await persist(fnpOverride({ id: editor.abilityId, name: editor.abilityName }, fnpX), editor.abilityName);
-    setEditor({ ...editor, effects: [], note: t("overrides.note.fnp", { x: fnpX }) });
+    const o = fnpOverride({ id: editor.abilityId, name: editor.abilityName }, fnpX);
+    await persist(o, editor.abilityName);
+    setEditor(withPatch(editor, o.patch, o.note ?? ""));
   };
   const quickNone = async () => {
     if (!editor) return;
-    await persist(noEffectOverride({ id: editor.abilityId, name: editor.abilityName }, editor.note), editor.abilityName);
-    setEditor({ ...editor, effects: [] });
+    const o = noEffectOverride({ id: editor.abilityId, name: editor.abilityName }, editor.note);
+    await persist(o, editor.abilityName);
+    setEditor(withPatch(editor, o.patch, o.note ?? ""));
   };
 
-  const addEffect = (e: EffectRecord) =>
-    setEditor((s) => {
-      if (!s) return s;
-      if (s.editing !== undefined) return { ...s, effects: s.effects.map((x, i) => (i === s.editing ? e : x)), editing: undefined };
-      return { ...s, effects: [...s.effects, e] };
-    });
-  const removeEffect = (i: number) => setEditor((s) => (s ? { ...s, effects: s.effects.filter((_, j) => j !== i), editing: editingAfterRemove(s.editing, i) } : s));
+  const addEffect = (e: EffectRecord) => setEditor((s) => (s ? withEffect(s, e) : s));
+  const removeEffect = (i: number) => setEditor((s) => (s ? withoutEffect(s, i) : s));
 
   const nameOf = (entity: Override["entity"], id: string): string | undefined => {
     if (!rawSnapshot) return undefined;
@@ -152,7 +144,7 @@ export function OverridesPage() {
     if (!(await confirm({ title: t("overrides.confirmDelete", { name: label }), body: t("overrides.deleteBody"), confirmLabel: t("common.delete"), danger: true }))) return;
     await db.overrides.delete(r.key);
     await refreshOverrides();
-    if (editor?.abilityId === r.id && r.entity === "ability") setEditor({ ...editor, effects: [], note: "" });
+    if (editor?.abilityId === r.id && r.entity === "ability") setEditor(withPatch(editor, {}, ""));
     notify(t("overrides.deleted", { name: label }), "success", undefined, { label: t("common.undo"), run: () => void restore(r, label) });
   };
 
@@ -251,13 +243,14 @@ export function OverridesPage() {
                     <p className="small muted">{t("overrides.noEffects")}</p>
                   )}
                   {derived && !effectiveAbility?.effects?.length ? <p className="small muted">{t("overrides.derived", { n: derived.effects.length })}</p> : null}
+                  {kept ? <p className="small muted">{t("overrides.alsoInPatch", { summary: patchSummary(kept) })}</p> : null}
                 </div>
                 <EffectForm key={`${editor.abilityId}:${editor.editing ?? "new"}`} source={editor.abilityName} initial={editingForm} onSubmit={addEffect} onCancel={editor.editing !== undefined ? () => setEditor({ ...editor, editing: undefined }) : undefined} />
                 <Field label={t("overrides.note")}>
                   <input type="text" value={editor.note} placeholder={t("overrides.notePlaceholder")} onChange={(e) => setEditor({ ...editor, note: e.target.value })} />
                 </Field>
                 <div className="row">
-                  <button type="button" className="primary" onClick={() => void saveEditor()}>
+                  <button type="button" className="primary" disabled={!pending || !Object.keys(pending.patch).length} onClick={() => void saveEditor()}>
                     {t("overrides.save")}
                   </button>
                 </div>

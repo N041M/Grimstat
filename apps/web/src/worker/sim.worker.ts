@@ -5,11 +5,19 @@ import { durabilityIndex, durabilityProfile, efficiencyRanking, incomingFire, ru
 import { evaluateTurnPlan, optimiseTurn, type TurnPlanInput, type TurnPlanResult, type TurnPlanStep } from "../lib/turn";
 import { reverseMathhammer, sensitivity, type ReverseInput, type ReverseResult, type SensitivityResult } from "../lib/gameExtras";
 
-/** Snapshots are large; the worker caches them by id so each run only ships the scenario. */
+/**
+ * Snapshots are large, so the worker caches them and each run only ships the scenario. The key comes
+ * from the client (see `snapshotKey` in client.ts). A snapshot id on its own would not do, because
+ * applying an override rewrites a snapshot's contents and its checksum while leaving its id alone, and
+ * a cache keyed by id would go on serving the un-patched data.
+ */
 const cache = new Map<string, Snapshot>();
 
-/** A full Snapshot (cached as a side effect) or the id of one previously put with putSnapshot. */
-export type SnapshotRef = Snapshot | string | undefined;
+/** How many snapshots the worker keeps. Every override edit makes a new key, so old ones are dropped. */
+export const SNAPSHOT_CACHE_LIMIT = 3;
+
+/** The key of a snapshot previously handed over with `putSnapshot`. */
+export type SnapshotRef = string | undefined;
 
 export interface Timed<T> {
   result: T;
@@ -21,38 +29,52 @@ export interface ArchetypeAnalysisOpts {
 }
 
 export interface SimWorkerApi {
-  /** Cache a snapshot in the worker; later runs can refer to it by id. */
-  putSnapshot(snapshot: Snapshot): void;
-  hasSnapshot(id: string): boolean;
-  forgetSnapshot(id: string): void;
+  /**
+   * Cache a snapshot under the client's key; later runs refer to it by that key. Returns the keys the
+   * worker holds afterwards, so the client knows which ones it has to hand over again.
+   */
+  putSnapshot(key: string, snapshot: Snapshot): string[];
   /** Run a scenario. Returns the result plus the wall time in ms. */
-  run(scenario: Scenario, snapshot?: SnapshotRef): Timed<SimResult>;
+  run(scenario: Scenario, ref?: SnapshotRef): Timed<SimResult>;
   /** Every attacker against every defender (Analyses → Matrix). Cells are stripped of engine state. */
-  matrix(attackers: ScenarioUnit[], defenders: ScenarioUnit[], context: Partial<ScenarioContext>, enabledToggles: string[], snapshot?: SnapshotRef): Timed<MatrixResult>;
+  matrix(attackers: ScenarioUnit[], defenders: ScenarioUnit[], context: Partial<ScenarioContext>, enabledToggles: string[], ref?: SnapshotRef): Timed<MatrixResult>;
   /** One defender against attacker archetypes (Analyses → Durability). */
-  durability(defender: ScenarioUnit, opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, snapshot?: SnapshotRef): Timed<DurabilityEntry[]>;
+  durability(defender: ScenarioUnit, opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, ref?: SnapshotRef): Timed<DurabilityEntry[]>;
   /** Points of shooting needed to remove each unit (Analyses → Matrix's durability index card). */
-  durabilityIndex(defenders: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, snapshot?: SnapshotRef): Timed<DurabilityIndexRow[]>;
+  durabilityIndex(defenders: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, ref?: SnapshotRef): Timed<DurabilityIndexRow[]>;
   /**
    * The same runs as `durabilityIndex`, reporting the rate as well as the endpoint plus effective
    * wounds (Armies → Statistics: durability, casualty curve and effective wounds all read this).
    */
-  incoming(defenders: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, snapshot?: SnapshotRef): Timed<IncomingFireRow[]>;
+  incoming(defenders: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { attackerIds?: string[] }, ref?: SnapshotRef): Timed<IncomingFireRow[]>;
   /** Attackers ranked by damage per point across target archetypes (Analyses → Efficiency). */
-  efficiency(attackers: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { targetIds?: string[] }, snapshot?: SnapshotRef): Timed<EfficiencyRow[]>;
+  efficiency(attackers: ScenarioUnit[], opts: ArchetypeAnalysisOpts & { targetIds?: string[] }, ref?: SnapshotRef): Timed<EfficiencyRow[]>;
   /** Joint target allocation for one turn (Analyses → Turn optimiser). */
-  optimiseTurn(input: Omit<TurnPlanInput, "snapshot">, snapshot?: SnapshotRef): Timed<TurnPlanResult>;
+  optimiseTurn(input: Omit<TurnPlanInput, "snapshot">, ref?: SnapshotRef): Timed<TurnPlanResult>;
   /** Re-score a manually edited plan. */
-  evaluateTurnPlan(input: Omit<TurnPlanInput, "snapshot">, plan: TurnPlanStep[], snapshot?: SnapshotRef): Timed<TurnPlanResult>;
+  evaluateTurnPlan(input: Omit<TurnPlanInput, "snapshot">, plan: TurnPlanStep[], ref?: SnapshotRef): Timed<TurnPlanResult>;
   /** "What kills X?": candidates (and combinations) ranked against one target (Analyses → Reverse). */
-  reverse(input: Omit<ReverseInput, "snapshot">, snapshot?: SnapshotRef): Timed<ReverseResult>;
+  reverse(input: Omit<ReverseInput, "snapshot">, ref?: SnapshotRef): Timed<ReverseResult>;
   /** One-step variations of the scenario (Calculator → What if widget). */
-  sensitivity(scenario: Scenario, variantIds: string[] | undefined, snapshot?: SnapshotRef): Timed<SensitivityResult>;
+  sensitivity(scenario: Scenario, variantIds: string[] | undefined, ref?: SnapshotRef): Timed<SensitivityResult>;
 }
 
-function resolve(snapshot: SnapshotRef): Snapshot | undefined {
-  if (typeof snapshot === "string") return cache.get(snapshot);
-  if (snapshot) cache.set(snapshot.id, snapshot);
+/** Store a snapshot and drop the least recently used ones past the limit. Returns the keys kept. */
+function remember(key: string, snapshot: Snapshot): string[] {
+  cache.delete(key);
+  cache.set(key, snapshot);
+  for (const old of [...cache.keys()].slice(0, Math.max(0, cache.size - SNAPSHOT_CACHE_LIMIT))) cache.delete(old);
+  return [...cache.keys()];
+}
+
+function resolve(ref: SnapshotRef): Snapshot | undefined {
+  if (ref === undefined) return undefined;
+  const snapshot = cache.get(ref);
+  // Running without the snapshot would quietly produce different numbers, so an unknown key is an error.
+  if (!snapshot) throw new Error(`snapshot ${ref} is not cached in the worker`);
+  // Reading counts as use, so the snapshot the screens keep running against is the last one dropped.
+  cache.delete(ref);
+  cache.set(ref, snapshot);
   return snapshot;
 }
 
@@ -69,66 +91,71 @@ function slim(r: SimResult): SimResult {
   return rest;
 }
 
-const api: SimWorkerApi = {
-  putSnapshot(snapshot) {
-    cache.set(snapshot.id, snapshot);
+/** Exported so the cache can be exercised directly; the app reaches it over Comlink. */
+export const api: SimWorkerApi = {
+  putSnapshot(key, snapshot) {
+    return remember(key, snapshot);
   },
-  hasSnapshot(id) {
-    return cache.has(id);
-  },
-  forgetSnapshot(id) {
-    cache.delete(id);
-  },
-  run(scenario, snapshot) {
-    const snap = resolve(snapshot);
+  run(scenario, ref) {
+    const snap = resolve(ref);
     return timed(() => runScenario(scenario, snap ? { snapshot: snap } : {}));
   },
-  matrix(attackers, defenders, context, enabledToggles, snapshot) {
-    const snap = resolve(snapshot);
+  matrix(attackers, defenders, context, enabledToggles, ref) {
+    const snap = resolve(ref);
     return timed(() => {
       const m = runMatrix(attackers, defenders, context, { ...(snap ? { snapshot: snap } : {}), enabledToggles });
       return { ...m, cells: m.cells.map((row) => row.map((c) => ({ ...c, result: slim(c.result) }))) };
     });
   },
-  durability(defender, opts, snapshot) {
-    const snap = resolve(snapshot);
+  durability(defender, opts, ref) {
+    const snap = resolve(ref);
     return timed(() => durabilityProfile(defender, { ...opts, ...(snap ? { snapshot: snap } : {}) }));
   },
-  durabilityIndex(defenders, opts, snapshot) {
-    const snap = resolve(snapshot);
+  durabilityIndex(defenders, opts, ref) {
+    const snap = resolve(ref);
     return timed(() => durabilityIndex(defenders, { ...opts, ...(snap ? { snapshot: snap } : {}) }));
   },
-  incoming(defenders, opts, snapshot) {
-    const snap = resolve(snapshot);
+  incoming(defenders, opts, ref) {
+    const snap = resolve(ref);
     return timed(() => incomingFire(defenders, { ...opts, ...(snap ? { snapshot: snap } : {}) }));
   },
-  efficiency(attackers, opts, snapshot) {
-    const snap = resolve(snapshot);
+  efficiency(attackers, opts, ref) {
+    const snap = resolve(ref);
     return timed(() => {
       // efficiencyRanking evaluates every attacker under one context; melee-only units would score 0 in the
       // shooting phase, so they are ranked in the fight phase (charged) and merged back into one ordering.
       const isMelee = (u: ScenarioUnit) => u.weapons.some((w) => w.enabled && w.count > 0) && u.weapons.every((w) => !w.enabled || w.count <= 0 || w.kind === "melee");
       const melee = attackers.filter(isMelee);
       const ranged = attackers.filter((u) => !isMelee(u));
-      const base = { ...opts, ...(snap ? { snapshot: snap } : {}) };
+      // The two halves are ranked separately and sorted into one column, so whether that column is
+      // denominated in points has to be settled across the whole set. Left to each call, a priced
+      // ranged half and an unpriced melee half would put damage per 100 points and raw damage in the
+      // same column.
+      const perPoints = attackers.length > 0 && attackers.every((u) => u.points !== undefined && u.points > 0);
+      const base = { ...opts, perPoints, ...(snap ? { snapshot: snap } : {}) };
+      // Each row carries its own backend and its own interval, both worked out over that unit's own
+      // target runs. The two halves are concatenated whole, so no row is dropped and no two rows are
+      // folded together. Settling `perPoints` above also settles the scale the intervals arrive on,
+      // because a row's half-width is denominated the same way its damage figure is.
       const rows = [...(ranged.length ? efficiencyRanking(ranged, base) : []), ...(melee.length ? efficiencyRanking(melee, { ...base, context: { ...(opts.context ?? {}), phase: "fight", charged: true } }) : [])];
+      // The order is still expected damage alone. Reading a tie off the intervals belongs to the screen.
       return rows.sort((x, y) => y.damagePer100 - x.damagePer100);
     });
   },
-  optimiseTurn(input, snapshot) {
-    const snap = resolve(snapshot);
+  optimiseTurn(input, ref) {
+    const snap = resolve(ref);
     return timed(() => optimiseTurn({ ...input, ...(snap ? { snapshot: snap } : {}) }));
   },
-  evaluateTurnPlan(input, plan, snapshot) {
-    const snap = resolve(snapshot);
+  evaluateTurnPlan(input, plan, ref) {
+    const snap = resolve(ref);
     return timed(() => evaluateTurnPlan({ ...input, ...(snap ? { snapshot: snap } : {}) }, plan));
   },
-  reverse(input, snapshot) {
-    const snap = resolve(snapshot);
+  reverse(input, ref) {
+    const snap = resolve(ref);
     return timed(() => reverseMathhammer({ ...input, ...(snap ? { snapshot: snap } : {}) }));
   },
-  sensitivity(scenario, variantIds, snapshot) {
-    const snap = resolve(snapshot);
+  sensitivity(scenario, variantIds, ref) {
+    const snap = resolve(ref);
     return timed(() => sensitivity(scenario, { ...(snap ? { snapshot: snap } : {}), ...(variantIds ? { variantIds } : {}) }));
   },
 };

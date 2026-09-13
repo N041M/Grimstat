@@ -1,4 +1,4 @@
-import type { Override, SnapshotData } from "@grimstat/schema";
+import { Ability, Datasheet, Detachment, Enhancement, Faction, PriceRule, Stratagem, type Override, type SnapshotData } from "@grimstat/schema";
 
 /** Structural copy of arrays and plain objects. Anything else (numbers, strings, null) is returned as it is. */
 function copy<T>(value: T): T {
@@ -36,10 +36,24 @@ const COLLECTIONS: Record<Override["entity"], keyof SnapshotData> = {
   faction: "factions",
 };
 
+/** The schema a record has to satisfy once the patch has been applied to it. */
+const SCHEMAS = {
+  datasheet: Datasheet,
+  ability: Ability,
+  detachment: Detachment,
+  enhancement: Enhancement,
+  stratagem: Stratagem,
+  priceRule: PriceRule,
+  faction: Faction,
+} satisfies Record<Override["entity"], { safeParse: (value: unknown) => { success: boolean } }>;
+
 export interface ApplyOverridesResult {
   data: SnapshotData;
   /** Overrides whose entity id was not found (index into the input array + a description). */
   missing: { index: number; entity: string; id: string }[];
+  /** Overrides that would leave a record the schema rejects. The record keeps the value it had. */
+  rejected: { index: number; entity: string; id: string; error: string }[];
+  /** How many overrides patched at least one record. */
   applied: number;
 }
 
@@ -47,25 +61,49 @@ export interface ApplyOverridesResult {
  * Apply hand-authored overrides on top of imported data. Each override is a JSON merge patch keyed by
  * entity kind + id. Price rules are addressed by datasheet id (the patch applies to every rule of that
  * datasheet). The input is not mutated.
+ *
+ * A patch is free-form JSON, so an imported pack can carry one that turns a record into something the
+ * schema no longer accepts. Each patched record is checked here and an override that fails the check
+ * is dropped whole and listed in `rejected`, which keeps the rest of the pack usable and names the
+ * entity the caller has to fix.
  */
 export function applyOverrides(data: SnapshotData, overrides: Override[]): ApplyOverridesResult {
   const out: SnapshotData = { ...data };
   const missing: ApplyOverridesResult["missing"] = [];
+  const rejected: ApplyOverridesResult["rejected"] = [];
   let applied = 0;
   overrides.forEach((ov, index) => {
     const key = COLLECTIONS[ov.entity];
     const list = (out[key] as unknown[]).slice();
     let hit = false;
+    let error: string | undefined;
     for (let i = 0; i < list.length; i++) {
       const item = list[i] as Record<string, unknown>;
       const id = ov.entity === "priceRule" ? item["datasheetId"] : item["id"];
       if (id !== ov.id) continue;
-      list[i] = mergePatch(item, ov.patch);
+      const patched = mergePatch(item, ov.patch);
+      const parsed = SCHEMAS[ov.entity].safeParse(patched);
+      if (!parsed.success) {
+        error = describeIssue(parsed.error);
+        break;
+      }
+      list[i] = patched;
       hit = true;
-      applied++;
+    }
+    if (error !== undefined) {
+      rejected.push({ index, entity: ov.entity, id: ov.id, error });
+      return;
     }
     if (!hit) missing.push({ index, entity: ov.entity, id: ov.id });
+    else applied++;
     (out as unknown as Record<string, unknown>)[key] = list;
   });
-  return { data: out, missing, applied };
+  return { data: out, missing, rejected, applied };
+}
+
+/** The first thing the schema objected to, as "field: reason". */
+function describeIssue(error: { issues: { path: PropertyKey[]; message: string }[] }): string {
+  const issue = error.issues[0];
+  if (!issue) return "invalid";
+  return `${issue.path.join(".") || "(root)"}: ${issue.message}`;
 }

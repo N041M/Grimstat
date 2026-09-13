@@ -8,6 +8,7 @@
  */
 
 import { XMLParser } from "fast-xml-parser";
+import { firstHttpUrl } from "./url";
 import type { FeedEntry } from "./types";
 
 /** Titles are tagged with their game; 40k write-ups are the ones naming the edition. */
@@ -32,7 +33,8 @@ export function parseFeed(xml: string): FeedEntry[] {
     if (!item || typeof item !== "object") continue;
     const it = item as Record<string, unknown>;
     const title = text(it["title"]);
-    const url = text(it["link"]) || attr(it["link"], "@href") || text(it["guid"]);
+    // A guid is often the article's address, and sometimes an id that is not a link at all.
+    const url = firstHttpUrl(text(it["link"]), attr(it["link"], "@href"), text(it["guid"]));
     if (!title || !url) continue;
     const published = text(it["pubDate"]) || text(it["published"]) || text(it["updated"]);
     out.push({ title, url, ...(published ? { published } : {}), isWarhammer40k: IS_40K.test(title) });
@@ -48,7 +50,7 @@ export function feedSource(xml: string): { title?: string; url?: string } {
   const channel = channelOf(xml);
   if (!channel) return {};
   const title = text(channel["title"]);
-  const url = text(channel["link"]) || attr(channel["link"], "@href");
+  const url = firstHttpUrl(text(channel["link"]), attr(channel["link"], "@href"));
   return { ...(title ? { title } : {}), ...(url ? { url } : {}) };
 }
 

@@ -62,6 +62,16 @@ export interface TerrainLayoutRecord {
  */
 export interface PublishedListRecord extends StoredPublishedList {
   id: string;
+  /**
+   * Where the record came from. A corpus refresh replaces the lists it put here itself and leaves
+   * everything else alone, so a list the user pasted in by hand survives a refresh of the corpus it
+   * was published in.
+   *
+   * Records written before this field existed carry nothing, and a refresh never removes those. The
+   * next refresh claims back the ones its corpus still carries. Nothing is indexed on the field, so
+   * adding it needed no new store version.
+   */
+  origin?: "corpus" | "hand";
 }
 
 /**
@@ -421,15 +431,21 @@ export interface ExportBundle {
     unitPresets?: UnitPresetRecord[];
     /** Added with db v10; absent in older bundles. */
     collection?: CollectionEntryRecord[];
+    /** Added with db v10; absent in older bundles. */
+    games?: GameRecord[];
+    /** Added with db v10; absent in older bundles. */
+    rosterVersions?: RosterVersionRecord[];
+    // `publishedResolved` is left out on purpose. It is worked out again from the lists and the
+    // active snapshot, so carrying it would only make a backup bigger.
   };
 }
 
 export async function exportAll(): Promise<ExportBundle> {
-  const [snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray(), db.terrainLayouts.toArray(), db.publishedLists.toArray(), db.unitPresets.toArray(), db.collection.toArray()]);
-  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection } };
+  const [snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection, games, rosterVersions] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray(), db.terrainLayouts.toArray(), db.publishedLists.toArray(), db.unitPresets.toArray(), db.collection.toArray(), db.games.toArray(), db.rosterVersions.toArray()]);
+  return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection, games, rosterVersions } };
 }
 
-export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number; terrainLayouts: number; publishedLists: number; unitPresets: number; collection: number }> {
+export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number; terrainLayouts: number; publishedLists: number; unitPresets: number; collection: number; games: number; rosterVersions: number }> {
   const s = bundle.stores;
   const rosters = s.rosters ?? [];
   const overrides = s.overrides ?? [];
@@ -437,7 +453,9 @@ export async function importAll(bundle: ExportBundle): Promise<{ snapshots: numb
   const publishedLists = s.publishedLists ?? [];
   const unitPresets = s.unitPresets ?? [];
   const collection = s.collection ?? [];
-  await db.transaction("rw", [db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, db.overrides, db.terrainLayouts, db.publishedLists, db.unitPresets, db.collection], async () => {
+  const games = s.games ?? [];
+  const rosterVersions = s.rosterVersions ?? [];
+  await db.transaction("rw", [db.snapshots, db.scenarios, db.layouts, db.settings, db.rosters, db.overrides, db.terrainLayouts, db.publishedLists, db.unitPresets, db.collection, db.games, db.rosterVersions], async () => {
     if (s.snapshots.length) await db.snapshots.bulkPut(s.snapshots);
     if (s.scenarios.length) await db.scenarios.bulkPut(s.scenarios);
     if (s.layouts.length) await db.layouts.bulkPut(s.layouts);
@@ -450,13 +468,16 @@ export async function importAll(bundle: ExportBundle): Promise<{ snapshots: numb
     if (publishedLists.length) await db.publishedLists.bulkPut(publishedLists.map((r) => ({ ...r, id: publishedListId(r) })));
     if (unitPresets.length) await db.unitPresets.bulkPut(unitPresets);
     if (collection.length) await db.collection.bulkPut(collection);
+    if (games.length) await db.games.bulkPut(games);
+    if (rosterVersions.length) await db.rosterVersions.bulkPut(rosterVersions);
   });
   notifyStoreChanged("rosters");
   if (terrainLayouts.length) notifyStoreChanged("terrainLayouts");
   if (publishedLists.length) notifyStoreChanged("publishedLists");
   if (unitPresets.length) notifyStoreChanged("unitPresets");
   if (collection.length) notifyStoreChanged("collection");
-  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length, terrainLayouts: terrainLayouts.length, publishedLists: publishedLists.length, unitPresets: unitPresets.length, collection: collection.length };
+  if (games.length) notifyStoreChanged("games");
+  return { snapshots: s.snapshots.length, scenarios: s.scenarios.length, layouts: s.layouts.length, settings: s.settings.length, rosters: rosters.length, overrides: overrides.length, terrainLayouts: terrainLayouts.length, publishedLists: publishedLists.length, unitPresets: unitPresets.length, collection: collection.length, games: games.length, rosterVersions: rosterVersions.length };
 }
 
 /** Every stored override, oldest first. */

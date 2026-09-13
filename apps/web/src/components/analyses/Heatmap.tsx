@@ -1,7 +1,7 @@
 import { useMemo, type CSSProperties } from "react";
-import type { MatrixResult } from "@grimstat/game-40k-11e";
+import type { MatrixCell, MatrixResult } from "@grimstat/game-40k-11e";
 import { heatColour, heatRamp, heatmapModel, type MatrixMetric } from "../../lib/heatmap";
-import { fmt, fmtInt, pct } from "../../lib/format";
+import { fmtInt, fmtSampled, pct } from "../../lib/format";
 import { useHover } from "../charts/HoverLayer";
 import { t } from "../../i18n";
 
@@ -47,9 +47,24 @@ export function metricNotation(metric: MatrixMetric): string {
   }
 }
 
-export function formatMetric(metric: MatrixMetric, v: number | undefined): string {
+export function formatMetric(metric: MatrixMetric, v: number | undefined, ciHalfWidth?: number): string {
   if (v === undefined) return "–";
-  return metric === "pKill" ? pct(v, 0) : fmt(v, 1);
+  return metric === "pKill" ? pct(v, 0) : fmtSampled(v, ciHalfWidth, 1);
+}
+
+/**
+ * The interval on a cell's metric, on that metric's own scale.
+ *
+ * A cell's interval belongs to its expected damage, so it carries straight over to the damage metric
+ * and, scaled by 100 / the attacker's points, to the damage per 100 points. A model count, a kill
+ * chance and a points trade are other quantities and the engine quotes no interval for them.
+ */
+export function cellHalfWidth(cell: MatrixCell, metric: MatrixMetric): number | undefined {
+  const h = cell.result.ciHalfWidth;
+  if (h === undefined) return undefined;
+  if (metric === "damage") return h;
+  if (metric === "damagePer100" && cell.attackerPoints) return (h / cell.attackerPoints) * 100;
+  return undefined;
 }
 
 /**
@@ -85,7 +100,8 @@ export function Heatmap({ matrix, metric, view = "values", attackerPoints, defen
             {matrix.defenders.map((dname, d) => {
               const v = model.values[a]?.[d];
               const c = heatColour(v, model.min, model.max);
-              const shown = formatMetric(metric, v);
+              const cell = matrix.cells[a]?.[d];
+              const shown = formatMetric(metric, v, cell ? cellHalfWidth(cell, metric) : undefined);
               const title = t("analyses.matrix.cellTitle", { a: name, d: dname, v: shown, metric: metricLabel(metric) });
               return (
                 <div key={d} role="cell" className="mx-cell">

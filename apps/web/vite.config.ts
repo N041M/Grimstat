@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { join, resolve } from "node:path";
@@ -116,6 +117,60 @@ function bundleSizePlugin(): Plugin {
   };
 }
 
+/* ---- the content policy the built page carries ---- */
+
+/**
+ * GitHub Pages serves files and sends no headers of its own, so the only place to state a policy is
+ * a meta tag in the page itself. Without one, a link or a piece of markup that arrived with
+ * imported data and got as far as the page would run with the same reach as the app, over every
+ * army and collection stored on the machine.
+ *
+ * `{hashes}` is filled in with the hash of each inline script, so the theme script can keep running
+ * before the first paint — which is the whole reason it is in the page rather than in the bundle —
+ * without the policy having to allow inline script in general. The hashes are taken from the page
+ * as it is actually built, so they cannot drift from what they cover.
+ *
+ * Styles are inline because React writes `style` attributes, and the reference-pack page carries
+ * its own stylesheet. `connect-src` allows other sites because the addresses are the user's to
+ * type: the corpus relay and the Wahapedia mirror are both fields on the Data page.
+ *
+ * `frame-ancestors` is left out because a meta tag cannot carry it.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' {hashes}",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self'",
+  "connect-src 'self' https:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
+/** Every `<script>` in the page that has no `src`, which is what a hash has to cover. */
+const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+
+/**
+ * Adds the policy to the built page. It is not added in dev, where the server injects inline
+ * scripts of its own for hot reloading that no fixed set of hashes can cover.
+ */
+function cspPlugin(): Plugin {
+  return {
+    name: "grimstat-csp",
+    apply: "build",
+    transformIndexHtml: {
+      order: "post",
+      handler(html) {
+        const hashes = [...html.matchAll(INLINE_SCRIPT)].map((m) => `'sha256-${createHash("sha256").update(m[1] ?? "", "utf8").digest("base64")}'`);
+        const policy = CSP.replace("{hashes}", hashes.join(" ")).replace(/\s+/g, " ").trim();
+        return html.replace(/<head>/i, `<head>\n    <meta http-equiv="Content-Security-Policy" content="${policy}" />`);
+      },
+    },
+  };
+}
+
 export default defineConfig({
   base,
   // pnpm gives each package its own node_modules, so @react-three/fiber can end up resolving a
@@ -128,10 +183,10 @@ export default defineConfig({
   },
   plugins: [
     bundleSizePlugin(),
+    cspPlugin(),
     react(),
     VitePWA({
       registerType: "prompt",
-      includeAssets: ["favicon.svg", "icon-192.png", "icon-512.png"],
       manifest: {
         name: "Grimstat",
         short_name: "Grimstat",
@@ -148,7 +203,11 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest}"],
+        // Everything the app needs to start without a network, including the four typefaces. They
+        // add about 69 KiB to the precache. Without them an offline visit falls back to system
+        // fonts and every screen reflows. The pattern also picks up the icons and the manifest,
+        // because public/ is copied into the build output this globs.
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest,woff2}"],
         navigateFallback: "index.html",
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },

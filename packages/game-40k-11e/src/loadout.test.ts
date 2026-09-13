@@ -87,6 +87,25 @@ describe("reading wargear option prose", () => {
     expect(r.complete).toBe(false);
   });
 
+  /**
+   * A weapon whose name opens with the letters of an article or a number word. Stripping those
+   * letters left "shen blade", which matches nothing the datasheet carries, so the line read as one
+   * granting the shock maul alone and the blade was reported as a weapon nothing grants.
+   */
+  it("keeps the first letter of a weapon whose name opens with an article or a number word", () => {
+    for (const name of ["Ashen blade", "Anvil hammer", "Thermal cutter", "Sixth lance"]) {
+      const ds = sheet({ weapons: ["Flux carbine", "Shock maul", name], options: [`Any number of models can each have their flux carbine replaced with 1 shock maul or ${name}.`] });
+      const r = readWargearOptions(ds);
+      expect(r.complete).toBe(true);
+      expect(r.options.map((o) => o.grants[0])).toContain(name.toLowerCase());
+      expect(checkLoadout(ds, withWeapon(ds, 10, name, 3)).problems).toEqual([]);
+    }
+    // A count written in front of such a name is still read as a count.
+    const counted = readWargearOptions(sheet({ weapons: ["Flux carbine", "Ashen blade"], options: ["Up to 2 Wardens can each have their flux carbine replaced with 2 Ashen blades."] }));
+    expect(counted.options[0]!.grants).toEqual(["ashen blade"]);
+    expect(counted.options[0]!.limit(10)).toBe(4);
+  });
+
   it("ignores a weapon the datasheet does not carry", () => {
     const r = readWargearOptions(sheet({ options: ["Up to 2 Wardens can each have their flux carbine replaced with 1 void hammer."] }));
     expect(r.options).toEqual([]);

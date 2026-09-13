@@ -5,7 +5,7 @@ import type { Roster, RosterUnit } from "@grimstat/schema";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import { SYNTHETIC_DIR } from "../test-utils";
 import { exportRosterText, importRosterText, exportRosterPrintHtml } from "./index";
-import { parseWargearItems, parseWargearList, splitList } from "./import";
+import { parseDetSpec, parseUnitHeader, parseWargearItems, parseWargearList, splitList } from "./import";
 import { RosterImportContext, nameIndexOf } from "./import-common";
 
 const snapshot = loadSyntheticSnapshot();
@@ -269,6 +269,12 @@ describe("text import edge cases", () => {
     expect(size(["Warden Squad (180 points)", "• 10x Flux carbine", "• 2x Shock maul"])).toBe(5);
   });
 
+  it("keeps a workable number of copies when a list line claims an absurd one", () => {
+    const { roster: r, warnings } = importLines("Ashen Wardens", "Ember Vanguard", "Ashen Crusher (180 points)", "• 999999999x Twin hail gun");
+    expect(warnings).toEqual([`Ashen Crusher: kept 20 copies of "Twin hail gun" out of the 999999999 the list asks for.`]);
+    expect(r.units[0]!.models[0]!.wargear).toEqual(Array.from({ length: 20 }, () => "Twin hail gun"));
+  });
+
   it("parses wargear with per-model counts and per-model copies", () => {
     expect(parseWargearItems("1 with Flux carbine, Power fist, 9 with Flux carbine")).toEqual([
       { name: "Flux carbine", n: 1, copies: 1 },
@@ -276,6 +282,54 @@ describe("text import edge cases", () => {
       { name: "Flux carbine", n: 9, copies: 1 },
     ]);
     expect(parseWargearList("Vortex cannon, 2x Twin hail gun")).toEqual(["Vortex cannon", "Twin hail gun", "Twin hail gun"]);
+  });
+});
+
+describe("detachment lines", () => {
+  it("reads the name, the DP count and the force disposition out of every dialect", () => {
+    expect(parseDetSpec("Ember Vanguard")).toEqual({ name: "Ember Vanguard" });
+    expect(parseDetSpec("Ember Vanguard [2 DP] (TAKE AND HOLD)")).toEqual({ name: "Ember Vanguard", dp: "2", note: "TAKE AND HOLD" });
+    expect(parseDetSpec("Ember Vanguard (2 DP, TAKE AND HOLD)")).toEqual({ name: "Ember Vanguard", dp: "2", dpNote: "TAKE AND HOLD" });
+    expect(parseDetSpec("Ember Vanguard (3 Detachment Points)")).toEqual({ name: "Ember Vanguard", dp: "3" });
+    expect(parseDetSpec("Ember Vanguard (VARIANT)")).toEqual({ name: "Ember Vanguard", note: "VARIANT" });
+    expect(parseDetSpec("Ashen Crusher (180 points)")).toEqual({ name: "Ashen Crusher", note: "180 points" });
+  });
+
+  // A line padded with spaces used to take the pattern this reads with seconds, and the meta worker runs
+  // it over every stored list, so one line of a fetched list could hold a core indefinitely.
+  it("reads a line padded with spaces in bounded time", () => {
+    for (const pad of [2000, 20000]) {
+      const started = performance.now();
+      parseDetSpec(`Ember Vanguard${" ".repeat(pad)}(`);
+      expect(performance.now() - started).toBeLessThan(50);
+    }
+  });
+});
+
+describe("unit header lines", () => {
+  it("reads the reference, the count, the name, the cost and the rest out of every dialect", () => {
+    expect(parseUnitHeader("Char1: 2x Canis Rex (415 pts): Warlord")).toEqual({ ref: "Char1", count: "2", label: "Canis Rex", points: "415", rest: "Warlord" });
+    expect(parseUnitHeader("5x Warden Squad (90 pts): 1 with Flux carbine")).toEqual({ count: "5", label: "Warden Squad", points: "90", rest: "1 with Flux carbine" });
+    expect(parseUnitHeader("Warden Squad [180pts]")).toEqual({ label: "Warden Squad", points: "180" });
+    expect(parseUnitHeader("Warden Squad - 80 pts")).toEqual({ label: "Warden Squad", points: "80" });
+    expect(parseUnitHeader("My list (2,000 points)")).toEqual({ label: "My list", points: "2,000" });
+    expect(parseUnitHeader("Ember Vanguard")).toBeUndefined();
+  });
+
+  // The count is only read when a name follows it. "10x (2000 points)" names no unit, so the whole "10x"
+  // is the name instead, and a line whose cost opens where the name would start reads the same way.
+  it("gives the count back when nothing is left for the name", () => {
+    expect(parseUnitHeader("10x (2000 points)")).toEqual({ label: "10x", points: "2000" });
+    expect(parseUnitHeader("Char1: (2000 points)")).toEqual({ ref: "Char1", label: " ", points: "2000" });
+    expect(parseUnitHeader("ab1:(80 pts)")).toEqual({ label: "ab1:", points: "80" });
+  });
+
+  it("reads a line padded with spaces in bounded time", () => {
+    for (const pad of [2000, 20000]) {
+      const started = performance.now();
+      parseUnitHeader(`Ember Vanguard${" ".repeat(pad)}(`);
+      expect(performance.now() - started).toBeLessThan(50);
+    }
   });
 });
 

@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Override, Roster, Scenario, Snapshot } from "@grimstat/schema";
-import { db, exportAll, importAll, overrideKey, type CollectionEntryRecord, type ExportBundle, type OverrideRecord, type PublishedListRecord, type SnapshotMeta, type TerrainLayoutRecord, type UnitPresetRecord } from "../db";
+import { db, exportAll, importAll, overrideKey, type CollectionEntryRecord, type ExportBundle, type GameRecord, type OverrideRecord, type PublishedListRecord, type RosterVersionRecord, type SettingRecord, type SnapshotMeta, type TerrainLayoutRecord, type UnitPresetRecord } from "../db";
 import { nowIso } from "../lib/ids";
 import { download } from "../lib/download";
 import { useApp } from "../state/AppContext";
 import { loadSampleSnapshot } from "../lib/snapshotSource";
 import { summarisePatch } from "../lib/overrides";
+import { CORPUS_URL_SETTING } from "../lib/corpusFetch";
+import { WAHAPEDIA_MIRROR_SETTING } from "../lib/importProgress";
 import { fmtDay, fmtInt } from "../lib/format";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead } from "../components/kit";
 import { useConfirm } from "../components/ui";
@@ -20,6 +22,19 @@ import { t } from "../i18n";
 
 /** Label (status dot) | System | Units | Weapons | Built. */
 const SNAPSHOT_COLUMNS = "minmax(180px,2fr) 120px 100px 100px 110px";
+
+/**
+ * Settings that name where the app fetches from. A backup file is something a player can be handed
+ * by anybody, so one may not quietly point a fetch at somewhere else.
+ */
+const FETCH_SETTINGS = new Set<string>([CORPUS_URL_SETTING, WAHAPEDIA_MIRROR_SETTING]);
+
+/** Somewhere the app may fetch from: an ordinary web address, or a path on this same site. */
+function isFetchable(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const v = value.trim();
+  return /^https?:\/\/[^\s/]+/i.test(v) || /^\/(?!\/)/.test(v);
+}
 
 function zodIssues(err: { issues: Array<{ path: Array<string | number>; message: string }> }, max = 15): string[] {
   const lines = err.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`);
@@ -259,14 +274,22 @@ export function DataPage() {
         else errors.push(`override ${rec.entity ?? "?"}:${rec.id ?? "?"}: ${p.error.issues[0]?.message ?? "invalid"}`);
       }
       // Everything `exportAll` writes has to come back, or a backup quietly loses the stores the
-      // importer forgot to name. These three have no Zod schema of their own, so each record is
+      // importer forgot to name. These stores have no Zod schema of their own, so each record is
       // checked for the fields the app reads and the rest are reported rather than dropped in
-      // silence.
-      const kept = <T,>(list: unknown, label: string, ok: (x: Record<string, unknown>) => boolean): T[] => {
+      // silence. A check may answer with the reason instead of `true` when "not a record" would
+      // not tell the reader what happened.
+      const named = (r: unknown): string => {
+        const rec = r as { id?: unknown; key?: unknown } | null;
+        if (typeof rec?.id === "string") return rec.id;
+        if (typeof rec?.key === "string") return rec.key;
+        return "?";
+      };
+      const kept = <T,>(list: unknown, label: string, ok: (x: Record<string, unknown>) => boolean | string): T[] => {
         const out: T[] = [];
         for (const r of Array.isArray(list) ? list : []) {
-          if (r && typeof r === "object" && ok(r as Record<string, unknown>)) out.push(r as T);
-          else errors.push(`${label} ${(r as { id?: string })?.id ?? "?"}: not a ${label} record`);
+          const verdict = r && typeof r === "object" ? ok(r as Record<string, unknown>) : false;
+          if (verdict === true) out.push(r as T);
+          else errors.push(`${label} ${named(r)}: ${typeof verdict === "string" ? verdict : `not a ${label} record`}`);
         }
         return out;
       };
@@ -275,12 +298,19 @@ export function DataPage() {
       const publishedLists = kept<PublishedListRecord>(b.stores.publishedLists, "list", (r) => isText(r.id));
       const unitPresets = kept<UnitPresetRecord>(b.stores.unitPresets, "preset", (r) => isText(r.id) && isText(r.name) && !!r.unit && typeof r.unit === "object");
       const collection = kept<CollectionEntryRecord>(b.stores.collection, "collection entry", (r) => isText(r.id) && isText(r.name) && Number.isFinite(r.owned));
+      const games = kept<GameRecord>(b.stores.games, "game", (r) => isText(r.id) && !!r.state && typeof r.state === "object" && Array.isArray(r.log));
+      const rosterVersions = kept<RosterVersionRecord>(b.stores.rosterVersions, "army version", (r) => isText(r.id) && isText(r.rosterId) && isText(r.json));
+      const settings = kept<SettingRecord>(b.stores.settings, "setting", (r) => {
+        if (!isText(r.key)) return false;
+        if (FETCH_SETTINGS.has(r.key as string) && !isFetchable(r.value)) return t("data.settingNotAddress");
+        return true;
+      });
 
       const counts = await importAll({
         format: "grimstat-export",
         version: 1,
         exportedAt: b.exportedAt ?? new Date().toISOString(),
-        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings: Array.isArray(b.stores.settings) ? b.stores.settings : [], rosters, overrides: overridesIn, terrainLayouts, publishedLists, unitPresets, collection },
+        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings, rosters, overrides: overridesIn, terrainLayouts, publishedLists, unitPresets, collection, games, rosterVersions },
       });
       await refreshSnapshots();
       await refreshOverrides();

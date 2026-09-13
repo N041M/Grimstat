@@ -115,6 +115,65 @@ export function bcompoundOneReroll(count: PMF, per: BPMF, pFail: number, perGive
   return btrim(out);
 }
 
+/**
+ * The table of `bcompoundOneReroll(delta(k), per, pFail, perGivenNotFail)` for k = 0..nMax.
+ *
+ * Every entry is built from the convolution powers of `perGivenNotFail`, and they are the same
+ * powers for every entry, so they are built once here and shared. Calling `bcompoundOneReroll` once
+ * per k rebuilds the whole power table on each call, which makes the table quadratic in nMax. On
+ * the exact backend that cost 30 weapons of D6+2 attacks 8.9 s with a single re-roll switched on
+ * against 0.11 s with it off.
+ */
+export function bcompoundOneRerollTable(nMax: number, per: BPMF, pFail: number, perGivenNotFail: BPMF): BPMF[] {
+  const table: BPMF[] = [];
+  if (pFail <= EPS) {
+    // Nothing is eligible for the re-roll, so entry k is the plain k-fold power of `per`.
+    let pow: BPMF = bdelta();
+    for (let k = 0; k <= nMax; k++) {
+      table.push(btrim(baddScaled([[0]], pow, 1)));
+      pow = bconvolve(pow, per);
+    }
+    return table;
+  }
+  const pows: BPMF[] = [bdelta()];
+  for (let k = 1; k <= nMax; k++) pows.push(bconvolve(pows[k - 1]!, perGivenNotFail));
+  // pows[m] followed by the one re-drawn item, built on first use and kept for later entries
+  const rerolled: BPMF[] = [];
+  const terms: Array<{ p: number; part: BPMF }> = [];
+  for (let k = 0; k <= nMax; k++) {
+    const bin = binomial(k, pFail);
+    terms.length = 0;
+    let rows = 1;
+    let cols = 1;
+    for (let j = 0; j <= k; j++) {
+      const pj = bin[j] ?? 0;
+      if (pj < EPS) continue;
+      let part: BPMF;
+      if (j >= 1) {
+        const m = k - j;
+        part = rerolled[m] ?? (rerolled[m] = bconvolve(pows[m]!, per));
+      } else part = pows[k]!;
+      terms.push({ p: pj, part });
+      rows = Math.max(rows, part.length);
+      cols = Math.max(cols, bcols(part));
+    }
+    // The terms are added into one grid of the final shape. Adding them one at a time with
+    // `baddScaled` copies the whole grid once per term, and the grid is much larger than most of the
+    // terms in it. That copying was three quarters of the time this table took.
+    const out: BPMF = [];
+    for (let i = 0; i < rows; i++) out.push(new Array<number>(cols).fill(0));
+    for (const { p, part } of terms) {
+      for (let i = 0; i < part.length; i++) {
+        const src = part[i]!;
+        const dst = out[i]!;
+        for (let j = 0; j < src.length; j++) dst[j] = (dst[j] ?? 0) + p * (src[j] ?? 0);
+      }
+    }
+    table.push(btrim(out));
+  }
+  return table;
+}
+
 export function bmarginalA(B: BPMF): PMF {
   return B.map((r) => r.reduce((s, v) => s + v, 0));
 }

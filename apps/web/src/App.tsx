@@ -6,6 +6,7 @@ import { useTheme } from "./theme";
 import { decodePermalink, permalinkTokenFromHash } from "./lib/permalink";
 import { decodeRosterPermalink, rosterTokenFromHash } from "./lib/rosterPermalink";
 import { cloneRoster } from "./lib/roster";
+import { hasUnsavedEdits } from "./lib/scenario";
 import { db, saveRosterWithVersion } from "./db";
 import { CalculatorPage } from "./pages/CalculatorPage";
 import { ScenariosPage } from "./pages/ScenariosPage";
@@ -20,15 +21,17 @@ import { DataPage } from "./pages/DataPage";
 import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { Sheet, useEdgeFade } from "./components/ui";
+import { Sheet, useConfirm, useEdgeFade } from "./components/ui";
 import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, useBarHostRef } from "./components/shell";
+import { mayReplaceScenario, setReplaceScenarioGuard } from "./components/shell/ContextColumn";
 import { swStore, useOnline, useServiceWorker } from "./lib/sw";
 import { t } from "./i18n";
 
 export function App() {
   const { route, param } = useRouteInfo();
   const theme = useTheme();
-  const { ready, notices, dismissNotice, replaceScenario, notify } = useApp();
+  const { ready, notices, dismissNotice, replaceScenario, notify, scenario } = useApp();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const sw = useServiceWorker();
   const online = useOnline();
   // On a phone the drawer carries navigation and on a tablet the rail does. Both widths put the
@@ -38,6 +41,10 @@ export function App() {
   const tablet = compact && !phone;
   const [sheet, setSheet] = useState(false);
   const [nav, setNav] = useState(false);
+  // Both layers keep the same close handler for as long as the app is mounted, so their focus
+  // handling is set up when they open rather than on every render of this screen.
+  const closeSheet = useCallback(() => setSheet(false), []);
+  const closeNav = useCallback(() => setNav(false), []);
   // The bar's action strip scrolls when a page has more actions than the width takes, and it is
   // only mounted at compact widths, so the fade is set up again whenever that changes.
   const setBarHost = useBarHostRef();
@@ -60,26 +67,48 @@ export function App() {
     if (!phone) setNav(false);
   }, [phone]);
 
+  // The shell owns the question every way of loading a scenario has to ask, because the calculator
+  // holds one scenario and loading another drops it. The screens and the palette ask through
+  // `mayReplaceScenario`.
+  useEffect(
+    () =>
+      setReplaceScenarioGuard(async () => {
+        const stored = await db.scenarios.get(scenario.id);
+        if (!hasUnsavedEdits(scenario, stored)) return true;
+        return confirm({ title: t("scenario.discardTitle"), body: t("scenario.discardBody", { name: scenario.name }), confirmLabel: t("scenario.discard"), danger: true });
+      }),
+    [scenario, confirm],
+  );
+
   // Permalinks: "#s=<token>" opens the scenario in the calculator (on load and when pasted later).
   useEffect(() => {
     if (!ready) return;
     const handle = () => {
       const token = permalinkTokenFromHash(location.hash);
       if (!token) return;
-      try {
-        const { scenario, snapshotId } = decodePermalink(token);
-        void replaceScenario(scenario, snapshotId).then(() => notify(t("scenario.openedFromLink", { name: scenario.name }), "success"));
-      } catch (e) {
-        notify(t("scenario.badLink"), "error", [e instanceof Error ? e.message : String(e)]);
-      }
-      navigate("calculator", true);
+      void (async () => {
+        try {
+          const shared = decodePermalink(token);
+          // A link pasted into the address bar changes the hash without reloading the page, so the
+          // scenario on screen is still there to lose.
+          if (await mayReplaceScenario()) {
+            await replaceScenario(shared.scenario, shared.snapshotId);
+            notify(t("scenario.openedFromLink", { name: shared.scenario.name }), "success");
+          }
+        } catch (e) {
+          notify(t("scenario.badLink"), "error", [e instanceof Error ? e.message : String(e)]);
+        }
+        navigate("calculator", true);
+      })();
     };
     handle();
     window.addEventListener("hashchange", handle);
     return () => window.removeEventListener("hashchange", handle);
   }, [ready, replaceScenario, notify]);
 
-  // Roster permalinks: "#/armies?r=<token>" stores the embedded army and opens it in the editor.
+  // Roster permalinks: "#/armies?r=<token>" offers the army the link carries, and keeps it once the
+  // person says so. Following a link is not by itself a reason to put someone else's army on this
+  // device, so nothing is stored until they answer.
   useEffect(() => {
     if (!ready) return;
     const handle = () => {
@@ -89,9 +118,16 @@ export function App() {
         try {
           const { roster, snapshotId } = decodeRosterPermalink(token);
           const existing = await db.rosters.get(roster.id);
-          const same = existing && JSON.stringify(existing) === JSON.stringify(roster);
-          const rec = existing && !same ? cloneRoster(roster, t("armies.fromLinkName", { name: roster.name })) : roster;
-          if (!same) await saveRosterWithVersion(rec);
+          if (existing && JSON.stringify(existing) === JSON.stringify(roster)) {
+            navigate("armies", true, roster.id);
+            return;
+          }
+          if (!(await confirm({ title: t("armies.keepFromLinkTitle"), body: t("armies.keepFromLinkBody", { name: roster.name }), confirmLabel: t("armies.keepFromLink") }))) {
+            navigate("armies", true);
+            return;
+          }
+          const rec = existing ? cloneRoster(roster, t("armies.fromLinkName", { name: roster.name })) : roster;
+          await saveRosterWithVersion(rec);
           if (!(await db.snapshots.get(snapshotId))) notify(t("armies.snapshotMissing", { id: snapshotId }), "info");
           else notify(t("armies.openedFromLink", { name: rec.name }), "success");
           navigate("armies", true, rec.id);
@@ -104,7 +140,7 @@ export function App() {
     handle();
     window.addEventListener("hashchange", handle);
     return () => window.removeEventListener("hashchange", handle);
-  }, [ready, notify]);
+  }, [ready, notify, confirm]);
 
   const page = !ready ? (
     <p className="muted shell-loading">{t("shell.loading")}</p>
@@ -136,9 +172,9 @@ export function App() {
         ) : null}
         {page}
       </main>
-      {phone ? <NavDrawer open={nav} onClose={() => setNav(false)} route={route} theme={theme} offline={!online} /> : null}
+      {phone ? <NavDrawer open={nav} onClose={closeNav} route={route} theme={theme} offline={!online} /> : null}
       {compact ? (
-        <Sheet open={sheet} onClose={() => setSheet(false)} label={contextEyebrow(route)} className="ctx-sheet">
+        <Sheet open={sheet} onClose={closeSheet} label={contextEyebrow(route)} className="ctx-sheet">
           <ContextColumn route={route} param={param} inSheet />
         </Sheet>
       ) : null}
@@ -187,6 +223,7 @@ export function App() {
         </div>
       ) : null}
       <CommandPalette theme={theme} />
+      {confirmDialog}
     </div>
   );
 }

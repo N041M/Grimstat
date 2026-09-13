@@ -1,11 +1,12 @@
 import { memo, useEffect, useRef, type ReactNode } from "react";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { Color, DoubleSide, MeshStandardMaterial, type Group, type Material } from "three";
-import type { ModelHull, Vec2, Vec3 } from "@grimstat/board";
+import type { ModelHull, Vec3 } from "@grimstat/board";
 import { footReach } from "@grimstat/board";
 import type { BattleUnit } from "../../lib/battle";
-import { SCENE_COLOURS, SIDE_COLOURS, facingRotation, fromScene, toScene } from "../../lib/battleScene";
+import { SCENE_COLOURS, SIDE_COLOURS, facingRotation, toScene } from "../../lib/battleScene";
 import { ACCENT, ARMOUR, figureScale, silhouetteFor, silhouetteGeometry, type SilhouetteId } from "../../lib/silhouettes";
+import { pressOf, type Press } from "./press";
 
 /**
  * Where each model's token is right now, mid-animation included, by model id.
@@ -219,7 +220,7 @@ export const UnitTokens = memo(function UnitTokens({
   /** Add mode is on from the toolbar: a press joins the model to the selection, with no key to hold. */
   addToSelection?: boolean;
   onSelect?: (unitId: string, modelId: string, additive?: boolean) => void;
-  onGrab?: (unitId: string, modelId: string, at: Vec2) => void;
+  onGrab?: (unitId: string, modelId: string, press: Press) => void;
 }) {
   return (
     <group>
@@ -230,12 +231,14 @@ export const UnitTokens = memo(function UnitTokens({
               <group
                 onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                   e.stopPropagation();
-                  const p = fromScene(e.point.x, e.point.y, e.point.z);
+                  // Only the primary button reaches a model. The right button pans the camera and
+                  // the middle one dollies it, and neither is meant to select or pick anything up.
+                  if (e.nativeEvent.button !== 0) return;
                   // A press with Shift, Ctrl or ⌘ adds to the selection rather than picking the model up.
                   // The toolbar's Add toggle says the same thing for a finger, which has no modifiers.
                   const additive = e.nativeEvent.shiftKey || e.nativeEvent.ctrlKey || e.nativeEvent.metaKey || !!addToSelection;
                   onSelect?.(unit.id, m.id, additive);
-                  if (!additive) onGrab?.(unit.id, m.id, { x: p.x, y: p.y });
+                  if (!additive) onGrab?.(unit.id, m.id, pressOf(e));
                 }}
                 onPointerOver={(e: ThreeEvent<PointerEvent>) => {
                   e.stopPropagation();

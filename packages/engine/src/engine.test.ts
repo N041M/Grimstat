@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
-import { binomial, compound, convolve, delta, dicePMF, diceMean, mean, thin, variance, run, runExact, runMonteCarlo, type EngineInput, type WeaponParams } from "./index";
+import { bcompoundOneReroll, bcompoundOneRerollTable, binomial, compound, convolve, delta, dicePMF, diceMean, makeStateSpace, mapPMF, mean, percentile, percentiles, thin, variance, run, runExact, runMonteCarlo, type EngineInput, type PMF, type TargetGroup, type WeaponParams } from "./index";
 
 const close = (a: number, b: number, tol = 1e-9) => expect(Math.abs(a - b)).toBeLessThanOrEqual(tol);
 
@@ -53,6 +53,72 @@ describe("pmf primitives", () => {
     const p = convolve(convolve(per, per), per);
     c.forEach((v, i) => close(v, p[i] ?? 0));
     close(variance(binomial(10, 0.5)), 2.5);
+  });
+});
+
+/**
+ * `percentile` uses the nearest-rank convention. The answer is the smallest value whose running
+ * total reaches the asked-for probability, so every answer is a value the distribution can take and
+ * nothing is interpolated between two adjacent values.
+ *
+ * The headline reads p50 and p95 off `damagePercentiles` and the damage chart shades the band
+ * between p25 and p75, so both the values and their order reach the screen.
+ */
+describe("percentiles", () => {
+  it("takes the first value whose running total reaches the quantile", () => {
+    //   k        0     1     2     3     4     5
+    //   P(X=k)  0.1   0.0   0.2   0.3   0.3   0.1
+    //   P(X≤k)  0.1   0.1   0.3   0.6   0.9   1.0
+    // 0.05 is reached at 0, 0.25 at 2, 0.5 at 3, 0.75 at 4 and 0.95 at 5.
+    const p = [0.1, 0, 0.2, 0.3, 0.3, 0.1];
+    // The two quarters are the ends of the band the chart shades, and they are two damage apart here.
+    expect(percentiles(p)).toEqual({ p5: 0, p25: 2, p50: 3, p75: 4, p95: 5 });
+  });
+
+  it("counts a running total that lands exactly on the quantile", () => {
+    //   k        0     1     2     3
+    //   P(X≤k)  0.25  0.50  0.75  1.00
+    // A running total equal to the quantile is enough, so 0.25 answers 0 rather than 1. An
+    // interpolating convention would put the median at 1.5 and the quarters at 0.75 and 2.25.
+    const p = [0.25, 0.25, 0.25, 0.25];
+    expect(percentiles(p)).toEqual({ p5: 0, p25: 0, p50: 1, p75: 2, p95: 3 });
+    expect(percentile(p, 0.5)).toBe(1);
+    expect(percentile(p, 0.5000001)).toBe(2);
+  });
+
+  it("gives one value five times for a distribution with no spread", () => {
+    expect(percentiles(delta(3))).toEqual({ p5: 3, p25: 3, p50: 3, p75: 3, p95: 3 });
+  });
+
+  it("never puts a lower quantile above a higher one on the engine's own output", () => {
+    const spread = (models: number, wounds: number, damage: PMF, count: number, pUnsaved: number) =>
+      run({
+        weapons: [weapon({ count, attacks: dicePMF("D3"), groups: [{ pUnsaved, damage, mortalDamage: damage }] })],
+        groups: [{ id: "g", name: "g", models, wounds, isCharacter: false }],
+        allocation: "in-order",
+        backend: "exact",
+        mcIterations: 0,
+      });
+    const outputs = [
+      spread(10, 1, delta(1), 10, 1 / 3),
+      spread(5, 2, dicePMF("D3"), 6, 1 / 2),
+      spread(3, 4, dicePMF("D6"), 4, 2 / 3),
+      spread(1, 12, dicePMF("D6"), 8, 5 / 6),
+      spread(20, 1, delta(2), 12, 1),
+    ];
+    let anySpread = false;
+    for (const out of outputs) {
+      for (const pmf of [out.damagePMF, out.slainPMF]) {
+        const q = percentiles(pmf);
+        expect(q.p5).toBeLessThanOrEqual(q.p25);
+        expect(q.p25).toBeLessThanOrEqual(q.p50);
+        expect(q.p50).toBeLessThanOrEqual(q.p75);
+        expect(q.p75).toBeLessThanOrEqual(q.p95);
+        if (q.p25 < q.p75) anySpread = true;
+      }
+    }
+    // The ordering above only says anything while some scenario has a quarter-to-quarter spread.
+    expect(anySpread).toBe(true);
   });
 });
 
@@ -257,6 +323,145 @@ describe("monte carlo agrees with exact", () => {
   });
 });
 
+/**
+ * The identities below have to hold for every weapon and every defender, so they are checked
+ * against randomly built profiles rather than against a handful of chosen ones. The generators
+ * cover the keyword combinations the hand-written cases above take one at a time: torrent,
+ * sustained hits, lethal hits, devastating wounds, a single re-roll on either roll, precision, a
+ * fixed die on either roll, and two weapons firing into one or two defending groups.
+ *
+ * A weapon deals the same damage to every group it can hit, which keeps the damage accounting below
+ * a single equation.
+ */
+describe("property: arbitrary weapon profiles and defender statlines", () => {
+  /** A hit or wound gate built from a target number and the roll a critical starts on. */
+  const gateArb = fc.tuple(fc.integer({ min: 2, max: 5 }), fc.constantFrom(5, 6)).map(([target, crit]) => {
+    const faces = [1, 2, 3, 4, 5, 6];
+    const pCrit = faces.filter((r) => r >= crit).length / 6;
+    const pOk = faces.filter((r) => r >= target && r < crit).length / 6;
+    return { ok: pOk, crit: pCrit, fail: 1 - pOk - pCrit };
+  });
+
+  const diceArb = fc.constantFrom("1", "2", "D3", "D6");
+
+  const profileArb = fc.record({
+    count: fc.integer({ min: 1, max: 3 }),
+    attacks: diceArb,
+    hit: gateArb,
+    wound: gateArb,
+    autoHit: fc.boolean(),
+    sustained: fc.constantFrom(null, "1", "D3"),
+    lethal: fc.boolean(),
+    devastating: fc.boolean(),
+    singleRerollHit: fc.boolean(),
+    singleRerollWound: fc.boolean(),
+    precision: fc.boolean(),
+    fixedHit: fc.constantFrom(undefined, "miss" as const, "hit" as const, "crit" as const),
+    fixedWound: fc.constantFrom(undefined, "fail" as const, "wound" as const, "crit" as const),
+    pUnsaved: fc.constantFrom(0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6, 1),
+    damage: diceArb,
+  });
+
+  const statlineArb = fc.record({
+    models: fc.integer({ min: 1, max: 5 }),
+    wounds: fc.integer({ min: 1, max: 3 }),
+    isCharacter: fc.boolean(),
+    pointsPerModel: fc.integer({ min: 0, max: 40 }),
+  });
+
+  type Profile = typeof profileArb extends fc.Arbitrary<infer T> ? T : never;
+  type Statline = typeof statlineArb extends fc.Arbitrary<infer T> ? T : never;
+
+  const build = (profiles: Profile[], statlines: Statline[]) => {
+    const groups: TargetGroup[] = statlines.map((s, i) => ({ id: `g${i}`, name: `g${i}`, ...s }));
+    const weapons = profiles.map((p, i) => {
+      const damage = dicePMF(p.damage);
+      return weapon({
+        name: `w${i}`,
+        count: p.count,
+        attacks: dicePMF(p.attacks),
+        hit: { pMiss: p.hit.fail, pHit: p.hit.ok, pCrit: p.hit.crit },
+        wound: { pFail: p.wound.fail, pWound: p.wound.ok, pCrit: p.wound.crit },
+        autoHit: p.autoHit,
+        sustained: p.sustained === null ? null : dicePMF(p.sustained),
+        lethal: p.lethal,
+        devastating: p.devastating,
+        singleRerollHit: p.singleRerollHit,
+        singleRerollWound: p.singleRerollWound,
+        precision: p.precision,
+        ...(p.fixedHit ? { fixedHit: p.fixedHit } : {}),
+        ...(p.fixedWound ? { fixedWound: p.fixedWound } : {}),
+        groups: groups.map(() => ({ pUnsaved: p.pUnsaved, damage, mortalDamage: damage })),
+      });
+    });
+    return { weapons, groups };
+  };
+
+  it("holds the engine's identities whatever the profile and the statline", () => {
+    fc.assert(
+      fc.property(
+        fc.array(profileArb, { minLength: 1, maxLength: 2 }),
+        fc.array(statlineArb, { minLength: 1, maxLength: 2 }),
+        fc.constantFrom("in-order" as const, "protect-character" as const),
+        (profiles, statlines, allocation) => {
+          const { weapons, groups } = build(profiles, statlines);
+          const out = runExact({ weapons, groups, allocation, backend: "exact", mcIterations: 0 })!;
+          expect(out).not.toBeNull();
+
+          // Both outputs are distributions. Every entry is a real number between 0 and 1 and the
+          // whole of the mass is accounted for.
+          for (const pmf of [out.damagePMF, out.slainPMF]) {
+            for (const v of pmf) {
+              expect(Number.isFinite(v)).toBe(true);
+              expect(v).toBeGreaterThanOrEqual(0);
+            }
+            close(pmf.reduce((s, v) => s + v, 0), 1, 1e-9);
+          }
+
+          // The reported expectation is the mean of the distribution it is reported beside.
+          close(out.expectedDamage, mean(out.damagePMF), 1e-9);
+          close(out.expectedSlain, mean(out.slainPMF), 1e-9);
+
+          // Every model dead is the top of the slain distribution, and that is what pKill counts.
+          const allModels = groups.reduce((s, g) => s + g.models, 0);
+          close(out.pKill, out.slainPMF[allModels] ?? 0, 1e-12);
+
+          // A hit is needed for a wound roll and a wound for a save, so the trace narrows at every step.
+          for (const t of out.weapons) {
+            expect(t.expectedWounds).toBeLessThanOrEqual(t.expectedHits + 1e-9);
+            expect(t.expectedUnsaved).toBeLessThanOrEqual(t.expectedWounds + 1e-9);
+            expect(t.expectedDamage).toBeGreaterThanOrEqual(-1e-9);
+          }
+
+          // Damage that is rolled either comes off the defending unit or is wasted on overkill, so
+          // the two together are the damage the dice produced. A weapon without devastating wounds
+          // rolls damage once per wound that beats the save, which is the equality below. A
+          // devastating weapon also rolls mortal damage for its critical wounds, and those skip the
+          // save, so its total sits between the two rates instead.
+          let rolledIfSaved = 0;
+          let rolledIfNotSaved = 0;
+          let everyEventSaveable = true;
+          profiles.forEach((p, i) => {
+            const per = diceMean(p.damage);
+            const wounds = out.weapons[i]!.expectedWounds;
+            rolledIfSaved += wounds * p.pUnsaved * per;
+            rolledIfNotSaved += wounds * per;
+            if (p.devastating) everyEventSaveable = false;
+          });
+          const total = out.expectedDamage + out.expectedWasted;
+          const tol = 1e-9 * Math.max(1, rolledIfNotSaved);
+          if (everyEventSaveable) close(total, rolledIfSaved, tol);
+          else {
+            expect(total).toBeGreaterThanOrEqual(rolledIfSaved - tol);
+            expect(total).toBeLessThanOrEqual(rolledIfNotSaved + tol);
+          }
+        },
+      ),
+      { numRuns: 300 },
+    );
+  });
+});
+
 describe("chained runs", () => {
   it("running two weapons in one run equals running them in two chained runs", () => {
     const groups = [{ id: "g", name: "g", models: 4, wounds: 3, isCharacter: false, pointsPerModel: 10 }];
@@ -299,5 +504,218 @@ describe("chained runs", () => {
     // cumulative total gave 4.35.
     const one = chained(3, 20000);
     expect((one.ciHalfWidth! * Math.sqrt(20000)) / 1.96).toBeCloseTo(2.33, 1);
+  });
+});
+
+describe("the confidence interval is only offered when the sample can support one", () => {
+  // On a target the attack always wipes, every run deals exactly the same damage. The half-width
+  // formula then reports zero, which reads as an exact answer from a method that did not produce
+  // one: measured at a hundred runs, such an interval held the true value 24% of the time. A sample
+  // with no spread says nothing about how far off it might be, so none is offered.
+  const overkill = (mcIterations: number) =>
+    runMonteCarlo({
+      weapons: [weapon({ count: 12, autoHit: true, wound: { pFail: 0.05, pWound: 0.95, pCrit: 0 }, groups: [{ pUnsaved: 0.95, damage: delta(2), mortalDamage: delta(2) }] })],
+      groups: [{ id: "g", name: "g", models: 3, wounds: 2, isCharacter: false }],
+      allocation: "in-order",
+      backend: "mc",
+      mcIterations,
+      seed: 1,
+    });
+
+  it("offers none when every run dealt the same damage", () => {
+    const r = overkill(1000);
+    expect(r.expectedDamage).toBe(6);
+    expect(r.ciHalfWidth).toBeUndefined();
+  });
+
+  it("still offers one whenever the runs differ", () => {
+    const r = runMonteCarlo({
+      weapons: [weapon({ count: 5, groups: [{ pUnsaved: 1 / 3, damage: delta(1), mortalDamage: delta(1) }] })],
+      groups: [{ id: "g", name: "g", models: 5, wounds: 2, isCharacter: false }],
+      allocation: "in-order",
+      backend: "mc",
+      mcIterations: 2000,
+      seed: 1,
+    });
+    expect(r.ciHalfWidth).toBeGreaterThan(0);
+  });
+});
+
+describe("a single re-roll costs about what the same attack costs without one", () => {
+  /**
+   * Command Re-roll rebuilt the whole table of wound-die powers once for every rolling hit the
+   * attack could produce, and the table is the same one every time. That is quadratic in the number
+   * of hits. 30 weapons of D6+2 attacks took 8.9 s with the re-roll on and 0.11 s with it off.
+   * The powers are now built once for the whole table.
+   *
+   * A re-roll still costs more than no re-roll, by about five times on this scenario. The threshold
+   * is four times that, which leaves room for a slow or a busy machine and still catches the
+   * quadratic term if it comes back.
+   */
+  const scenario = (singleRerollWound: boolean): EngineInput => ({
+    weapons: [
+      weapon({
+        count: 12,
+        attacks: dicePMF("D6+2"),
+        sustained: dicePMF("D3"),
+        devastating: true,
+        singleRerollWound,
+        groups: [{ pUnsaved: 2 / 3, damage: dicePMF("D3"), mortalDamage: dicePMF("D3") }],
+      }),
+    ],
+    groups: [{ id: "g", name: "g", models: 10, wounds: 3, isCharacter: false }],
+    allocation: "in-order",
+    backend: "exact",
+    mcIterations: 0,
+  });
+
+  const time = (reroll: boolean): number => {
+    const t0 = performance.now();
+    runExact(scenario(reroll));
+    return performance.now() - t0;
+  };
+
+  it("stays within a small multiple of the same attack without the re-roll", () => {
+    // Two goes at each and the quicker one taken, so that the first run's warm-up and a machine
+    // that is busy for a moment do not decide the answer.
+    const off = Math.min(time(false), time(false));
+    const on = Math.min(time(true), time(true));
+    expect(on).toBeLessThan(off * 20);
+  });
+
+  it("builds the same table as one call for each number of dice", () => {
+    // The shared table has to give the same numbers as the call it replaced, to the last bit, for
+    // every wound gate the game can produce. The last gate here never fails, which is the case that
+    // has no die to re-roll.
+    const gate = (pFail: number, pWound: number, pCrit: number) => {
+      const full = [
+        [pFail, pCrit],
+        [pWound, 0],
+      ];
+      const z = 1 - pFail;
+      const givenNotFail = z > 0 ? [[0, pCrit / z], [pWound / z, 0]] : [[1]];
+      return { full, givenNotFail };
+    };
+    for (const [pFail, pWound, pCrit] of [
+      [1 / 2, 1 / 3, 1 / 6],
+      [1 / 6, 4 / 6, 1 / 6],
+      [5 / 6, 0, 1 / 6],
+      [0, 5 / 6, 1 / 6],
+    ]) {
+      const { full, givenNotFail } = gate(pFail!, pWound!, pCrit!);
+      const table = bcompoundOneRerollTable(9, full, pFail!, givenNotFail);
+      for (let k = 0; k <= 9; k++) expect(table[k]).toEqual(bcompoundOneReroll(delta(k), full, pFail!, givenNotFail));
+    }
+  });
+});
+
+describe("the exact backend counts the work a target will take", () => {
+  /**
+   * The DP walks the whole state space once per wound needing a save and once per mortal-damage
+   * event, so a target can be small in states and still take seconds. This one is 21,777 states,
+   * comfortably inside the 40,000 state cap, and its DP walked them 3.9e8 times before the work was
+   * counted.
+   */
+  const heavy = (groups: TargetGroup[]): EngineInput => ({
+    weapons: [
+      weapon({
+        count: 30,
+        attacks: dicePMF("D6+2"),
+        sustained: dicePMF("D3"),
+        devastating: true,
+        groups: groups.map(() => ({ pUnsaved: 2 / 3, damage: dicePMF("D3"), mortalDamage: dicePMF("D3") })),
+      }),
+    ],
+    groups,
+    allocation: "in-order",
+    backend: "auto",
+    mcIterations: 2000,
+    seed: 5,
+  });
+
+  const threeGroups: TargetGroup[] = [
+    { id: "a", name: "a", models: 20, wounds: 3, isCharacter: false },
+    { id: "b", name: "b", models: 10, wounds: 5, isCharacter: false },
+    { id: "c", name: "c", models: 1, wounds: 6, isCharacter: true },
+  ];
+
+  it("sends a target the state cap would have let through to the sampled backend", () => {
+    expect(makeStateSpace(threeGroups).total).toBeLessThan(40000);
+    expect(runExact(heavy(threeGroups))).toBeNull();
+    const out = run(heavy(threeGroups));
+    expect(out.backend).toBe("mc");
+    expect(out.warnings.join(" ")).toContain("Monte Carlo");
+  });
+
+  it("still solves a target whose work is inside the budget", () => {
+    const out = runExact(heavy([{ id: "g", name: "g", models: 10, wounds: 3, isCharacter: false }]));
+    expect(out).not.toBeNull();
+    expect(out!.backend).toBe("exact");
+  });
+
+  it("takes the budget from the caller when it sets one", () => {
+    const small: EngineInput = {
+      weapons: [weapon({ count: 4, groups: [{ pUnsaved: 1 / 2, damage: delta(1), mortalDamage: delta(1) }] })],
+      groups: [{ id: "g", name: "g", models: 2, wounds: 2, isCharacter: false }],
+      allocation: "in-order",
+      backend: "exact",
+      mcIterations: 0,
+    };
+    expect(runExact({ ...small, maxExactWork: 1 })).toBeNull();
+    expect(runExact({ ...small, maxExactStates: 1 })).toBeNull();
+    expect(runExact(small)).not.toBeNull();
+  });
+});
+
+describe("inputs the engine should not be broken by", () => {
+  const shot = (groups: TargetGroup[], mcIterations: number): EngineInput => ({
+    weapons: [weapon({ count: 4, attacks: dicePMF("2"), groups: groups.map(() => ({ pUnsaved: 1 / 2, damage: delta(1), mortalDamage: delta(1) })) })],
+    groups,
+    allocation: "in-order",
+    backend: "exact",
+    mcIterations,
+    seed: 3,
+  });
+
+  it("reads a model of no wounds as a model of one, in both backends", () => {
+    // A group of zero wounds has one state, and that state is the one every reader takes for "all
+    // the models here are dead". The exact backend reported three models slain before a shot was
+    // fired. The sampled backend reported none.
+    const groups: TargetGroup[] = [{ id: "g", name: "g", models: 3, wounds: 0, isCharacter: false }];
+    const before = runExact({ ...shot(groups, 0), weapons: [] })!;
+    expect(before.expectedSlain).toBe(0);
+    expect(before.pKill).toBe(0);
+    const ex = runExact(shot(groups, 0))!;
+    const mc = runMonteCarlo(shot(groups, 20000));
+    close(ex.expectedSlain, mc.expectedSlain, 0.05);
+    close(ex.pKill, mc.pKill, 0.05);
+    close(ex.expectedDamage, mc.expectedDamage, 0.05);
+  });
+
+  it("fires into an empty target list without either backend falling over", () => {
+    // Reached only through the engine's own API: the game plugin refuses a target with no groups.
+    const ex = runExact(shot([], 0))!;
+    const mc = runMonteCarlo(shot([], 500));
+    close(ex.pKill, mc.pKill, 1e-9);
+    expect(mc.expectedDamage).toBe(0);
+    expect(mc.expectedWasted).toBe(0);
+  });
+
+  it("keeps binomial a distribution past the size its coefficients overflow at", () => {
+    // The coefficient runs past the largest double a little above n = 1030, and every entry from
+    // there on was an infinity or a NaN. Reached from a profile rolling that many attack dice.
+    for (const n of [1029, 1031, 2000]) {
+      const b = binomial(n, 1 / 3);
+      expect(b.every(Number.isFinite)).toBe(true);
+      close(b.reduce((s, v) => s + v, 0), 1, 1e-9);
+      close(mean(b), n / 3, 1e-6);
+    }
+  });
+
+  it("refuses a damage modifier that is not a number instead of dropping the mass", () => {
+    // Math.round(NaN) is NaN, which is no index at all. The mass went into a property named "NaN"
+    // and the caller was handed a distribution summing to less than one, with no error raised.
+    expect(() => mapPMF(dicePMF("D6"), (k) => k * NaN)).toThrow(/mapPMF/);
+    close(mapPMF(dicePMF("D6"), (k) => k - 1).reduce((s, v) => s + v, 0), 1, 1e-12);
   });
 });

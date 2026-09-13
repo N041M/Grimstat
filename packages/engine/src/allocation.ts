@@ -15,7 +15,21 @@ export interface StateSpace {
   total: number;
 }
 
-export function makeStateSpace(groups: TargetGroup[]): StateSpace {
+/**
+ * The encoding above counts whole models and whole wounds, so a group is read as a whole number of
+ * models with at least one wound each. A group of zero wounds has only one local index. That index
+ * is the one every reader here treats as "every model in the group is dead", so the exact backend
+ * reported such a group wiped out before a shot was fired. The sampled backend had the same group
+ * standing. Both backends take their models from this function, so they read the same defender.
+ */
+function readGroup(g: TargetGroup): TargetGroup {
+  const models = Number.isFinite(g.models) ? Math.max(0, Math.round(g.models)) : 0;
+  const wounds = Number.isFinite(g.wounds) ? Math.max(1, Math.round(g.wounds)) : 1;
+  return models === g.models && wounds === g.wounds ? g : { ...g, models, wounds };
+}
+
+export function makeStateSpace(raw: TargetGroup[]): StateSpace {
+  const groups = raw.map(readGroup);
   const sizes = groups.map((g) => g.models * g.wounds + 1);
   const strides: number[] = [];
   let acc = 1;

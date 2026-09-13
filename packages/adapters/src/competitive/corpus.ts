@@ -8,6 +8,7 @@
 
 import { z } from "zod";
 import { PublishedListsError, dedupePublishedLists } from "./file";
+import { CorpusFileName, HttpUrl } from "./url";
 import type { MinihqTournamentLists } from "./minihq";
 import type { StoredPublishedList } from "./types";
 
@@ -18,14 +19,14 @@ export const CORPUS_INDEX_FILE = "index.json";
 const CorpusSource = z.object({
   id: z.string(),
   name: z.string(),
-  url: z.string(),
+  url: HttpUrl,
   publication: z.string(),
   attribution: z.string(),
   licence: z.string().optional(),
 });
 
 const CorpusFile = z.object({
-  name: z.string(),
+  name: CorpusFileName,
   /** YYYY-MM, the month the tournaments were played. */
   month: z.string(),
   lists: z.number().int().nonnegative(),
@@ -36,9 +37,10 @@ const CorpusTournament = z.object({
   slug: z.string(),
   name: z.string(),
   date: z.string(),
-  url: z.string(),
+  /** The page the lists were read from. Empty when the crawl did not record one. */
+  url: HttpUrl.or(z.literal("")),
   lists: z.number().int().nonnegative(),
-  file: z.string(),
+  file: CorpusFileName,
 });
 
 export const CorpusIndex = z.object({

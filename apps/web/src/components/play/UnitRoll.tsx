@@ -68,13 +68,16 @@ function WoundRow({ game, side, id, name, profileWounds, models, woundsLeft, mod
   const total = Math.max(1, Math.round(profileWounds)) * Math.max(1, Math.round(models));
   const typed = Math.max(0, Math.floor(num(text, 0)));
 
+  // The wounds go in the log line as well as on the unit. The side named is the one that took them,
+  // which is how the summary works out who dealt them. Wounds put back are the same line with a
+  // negative amount, so healing a unit lowers what was dealt to it rather than adding to it.
   const damage = (n: number) => {
     if (n <= 0) return;
-    game.dispatch({ kind: "damage", target, wounds: n, profileWounds, models }, "damage", tn(n, "roll.log.damage.one", "roll.log.damage.many", { name }));
+    game.dispatch({ kind: "damage", target, wounds: n, profileWounds, models }, "damage", tn(n, "roll.log.damage.one", "roll.log.damage.many", { name }), { amount: n, side, unitId: id });
   };
   const heal = (n: number) => {
     if (n <= 0) return;
-    game.dispatch({ kind: "heal", target, wounds: n, profileWounds }, "damage", tn(n, "roll.log.heal.one", "roll.log.heal.many", { name }));
+    game.dispatch({ kind: "heal", target, wounds: n, profileWounds }, "damage", tn(n, "roll.log.heal.one", "roll.log.heal.many", { name }), { amount: -n, side, unitId: id });
   };
   const setDestroyed = (on: boolean) => {
     game.dispatch({ kind: "destroy", target, destroyed: on }, "destroy", t(on ? "roll.log.destroyed" : "roll.log.restored", { name }));

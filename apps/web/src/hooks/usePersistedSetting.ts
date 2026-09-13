@@ -1,7 +1,47 @@
-import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { getSetting, setSetting } from "../db";
 
 const WRITE_DEBOUNCE_MS = 250;
+
+/** A write that is waiting for the typing to stop. */
+export interface PendingWrite<T> {
+  /** Start the wait again with this value, replacing whatever was waiting. */
+  schedule(key: string, value: T): void;
+  /** Write what is waiting now. Does nothing when nothing is waiting. */
+  flush(): Promise<void>;
+  /** Forget what is waiting without writing it. */
+  cancel(): void;
+}
+
+/**
+ * A debounced write that can be finished early.
+ *
+ * The value waits `delay` milliseconds so a run of keystrokes costs one write, and the wait can be
+ * cut short by `flush`, which is what a component does on its way out. A write that fails is
+ * dropped, because there is nothing a settings write can usefully report to the person typing.
+ */
+export function pendingWrite<T>(write: (key: string, value: T) => Promise<void>, delay = WRITE_DEBOUNCE_MS): PendingWrite<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let due: { key: string; value: T } | undefined;
+  const flush = async (): Promise<void> => {
+    clearTimeout(timer);
+    const now = due;
+    due = undefined;
+    if (now) await write(now.key, now.value).catch(() => undefined);
+  };
+  return {
+    schedule(key, value) {
+      clearTimeout(timer);
+      due = { key, value };
+      timer = setTimeout(() => void flush(), delay);
+    },
+    flush,
+    cancel() {
+      clearTimeout(timer);
+      due = undefined;
+    },
+  };
+}
 
 /**
  * React state mirrored into the Dexie `settings` store under `key`. The stored value is read once on
@@ -11,10 +51,10 @@ const WRITE_DEBOUNCE_MS = 250;
 export function usePersistedSetting<T>(key: string, initial: T, parse: (raw: unknown) => T | undefined): [T, (next: SetStateAction<T>) => void, boolean] {
   const [value, setValue] = useState<T>(initial);
   const [loaded, setLoaded] = useState(false);
-  const timer = useRef<number | undefined>(undefined);
   const parseRef = useRef(parse);
   parseRef.current = parse;
   const initialRef = useRef(initial);
+  const writer = useMemo(() => pendingWrite<T>((k, v) => setSetting(k, v)), []);
 
   useEffect(() => {
     let alive = true;
@@ -35,12 +75,25 @@ export function usePersistedSetting<T>(key: string, initial: T, parse: (raw: unk
     };
   }, [key]);
 
+  // No cleanup here: the next change restarts the wait by itself, and a value still waiting has to
+  // survive an unmount for the effect below to write it.
   useEffect(() => {
-    if (!loaded) return;
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => void setSetting(key, value).catch(() => undefined), WRITE_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer.current);
-  }, [key, value, loaded]);
+    if (!loaded) {
+      writer.cancel();
+      return;
+    }
+    writer.schedule(key, value);
+  }, [key, value, loaded, writer]);
+
+  // Save on unmount / page hide so a quick navigation never loses the last edit.
+  useEffect(() => {
+    const onHide = () => void writer.flush();
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      void writer.flush();
+    };
+  }, [writer]);
 
   const set = useCallback((next: SetStateAction<T>) => setValue(next), []);
   return [value, set, loaded];

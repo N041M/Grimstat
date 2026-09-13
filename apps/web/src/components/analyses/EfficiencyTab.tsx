@@ -7,7 +7,7 @@ import { useWorkerTask } from "../../hooks/useWorkerTask";
 import { useUnitSet } from "../../hooks/useUnitSet";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { UNIT_SET_KEYS, type UnitEntry } from "../../lib/unitSet";
-import { fmt, fmtInt } from "../../lib/format";
+import { fmtInt, fmtSampled, overlaps } from "../../lib/format";
 import { download } from "../../lib/download";
 import { efficiencyToCsv } from "../../lib/matrixCsv";
 import { UnitSetPicker } from "./UnitSetPicker";
@@ -45,13 +45,81 @@ export function targetNames(rows: EfficiencyRow[]): string[] {
   return out;
 }
 
+/** A row's place in a ranking, and whether any other row holds the same one. */
+export interface Place {
+  rank: number;
+  tied: boolean;
+}
+
+/**
+ * Places for a list of rows already in ranking order, sharing a place wherever the ranking has no
+ * grounds to put one row above another.
+ *
+ * A place is held by the rows that cannot be told apart from the best row in it, and it ends at the
+ * first row that can be. Sharing a place is a claim about every row in it, so it is measured against
+ * the row holding the place rather than against the row above.
+ *
+ * Comparing each row with the one above it instead would chain: six rows each within noise of their
+ * neighbour would share one place even when the first and the last are three times their reach
+ * apart, which says the last of them might be first when it plainly cannot be. A row worked out
+ * exactly stands at a point and shares a place only with a row holding the very same figure, so a
+ * ranking with no sampled row in it numbers 1, 2, 3 as it always has.
+ */
+export function tieRanks<T>(rows: readonly T[], value: (row: T) => number, half: (row: T) => number | undefined): Place[] {
+  const places: Place[] = [];
+  let start = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
+    if (i > 0) {
+      const leader = rows[start]!;
+      if (!overlaps(value(row), half(row), value(leader), half(leader))) start = i;
+    }
+    places.push({ rank: start + 1, tied: false });
+  }
+  // Rows holding a place together are always neighbours, so a row is tied when either neighbour
+  // carries its number.
+  for (let i = 0; i < places.length; i++) {
+    places[i]!.tied = (i > 0 && places[i - 1]!.rank === places[i]!.rank) || (i + 1 < places.length && places[i + 1]!.rank === places[i]!.rank);
+  }
+  return places;
+}
+
+/** "4" for a place of its own, "=4" for one held with the rows either side of it. */
+export function rankLabel(place: Place): string {
+  return place.tied ? `=${place.rank}` : String(place.rank);
+}
+
+/**
+ * The half-width on a per-target cell, on that cell's own scale.
+ *
+ * The row's interval belongs to `damagePer100`, which is the mean of the per-target intervals and,
+ * in a ranking priced per 100 points, already scaled by 100 / points. The per-target cells are raw
+ * expected damage, so that scaling is taken back off before the interval decides how many decimals
+ * a cell can carry.
+ */
+export function perTargetHalfWidth(row: EfficiencyRow): number | undefined {
+  if (row.ciHalfWidth === undefined) return undefined;
+  if (!row.perPoints || !row.points) return row.ciHalfWidth;
+  return (row.ciHalfWidth * row.points) / 100;
+}
+
 export function EfficiencyTable({ rows }: { rows: EfficiencyRow[] }) {
   const [sort, setSort] = useState<{ col: SortCol; dir: "asc" | "desc" }>({ col: "rank", dir: "asc" });
   const targets = useMemo(() => targetNames(rows), [rows]);
-  const ranked = useMemo(() => rows.map((r, i) => ({ r, rank: i + 1 })), [rows]);
+  // Places come off the ranking order the engine delivered, so they stay put when the reader sorts
+  // the view by another column.
+  const ranked = useMemo(() => {
+    const places = tieRanks(
+      rows,
+      (r) => r.damagePer100,
+      (r) => r.ciHalfWidth,
+    );
+    return rows.map((r, i) => ({ r, at: i, place: places[i]! }));
+  }, [rows]);
+  const anyTied = useMemo(() => ranked.some((x) => x.place.tied), [ranked]);
   const sorted = useMemo(() => {
-    const key = (x: { r: EfficiencyRow; rank: number }): number | string => {
-      if (sort.col === "rank") return x.rank;
+    const key = (x: { r: EfficiencyRow; at: number; place: Place }): number | string => {
+      if (sort.col === "rank") return x.place.rank;
       if (sort.col === "unit") return x.r.unit.toLowerCase();
       if (sort.col === "points") return x.r.points ?? -1;
       if (sort.col === "per100") return x.r.damagePer100;
@@ -66,6 +134,7 @@ export function EfficiencyTable({ rows }: { rows: EfficiencyRow[] }) {
   }, [ranked, sort]);
   const onSort = (col: SortCol) => setSort((s) => (s.col === col ? { col, dir: s.dir === "asc" ? "desc" : "asc" } : { col, dir: col === "unit" || col === "rank" ? "asc" : "desc" }));
   if (!rows.length) return <div className="empty">{t("analyses.efficiency.none")}</div>;
+  const perPoints = rows[0]?.perPoints ?? false;
   const hasPoints = rows.some((r) => r.points !== undefined);
   return (
     <div className="table-wrap">
@@ -75,30 +144,33 @@ export function EfficiencyTable({ rows }: { rows: EfficiencyRow[] }) {
             <SortHeader col="rank" label="#" sort={sort} onSort={onSort} num />
             <SortHeader col="unit" label={t("analyses.efficiency.unit")} sort={sort} onSort={onSort} />
             {hasPoints ? <SortHeader col="points" label={t("unit.pointsLabel")} sort={sort} onSort={onSort} num /> : null}
-            <SortHeader col="per100" label={hasPoints ? t("analyses.metric.damagePer100") : t("analyses.metric.damage")} sort={sort} onSort={onSort} num />
+            <SortHeader col="per100" label={perPoints ? t("analyses.metric.damagePer100") : t("analyses.metric.damage")} sort={sort} onSort={onSort} num />
             {targets.map((name) => (
               <SortHeader key={name} col={`t:${name}`} label={name} sort={sort} onSort={onSort} num />
             ))}
           </tr>
         </thead>
         <tbody>
-          {sorted.map(({ r, rank }) => (
-            <tr key={`${rank}-${r.unit}`}>
-              <td className="num">{rank}</td>
+          {sorted.map(({ r, at, place }) => (
+            <tr key={`${at}-${r.unit}`}>
+              <td className={place.tied ? "num rank-tied" : "num"} {...(place.tied ? { title: t("analyses.tie.title") } : {})}>
+                {rankLabel(place)}
+              </td>
               <td>{r.unit}</td>
               {hasPoints ? <td className="num">{r.points !== undefined ? fmtInt(r.points) : "–"}</td> : null}
               <td className="num">
-                <strong>{fmt(r.damagePer100)}</strong>
+                <strong>{fmtSampled(r.damagePer100, r.ciHalfWidth)}</strong>
               </td>
               {targets.map((name) => (
                 <td key={name} className="num">
-                  {fmt(r.byTarget[name])}
+                  {fmtSampled(r.byTarget[name], perTargetHalfWidth(r))}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
+      {anyTied ? <p className="small muted">{t("analyses.tie")}</p> : null}
       <p className="small muted">{t("analyses.efficiency.tableHint")}</p>
     </div>
   );
@@ -106,8 +178,21 @@ export function EfficiencyTable({ rows }: { rows: EfficiencyRow[] }) {
 
 export function EfficiencyChart({ rows }: { rows: EfficiencyRow[] }) {
   if (!rows.length) return <div className="empty">{t("analyses.efficiency.none")}</div>;
-  const hasPoints = rows.some((r) => r.points !== undefined);
-  return <HBarChart ariaLabel={t("analyses.efficiency.chartAria")} rows={rows.map((r, i) => ({ key: `${i}-${r.unit}`, label: `${i + 1}. ${r.unit}`, value: r.damagePer100, display: fmt(r.damagePer100), title: `${r.unit}: ${fmt(r.damagePer100)} ${hasPoints ? t("analyses.metric.damagePer100") : t("analyses.metric.damage")}` }))} />;
+  const perPoints = rows[0]?.perPoints ?? false;
+  const places = tieRanks(
+    rows,
+    (r) => r.damagePer100,
+    (r) => r.ciHalfWidth,
+  );
+  return (
+    <HBarChart
+      ariaLabel={t("analyses.efficiency.chartAria")}
+      rows={rows.map((r, i) => {
+        const shown = fmtSampled(r.damagePer100, r.ciHalfWidth);
+        return { key: `${i}-${r.unit}`, label: `${rankLabel(places[i]!)}. ${r.unit}`, value: r.damagePer100, display: shown, title: `${r.unit}: ${shown} ${perPoints ? t("analyses.metric.damagePer100") : t("analyses.metric.damage")}` };
+      })}
+    />
+  );
 }
 
 export function EfficiencyTab() {

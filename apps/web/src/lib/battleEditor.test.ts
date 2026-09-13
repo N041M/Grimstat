@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BATTLE_SIZES, RUINED_CITY, ruin } from "@grimstat/board";
 import { clearDeployment, deployUnit, sampleBattle } from "./battle";
-import { addPiece, emptyLayout, movePiece } from "./layoutEdit";
+import { addPiece, emptyLayout, movePiece, placePieceSnapped } from "./layoutEdit";
 import { FORK_SUFFIX, HISTORY_CAP, UNIT_HISTORY_CAP, canRedo, canUndo, canUndoUnits, editorReducer, initialEditor, type EditorAction, type EditorState } from "./battleEditor";
 
 const mine = () => addPiece(emptyLayout("mine", "Mine", BATTLE_SIZES.strikeForce), ruin("r1", { x: 20, y: 14 }, 8, 6, 2));
@@ -53,6 +53,40 @@ describe("editing with a history", () => {
   it("ignores an edit that changed nothing", () => {
     const s = start();
     expect(editorReducer(s, { type: "layout", change: (l) => l })).toBe(s);
+  });
+
+  /*
+   * The piece starts centred on (20, 14). Snapping settles it back onto the half-inch grid, so a
+   * drag of less than a quarter inch puts it exactly where it already was and changes nothing,
+   * which is what the opening frames of a careful drag look like.
+   */
+  const drag = (x: number, y = 14): Extract<EditorAction, { type: "layout" }> => ({ type: "layout", change: (l) => placePieceSnapped(l, "r1", { x, y }), record: "drag" });
+
+  it("records the frame of a drag that moves something, not the first frame it is sent", () => {
+    const s = run(start(), drag(20.1), drag(20.2), drag(23), drag(24));
+    expect(xOf(s)).toBe(20);
+    expect(s.past).toHaveLength(1);
+    // One step back is the whole gesture, from where the piece stood when it was picked up.
+    expect(xOf(editorReducer(s, { type: "undo" }))).toBe(16);
+    expect(canUndo(editorReducer(s, { type: "undo" }))).toBe(false);
+  });
+
+  it("keeps the edit before a drag, so one undo takes back one thing", () => {
+    const s = run(start(), nudge(1), drag(20.1), drag(24));
+    const back = editorReducer(s, { type: "undo" });
+    expect(xOf(back)).toBe(17);
+    expect(canUndo(back)).toBe(true);
+  });
+
+  it("gives each drag a step of its own once the pointer is released", () => {
+    const s = run(start(), drag(24), { type: "endDrag" }, drag(28));
+    expect(s.past).toHaveLength(2);
+    expect(xOf(editorReducer(s, { type: "undo" }))).toBe(20);
+  });
+
+  it("does nothing on a release that ends no drag", () => {
+    const s = start();
+    expect(editorReducer(s, { type: "endDrag" })).toBe(s);
   });
 
   it("forks a shipped layout on the first edit, and undo brings the shipped one back untouched", () => {

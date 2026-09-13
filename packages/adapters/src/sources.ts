@@ -55,7 +55,7 @@ export const SOURCES: Record<SourceId, SourceDef> = {
   },
 };
 
-export type FetchLike = (url: string, init?: { headers?: Record<string, string> }) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
+export type FetchLike = (url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
 
 export interface FetchSourceOptions {
   /** Override the entry URL(s) (e.g. a mirror or a pinned git SHA). */
@@ -75,10 +75,27 @@ export interface FetchedSource {
   url: string;
 }
 
+/**
+ * How long one file gets. A server that refuses a connection fails straight away, but one that
+ * accepts it and then stops sending holds the download open for as long as whatever is running the
+ * download allows, which on a CI runner is six hours. The deadline covers the body as well as the
+ * response, so a transfer that stalls halfway also gives up.
+ *
+ * A caller that passes its own `signal` (the browser's import worker cancels that way) keeps it,
+ * and loses the deadline with it.
+ */
+const FETCH_TIMEOUT_MS = 60_000;
+
 async function getText(fetchImpl: FetchLike, url: string): Promise<string> {
-  const res = await fetchImpl(url, { headers: { Accept: "application/vnd.github+json, text/plain, */*" } });
-  if (!res.ok) throw new Error(`GET ${url} -> HTTP ${res.status}`);
-  return res.text();
+  try {
+    const res = await fetchImpl(url, { headers: { Accept: "application/vnd.github+json, text/plain, */*" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!res.ok) throw new Error(`GET ${url} -> HTTP ${res.status}`);
+    return await res.text();
+  } catch (e) {
+    // The deadline arrives as a DOMException that names neither the file nor the deadline.
+    if (e instanceof Error && e.name === "TimeoutError") throw new Error(`GET ${url} -> no answer within ${FETCH_TIMEOUT_MS / 1000} seconds`);
+    throw e;
+  }
 }
 
 interface GitTree {

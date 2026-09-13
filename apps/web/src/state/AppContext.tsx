@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Scenario, Snapshot } from "@grimstat/schema";
 import { db, getSetting, listOverrides, listSnapshotMeta, setSetting, SETTING_ACTIVE_SNAPSHOT, type OverrideRecord, type SnapshotMeta } from "../db";
-import { newScenario } from "../lib/scenario";
+import { isDefaultScenario, newScenario } from "../lib/scenario";
 import { effectiveSnapshot } from "../lib/overrides";
 import { t } from "../i18n";
 
@@ -123,6 +123,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const s = await db.snapshots.get(id);
     setSnapshot(s);
     setActiveId(s ? id : undefined);
+    // The opening scenario is built before any snapshot has been read, so it carries the default
+    // edition. A scenario nobody has touched is restamped once the snapshot says which edition the
+    // numbers belong to. One the player has worked on keeps whatever edition it was made under.
+    if (s) setScenario((cur) => (isDefaultScenario(cur) && cur.gameSystemId !== s.gameSystemId ? { ...cur, gameSystemId: s.gameSystemId } : cur));
   }, []);
 
   const refreshSnapshots = useCallback(async () => {

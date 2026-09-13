@@ -13,8 +13,9 @@ import type { ModelHull } from "./shapes";
 import { coreSegment, footReach, silhouettePoints, topZ } from "./shapes";
 import type { TerrainPiece , TerrainIndex} from "./terrain";
 import { blocksSight, containsPoint, grantsCover, hasTrait, segmentHitsPrism, topOf } from "./terrain";
+import { horizontalGap } from "./distance";
 import type { Vec2, Vec3 } from "./vec";
-import { EPS, bounds, expand, segInPolygonSpans, segPolygonDistance } from "./vec";
+import { EPS, bounds, expand, intervalGap, segInPolygonSpans, segPolygonDistance } from "./vec";
 
 export interface SightRay {
   readonly from: Vec3;
@@ -152,7 +153,10 @@ export function visibleFraction(from: readonly ModelHull[], to: readonly ModelHu
 export function hiddenFrom(unit: readonly ModelHull[], enemies: readonly ModelHull[], index: TerrainIndex, range: number, opts?: SightOptions): boolean {
   for (const enemy of enemies) {
     for (const model of unit) {
-      if (Math.hypot(enemy.pos.x - model.pos.x, enemy.pos.y - model.pos.y) > range + model.foot.r + enemy.foot.r) continue;
+      // Base to base, the way the range is measured on the table. An oval base reaches further from
+      // its centre than its radius, so measuring it as a circle skips an enemy that is genuinely
+      // within range and reports the unit hidden.
+      if (horizontalGap(enemy, model) > range) continue;
       if (canSee(enemy, model, index, opts)) return false;
     }
   }
@@ -180,6 +184,10 @@ export interface CoverResult {
  * Both models are measured as their bases. A model is within a footprint when any part of its base
  * is, which is what the rules ask and what a player reads off the table — a trooper with most of his
  * base in a crater is in the crater however his centre point falls.
+ *
+ * The footprint rule is a question about the table plane, but the piece still has to be at a height
+ * where it matters. A model on a gantry twelve inches above a crater is not standing in the crater,
+ * and a crater half an inch tall does not come between him and anyone shooting at him.
  */
 export function coverFor(target: ModelHull, attacker: ModelHull, index: TerrainIndex): CoverResult {
   const here: Vec2 = { x: target.pos.x, y: target.pos.y };
@@ -196,15 +204,37 @@ export function coverFor(target: ModelHull, attacker: ModelHull, index: TerrainI
   for (const piece of index.candidates(region, grantsCover)) {
     const level: CoverLevel = hasTrait(piece, "heavy-cover") ? "heavy" : "light";
     if (!better(level, best.level)) continue;
-    if (segPolygonDistance(mark, piece.polygon) <= target.foot.r) {
+    if (standsIn(piece, target) && segPolygonDistance(mark, piece.polygon) <= target.foot.r) {
       best = { level, from: piece.id, reason: "within" };
       continue;
     }
-    if (segPolygonDistance(eye, piece.polygon) <= attacker.foot.r) continue; // the attacker is inside it, so it is not in the way
+    if (standsIn(piece, attacker) && segPolygonDistance(eye, piece.polygon) <= attacker.foot.r) continue; // the attacker is inside it, so it is not in the way
     const spans = segInPolygonSpans({ a: there, b: here }, piece.polygon);
-    if (spans.some(([t0, t1]) => t1 - t0 > EPS)) best = { level, from: piece.id, reason: "intervening" };
+    if (spans.some(([t0, t1]) => t1 - t0 > EPS && risesIntoView(piece, attacker, target, t0, t1))) best = { level, from: piece.id, reason: "intervening" };
   }
   return best;
+}
+
+/**
+ * Is the model at a height where the piece is around it? A model standing on the piece counts, and
+ * so does one on a floor inside it.
+ */
+function standsIn(piece: TerrainPiece, h: ModelHull): boolean {
+  return intervalGap(h.pos.z, topZ(h), piece.base, topOf(piece)) <= EPS;
+}
+
+/**
+ * Does the piece rise into the space the sight lines run through, over the stretch of the line that
+ * crosses its footprint?
+ *
+ * The lines between the two models fill a band. The lowest of them runs from one model's feet to the
+ * other's, and the highest from one model's top to the other's. Both are straight, so the two ends of
+ * the crossed stretch settle the whole of it.
+ */
+function risesIntoView(piece: TerrainPiece, attacker: ModelHull, target: ModelHull, t0: number, t1: number): boolean {
+  const feet = (t: number): number => attacker.pos.z + (target.pos.z - attacker.pos.z) * t;
+  const head = (t: number): number => topZ(attacker) + (topZ(target) - topZ(attacker)) * t;
+  return piece.base <= Math.max(head(t0), head(t1)) + EPS && topOf(piece) >= Math.min(feet(t0), feet(t1)) - EPS;
 }
 
 /* ---- internals -------------------------------------------------------------------------------- */
@@ -213,7 +243,9 @@ function candidateBlockers(from: ModelHull, to: ModelHull, index: TerrainIndex, 
   const selfExempt = opts.selfExempt ?? true;
   const here: Vec2 = { x: from.pos.x, y: from.pos.y };
   const there: Vec2 = { x: to.pos.x, y: to.pos.y };
-  const region = expand(bounds([here, there]), Math.max(from.foot.r, to.foot.r));
+  // The rays run out to the silhouettes, which reach `footReach` from a capsule's centre rather than
+  // its radius. Sizing the box by the radius drops pieces the rays really do cross.
+  const region = expand(bounds([here, there]), Math.max(footReach(from.foot), footReach(to.foot)));
   const ceiling = Math.max(topZ(from), topZ(to));
   const floor = Math.min(from.pos.z, to.pos.z);
 

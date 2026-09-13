@@ -5,7 +5,7 @@ import { Id } from "./common";
  * 11e pricing: cost depends on which copy of the unit this is (Requisition Thresholds),
  * on the model count band, and on selected wargear. Never a flat number.
  */
-export const PriceTier = z.object({ models: z.number().int().positive(), points: z.number() });
+export const PriceTier = z.object({ models: z.number().int().positive(), points: z.number().nonnegative() });
 export type PriceTier = z.infer<typeof PriceTier>;
 
 export const PriceRule = z.object({
@@ -17,5 +17,5 @@ export const PriceRule = z.object({
 });
 export type PriceRule = z.infer<typeof PriceRule>;
 
-export const WargearPrice = z.object({ datasheetId: Id, item: z.string(), points: z.number() });
+export const WargearPrice = z.object({ datasheetId: Id, item: z.string(), points: z.number().nonnegative() });
 export type WargearPrice = z.infer<typeof WargearPrice>;

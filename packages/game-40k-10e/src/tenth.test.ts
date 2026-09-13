@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ScenarioUnit, ScenarioWeapon } from "@grimstat/schema";
-import { makeScenario, runScenario as run11 } from "@grimstat/game-40k-11e";
+import { CH, makeScenario, registerKeyword, runScenario as run11 } from "@grimstat/game-40k-11e";
 import { plugin, runScenario as run10 } from "./index";
 
 const close = (a: number, b: number, tol = 1e-9) => expect(Math.abs(a - b)).toBeLessThanOrEqual(tol);
@@ -39,5 +39,25 @@ describe("10th edition plugin", () => {
     close(tenth.expectedDamage, always11.expectedDamage, 1e-9);
     const haz = run10(makeScenario(unit([], [gun({ count: 3, keywords: [{ name: "HAZARDOUS" }] })]), target(4)));
     close(haz.expectedSelfMortals, 3 * (1 / 6));
+  });
+  it("the app's path through the 11e package resolves 10e keywords the same way this plugin does", () => {
+    // Cleave 2 against a target of 10 models is +4 attacks in 11e and nothing at all in 10e.
+    const cleaver = unit([], [gun({ name: "axe", count: 1, kind: "melee", range: null, A: "2", keywords: [{ name: "CLEAVE", value: 2, raw: "Cleave 2" }] })]);
+    const mob = unit([{ name: "Boy", count: 10, T: 4, Sv: 7, W: 2, isCharacter: false, keywords: [] }]);
+    const scenario = makeScenario(cleaver, mob, { phase: "fight" }, [], plugin.gameSystem.id);
+    const viaApp = run11(scenario);
+    const viaPlugin = run10(scenario);
+    close(viaApp.expectedDamage, 2 * (2 / 3) * (1 / 2));
+    close(viaPlugin.expectedDamage, viaApp.expectedDamage);
+    expect(viaApp.warnings).toEqual(viaPlugin.warnings);
+    expect(viaApp.warnings).toContain("CLEAVE is not an ability in this edition.");
+  });
+  it("a keyword added through the extension point reaches 10th edition as well as 11th", () => {
+    registerKeyword("SPARE ROUNDS", (_kw, c) => c.mods.add({ channel: CH.attacks, op: "add", value: 1, source: "Spare rounds" }));
+    const att = unit([], [gun({ count: 1, keywords: [{ name: "SPARE ROUNDS" }] })]);
+    // Two attacks rather than one, at a 4+ save with no unmodified-6 save behind it.
+    close(run10(makeScenario(att, target(4))).expectedDamage, 2 * (2 / 3) * (1 / 2) * (3 / 6));
+    close(run11(makeScenario(att, target(4), {}, [], "wh40k-10e")).expectedDamage, 2 * (2 / 3) * (1 / 2) * (3 / 6));
+    expect(run10(makeScenario(att, target(4))).warnings).toEqual([]);
   });
 });

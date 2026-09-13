@@ -4,8 +4,8 @@ import type { PublishedListRecord } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { useStoreVersion } from "../../hooks/useStoreVersion";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
-import { classifyPublishedText, clearPublishedLists, feedChecklist, importPastedList, importPublishedFile, listPublishedLists, parsePublishedFeed, publishedSources, readPublishedFeed, type PublishedFeed } from "../../lib/publishedLists";
-import { CORPUS_SETTING, CORPUS_URL_SETTING, DEFAULT_CORPUS_URL, fetchPublishedCorpus, parseCorpusRecord, type CorpusRecord } from "../../lib/corpusFetch";
+import { classifyPublishedText, clearPublishedLists, feedChecklist, importPastedList, importPublishedFile, listPublishedLists, parsePublishedFeed, publishedSources, readPublishedFeed, webHref, type PublishedFeed } from "../../lib/publishedLists";
+import { CORPUS_SETTING, CORPUS_URL_SETTING, CorpusIncomplete, DEFAULT_CORPUS_URL, fetchPublishedCorpus, parseCorpusRecord, type CorpusRecord } from "../../lib/corpusFetch";
 import { metaClient } from "../../worker/metaClient";
 import { fmtDay, fmtInt } from "../../lib/format";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead } from "../kit";
@@ -85,6 +85,8 @@ export const PublishedLists = forwardRef<PublishedListsHandle>(function Publishe
   const sources = useMemo(() => publishedSources(records), [records]);
   const checklist = useMemo(() => (feed ? feedChecklist(feed, records) : []), [feed, records]);
   const otherGames = feed ? feed.entries.filter((e) => !e.isWarhammer40k).length : 0;
+  const corpusHref = webHref(corpus?.sourceUrl);
+  const feedHref = webHref(feed?.url);
 
   const importFiles = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
@@ -131,10 +133,11 @@ export const PublishedLists = forwardRef<PublishedListsHandle>(function Publishe
     try {
       const result = await fetchPublishedCorpus(corpusUrl, { signal: controller.signal, onProgress: (done, total) => setProgress({ done, total }) });
       setCorpus(result.record);
-      notify(t("data.published.corpus.fetched", { added: result.added, found: result.found }), result.warnings.length ? "info" : "success", result.warnings.slice(0, 8));
+      notify(result.removed ? t("data.published.corpus.fetchedRemoved", { added: result.added, found: result.found, removed: result.removed }) : t("data.published.corpus.fetched", { added: result.added, found: result.found }), "success");
       metaClient.warm(activeSnapshotId);
     } catch (e) {
       if (controller.signal.aborted) notify(t("data.published.corpus.cancelled"), "info");
+      else if (e instanceof CorpusIncomplete) notify(t("data.published.corpus.incomplete"), "error", e.details.slice(0, 8));
       else notify(t("data.published.corpus.failed"), "error", [e instanceof Error ? e.message : String(e)]);
     } finally {
       abort.current = null;
@@ -280,24 +283,27 @@ export const PublishedLists = forwardRef<PublishedListsHandle>(function Publishe
               <GridHeadCell align="end">{t("data.published.col.lists")}</GridHeadCell>
               <GridHeadCell>{t("data.published.col.factions")}</GridHeadCell>
             </GridHead>
-            {sources.map((s) => (
-              <GridRow key={s.key}>
-                <GridCell>
-                  {s.url ? (
-                    <a href={s.url} target="_blank" rel="noreferrer">
-                      {s.title}
-                    </a>
-                  ) : (
-                    s.title
-                  )}
-                </GridCell>
-                <GridCell tone="muted">{s.publication ?? "—"}</GridCell>
-                <GridCell align="end" mono>
-                  {fmtInt(s.lists)}
-                </GridCell>
-                <GridCell tone="muted">{s.factions.join(", ") || "—"}</GridCell>
-              </GridRow>
-            ))}
+            {sources.map((s) => {
+              const href = webHref(s.url);
+              return (
+                <GridRow key={s.key}>
+                  <GridCell>
+                    {href ? (
+                      <a href={href} target="_blank" rel="noreferrer">
+                        {s.title}
+                      </a>
+                    ) : (
+                      s.title
+                    )}
+                  </GridCell>
+                  <GridCell tone="muted">{s.publication ?? "—"}</GridCell>
+                  <GridCell align="end" mono>
+                    {fmtInt(s.lists)}
+                  </GridCell>
+                  <GridCell tone="muted">{s.factions.join(", ") || "—"}</GridCell>
+                </GridRow>
+              );
+            })}
           </GridTable>
         </div>
       )}
@@ -305,9 +311,9 @@ export const PublishedLists = forwardRef<PublishedListsHandle>(function Publishe
       <div className="data-table-card published-corpus">
         <div className="published-feed-head">
           <span className="published-feed-title" id="data-published-corpus-h">
-            {corpus?.sourceUrl ? (
-              <a href={corpus.sourceUrl} target="_blank" rel="noreferrer">
-                {corpus.sourceName || t("data.published.corpus.title")}
+            {corpusHref ? (
+              <a href={corpusHref} target="_blank" rel="noreferrer">
+                {corpus?.sourceName || t("data.published.corpus.title")}
               </a>
             ) : (
               t("data.published.corpus.title")
@@ -329,8 +335,8 @@ export const PublishedLists = forwardRef<PublishedListsHandle>(function Publishe
         <div className="data-table-card published-feed" aria-labelledby="data-published-feed-h">
           <div className="published-feed-head">
             <span className="published-feed-title" id="data-published-feed-h">
-              {feed.url ? (
-                <a href={feed.url} target="_blank" rel="noreferrer">
+              {feedHref ? (
+                <a href={feedHref} target="_blank" rel="noreferrer">
                   {feed.title ?? t("data.published.feed.title")}
                 </a>
               ) : (
@@ -339,8 +345,8 @@ export const PublishedLists = forwardRef<PublishedListsHandle>(function Publishe
               <span className="t-meta">{t("data.published.feed.loaded", { day: fmtDay(feed.loadedAt) })}</span>
             </span>
             <span className="data-published-actions">
-              {feed.url ? (
-                <a className="data-link" href={feed.url} target="_blank" rel="noreferrer">
+              {feedHref ? (
+                <a className="data-link" href={feedHref} target="_blank" rel="noreferrer">
                   {t("data.published.feed.open")}
                 </a>
               ) : null}
@@ -358,21 +364,28 @@ export const PublishedLists = forwardRef<PublishedListsHandle>(function Publishe
                 <GridHeadCell>{t("data.published.feed.col.writeUp")}</GridHeadCell>
                 <GridHeadCell align="end">{t("data.published.feed.col.stored")}</GridHeadCell>
               </GridHead>
-              {checklist.map(({ entry, lists }) => (
-                <GridRow key={entry.url}>
-                  <GridCell tone="muted" mono>
-                    {fmtDay(entry.published)}
-                  </GridCell>
-                  <GridCell>
-                    <a href={entry.url} target="_blank" rel="noreferrer">
-                      {entry.title}
-                    </a>
-                  </GridCell>
-                  <GridCell align="end" tone={lists ? "ink" : "faint"} mono>
-                    {lists ? tn(lists, "data.published.feed.stored.one", "data.published.feed.stored.many", { n: fmtInt(lists) }) : t("data.published.feed.notYet")}
-                  </GridCell>
-                </GridRow>
-              ))}
+              {checklist.map(({ entry, lists }) => {
+                const href = webHref(entry.url);
+                return (
+                  <GridRow key={entry.url}>
+                    <GridCell tone="muted" mono>
+                      {fmtDay(entry.published)}
+                    </GridCell>
+                    <GridCell>
+                      {href ? (
+                        <a href={href} target="_blank" rel="noreferrer">
+                          {entry.title}
+                        </a>
+                      ) : (
+                        entry.title
+                      )}
+                    </GridCell>
+                    <GridCell align="end" tone={lists ? "ink" : "faint"} mono>
+                      {lists ? tn(lists, "data.published.feed.stored.one", "data.published.feed.stored.many", { n: fmtInt(lists) }) : t("data.published.feed.notYet")}
+                    </GridCell>
+                  </GridRow>
+                );
+              })}
             </GridTable>
           )}
           {otherGames ? <p className="data-note published-feed-note">{tn(otherGames, "data.published.feed.others.one", "data.published.feed.others.many", { n: fmtInt(otherGames) })}</p> : null}

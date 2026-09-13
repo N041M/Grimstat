@@ -93,7 +93,7 @@ export function CalculatorPage() {
       const ok = await confirm({ title: t("scenario.discardTitle"), body: t("scenario.discardBody", { name: scenario.name }), confirmLabel: t("scenario.discard"), danger: true });
       if (!ok) return;
     }
-    await replaceScenario(newScenario());
+    await replaceScenario(newScenario({}, { snapshot }));
   };
   const swap = () => updateScenario((s) => ({ ...s, attacker: s.defender, defender: s.attacker }));
   const onContext = (patch: Partial<ScenarioContext>) => updateScenario((s) => ({ ...s, context: { ...s.context, ...patch } }));

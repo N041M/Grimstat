@@ -20,7 +20,7 @@ import { MetaTab } from "../components/roster/MetaTab";
 import { RosterDock, type DockBudget } from "../components/roster/RosterDock";
 import { ExportDrawer } from "../components/roster/ExportDrawer";
 import { HistoryPanel } from "../components/roster/HistoryPanel";
-import { Empty, Sheet } from "../components/ui";
+import { Empty, Sheet, modalOpen } from "../components/ui";
 import { withoutDanglingTransports } from "../lib/transport";
 import { t } from "../i18n";
 
@@ -54,10 +54,17 @@ export function RosterEditorPage({ id }: { id: string }) {
   // Points by role for the header bar; attached characters count under their own role.
   const points = useMemo(() => (roster ? pointsBarModel(roster.units.map((u) => ({ section: sectionOf(datasheets.get(u.datasheetId), roster), points: costById.get(u.id)?.total ?? 0 })), roster.pointsLimit) : undefined), [roster, datasheets, costById]);
 
-  // Escape closes the inspector / export / history panel (the phone sheet handles its own).
+  /*
+   * Escape closes the inspector / export / history panel (the phone sheet handles its own).
+   *
+   * A layer over the screen answers Escape first, so this stands down while one is open. Otherwise
+   * the one keypress that closes the command palette, a dialog or a sheet also shut the inspector
+   * underneath it. `defaultPrevented` catches a layer that has already handled the key; `modalOpen`
+   * catches one that has not got to it yet.
+   */
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented || modalOpen()) return;
       setMode("unit");
       setSelectedId(undefined);
     };

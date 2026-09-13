@@ -7,7 +7,7 @@ import { hrefFor } from "../router";
 import { nowIso } from "../lib/ids";
 import { compositionBounds } from "../lib/roster";
 import { fmtInt, pct } from "../lib/format";
-import { addModels, asCount, byFaction, canField, collectionTotals, coverage, rosterNeeds, tidyEntry, type Shortfall } from "../lib/collection";
+import { addModels, asCount, byFaction, canField, collectionTotals, commitCount, coverage, rosterNeeds, tidyEntry, type Shortfall } from "../lib/collection";
 import { UnitArt } from "../components/UnitArt";
 import { Badge, Dialog, Empty, Icon, useConfirm } from "../components/ui";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead, ProportionBar } from "../components/kit";
@@ -276,6 +276,47 @@ export function CollectionPage() {
   );
 }
 
+/**
+ * A count that can be cleared while it is being retyped.
+ *
+ * The field holds what was typed and hands a number back only when the user leaves it or presses
+ * Enter, so clearing "10" to type "12" never passes through zero. `NumberBox` in the kit works the
+ * same way; it cannot be used here because it draws its own visible label and this one sits in a
+ * table cell under a column heading.
+ */
+function CountBox({ value, max, label, onCommit }: { value: number; max?: number; label: string; onCommit: (n: number) => void }) {
+  const [text, setText] = useState(String(value));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setText(String(value));
+  }, [value, editing]);
+  const commit = () => {
+    const next = commitCount(text, value, max);
+    setText(String(next));
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <input
+      className="coll-num"
+      type="number"
+      min={0}
+      max={max}
+      step={1}
+      value={text}
+      aria-label={label}
+      onFocus={() => setEditing(true)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        commit();
+        setEditing(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+      }}
+    />
+  );
+}
+
 /** One datasheet on the shelf: what is owned, what is painted, and how far along that is. */
 function EntryRow({ entry, sheet, onChange, onRemove }: { entry: CollectionEntryRecord; sheet: Datasheet | undefined; onChange: (next: CollectionEntryRecord) => void; onRemove: () => void }) {
   const done = entry.owned > 0 ? entry.painted / entry.owned : 0;
@@ -288,10 +329,10 @@ function EntryRow({ entry, sheet, onChange, onRemove }: { entry: CollectionEntry
         </span>
       </GridCell>
       <GridCell align="end">
-        <input className="coll-num" type="number" min={0} step={1} value={entry.owned} aria-label={t("collection.ownedAria", { name: entry.name })} onChange={(e) => onChange({ ...entry, owned: asCount(Number(e.target.value)) })} />
+        <CountBox value={entry.owned} label={t("collection.ownedAria", { name: entry.name })} onCommit={(owned) => onChange({ ...entry, owned })} />
       </GridCell>
       <GridCell align="end">
-        <input className="coll-num" type="number" min={0} max={entry.owned} step={1} value={entry.painted} aria-label={t("collection.paintedField", { name: entry.name })} onChange={(e) => onChange({ ...entry, painted: asCount(Number(e.target.value)) })} />
+        <CountBox value={entry.painted} max={entry.owned} label={t("collection.paintedField", { name: entry.name })} onCommit={(painted) => onChange({ ...entry, painted })} />
       </GridCell>
       <GridCell>
         <ProportionBar value={done} height={6} tone="accent" title={t("collection.rowPainted", { painted: fmtInt(entry.painted), models: fmtInt(entry.owned) })} />

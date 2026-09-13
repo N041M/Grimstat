@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScenarioUnit, Snapshot } from "@grimstat/schema";
-import type { DurabilityIndexRow } from "@grimstat/game-40k-11e";
+import type { DurabilityIndexRow, MatrixResult } from "@grimstat/game-40k-11e";
 import { useApp } from "../../state/AppContext";
 import { navigate } from "../../router";
 import { simClient } from "../../worker/client";
@@ -53,6 +53,19 @@ function bestAnswers(values: Array<Array<number | undefined>>, attackers: string
   });
 }
 
+/**
+ * Whether the durability index should start now.
+ *
+ * Pressing Run empties the card and asks for a new matrix, and the index follows the matrix once it
+ * has finished. Cancelling that run, or a run that fails, leaves the matrix on screen as it was
+ * with an empty card beside it, so the index has to be able to start again from the same result.
+ * Reading only the result would never notice, because a cancelled run leaves the result untouched.
+ */
+export function shouldRunIndex(matrix: { result: unknown; running: boolean }, index: { result: unknown; running: boolean }, defenders: number): boolean {
+  if (matrix.running || matrix.result === undefined || defenders === 0) return false;
+  return index.result === undefined && !index.running;
+}
+
 function DurabilityCard({ rows, running }: { rows: DurabilityIndexRow[] | undefined; running: boolean }) {
   const sorted = useMemo(() => (rows ?? []).filter((r) => Number.isFinite(r.pointsToRemove)).sort((a, b) => b.pointsToRemove - a.pointsToRemove), [rows]);
   const max = sorted[0]?.pointsToRemove ?? 0;
@@ -81,6 +94,19 @@ function DurabilityCard({ rows, running }: { rows: DurabilityIndexRow[] | undefi
  * Matchup matrix. The Heatmap tab renders the same run without the per-cell numbers, so both tabs
  * share this component and only `view` differs.
  */
+/**
+ * How the numbers on show were arrived at.
+ *
+ * The engine falls back to sampling when a defender's state space is too large to solve exactly, and
+ * a sampled cell is formatted exactly like an exact one, so the heading is the only place the
+ * difference can be seen.
+ */
+export function solveLabel(result: MatrixResult | undefined): string {
+  const cells = (result?.cells ?? []).flat();
+  const sampled = cells.filter((c) => c.result.backend === "mc").length;
+  return sampled ? t("analyses.matrix.solve.sampled", { n: sampled, of: cells.length }) : t("analyses.matrix.solve.exact");
+}
+
 export function MatrixTab({ view = "values" }: { view?: "values" | "swatches" }) {
   const { snapshot, scenario, activeSnapshotId, replaceScenario, notify } = useApp();
   const attackers = useUnitSet(UNIT_SET_KEYS.matrixAttackers);
@@ -107,13 +133,13 @@ export function MatrixTab({ view = "values" }: { view?: "values" | "swatches" })
   };
 
   // The worker sequences requests and drops superseded ones, so the durability index only starts
-  // once the matrix result is in hand. A restored result brings its index along, so that is skipped.
+  // once the matrix has stopped. A restored result brings its index along, so that is skipped.
   const ranDefenders = ran?.defenders;
   useEffect(() => {
-    if (!task.result || !ranDefenders?.length || durability.result !== undefined || durability.running) return;
+    if (!ranDefenders || !shouldRunIndex(task, durability, ranDefenders.length)) return;
     durability.run(ranDefenders, snapshot);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [task.result]);
+  }, [task.result, task.running]);
 
   const openPair = async (a: number, d: number) => {
     const A = ran?.attackers[a];
@@ -130,7 +156,7 @@ export function MatrixTab({ view = "values" }: { view?: "values" | "swatches" })
   const hasResult = !!task.result;
   useAnalysisHeader(
     () => ({
-      subtitle: hasResult ? t("analyses.matrix.sub", { a: ran?.attackers.length ?? 0, d: ran?.defenders.length ?? 0, metric: metricLabel(opts.metric) }) : t("analyses.matrix.subIdle", { a: attackers.entries.length, d: defenders.entries.length }),
+      subtitle: hasResult ? t("analyses.matrix.sub", { a: ran?.attackers.length ?? 0, d: ran?.defenders.length ?? 0, metric: metricLabel(opts.metric), solve: solveLabel(task.result) }) : t("analyses.matrix.subIdle", { a: attackers.entries.length, d: defenders.entries.length }),
       actions: (
         <RunActions canRun={canRun} running={task.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()}>
           <button type="button" disabled={!hasResult} onClick={() => handlers.current.exportCsv()}>

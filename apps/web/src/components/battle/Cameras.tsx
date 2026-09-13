@@ -33,11 +33,16 @@ const RECENTRE_MS = 420;
  */
 const ROTATE_REFERENCE = 800;
 
+/** Where a camera is, what it is pointed at, and how far it is zoomed in. */
+interface View {
+  readonly position: Vector3;
+  readonly target: Vector3;
+  readonly zoom: number;
+}
+
 export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; size: BoardSize; frame?: Aabb2; recentre?: number }) {
   const { gl, set, size: viewport, invalidate } = useThree();
   const controls = useRef<OrbitControls>();
-  /** Where the view opens: what `recentre` travels back to. */
-  const home = useRef<{ position: Vector3; target: Vector3; zoom: number } | undefined>(undefined);
   const centre = useMemo(() => new Vector3(size.width / 2, 0, -size.depth / 2), [size.width, size.depth]);
   /**
    * What has to be in shot is more than the play area. A player's units start on the muster
@@ -86,6 +91,30 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
     return needed * 1.04;
   }, [halfX, halfY, aspect, perspective.fov]);
 
+  /**
+   * The framing a view opens on, which is also where Recentre travels back to.
+   *
+   * It follows the canvas, since what fits in a wide pane is not what fits in a tall one. Changing
+   * it moves nothing. The camera stays where the player put it until they press Recentre.
+   */
+  const home = useMemo<View>(() => {
+    if (mode === "top") return { position: new Vector3(centre.x, 150, centre.z), target: centre.clone(), zoom: 1 };
+    const elevation = (ELEVATION * Math.PI) / 180;
+    return { position: new Vector3(centre.x, distance * Math.sin(elevation), centre.z + distance * Math.cos(elevation)), target: centre.clone(), zoom: 1 };
+  }, [mode, centre, distance]);
+  // Read inside effects that must not run again when the framing changes.
+  const homeNow = useRef(home);
+  homeNow.current = home;
+
+  /**
+   * The view each mode was left in, so a trip to the top-down camera and back returns to the table
+   * as the player had it rather than to the opening shot. It is dropped when the table itself
+   * changes, since a framing of one board says nothing about another.
+   */
+  const kept = useRef<{ table: string; views: Partial<Record<CameraMode, View>> }>({ table: "", views: {} });
+  const table = `${size.width}×${size.depth}`;
+  if (kept.current.table !== table) kept.current = { table, views: {} };
+
   useEffect(() => {
     perspective.aspect = aspect;
     perspective.updateProjectionMatrix();
@@ -102,26 +131,32 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
     orthographic.updateProjectionMatrix();
   }, [perspective, orthographic, aspect, halfX, halfY]);
 
-  // Swap the active camera, put it somewhere sensible, and rebuild the controls around it.
+  /*
+   * Swap the active camera, put it where this mode was left, and rebuild the controls around it.
+   *
+   * It runs on a change of camera and on nothing else. A canvas resize changes the projection and
+   * the turn rate, and both of those are set elsewhere. Rebuilding here on a resize would throw the
+   * player's framing away, and the full-screen control resizes the table on purpose, mid-game.
+   */
   useEffect(() => {
     const camera = mode === "top" ? orthographic : perspective;
-    if (mode === "top") {
-      // Straight down, with board +y as screen up. Without redefining `up`, looking along −y is
-      // degenerate against the default +y and the table arrives at an arbitrary rotation.
-      camera.up.set(0, 0, -1);
-      camera.position.set(centre.x, 150, centre.z);
-      camera.zoom = 1;
-    } else {
-      camera.up.set(0, 1, 0);
-      const elevation = (ELEVATION * Math.PI) / 180;
-      camera.position.set(centre.x, distance * Math.sin(elevation), centre.z + distance * Math.cos(elevation));
-    }
-    camera.lookAt(centre);
+    // The top-down camera looks straight down with board +y as screen up. Without redefining `up`,
+    // looking along −y is degenerate against the default +y and the table arrives at an arbitrary
+    // rotation.
+    if (mode === "top") camera.up.set(0, 0, -1);
+    else camera.up.set(0, 1, 0);
+    const start = kept.current.views[mode] ?? homeNow.current;
+    camera.position.copy(start.position);
+    camera.zoom = start.zoom;
+    camera.lookAt(start.target);
     camera.updateProjectionMatrix();
     set({ camera });
 
     const next = new OrbitControls(camera, gl.domElement);
-    next.target.copy(centre);
+    next.target.copy(start.target);
+    // A drag has the pointer and has switched the controls off. A camera rebuilt under that drag
+    // must not start steering the table with the finger that is moving a model.
+    next.enabled = controls.current?.enabled ?? true;
     next.enableDamping = true;
     next.dampingFactor = 0.12;
     next.minDistance = 8;
@@ -138,28 +173,33 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
      */
     next.touches.ONE = mode === "orbit" ? TOUCH.ROTATE : TOUCH.PAN;
     next.touches.TWO = TOUCH.DOLLY_PAN;
-    next.rotateSpeed = Math.min(1, viewportHeight / ROTATE_REFERENCE);
-    /*
-     * Panning and pinching are left alone. A pan is measured so the table keeps up with the finger
-     * that is dragging it, and a pinch by the ratio between the two fingers; both are already the
-     * same gesture at any size, and slowing either would leave the table lagging behind the hand.
-     */
     const onChange = () => invalidate();
     next.addEventListener("change", onChange);
     next.update();
-    // The framing the view opens on, kept so `recentre` can travel back to it.
-    home.current = { position: camera.position.clone(), target: centre.clone(), zoom: camera.zoom };
     controls.current = next;
     // Publish the controls so the rest of the scene can suspend them — dragging a unit and orbiting
     // the camera are the same gesture, and only one of them can have it.
     set({ controls: next as unknown as never });
     invalidate();
     return () => {
+      // Remember how this mode was left, unless the table underneath it has changed.
+      if (kept.current.table === table) kept.current.views[mode] = { position: camera.position.clone(), target: next.target.clone(), zoom: camera.zoom };
       next.removeEventListener("change", onChange);
       set({ controls: null as unknown as never });
       next.dispose();
     };
-  }, [mode, perspective, orthographic, centre, distance, viewportHeight, gl, set, invalidate]);
+  }, [mode, table, perspective, orthographic, gl, set, invalidate]);
+
+  /*
+   * The turn rate is the one thing that does follow a resize, since OrbitControls measures a drag
+   * against the canvas height. It is set on its own so that a resize does not take the camera with
+   * it. Panning and pinching are left alone. A pan is measured so the table keeps up with the
+   * finger dragging it and a pinch by the ratio between two fingers, and both are already the same
+   * gesture at any size.
+   */
+  useEffect(() => {
+    if (controls.current) controls.current.rotateSpeed = Math.min(1, viewportHeight / ROTATE_REFERENCE);
+  }, [viewportHeight, mode, table]);
 
   /**
    * Two fingers can carry the board off the screen, and nothing on a table of dark ground says
@@ -171,8 +211,8 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
   useEffect(() => {
     if (!recentre) return;
     const next = controls.current;
-    const to = home.current;
-    if (!next || !to) return;
+    const to = homeNow.current;
+    if (!next) return;
     // OrbitControls types its subject as an Object3D; here it is always one of the two cameras
     // above, and both carry a zoom and a projection matrix.
     const camera = next.object as PerspectiveCamera | OrthographicCamera;

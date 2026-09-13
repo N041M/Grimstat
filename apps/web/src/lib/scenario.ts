@@ -1,4 +1,4 @@
-import { Scenario, ScenarioContext, type ScenarioUnit, type ScenarioModel, type ScenarioWeapon, type ManualToggle } from "@grimstat/schema";
+import { Scenario, ScenarioContext, type ScenarioUnit, type ScenarioModel, type ScenarioWeapon, type ManualToggle, type Snapshot } from "@grimstat/schema";
 import { archetypes, gameSystem } from "@grimstat/game-40k-11e";
 import { newId, nowIso } from "./ids";
 
@@ -21,14 +21,22 @@ export function archetypeUnit(id: string): ScenarioUnit | undefined {
   return a ? cloneUnit(a.unit) : undefined;
 }
 
-export function newScenario(partial: Partial<Scenario> = {}): Scenario {
+/**
+ * A fresh scenario, scored under the edition of the loaded data.
+ *
+ * The snapshot names its own game system, and `rosterFromImport` already stamps a roster with it, so
+ * the scenario has to be stamped from the same place or the two disagree about which rules they are
+ * read under. With no snapshot loaded there is nothing to read the edition off, and the scenario
+ * carries the 11th-edition id.
+ */
+export function newScenario(partial: Partial<Scenario> = {}, opts: { snapshot?: Snapshot } = {}): Scenario {
   const now = nowIso();
   const attacker = partial.attacker ?? archetypeUnit("bolter-squad") ?? emptyUnit("Attacker");
   const defender = partial.defender ?? archetypeUnit("marine-like") ?? emptyUnit("Defender");
   return Scenario.parse({
     id: newId("sc"),
     name: "Untitled scenario",
-    gameSystemId: gameSystem.id,
+    gameSystemId: opts.snapshot?.gameSystemId ?? gameSystem.id,
     ownerId: "local",
     createdAt: now,
     updatedAt: now,
@@ -87,9 +95,13 @@ export function sameScenario(a: Scenario | undefined, b: Scenario): boolean {
   }
 }
 
-/** A scenario nobody has touched yet: what `newScenario()` produces, with this one's id and stamps. */
+/**
+ * A scenario nobody has touched yet: what `newScenario()` produces, with this one's id and stamps.
+ * The edition is taken from the scenario as well, because it comes from the loaded data rather than
+ * from anything the player typed.
+ */
 export function isDefaultScenario(s: Scenario): boolean {
-  return sameScenario(newScenario({ id: s.id, createdAt: s.createdAt, updatedAt: s.updatedAt, revision: s.revision }), s);
+  return sameScenario(newScenario({ id: s.id, createdAt: s.createdAt, updatedAt: s.updatedAt, revision: s.revision, gameSystemId: s.gameSystemId }), s);
 }
 
 /**

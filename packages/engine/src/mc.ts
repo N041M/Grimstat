@@ -16,7 +16,10 @@ interface Prepared {
 export function runMonteCarlo(input: EngineInput): EngineOutput {
   const rand = mulberry32(input.seed ?? 0x9e3779b9);
   const iters = Math.max(100, input.mcIterations);
-  const groups = input.groups;
+  // The state space reads the defender as whole models with at least one wound each, and this run
+  // uses the same reading so that it simulates the unit the exact backend solves.
+  const space = makeStateSpace(input.groups);
+  const groups = space.groups;
   const G = groups.length;
   const prepared: Prepared[] = input.weapons
     .filter((w) => w.count > 0)
@@ -42,7 +45,6 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
 
   const slain = new Array<number>(G).fill(0);
   const curW = new Array<number>(G).fill(0);
-  const space = makeStateSpace(groups);
   const initial = input.initialState ? makeSampler(input.initialState, rand) : null;
   let startSlain = 0;
   let startDamage = 0;
@@ -155,7 +157,10 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
           for (let k = 0; k < woundsNeedingSave; k++) {
             const g = pickGroup(P.order);
             if (g < 0) {
-              wasted += mean(w.groups[P.order[0] ?? 0]!.damage) * (w.groups[P.order[0] ?? 0]!.pUnsaved);
+              // Nothing left to allocate to, so the wound is wasted. With no group at all there is
+              // no damage profile to measure the waste with and nothing to add.
+              const gp = w.groups[P.order[0] ?? 0];
+              if (gp) wasted += mean(gp.damage) * gp.pUnsaved;
               continue;
             }
             if (rand() < w.groups[g]!.pUnsaved) {
@@ -174,7 +179,8 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
       for (let k = 0; k < mortalEvents; k++) {
         const g = pickGroup(P.order);
         if (g < 0) {
-          wasted += mean(w.groups[P.order[0] ?? 0]!.mortalDamage);
+          const gp = w.groups[P.order[0] ?? 0];
+          if (gp) wasted += mean(gp.mortalDamage);
           continue;
         }
         const d = P.mortal[g]!();
@@ -203,6 +209,17 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
   const slainPMF = pmfFromHistogram(slainHist, iters);
   const m = dmgSum / iters - startDamage / iters;
   const sd = Math.sqrt(Math.max(0, dmgSq / iters - m * m));
+  /*
+   * An interval is only quoted when the sample can support one.
+   *
+   * The half-width below assumes the sample spread stands in for the real one. On a target the attack
+   * almost always wipes, nearly every run deals exactly the same damage, and on a short run every one
+   * of them can. The spread is then zero and the formula reports "± 0.00", which reads as an exact
+   * answer from a method that did not produce one: at a hundred runs that interval held the true
+   * value 24% of the time rather than 95%. A sample with no spread at all says nothing about how far
+   * off it might be, so no interval is offered for it and the caller shows none.
+   */
+  const ciHalfWidth = sd > 0 ? (1.96 * sd) / Math.sqrt(iters) : undefined;
   const traces: WeaponTrace[] = prepared.map((P, i) => ({
     name: P.w.name,
     count: P.w.count,
@@ -215,7 +232,7 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
   return {
     backend: "mc",
     iterations: iters,
-    ciHalfWidth: (1.96 * sd) / Math.sqrt(iters),
+    ...(ciHalfWidth !== undefined ? { ciHalfWidth } : {}),
     damagePMF,
     slainPMF,
     expectedDamage: m,

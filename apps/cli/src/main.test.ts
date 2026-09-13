@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -88,6 +89,116 @@ describe("the usage text", () => {
     expect(text).toContain("diff     <a.json> <b.json> [--limit n]");
     expect(text).toContain("mirror   [--system wh40k-11e] [--out data/mirror] [--delay ms] [--quiet]");
   });
+});
+
+/** Run a command with both output streams captured, and hand back what went to each. */
+async function streams(argv: string[]): Promise<{ code: number; out: string; err: string }> {
+  let out = "";
+  let err = "";
+  const sink = (add: (s: string) => void) => (chunk: string | Uint8Array) => {
+    add(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+    return true;
+  };
+  vi.spyOn(process.stdout, "write").mockImplementation(sink((s) => (out += s)));
+  vi.spyOn(process.stderr, "write").mockImplementation(sink((s) => (err += s)));
+  const code = await main(argv);
+  return { code, out, err };
+}
+
+describe("--help", () => {
+  const commands = ["import", "diff", "show", "synthetic", "competitive", "corpus", "mirror"];
+
+  it.each(commands)("prints %s's own usage rather than refusing an undeclared option", async (cmd) => {
+    const { code, out, err } = await streams([cmd, "--help"]);
+    expect(code).toBe(0);
+    expect(err).toBe("");
+    // The command's own options line, then what it does, and none of the other commands.
+    expect(out.split("\n")[0]).toMatch(new RegExp(`^grimstat ${cmd} \\S`));
+    expect(out.split("\n").slice(2).join("\n").trim().length).toBeGreaterThan(20);
+    expect(out).not.toContain("Commands:");
+  });
+
+  it("prints show's own usage, and not a complaint about an unknown option", async () => {
+    const { code, out } = await streams(["show", "--help"]);
+    expect(code).toBe(0);
+    expect(out).toBe("grimstat show <snapshot.json> <datasheet>\n\nPrint a datasheet (stats, weapons, abilities, points).\n");
+  });
+
+  it("still prints the whole command list for the top-level help", async () => {
+    for (const argv of [[], ["help"], ["--help"]]) {
+      const { code, out } = await streams(argv);
+      expect(code).toBe(0);
+      expect(out).toContain("Commands:");
+      for (const cmd of commands) expect(out).toContain(`  ${cmd.padEnd(8)} `);
+    }
+  });
+
+  it("sends an unknown command's usage to stderr, where error messages go", async () => {
+    const { code, out, err } = await streams(["frobnicate"]);
+    expect(code).toBe(2);
+    expect(out).toBe("");
+    expect(err).toContain(`unknown command "frobnicate"`);
+    expect(err).toContain("Commands:");
+  });
+});
+
+/**
+ * The entry point, run the way a shell runs it. Every other test here calls `main` directly, so the
+ * line that turns its return value into an exit code is covered nowhere else.
+ *
+ * Writes to a pipe are asynchronous and a pager does not start reading straight away, so a process
+ * that ends the moment its work is done throws away whatever the pipe has not taken yet. The reader
+ * below waits before it reads, and the output is larger than one pipe buffer.
+ */
+describe("the entry point", () => {
+  /** A snapshot with enough datasheets under one name for `show` to print more than 64 KiB. */
+  function crowdedSnapshot(dir: string): string {
+    const snapshot = JSON.parse(readFileSync(SNAPSHOT, "utf8")) as { data: { datasheets: Array<Record<string, unknown>> } };
+    const proto = snapshot.data.datasheets[0]!;
+    const clones = Array.from({ length: 800 }, (_, i) => ({
+      ...proto,
+      id: `clone-${i}`,
+      name: `Clone ${String(i).padStart(4, "0")} ${"Reiver Squad Veteran ".repeat(4)}`,
+      weapons: [],
+      abilityIds: [],
+      composition: [],
+      leaderTo: [],
+      supportTo: [],
+    }));
+    snapshot.data.datasheets = [...snapshot.data.datasheets, ...clones];
+    const file = join(dir, "crowded.json");
+    writeFileSync(file, JSON.stringify(snapshot));
+    return file;
+  }
+
+  /** Run the CLI as a child process, with a reader that waits `delayMs` before it starts reading. */
+  function runCli(argv: string[], delayMs: number): Promise<{ code: number; out: string }> {
+    const tsx = join(process.cwd(), "node_modules/.bin/tsx");
+    const entry = join(process.cwd(), "apps/cli/src/main.ts");
+    return new Promise((resolve, reject) => {
+      const child = spawn(tsx, [entry, ...argv], { stdio: ["ignore", "pipe", "ignore"] });
+      const chunks: Buffer[] = [];
+      let code = 0;
+      child.on("error", reject);
+      child.on("exit", (c) => (code = c ?? 0));
+      child.on("close", () => resolve({ code, out: Buffer.concat(chunks).toString("utf8") }));
+      setTimeout(() => child.stdout.on("data", (c: Buffer) => chunks.push(c)), delayMs);
+    });
+  }
+
+  it("writes all of its output even when the reader starts late", async () => {
+    const file = crowdedSnapshot(workDir());
+    const drained = await runCli(["show", file, "clone"], 0);
+    expect(drained.out.length).toBeGreaterThan(64 * 1024);
+    const waited = await runCli(["show", file, "clone"], 1000);
+    expect(waited.out.length).toBe(drained.out.length);
+    expect(waited.code).toBe(0);
+  }, 60_000);
+
+  it("still hands a non-zero exit code to the shell", async () => {
+    const { code } = await runCli(["show", join(workDir(), "absent.json"), "anything"], 0);
+    expect(code).toBe(1);
+  }, 60_000);
 });
 
 /** Every request Wahapedia's mirror made, so the test can check the URLs and the user agent. */

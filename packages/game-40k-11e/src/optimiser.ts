@@ -1,6 +1,6 @@
 import { convolve, delta, type PMF } from "@grimstat/engine";
 import type { ScenarioContext, ScenarioUnit, SimResult, Snapshot } from "@grimstat/schema";
-import { makeScenario } from "./analysis";
+import { editionOf, makeScenario, phaseFor } from "./analysis";
 import { runScenario } from "./scenario";
 
 /**
@@ -37,6 +37,8 @@ export interface TurnPlanInput {
   cpBudget?: number;
   objective?: "points" | "kills" | "damage";
   snapshot?: Snapshot;
+  /** The edition to score under. Taken from the snapshot when one is given. See `editionOf`. */
+  gameSystemId?: string;
   enabledToggles?: string[];
 }
 
@@ -102,7 +104,10 @@ function objectiveValue(objective: TurnPlanInput["objective"], r: { expectedPoin
 class Evaluator {
   evaluations = 0;
   private readonly cache = new Map<string, SimResult>();
-  constructor(private readonly input: TurnPlanInput) {}
+  private readonly edition: string;
+  constructor(private readonly input: TurnPlanInput) {
+    this.edition = editionOf(input);
+  }
 
   private key(attackerId: string, targetId: string, optionId: string | undefined, initial: number[] | undefined): string {
     // states are floats; hash a compact representation
@@ -117,13 +122,15 @@ class Evaluator {
     if (hit) return hit;
     this.evaluations++;
     const toggles = [...(this.input.enabledToggles ?? []), ...(option?.enabledToggles ?? [])];
-    const scenario = makeScenario(att.unit, tgt.unit, { ...(this.input.context ?? {}), backend: "exact" }, toggles);
+    // Resolve the attacker in the phase it can actually fight in, the way every other analysis
+    // does. Without this a melee-only attacker in a shooting-phase plan scored a flat zero.
+    const scenario = makeScenario(att.unit, tgt.unit, { ...phaseFor(att.unit, this.input.context ?? {}), backend: "exact" }, toggles, this.edition);
     let r: SimResult;
     try {
       r = runScenario(scenario, { snapshot: this.input.snapshot, ...(initial ? { initialState: initial } : {}) });
     } catch {
       // exact path refused (state space too large): fall back to MC without chaining
-      r = runScenario(makeScenario(att.unit, tgt.unit, { ...(this.input.context ?? {}), backend: "mc" }, toggles), { snapshot: this.input.snapshot });
+      r = runScenario(makeScenario(att.unit, tgt.unit, { ...phaseFor(att.unit, this.input.context ?? {}), backend: "mc" }, toggles, this.edition), { snapshot: this.input.snapshot });
       r.warnings.push(`${att.unit.name} vs ${tgt.unit.name}: exact chaining unavailable; used Monte Carlo (not chained).`);
     }
     this.cache.set(k, r);
@@ -134,12 +141,26 @@ class Evaluator {
     return att.options?.length ? att.options : DEFAULT_TURN_OPTIONS;
   }
 
+  /** The attacker a plan step names, or nothing when the input no longer carries it. */
+  attacker(id: string): TurnAttacker | undefined {
+    return this.input.attackers.find((x) => x.id === id);
+  }
+
   evaluate(plan: Plan): Eval {
     const input = this.input;
     const objective = input.objective ?? "points";
     const warnings = new Set<string>();
     const byTarget = new Map<string, Plan>();
-    for (const a of plan) byTarget.set(a.targetId, [...(byTarget.get(a.targetId) ?? []), a]);
+    const targetIds = new Set(input.targets.map((t) => t.id));
+    // A step naming a unit the input no longer holds is reported and left out. Reading the attacker
+    // back with a non-null assertion threw inside the worker instead, and a step naming a target
+    // that has gone was dropped in silence while its CP still counted against the budget.
+    for (const a of plan) {
+      const att = this.attacker(a.attackerId);
+      if (!att) warnings.add(`The plan assigns "${a.attackerId}", which is not one of the attackers.`);
+      else if (!targetIds.has(a.targetId)) warnings.add(`${att.unit.name} is assigned to "${a.targetId}", which is not one of the targets.`);
+      else byTarget.set(a.targetId, [...(byTarget.get(a.targetId) ?? []), a]);
+    }
     const assignments: TurnAssignment[] = [];
     const targets: TurnTargetOutcome[] = [];
     let score = 0;
@@ -156,7 +177,8 @@ class Evaluator {
       let last: SimResult | null = null;
       const agg = { expectedDamage: 0, expectedSlain: 0, expectedPointsSlain: 0, expectedWasted: 0 };
       for (const a of list) {
-        const att = input.attackers.find((x) => x.id === a.attackerId)!;
+        const att = this.attacker(a.attackerId);
+        if (!att) continue;
         const option = this.options(att).find((o) => o.id === a.optionId);
         const r = this.run(att, tgt, option, state);
         for (const w of r.warnings) warnings.add(w);
@@ -200,9 +222,13 @@ class Evaluator {
 
 function withinBudget(plan: Plan, ev: Evaluator, input: TurnPlanInput): boolean {
   if (input.cpBudget === undefined) return true;
+  const targetIds = new Set(input.targets.map((t) => t.id));
   let cp = 0;
   for (const a of plan) {
-    const att = input.attackers.find((x) => x.id === a.attackerId)!;
+    const att = ev.attacker(a.attackerId);
+    // Count exactly the steps `evaluate` resolves, so the budget checked here and the CP reported
+    // there are the same number.
+    if (!att || !targetIds.has(a.targetId)) continue;
     cp += ev.options(att).find((o) => o.id === a.optionId)?.cp ?? 0;
   }
   return cp <= input.cpBudget;
@@ -240,6 +266,15 @@ export function optimiseTurn(input: TurnPlanInput): TurnPlanResult {
         if (!bestChoice || e.score > bestChoice.ev.score + 1e-12) bestChoice = { plan: cand, ev: e };
       }
     }
+    // Every option this attacker carries costs more CP than is left. It fires with no stratagem
+    // rather than leaving the plan. A unit that cannot afford a stratagem still shoots.
+    if (!bestChoice) {
+      for (const tgt of input.targets) {
+        const cand: Plan = [...plan, { attackerId: att.id, targetId: tgt.id }];
+        const e = ev.evaluate(cand);
+        if (!bestChoice || e.score > bestChoice.ev.score + 1e-12) bestChoice = { plan: cand, ev: e };
+      }
+    }
     if (bestChoice) {
       plan = bestChoice.plan;
       best = bestChoice.ev;
@@ -252,7 +287,8 @@ export function optimiseTurn(input: TurnPlanInput): TurnPlanResult {
     improved = false;
     rounds++;
     for (let i = 0; i < plan.length; i++) {
-      const att = input.attackers.find((x) => x.id === plan[i]!.attackerId)!;
+      const att = ev.attacker(plan[i]!.attackerId);
+      if (!att) continue;
       for (const tgt of input.targets) {
         for (const opt of ev.options(att)) {
           if (tgt.id === plan[i]!.targetId && opt.id === plan[i]!.optionId) continue;
@@ -297,5 +333,13 @@ export function optimiseTurn(input: TurnPlanInput): TurnPlanResult {
   }
   const result = best.result;
   result.evaluations = ev.evaluations;
+  // Name the attackers that ended up firing with nothing. This reads the finished plan rather than
+  // the greedy pass, so it cannot outlive a stratagem the local search managed to afford after all.
+  for (const a of result.assignments) {
+    if (a.optionId !== undefined) continue;
+    const att = ev.attacker(a.attackerId);
+    if (!att || ev.options(att).some((o) => o.cp === 0)) continue;
+    result.warnings.push(`${att.unit.name} fires with no stratagem. Every option it carries costs more CP than the budget leaves.`);
+  }
   return result;
 }

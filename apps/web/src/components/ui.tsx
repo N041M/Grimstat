@@ -343,6 +343,16 @@ export function IconSwap({ from, to, on }: { from: IconName; to: IconName; on: b
 
 // ---------- dismissable layers ----------
 
+/**
+ * Whether a dialog, a sheet or the command palette is open over the page.
+ *
+ * A screen that answers Escape from anywhere has to leave the key alone while one of them is up.
+ * Otherwise one press closes the layer and the screen underneath it together.
+ */
+export function modalOpen(): boolean {
+  return document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]') !== null;
+}
+
 /** Calls `onDismiss` on Escape or on a pointer-down outside `ref` while `active`. */
 export function useDismiss(ref: RefObject<HTMLElement>, active: boolean, onDismiss: () => void): void {
   useEffect(() => {
@@ -499,14 +509,28 @@ export function Dialog({ open, onClose, title, children, className, wide }: { op
 export function Sheet({ open, onClose, label, children, className, side }: { open: boolean; onClose: () => void; label: string; children: ReactNode; className?: string; side?: "bottom" | "left" }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number } | undefined>(undefined);
+  /*
+   * The effect below reads `onClose` through this ref instead of listing it as a dependency.
+   * Callers pass an inline arrow, so a new function arrives on every render of the screen around
+   * the sheet. With `onClose` in the dependency list the effect tore down and set up again on each
+   * of those renders, and the setup moves focus to the top of the sheet and records what to give
+   * focus back to. Anything that re-renders the screen on a timer, such as a notice dismissing
+   * itself, therefore pulled focus out of the sheet's contents and lost the button it was opened
+   * from. Now the effect runs when the sheet opens and when it closes.
+   */
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!open) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const root = ref.current;
     root?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else if (root) trapTab(e, root);
+      if (e.key === "Escape") {
+        // The sheet is the layer on top, so Escape stops here rather than reaching the screen behind it.
+        e.stopPropagation();
+        close.current();
+      } else if (root) trapTab(e, root);
     };
     document.addEventListener("keydown", onKey);
     document.body.classList.add("sheet-open");
@@ -515,7 +539,7 @@ export function Sheet({ open, onClose, label, children, className, side }: { ope
       document.body.classList.remove("sheet-open");
       restoreFocus(opener);
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <>

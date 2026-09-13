@@ -183,7 +183,12 @@ export function reachable(model: ModelHull, budget: number, index: TerrainIndex,
   };
 }
 
-/** Can this model stand with its base centred here, given the terrain? */
+/**
+ * Can this model stand with its base centred here, given the terrain?
+ *
+ * This asks what the search asks of every cell it settles. There has to be a surface at this height,
+ * the model's keywords have to be allowed on it, and no solid may run through the base.
+ */
 export function canStand(model: ModelHull, at: Vec3, index: TerrainIndex, opts: ReachOptions = {}): boolean {
   const rules = { ...MOVE_RULES, ...opts.rules };
   const keywords = new Set((opts.keywords ?? []).map((k) => k.toUpperCase()));
@@ -346,8 +351,22 @@ class SurfaceMap {
     return out.length > 1 ? [...new Set(out)].sort((a, b) => a - b) : out;
   }
 
-  /** Can the model's base rest here without any solid running through it? */
+  /**
+   * Is there a surface at this height to stand on?
+   *
+   * The surfaces are the ones the search itself walks on, so a height `canStand` allows is a height
+   * `reachable` offers. A piece that only some keywords may climb keeps the rest off its floors.
+   */
+  supported(at: Vec3): boolean {
+    // The table is under every point of the board, which settles a ground-level search here rather
+    // than in an index query per cell.
+    if (Math.abs(at.z) <= this.rules.floorTolerance) return true;
+    return this.at({ x: at.x, y: at.y }).some((z) => Math.abs(z - at.z) <= this.rules.floorTolerance);
+  }
+
+  /** Can the model's base rest here, with something under it and no solid running through it? */
   standable(at: Vec3): boolean {
+    if (!this.supported(at)) return false;
     // The enclosing circle is the broad phase. It over-reaches an oval base by `half`, which is
     // harmless here because everything it lets through is measured again inside `occupies`.
     const here: ModelHull = { ...this.model, pos: at };
@@ -361,7 +380,9 @@ class SurfaceMap {
   /** Does this piece's solid fill the space the model would stand in? */
   occupies(piece: TerrainPiece, here: ModelHull): boolean {
     const at = here.pos;
-    if (piece.height <= this.rules.stepOver) return false; // stepped over
+    // Terrain this low is stepped over, unless the piece is a wall. `impassable` and `breachable`
+    // name who may cross them at any height, and the search enforces that on every step it takes.
+    if (piece.height <= this.rules.stepOver && !hasTrait(piece, "impassable") && !hasTrait(piece, "breachable")) return false;
     if (at.z + here.height <= piece.base + EPS) return false; // the model is under it
     if (at.z >= topOf(piece) - EPS) return false; // the model is on top of it
     // The narrow phase: the base's own core segment against the piece's polygon, which is how the

@@ -32,12 +32,22 @@ export interface RulesParams {
   coverAsSaveBonus: boolean;
   /** Lethal Hits is a choice (11e) or automatic (10e). */
   lethalOptional: boolean;
+  /**
+   * Indirect Fire at a target the firing unit cannot see: only unmodified 6s hit (11e), or -1 to the
+   * Hit roll and the Benefit of Cover for the target (10e).
+   */
+  indirectNotVisibleSnap: boolean;
   hazardousFailProb: number;
   hazardousMortals: number;
-  hazardousMortalsVehicleMonster: number;
+  /** Mortal wounds a failed Hazardous test costs a model carrying one of `hazardousBigModelKeywords`. */
+  hazardousMortalsBigModel: number;
+  /** Keywords that raise a failed Hazardous test to `hazardousMortalsBigModel` mortal wounds. */
+  hazardousBigModelKeywords: readonly string[];
   devastatingMortalsNoSpill: boolean;
   damageModsApplyToDevastating: boolean;
   blastPerModels: number;
+  /** CLEAVE exists as a weapon ability. 10e has no such ability, and a weapon printed with it is flagged. */
+  cleave: boolean;
 }
 
 export const RULES: RulesParams = {
@@ -50,16 +60,20 @@ export const RULES: RulesParams = {
   coverAsSkillPenalty: true,
   coverAsSaveBonus: false,
   lethalOptional: true,
-  /** Hazardous: fails on 1-2; 1 MW, or 3 MW if every model in the firing unit is a VEHICLE/MONSTER. */
+  /** Indirect Fire at a target that cannot be seen: only unmodified 6s hit. */
+  indirectNotVisibleSnap: true,
+  /** Hazardous: fails on 1-2; 1 MW, or 3 MW for a VEHICLE or MONSTER. */
   hazardousFailProb: 2 / 6,
   hazardousMortals: 1,
-  hazardousMortalsVehicleMonster: 3,
+  hazardousMortalsBigModel: 3,
+  hazardousBigModelKeywords: ["VEHICLE", "MONSTER"],
   /** Devastating Wounds: MW equal to Damage, max one model per critical wound (no spill). */
   devastatingMortalsNoSpill: true,
   /** Damage modifiers also apply to Devastating Wounds mortal damage (it equals the *modified* D characteristic). */
   damageModsApplyToDevastating: true,
   /** Blast/Cleave: +1 (or +X) attacks per 5 models in the target unit. */
   blastPerModels: 5,
+  cleave: true,
 };
 
 export const RULES_10E: RulesParams = {
@@ -68,7 +82,10 @@ export const RULES_10E: RulesParams = {
   coverAsSkillPenalty: false,
   coverAsSaveBonus: true,
   lethalOptional: false,
+  /** Indirect Fire at a target that cannot be seen: -1 to the Hit roll, and the target has the Benefit of Cover. */
+  indirectNotVisibleSnap: false,
   hazardousFailProb: 1 / 6,
-  hazardousMortals: 1,
-  hazardousMortalsVehicleMonster: 3,
+  /** 10e gives the three mortal wounds to a CHARACTER as well as to a MONSTER or VEHICLE. */
+  hazardousBigModelKeywords: ["CHARACTER", "MONSTER", "VEHICLE"],
+  cleave: false,
 };

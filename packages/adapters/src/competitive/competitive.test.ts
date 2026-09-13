@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import { SYNTHETIC_DIR } from "../test-utils";
 import { importRosterText } from "../roster/index";
-import { dedupePublishedLists, extractList, feedSource, guessListHeader, parseArticle, parseFeed, parseHeading, parsePublishedListsFile, pastedList, publishedListKey, sourceOf, stringifyPublishedListsFile, type StoredPublishedList } from "./index";
+import { dedupePublishedLists, extractList, feedSource, guessListHeader, isHttpUrl, parseArticle, parseCorpusIndex, parseFeed, parseHeading, parsePublishedListsFile, pastedList, publishedListKey, sourceOf, stringifyPublishedListsFile, type StoredPublishedList } from "./index";
 
 const read = (rel: string) => readFileSync(join(SYNTHETIC_DIR, rel), "utf8");
 const html = read("competitive/write-up.html");
@@ -272,5 +272,63 @@ describe("guessing a list's header for prefilling", () => {
   it("guesses nothing from a list with no header", () => {
     expect(guessListHeader("Warden Captain (95 points)\n• Warlord")).toEqual({});
     expect(guessListHeader("")).toEqual({});
+  });
+});
+
+// An imported link is put in front of the user as something to click, and a list can be imported
+// from a file, a feed or a page that anyone wrote.
+describe("the links an import brings with it", () => {
+  const listText = ["Warden Captain (95 points)", "• Warlord", "Warden Squad (180 points)", "• 9x Warden"].join("\n");
+  const corpusFile = (url: string) => ({
+    format: "grimstat-published-lists",
+    version: 1,
+    lists: [{ heading: "A. Player - 1st Place", listText, source: { title: "Club Night", url }, importedAt: "2026-09-11T00:00:00.000Z" }],
+  });
+
+  it("imports a list from a file that named a script as its link, without the link", () => {
+    const [list] = parsePublishedListsFile(corpusFile("javascript:alert(document.domain)"));
+    expect(list!.listText).toBe(listText);
+    expect(list!.source).toEqual({ title: "Club Night" });
+    expect(parsePublishedListsFile(corpusFile("data:text/html,<script>alert(1)</script>"))[0]!.source.url).toBeUndefined();
+    expect(parsePublishedListsFile(corpusFile("/club-night/"))[0]!.source.url).toBeUndefined();
+    expect(parsePublishedListsFile(corpusFile("https://example.invalid/club-night/"))[0]!.source.url).toBe("https://example.invalid/club-night/");
+  });
+
+  it("ignores what a saved page claims its own address is when it is not a web address", () => {
+    const page = (canonical: string, og = "") => `<html><head><title>Club Night</title><link rel="canonical" href="${canonical}">${og}</head><body></body></html>`;
+    expect(sourceOf(page("javascript:alert(1)")).url).toBeUndefined();
+    expect(sourceOf(page("javascript:alert(1)", `<meta property="og:url" content="https://example.invalid/club-night/">`)).url).toBe("https://example.invalid/club-night/");
+    expect(sourceOf(page("https://example.invalid/club-night/")).url).toBe("https://example.invalid/club-night/");
+  });
+
+  it("skips a feed entry that links to a script, and takes the guid when it is a real link", () => {
+    const item = (link: string, guid = "") => `<rss><channel><item><title>[40k] In 11th: A</title><link>${link}</link>${guid ? `<guid>${guid}</guid>` : ""}</item></channel></rss>`;
+    expect(parseFeed(item("javascript:alert(1)"))).toEqual([]);
+    expect(parseFeed(item("javascript:alert(1)", "https://example.invalid/a/"))[0]?.url).toBe("https://example.invalid/a/");
+    expect(parseFeed(item("https://example.invalid/a/"))[0]?.url).toBe("https://example.invalid/a/");
+    expect(feedSource("<rss><channel><title>P</title><link>javascript:alert(1)</link></channel></rss>")).toEqual({ title: "P" });
+  });
+
+  it("refuses a corpus index that points its source or its files somewhere else", () => {
+    const index = {
+      format: "grimstat-corpus",
+      version: 1,
+      generatedAt: "2026-09-11T00:00:00.000Z",
+      source: { id: "minihq", name: "MiniHeadQuarters", url: "https://miniheadquarters.com", publication: "miniheadquarters.com", attribution: "Lists published by their players" },
+      files: [{ name: "lists-2026-09.json", month: "2026-09", lists: 2, tournaments: 1 }],
+      tournaments: [{ slug: "club-night", name: "Club Night", date: "2026-09-05", url: "https://miniheadquarters.com/club-night", lists: 2, file: "lists-2026-09.json" }],
+    };
+    expect(parseCorpusIndex(index).files).toHaveLength(1);
+    expect(() => parseCorpusIndex({ ...index, source: { ...index.source, url: "javascript:alert(1)" } })).toThrow(/http/);
+    expect(() => parseCorpusIndex({ ...index, files: [{ ...index.files[0]!, name: "../../../elsewhere.json" }] })).toThrow(/file name/);
+    expect(() => parseCorpusIndex({ ...index, tournaments: [{ ...index.tournaments[0]!, url: "javascript:alert(1)" }] })).toThrow(/Not a corpus index/);
+    // A crawl that recorded no page for a tournament leaves that tournament's link empty.
+    expect(parseCorpusIndex({ ...index, tournaments: [{ ...index.tournaments[0]!, url: "" }] }).tournaments[0]!.url).toBe("");
+  });
+
+  it("takes http and https links and nothing else", () => {
+    expect(["https://example.invalid/a", "http://example.invalid/a", "HTTPS://EXAMPLE.INVALID"].every(isHttpUrl)).toBe(true);
+    expect(["javascript:alert(1)", "java\nscript:alert(1)", "data:text/html,x", "vbscript:msgbox(1)", "file:///etc/passwd", "/relative", "", "  ", "not a url"].some(isHttpUrl)).toBe(false);
+    expect(pastedList({ listText, sourceUrl: "javascript:alert(1)" })?.source).toEqual({});
   });
 });

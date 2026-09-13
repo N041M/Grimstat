@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, TerrainIndex, bounds, canSee, canStand, circleBase, coherency, coreSegment, distance, inBox, inZone, ovalBase, segPolygonDistance, terrain, type TerrainLayout, type Vec2 } from "@grimstat/board";
+import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, TerrainIndex, bounds, canSee, canStand, circleBase, coherency, coreSegment, distance, inBox, inZone, ovalBase, segPolygonDistance, terrain, type ReachNode, type TerrainLayout, type Vec2 } from "@grimstat/board";
 import {
   anchorOf,
   applyGroupMove,
@@ -16,6 +16,7 @@ import {
   incoherentModels,
   modelMoveVerdict,
   modelReach,
+  reachSignature,
   remainingMove,
   groupMoveVerdict,
   type GroupMove,
@@ -585,6 +586,58 @@ describe("routes", () => {
 });
 
 
+/**
+ * The reach overlay is drawn from these cells, and drawing it costs a mask the width of the table.
+ * So the page keeps the last answer and asks `reachSignature` whether anything it depends on has
+ * moved. The cells are pinned here, and so is what the signature notices.
+ */
+describe("the reach overlay", () => {
+  const index = indexOf(state);
+
+  /** A fingerprint of the cells lit, so a change to any one of them fails here. */
+  const cells = (nodes: readonly ReachNode[]): string => {
+    const each = nodes.map((n) => `${n.at.x.toFixed(4)},${n.at.y.toFixed(4)},${n.at.z.toFixed(4)}`).sort();
+    let hash = 0;
+    for (const cell of each) for (let i = 0; i < cell.length; i++) hash = (Math.imul(hash, 31) + cell.charCodeAt(i)) | 0;
+    return `${each.length}:${(hash >>> 0).toString(16)}`;
+  };
+
+  it("lights the cells it has always lit", () => {
+    expect(cells(modelReach(state, attacker(0), attacker(0).models[0]!, index))).toBe("228:cb758c41");
+    expect(cells(modelReach(state, attacker(3), attacker(3).models[0]!, index))).toBe("290:e0ec7584");
+  });
+
+  it("is unchanged by a turn on round bases, and says so", () => {
+    const unit = attacker(0);
+    const turned = replaceUnit(state, rotateUnit(unit, 0.37));
+    const after = findUnit(turned, unit.id)!;
+    expect(cells(modelReach(turned, after, after.models[0]!, index))).toBe(cells(modelReach(state, unit, unit.models[0]!, index)));
+    expect(reachSignature(turned, after, after.models[0]!)).toBe(reachSignature(state, unit, unit.models[0]!));
+    expect(reachSignature(turned, after)).toBe(reachSignature(state, unit));
+  });
+
+  it("is searched again when an oval base turns, when anything moves, and when the mover has spent some of its move", () => {
+    const unit = attacker(0);
+    const before = reachSignature(state, unit, unit.models[0]!);
+
+    const ovals = { ...unit, models: unit.models.map((m) => ({ ...m, hull: { ...m.hull, foot: ovalBase(105, 70) } })) };
+    const flat = replaceUnit(state, ovals);
+    const swung = replaceUnit(flat, rotateUnit(ovals, 0.37));
+    expect(reachSignature(swung, findUnit(swung, unit.id)!, findModel(findUnit(swung, unit.id)!, ovals.models[0]!.id))).not.toBe(reachSignature(flat, ovals, ovals.models[0]!));
+
+    const walked = replaceUnit(state, translateUnit(unit, { x: 0, y: 1 }));
+    expect(reachSignature(walked, findUnit(walked, unit.id)!, findModel(findUnit(walked, unit.id)!, unit.models[0]!.id))).not.toBe(before);
+
+    // Someone else moving matters too: the mover has to get round them.
+    const other = attacker(1);
+    const shifted = replaceUnit(state, translateUnit(other, { x: 0, y: 1 }));
+    expect(reachSignature(shifted, unit, unit.models[0]!)).not.toBe(before);
+
+    const spent = { ...unit, models: unit.models.map((m, i) => (i === 0 ? { ...m, spent: 1.5 } : m)) };
+    expect(reachSignature(replaceUnit(state, spent), spent, spent.models[0]!)).not.toBe(before);
+  });
+});
+
 describe("turning in place", () => {
   it("turns one model, or the whole unit, about its own base and keeps the angle in range", () => {
     const unit = attacker(0);
@@ -744,6 +797,104 @@ describe("moving a selection together", () => {
     expect(turned.models[0]!.hull.facing).toBeCloseTo(Math.PI / 12);
     expect(turned.models[1]!.hull.facing).toBeCloseTo(Math.PI / 12);
     expect(turned.models[2]!.hull.facing).toBe(unit.models[2]!.hull.facing);
+  });
+
+  /** Where a verdict puts each member, to a thousandth of an inch. */
+  const where = (verdict: { moves: readonly GroupMove[] }): string[] => verdict.moves.map((m) => `${m.at.x.toFixed(3)} ${m.at.y.toFixed(3)} ${m.at.z.toFixed(3)}`);
+
+  /**
+   * A move sent between two cells the squad can reach, both of them near enough to where it was
+   * pointed to count as it. It goes to the one the shorter route reaches, and these are the places
+   * that puts it in.
+   */
+  it("takes the nearer of two cells a member could land on", () => {
+    const unit = attacker(0);
+    const members = unit.models.map((m) => ({ unitId: unit.id, modelId: m.id }));
+    const verdict = groupMoveVerdict(state, members, { x: 5.8, y: 0 }, indexOf(state));
+    expect(verdict.ok).toBe(true);
+    for (const move of verdict.moves) expect(move.cost).toBeCloseTo(5.5, 6);
+    expect(where(verdict)).toEqual([
+      "14.710 4.140 0.000",
+      "16.570 4.140 0.000",
+      "18.430 4.140 0.000",
+      "20.290 4.140 0.000",
+      "14.710 6.000 0.000",
+      "16.570 6.000 0.000",
+      "18.430 6.000 0.000",
+      "20.290 6.000 0.000",
+      "16.570 7.860 0.000",
+      "18.430 7.860 0.000",
+    ]);
+  });
+
+  it("puts the squad where it has always put it", () => {
+    const unit = attacker(0);
+    const members = unit.models.map((m) => ({ unitId: unit.id, modelId: m.id }));
+    expect(where(groupMoveVerdict(clear, members, { x: 0, y: 2 }))).toEqual([
+      "9.210 6.140 0.000",
+      "11.070 6.140 0.000",
+      "12.930 6.140 0.000",
+      "14.790 6.140 0.000",
+      "9.210 8.000 0.000",
+      "11.070 8.000 0.000",
+      "12.930 8.000 0.000",
+      "14.790 8.000 0.000",
+      "11.070 9.860 0.000",
+      "12.930 9.860 0.000",
+    ]);
+
+    const { by, world, members: squad } = squadAtAWall();
+    expect(where(groupMoveVerdict(world, squad, by))).toEqual([
+      "17.210 12.140 0.000",
+      "19.070 12.140 0.000",
+      "20.930 12.140 0.000",
+      "22.790 12.140 0.000",
+      "17.210 14.000 0.000",
+      "19.070 14.000 0.000",
+      "20.930 14.000 0.000",
+      "22.790 14.000 0.000",
+      "19.070 15.860 0.000",
+      "22.430 15.860 0.000",
+    ]);
+  });
+
+  /**
+   * A drag hands the same state object back sixty times a second and the searches behind it are kept
+   * for as long as that object lives. What is kept must not depend on where the hand was when it was
+   * made, so every frame has to answer as it would have on its own.
+   */
+  it("answers a drag the same whether or not it has been asked before", () => {
+    const unit = attacker(0);
+    const members = unit.models.map((m) => ({ unitId: unit.id, modelId: m.id }));
+    const index = indexOf(state);
+    for (const by of [
+      { x: 0.4, y: 0 },
+      { x: 0, y: 2 },
+      { x: -1.5, y: 3.2 },
+      { x: 4.9, y: 0 },
+      { x: 0, y: 30 },
+      { x: 0, y: 2 },
+    ]) {
+      const alone: BattleState = { ...state, units: [...state.units] };
+      const aim = { x: unit.models[0]!.hull.pos.x + by.x, y: unit.models[0]!.hull.pos.y + by.y };
+      expect(groupMoveVerdict(state, members, by, index, aim)).toEqual(groupMoveVerdict(alone, members, by, indexOf(alone), aim));
+    }
+  });
+
+  /**
+   * Half a squad still on its muster table. Nothing around it is on the board, so only its own five
+   * companions are in its way, and the two halves of the move count those companions differently:
+   * the body move has to get past them and the fit does not. The move comes out spaced, and these
+   * are the places it puts the five in.
+   */
+  it("moves a group that is still on its muster table past its own companions", () => {
+    const off: BattleUnit = { ...placeUnit(attacker(0), { x: 20, y: 20 }), reserve: true };
+    const shelf = replaceUnit(clear, off);
+    const members = off.models.slice(0, 5).map((m) => ({ unitId: off.id, modelId: m.id }));
+    const verdict = groupMoveVerdict(shelf, members, { x: 2, y: 0 });
+    expect(verdict.ok).toBe(true);
+    expect(verdict.spaced).toBe(true);
+    expect(where(verdict)).toEqual(["19.210 18.140 0.000", "21.070 18.140 0.000", "22.930 18.140 0.000", "24.790 18.140 0.000", "19.210 20.000 0.000"]);
   });
 });
 

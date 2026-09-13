@@ -14,8 +14,10 @@ export function Scoreboard({ ctx }: { ctx: PlayContext }) {
   const mine = totalsFor(state.you, state.secondaries);
   const theirs = totalsFor(state.them, state.secondaries);
 
+  // The line carries the change so the summary can count a point spent here alongside the ones
+  // spent on stratagems.
   const cp = (delta: number) => {
-    dispatch({ kind: "cp", side: "you", delta }, "cp", delta > 0 ? t("play.log.cpGain", { n: delta }) : t("play.log.cpSpend", { n: Math.abs(delta) }));
+    dispatch({ kind: "cp", side: "you", delta }, "cp", delta > 0 ? t("play.log.cpGain", { n: delta }) : t("play.log.cpSpend", { n: Math.abs(delta) }), { amount: delta, side: "you" });
   };
 
   const score = (side: Side, total: number) => (

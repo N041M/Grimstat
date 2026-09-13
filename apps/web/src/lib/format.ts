@@ -6,6 +6,41 @@ export function fmt(n: number | undefined | null, digits = 2): string {
   return n.toFixed(digits);
 }
 
+/**
+ * A sampled figure, printed only to the place its interval can actually tell apart.
+ *
+ * `ciHalfWidth` is the 95% half-width on `value`. Two decimals on a figure whose interval is ±0.05
+ * print digits the run cannot support, so the number of decimals is read off the interval instead:
+ * floor(-log10(halfWidth)), held between 0 and `maxDigits`. A half-width of 0.5 gets no decimals,
+ * 0.07 and 0.05 get one, 0.005 gets two.
+ *
+ * An exact result has no half-width and prints at `maxDigits`, which is what `fmt` does. A
+ * half-width that is not a positive finite number says nothing about how precise the figure is, so
+ * zero, a negative number and a non-finite one are all read as no interval and print at `maxDigits`
+ * too. `value` itself goes through `fmt`, so an absent or non-finite one still prints an en dash.
+ */
+export function fmtSampled(value: number | undefined | null, ciHalfWidth?: number, maxDigits = 2): string {
+  if (ciHalfWidth === undefined || !Number.isFinite(ciHalfWidth) || ciHalfWidth <= 0) return fmt(value, maxDigits);
+  return fmt(value, Math.min(maxDigits, Math.max(0, Math.floor(-Math.log10(ciHalfWidth)))));
+}
+
+/** A half-width only counts when it is a positive finite number. Anything else means no interval. */
+const width = (h: number | undefined): number => (h !== undefined && Number.isFinite(h) && h > 0 ? h : 0);
+
+/**
+ * Whether two figures are close enough that their intervals touch, which is where a ranking has no
+ * grounds to put one of them above the other.
+ *
+ * A figure with no half-width was worked out exactly and stands at a point, so two exact figures
+ * touch only when they are the same number. Two figures that are exactly equal count as tied for
+ * that reason, whether they were sampled or not.
+ */
+export function overlaps(aValue: number, aHalf: number | undefined, bValue: number, bHalf: number | undefined): boolean {
+  if (aValue === bValue) return true;
+  if (!Number.isFinite(aValue) || !Number.isFinite(bValue)) return false;
+  return Math.abs(aValue - bValue) <= width(aHalf) + width(bHalf);
+}
+
 export function pct(p: number | undefined | null, digits = 1): string {
   if (p === undefined || p === null || !Number.isFinite(p)) return "–";
   return `${(p * 100).toFixed(digits)}%`;

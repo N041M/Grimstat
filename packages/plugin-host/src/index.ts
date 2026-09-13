@@ -86,6 +86,8 @@ export function compatible(apiVersion: string): boolean {
 
 export class PluginHost {
   readonly registries = createRegistries();
+  /** Which plugin registered each `${kind}:${id}`, so a collision can name the plugin that holds the id. */
+  private readonly owners = new Map<string, string>();
 
   async load(mod: PluginModule): Promise<void> {
     const m = mod.manifest;
@@ -94,18 +96,52 @@ export class PluginHost {
     // Registrations are staged and committed once activate() resolves, so a plugin that throws part of the
     // way through leaves the registries as they were and can be loaded again.
     const staged = createRegistries();
+    /**
+     * An id already registered stays with the plugin that registered it first. The second plugin is
+     * refused, which fails its load and leaves the first one whole. Letting the second one win would
+     * disable part of the first with nothing to show for it. The refusal is recorded as well as thrown,
+     * so a plugin that catches the error during activate() still fails to load.
+     */
+    const refused: string[] = [];
+    const claim = <V>(kind: string, id: string, into: Map<string, V>): void => {
+      const owner = this.owners.get(`${kind}:${id}`);
+      const clash = owner ? `plugin ${owner} registered it first` : into.has(id) ? "it registered that id already" : undefined;
+      if (!clash) return;
+      const message = `Plugin ${m.id} cannot register ${kind} "${id}": ${clash}`;
+      refused.push(message);
+      throw new Error(message);
+    };
     const ctx: PluginContext = {
-      registerGameSystem: (id, api) => staged.gameSystems.set(id, api),
-      registerWidget: (def) => staged.widgets.set(def.id, def),
-      registerAnalysis: (def) => staged.analyses.set(def.id, def),
-      registerArchetype: (a) => staged.archetypes.set(a.id, a),
+      registerGameSystem: (id, api) => {
+        claim("game system", id, staged.gameSystems);
+        staged.gameSystems.set(id, api);
+      },
+      registerWidget: (def) => {
+        claim("widget", def.id, staged.widgets);
+        staged.widgets.set(def.id, def);
+      },
+      registerAnalysis: (def) => {
+        claim("analysis", def.id, staged.analyses);
+        staged.analyses.set(def.id, def);
+      },
+      registerArchetype: (a) => {
+        claim("archetype", a.id, staged.archetypes);
+        staged.archetypes.set(a.id, a);
+      },
     };
     await mod.activate(ctx);
+    if (refused.length) throw new Error(refused[0]);
     const r = this.registries;
-    for (const [id, api] of staged.gameSystems) r.gameSystems.set(id, api);
-    for (const [id, def] of staged.widgets) r.widgets.set(id, def);
-    for (const [id, def] of staged.analyses) r.analyses.set(id, def);
-    for (const [id, a] of staged.archetypes) r.archetypes.set(id, a);
+    const commit = <V>(kind: string, from: Map<string, V>, to: Map<string, V>): void => {
+      for (const [id, v] of from) {
+        to.set(id, v);
+        this.owners.set(`${kind}:${id}`, m.id);
+      }
+    };
+    commit("game system", staged.gameSystems, r.gameSystems);
+    commit("widget", staged.widgets, r.widgets);
+    commit("analysis", staged.analyses, r.analyses);
+    commit("archetype", staged.archetypes, r.archetypes);
     r.manifests.set(m.id, m);
   }
 }

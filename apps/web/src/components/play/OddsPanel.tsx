@@ -27,7 +27,7 @@ type RangeBand = ScenarioContext["rangeBand"];
 const runOdds = (scenario: Scenario, snapshot: Snapshot | undefined) => simClient().run(scenario, snapshot);
 
 /** P(damage >= k) read off the damage distribution: the chance the attack covers what is left. */
-function pAtLeast(pmf: readonly number[], k: number): number {
+export function pAtLeast(pmf: readonly number[], k: number): number {
   if (k <= 0) return 1;
   let sum = 0;
   for (let i = k; i < pmf.length; i++) sum += pmf[i] ?? 0;
@@ -78,7 +78,7 @@ export function OddsPanel({ ctx }: { ctx: PlayContext }) {
       defender: cloneUnit(foe.current),
       context: { ...defaultContext(), phase, charged, rangeBand, inCover },
       ...(snapshot ? { snapshotId: snapshot.id } : {}),
-    });
+    }, { snapshot });
     // fp covers every field read above; rebuilding on object identity alone would re-run the
     // worker on every render of the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -111,7 +111,9 @@ export interface GameState {
 }
 
 export function newGameState(): GameState {
-  return { round: 1, active: "you", phase: "command", you: newSideState(), them: newSideState(), units: {}, opponentUnits: {}, opponent: [], secondaries: [], over: false };
+  // The game opens in the first round's command phase for the player whose turn it is. No handover
+  // starts that phase, so its command point is paid here rather than by `startTurn`.
+  return { round: 1, active: "you", phase: "command", you: { ...newSideState(), cp: CP_PER_COMMAND_PHASE }, them: newSideState(), units: {}, opponentUnits: {}, opponent: [], secondaries: [], over: false };
 }
 
 // ---------- actions ----------
@@ -154,6 +156,10 @@ export function applyDamage(unit: UnitState, wounds: number, profileWounds: numb
   const size = Math.max(1, Math.floor(models));
   const taken = clampPositive(wounds);
   if (taken === 0) return unit;
+  // A unit the player marked destroyed has no models lost recorded, so counting wounds against it
+  // again would come out under its total and stand the unit back up. Bringing it back is the
+  // destroy action's job.
+  if (unit.destroyed) return unit;
   const total = unit.modelsLost * w + unit.woundsLost + taken;
   const cap = size * w;
   if (total >= cap) return { ...unit, modelsLost: size, woundsLost: 0, destroyed: true };
@@ -280,22 +286,44 @@ export interface SideTotals {
   byRound: Map<number, number>;
 }
 
+/**
+ * Points scored in each round, with every secondary's cap applied.
+ *
+ * The entries are read in round order and a secondary stops adding once it has reached its cap, so
+ * the rounds add up to the same figure the headline total shows. Summing the raw entries instead
+ * gave a column that disagreed with the total printed above it.
+ */
+export function scoredByRound(side: SideState, secondaries: readonly Secondary[]): Map<number, number> {
+  const caps = new Map(secondaries.map((s) => [s.id, s.cap] as const));
+  const used = new Map<string, number>();
+  const byRound = new Map<number, number>();
+  for (const e of [...side.scores].sort(byRoundThenLine)) {
+    let points = e.points;
+    if (e.secondaryId) {
+      const cap = caps.get(e.secondaryId);
+      const sofar = used.get(e.secondaryId) ?? 0;
+      if (cap !== undefined) points = Math.max(0, Math.min(points, cap - sofar));
+      used.set(e.secondaryId, sofar + points);
+    }
+    byRound.set(e.round, (byRound.get(e.round) ?? 0) + points);
+  }
+  return byRound;
+}
+
 export function totalsFor(side: SideState, secondaries: readonly Secondary[]): SideTotals {
   const caps = new Map(secondaries.map((s) => [s.id, s.cap] as const));
   const perSecondary = new Map<string, number>();
   let primary = 0;
-  const byRound = new Map<number, number>();
   for (const e of side.scores) {
     if (e.secondaryId) perSecondary.set(e.secondaryId, (perSecondary.get(e.secondaryId) ?? 0) + e.points);
     else primary += e.points;
-    byRound.set(e.round, (byRound.get(e.round) ?? 0) + e.points);
   }
   let secondary = 0;
   for (const [id, points] of perSecondary) {
     const cap = caps.get(id);
     secondary += cap === undefined ? points : Math.min(points, cap);
   }
-  return { primary, secondary, total: primary + secondary, byRound };
+  return { primary, secondary, total: primary + secondary, byRound: scoredByRound(side, secondaries) };
 }
 
 /** What a side has scored on one line in one round, or undefined when it has not been entered. */
@@ -387,8 +415,15 @@ export function summarise(log: readonly LogEntry[], state: GameState): GameSumma
       row.cpSpent[side] += e.amount;
       cpSpent[side] += e.amount;
     }
+    // The scoreboard's own minus button writes a "cp" line carrying the change, so a point spent
+    // there counts the same as one spent on a stratagem. Points gained there are skipped.
+    if (e.kind === "cp" && e.amount !== undefined && e.amount < 0) {
+      const side = e.side ?? "you";
+      row.cpSpent[side] -= e.amount;
+      cpSpent[side] -= e.amount;
+    }
   }
-  for (const side of SIDES) for (const entry of state[side].scores) at(entry.round).scored[side] += entry.points;
+  for (const side of SIDES) for (const [round, points] of scoredByRound(state[side], state.secondaries)) at(round).scored[side] += points;
   return { rounds: [...byRound.values()].sort((a, b) => a.round - b.round), dealt, cpSpent, estimates };
 }
 
@@ -397,6 +432,10 @@ export function summarise(log: readonly LogEntry[], state: GameState): GameSumma
 /**
  * An opponent unit as the solver sees it. Archetype-backed units are resolved by the caller, which
  * owns the plugin; this builds the typed-stats case.
+ *
+ * `state` sizes the unit to the models still standing. The wounds on the model currently being
+ * damaged are set by `atStrength`, which every caller runs over the result, so they are not applied
+ * twice here.
  */
 export function opponentScenarioUnit(u: OpponentUnit, state?: UnitState): ScenarioUnit {
   const alive = state ? modelsLeft(state, u.models) : u.models;
@@ -424,17 +463,24 @@ export function opponentScenarioUnit(u: OpponentUnit, state?: UnitState): Scenar
 }
 
 /**
- * The unit as it stands now: model groups and weapon counts scaled to the models still alive.
+ * The unit as it stands now: model groups carrying the wounds they have left, and weapon counts
+ * scaled to the models still alive.
  *
  * Casualties are taken from the back of the unit, which is how a squad is usually removed, and
  * weapon counts fall with the models carrying them. The tracker does not know which specific models
  * died, so this is proportional rather than exact. It is far closer than solving at full strength,
  * which is what a companion would otherwise report in the middle of a game.
+ *
+ * The model part way through being killed carries `woundsLost`, so it is split out as a group of
+ * one at the wounds it has left. Without that a damaged one-model unit reached the solver at its
+ * full wounds, and the panel printed one chance of finishing it and a different chance of killing
+ * it for the same shot.
  */
 export function atStrength(unit: ScenarioUnit, state: UnitState, startingModels: number): ScenarioUnit {
   const alive = modelsLeft(state, startingModels);
   const start = Math.max(1, Math.floor(startingModels));
-  if (alive >= start) return unit;
+  const hurt = Math.max(0, Math.floor(state.woundsLost));
+  if (alive >= start && hurt === 0) return unit;
   if (alive <= 0) return { ...unit, models: unit.models.map((m) => ({ ...m, count: 0 })), weapons: unit.weapons.map((w) => ({ ...w, count: 0 })) };
 
   /*
@@ -442,9 +488,10 @@ export function atStrength(unit: ScenarioUnit, state: UnitState, startingModels:
    * alive longest.
    *
    * A Leader's models are appended after the host's, so filling strictly from the front removed the
-   * character first — the exact opposite of the rule, where the bodyguard is removed until none is
-   * left. The solver's own allocation already protects characters, so a `current` unit that had
-   * lost its captain first under-rated the unit every time the companion was asked for odds.
+   * character before any of the squad. The rule is the reverse of that: the bodyguard is removed
+   * until none of it is left. The solver's own allocation already protects characters, so a
+   * `current` unit that had lost its captain first under-rated the unit every time the companion
+   * was asked for odds.
    */
   let left = alive;
   // Survivors are handed out to the character first, so it is the last model still standing.
@@ -455,9 +502,39 @@ export function atStrength(unit: ScenarioUnit, state: UnitState, startingModels:
     left -= keep;
     kept.set(i, keep);
   }
-  const models = unit.models.map((m, i) => ({ ...m, count: kept.get(i) ?? 0 }));
+  const whole = unit.models.map((m, i) => ({ ...m, count: kept.get(i) ?? 0 }));
+
+  /*
+   * The model taking wounds right now is the next one to be removed, which is the last group the
+   * survivors reached. A character is handed survivors first, so it only carries the wounds once
+   * the rest of the unit is gone.
+   *
+   * That model is split out as a group of one at the wounds it has left and listed first, so the
+   * solver spends damage on it before the models still at full health.
+   */
+  const woundedAt = hurt > 0 ? [...order].reverse().find((i) => (kept.get(i) ?? 0) > 0) : undefined;
+  const source = woundedAt === undefined ? undefined : whole[woundedAt]!;
+  const models =
+    source === undefined
+      ? whole
+      : [{ ...source, count: 1, W: Math.max(1, source.W - hurt) }, ...whole.flatMap((m, i) => (i !== woundedAt ? [m] : m.count > 1 ? [{ ...m, count: m.count - 1 }] : []))];
+
+  /*
+   * Weapon counts fall with the models carrying them. Each line takes its share of what it started
+   * with, and the shares are handed out from the front of the list until the unit's share of the
+   * weapons it began with runs out. A squad down to its last model would otherwise keep one of
+   * every line, so three special weapons and a rifle all fired from one survivor.
+   *
+   * Lines listed first keep their weapons, which is the same order the models above are kept in.
+   */
   const ratio = alive / start;
-  const weapons = unit.weapons.map((w) => ({ ...w, count: w.count === 0 ? 0 : Math.max(1, Math.round(w.count * ratio)) }));
+  const started = unit.weapons.reduce((s, w) => s + w.count, 0);
+  let room = Math.max(1, Math.round(started * ratio));
+  const weapons = unit.weapons.map((w) => {
+    const count = w.count === 0 ? 0 : Math.min(Math.max(1, Math.round(w.count * ratio)), Math.max(0, room));
+    room -= count;
+    return { ...w, count };
+  });
   return { ...unit, models, weapons };
 }
 

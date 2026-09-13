@@ -35,10 +35,11 @@ export const ModelProfile = z.object({
   id: Id,
   name: z.string(),
   M: z.number().nullable().optional(),
-  T: z.number(),
-  Sv: z.number(),
+  T: z.number().positive(),
+  Sv: z.number().positive(),
   InvSv: z.number().nullable().optional(),
-  W: z.number(),
+  /** Wounds. Zero is rejected because the engine reads a group of zero-wound models as already slain. */
+  W: z.number().int().positive(),
   Ld: z.number().nullable().optional(),
   OC: z.number().nullable().optional(),
   baseSize: z.string().optional(),
@@ -63,8 +64,8 @@ export const WeaponProfile = z.object({
   A: DiceExpr,
   /** BS or WS as a target number (2..6). null = weapon has no skill (e.g. TORRENT: N/A). */
   skill: z.number().nullable(),
-  S: z.number(),
-  AP: z.number(), // stored as a non-negative magnitude: AP -2 => 2
+  S: z.number().positive(),
+  AP: z.number().nonnegative(), // stored as a non-negative magnitude: AP -2 => 2
   D: DiceExpr,
   keywords: z.array(WeaponKeyword).default([]),
   /** For multi-profile weapons: the parent weapon name (e.g. "Plasma gun" for "Plasma gun - supercharge"). */
@@ -99,8 +100,8 @@ export type Ability = z.infer<typeof Ability>;
 export const UnitComposition = z.object({
   /** Free-text line, e.g. "1 Sergeant and 4 Marines". */
   description: z.string(),
-  min: z.number().int().optional(),
-  max: z.number().int().optional(),
+  min: z.number().int().nonnegative().optional(),
+  max: z.number().int().nonnegative().optional(),
 });
 
 export const Datasheet = z.object({
@@ -133,7 +134,7 @@ export const Datasheet = z.object({
   damagedProfile: z.object({ threshold: z.string(), description: z.string() }).optional(),
   sourceId: Id.optional(),
   /** Points fallback when no PriceRule exists (e.g. ad-hoc data). */
-  fallbackPoints: z.number().optional(),
+  fallbackPoints: z.number().nonnegative().optional(),
 });
 export type Datasheet = z.infer<typeof Datasheet>;
 
@@ -141,7 +142,7 @@ export const Enhancement = z.object({
   id: Id,
   detachmentId: Id,
   name: z.string(),
-  cost: z.number(),
+  cost: z.number().nonnegative(),
   text: z.string().default(""),
   supportOnly: z.boolean().default(false),
   restrictions: z.string().optional(),
@@ -156,7 +157,7 @@ export const Stratagem = z.object({
   detachmentId: Id.optional(),
   name: z.string(),
   type: z.string().optional(),
-  cpCost: z.number(),
+  cpCost: z.number().nonnegative(),
   turn: z.enum(["your", "opponent", "either"]).optional(),
   phases: z.array(z.string()).default([]),
   when: z.string().optional(),
@@ -174,7 +175,7 @@ export const Detachment = z.object({
   factionId: Id,
   name: z.string(),
   /** Detachment Points cost (11e). */
-  dp: z.number().int().default(1),
+  dp: z.number().int().nonnegative().default(1),
   forceDispositions: z.array(z.string()).default([]),
   uniqueTag: z.string().optional(),
   ruleAbilityIds: z.array(Id).default([]),

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { Plane, Raycaster, Vector2, Vector3 } from "three";
+import { Raycaster, Vector2, Vector3 } from "three";
 import type { ModelHull, ReachNode, Vec2, Vec3 } from "@grimstat/board";
 import type { BattleState, BattleUnit, Tape } from "../../lib/battle";
 import { anchorOf, deployVerdict, dragVerdict, findModel, findUnit, groupMoveVerdict, indexOf, modelMoveVerdict, muster, musterAt, musterVerdict, placeUnit, sceneFrame, translateUnit, unitHulls, type GroupMember, type GroupMove, type Side } from "../../lib/battle";
-import { fromScene, toScene } from "../../lib/battleScene";
+import { toScene } from "../../lib/battleScene";
 import { centre } from "../../lib/layoutEdit";
 import { Cameras, type CameraMode } from "./Cameras";
+import { boardPointOn, pressOf, type Press } from "./press";
+import { dragsSelection } from "./selection";
 import { Lighting, MusterTables, Objectives, Table, Terrain, Zones } from "./TableScene";
 import { Ghost, UnitTokens, livePositions } from "./UnitTokens";
 import { silhouetteFor, type SilhouetteId } from "../../lib/silhouettes";
@@ -210,44 +212,68 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
 
   const held = useRef<Held | undefined>();
   const pending = useRef<DragState | undefined>();
+  /** The pointer the drag belongs to. Moves and releases from any other are not this drag's. */
+  const pointer = useRef<number | undefined>(undefined);
 
+  /**
+   * Take hold of something, on behalf of one pointer.
+   *
+   * Only the primary button takes hold. OrbitControls pans with the right button and dollies with
+   * the middle, so a press of either is a camera gesture, and a table that acted on it would plant
+   * a move plan or a tape mark every time the view was panned.
+   *
+   * The pointer is captured and its id kept, and a pointer that arrives while something is already
+   * held takes nothing. A second finger landing anywhere reports moves of its own, and a drag that
+   * followed them would tear the model out from under the first finger and then commit it wherever
+   * the second one was lifted.
+   */
   const hold = useCallback(
-    (what: Held) => {
+    (what: Held, press: Press): boolean => {
+      if (press.event.button !== 0 || held.current) return false;
       held.current = what;
+      pointer.current = press.event.pointerId;
       if (controls) controls.enabled = false;
       document.body.style.cursor = "grabbing";
+      canvas.setPointerCapture(press.event.pointerId);
+      return true;
     },
-    [controls],
+    [controls, canvas],
   );
 
   /**
    * Pick a model up where it was pressed. The offset between the press and the model's centre is kept
    * for the whole drag, so a tank grabbed by its corner stays under the pointer by its corner instead
    * of jumping two inches to centre itself.
+   *
+   * The press is read at the height the drag will follow, which is the model's own storey — or the
+   * table, when the drag is a deployment. Read anywhere else the offset is wrong by the height of
+   * whatever the pointer happened to land on.
    */
   const grabModel = useCallback(
-    (unitId: string, modelId: string, at: Vec2) => {
+    (unitId: string, modelId: string, press: Press) => {
       if (!canDrag) return;
       const unit = findUnit(latest.current.state, unitId);
       const model = unit && findModel(unit, modelId);
       if (!unit || !model) return;
+      const deploying = latest.current.dragMode === "deploy" || unit.reserve;
+      const at = press.at(deploying ? 0 : model.hull.pos.z);
       // Deploying moves the whole block, so the offset is to the block's centre, not the model's.
       // A unit on its muster table is always picked up by the block: there is nothing else a drag
       // of it could mean, and the press that took it has already put the deploy tool in hand.
-      if (latest.current.dragMode === "deploy" || unit.reserve) {
+      if (deploying) {
         const n = unit.models.length || 1;
         const cx = unit.models.reduce((s, m) => s + m.hull.pos.x, 0) / n;
         const cy = unit.models.reduce((s, m) => s + m.hull.pos.y, 0) / n;
-        hold({ kind: "model", unitId, modelId, offset: { x: cx - at.x, y: cy - at.y } });
+        hold({ kind: "model", unitId, modelId, offset: { x: cx - at.x, y: cy - at.y } }, press);
         return;
       }
       // A model selected with others takes them all along.
       const ids = latest.current.groupIds;
-      if (ids && ids.size >= 2 && ids.has(modelId)) {
-        hold({ kind: "group", lead: modelId, members: membersOf(latest.current.state, ids), offset: { x: model.hull.pos.x - at.x, y: model.hull.pos.y - at.y } });
+      if (ids && dragsSelection(ids, modelId)) {
+        hold({ kind: "group", lead: modelId, members: membersOf(latest.current.state, ids), offset: { x: model.hull.pos.x - at.x, y: model.hull.pos.y - at.y } }, press);
         return;
       }
-      hold({ kind: "model", unitId, modelId, offset: { x: model.hull.pos.x - at.x, y: model.hull.pos.y - at.y } });
+      hold({ kind: "model", unitId, modelId, offset: { x: model.hull.pos.x - at.x, y: model.hull.pos.y - at.y } }, press);
     },
     [canDrag, hold],
   );
@@ -260,14 +286,16 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
    * and the plan is replaced by the drop — only the hand's offset is measured from the ghost.
    */
   const grabGhost = useCallback(
-    (at: Vec2) => {
+    (press: Press) => {
       if (!planned || !canDrag || dragMode !== "move") return;
+      const now = latest.current.state;
       if (planned.moves && planned.moves.length >= 2) {
         // The ghost nearest the press leads; the rest follow by their offsets.
+        const over = press.at(planned.hulls[0]?.pos.z ?? 0);
         let best = 0;
         let nearest = Infinity;
         planned.hulls.forEach((h, i) => {
-          const d = Math.hypot(h.pos.x - at.x, h.pos.y - at.y);
+          const d = Math.hypot(h.pos.x - over.x, h.pos.y - over.y);
           if (d < nearest) {
             nearest = d;
             best = i;
@@ -276,43 +304,56 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
         const lead = planned.moves[best];
         const ghostPos = planned.hulls[best]?.pos;
         if (!lead || !ghostPos) return;
-        hold({ kind: "group", lead: lead.modelId, members: planned.moves.map(({ unitId, modelId }) => ({ unitId, modelId })), offset: { x: ghostPos.x - at.x, y: ghostPos.y - at.y } });
+        // The drag is judged from the model's real position, so it follows the plane that model
+        // stands on and the offset has to be measured on that same plane.
+        const at = press.at(modelIn(now, lead.modelId)?.model.hull.pos.z ?? ghostPos.z);
+        hold({ kind: "group", lead: lead.modelId, members: planned.moves.map(({ unitId, modelId }) => ({ unitId, modelId })), offset: { x: ghostPos.x - at.x, y: ghostPos.y - at.y } }, press);
         return;
       }
       const anchor = planned.hulls[0];
       if (!anchor) return;
-      hold({ kind: "model", unitId: planned.unitId, ...(planned.modelId ? { modelId: planned.modelId } : {}), offset: { x: anchor.pos.x - at.x, y: anchor.pos.y - at.y } });
+      const unit = findUnit(now, planned.unitId);
+      const model = unit && planned.modelId ? findModel(unit, planned.modelId) : undefined;
+      const real = model?.hull ?? (unit ? anchorOf(unit) : undefined);
+      const at = press.at(real?.pos.z ?? anchor.pos.z);
+      hold({ kind: "model", unitId: planned.unitId, ...(planned.modelId ? { modelId: planned.modelId } : {}), offset: { x: anchor.pos.x - at.x, y: anchor.pos.y - at.y } }, press);
     },
     [planned, canDrag, dragMode, hold],
   );
 
   /** Take hold of the turn ring: remember the bearing of the press and the facing it started from. */
   const grabRing = useCallback(
-    (at: Vec2) => {
+    (press: Press) => {
       if (!turnRing || !canDrag) return;
       const centre = { x: turnRing.hull.pos.x, y: turnRing.hull.pos.y };
-      hold({ kind: "turn", leadId: turnRing.modelId, centre, z: turnRing.hull.pos.z, startAngle: Math.atan2(at.y - centre.y, at.x - centre.x), startFacing: turnRing.hull.facing });
+      const at = press.at(turnRing.hull.pos.z);
+      hold({ kind: "turn", leadId: turnRing.modelId, centre, z: turnRing.hull.pos.z, startAngle: Math.atan2(at.y - centre.y, at.x - centre.x), startFacing: turnRing.hull.facing }, press);
     },
     [turnRing, canDrag, hold],
   );
 
+  // Terrain and objectives are dragged along the table itself, so the press is read there too. The
+  // point on a ruin's roof is the piece's height above the plane the drag follows, and using it
+  // would send the piece that far across on the first frame.
   const pickPiece = useCallback(
-    (id: string, at: Vec2) => {
+    (id: string, press: Press) => {
       const piece = latest.current.state.layout.pieces.find((p) => p.id === id);
       if (!piece || !editing) return;
-      editing.onPickPiece(id);
       const c = centre(piece);
-      hold({ kind: "piece", id, offset: { x: c.x - at.x, y: c.y - at.y } });
+      const at = press.at(0);
+      if (!hold({ kind: "piece", id, offset: { x: c.x - at.x, y: c.y - at.y } }, press)) return;
+      editing.onPickPiece(id);
     },
     [editing, hold],
   );
 
   const pickObjective = useCallback(
-    (id: string, at: Vec2) => {
+    (id: string, press: Press) => {
       const objective = latest.current.state.layout.objectives.find((o) => o.id === id);
       if (!objective || !editing) return;
+      const at = press.at(0);
+      if (!hold({ kind: "objective", id, offset: { x: objective.at.x - at.x, y: objective.at.y - at.y } }, press)) return;
       editing.onPickObjective(id);
-      hold({ kind: "objective", id, offset: { x: objective.at.x - at.x, y: objective.at.y - at.y } });
     },
     [editing, hold],
   );
@@ -376,8 +417,6 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
   useEffect(() => {
     const ray = new Raycaster();
     const ndc = new Vector2();
-    const hit = new Vector3();
-    const plane = new Plane(new Vector3(0, 1, 0), 0);
     let frame = 0;
     let last: PointerEvent | undefined;
 
@@ -386,8 +425,7 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
       if (rect.width === 0 || rect.height === 0) return undefined;
       ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
       ray.setFromCamera(ndc, camera);
-      plane.constant = -height;
-      return ray.ray.intersectPlane(plane, hit) ? { x: hit.x, y: -hit.z } : undefined;
+      return boardPointOn(ray.ray, height);
     };
 
     const place = (e: PointerEvent) => {
@@ -506,7 +544,11 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
     };
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!held.current && !latest.current.measureFrom) return;
+      // A drag answers to the pointer that started it and to no other. Without that, a second
+      // finger put down anywhere moves the model to where that finger is.
+      if (held.current) {
+        if (e.pointerId !== pointer.current) return;
+      } else if (!latest.current.measureFrom) return;
       last = e;
       if (!frame) {
         frame = requestAnimationFrame(() => {
@@ -516,9 +558,11 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
       }
     };
 
-    const drop = () => {
+    const drop = (e: PointerEvent) => {
       const what = held.current;
-      if (!what) return;
+      // Only the pointer that took hold can put the thing down. Another one lifting says nothing
+      // about this drag, and committing on it lands the model wherever that pointer happened to be.
+      if (!what || e.pointerId !== pointer.current) return;
       if (frame) {
         cancelAnimationFrame(frame);
         frame = 0;
@@ -527,6 +571,7 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
       if (last) follow(last);
       const release = last;
       held.current = undefined;
+      pointer.current = undefined;
       last = undefined;
       if (controls) controls.enabled = true;
       document.body.style.cursor = "";
@@ -587,14 +632,18 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
    * the same thing and are read here alongside the modifiers.
    */
   const onDown = useCallback(
-    (at: Vec2, e: PointerEvent) => {
+    (press: Press) => {
+      const e = press.event;
       if (held.current) return;
+      // The right button is the camera's pan and the middle one its dolly, so neither plants a move
+      // plan under the Move tool or a tape mark under Measure.
+      if (e.button !== 0) return;
       if ((e.shiftKey || boxSelect) && canDrag && dragMode === "move" && onBoxSelect) {
-        hold({ kind: "box", start: { x: e.clientX, y: e.clientY }, additive: e.metaKey || e.ctrlKey || !!addToSelection });
+        hold({ kind: "box", start: { x: e.clientX, y: e.clientY }, additive: e.metaKey || e.ctrlKey || !!addToSelection }, press);
         document.body.style.cursor = "crosshair";
         return;
       }
-      onTableDown?.(at);
+      onTableDown?.(press.at(0));
     },
     [onTableDown, canDrag, dragMode, onBoxSelect, boxSelect, addToSelection, hold],
   );
@@ -630,8 +679,7 @@ function Scene({ state, cameraMode, recentre, selectedId, activeModelId, incoher
         <group
           onPointerDown={(e: ThreeEvent<PointerEvent>) => {
             e.stopPropagation();
-            const p = fromScene(e.point.x, e.point.y, e.point.z);
-            grabGhost({ x: p.x, y: p.y });
+            grabGhost(pressOf(e));
           }}
           onPointerOver={(e: ThreeEvent<PointerEvent>) => {
             e.stopPropagation();

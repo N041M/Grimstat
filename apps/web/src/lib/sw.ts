@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * What the service worker has to say to the shell: a new build is waiting, or the app has just
- * been cached for offline use. `main.tsx` feeds it from `registerSW`; `App` shows the banner.
+ * What the service worker has to say to the shell: a new build is waiting, or the app has just been
+ * cached for offline use. `main.tsx` feeds both from `registerSW`. `App` reads `needRefresh` and
+ * shows the update banner. Nothing reads `offlineReady` yet.
  */
 export interface SwState {
   needRefresh: boolean;

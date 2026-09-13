@@ -25,6 +25,12 @@ export function create11eKeywordRegistry(rules: RulesParams = RULES): KeywordReg
     if (bonus > 0) c.mods.add({ channel: CH.attacks, op: "add", value: bonus, source: "Blast" });
   });
   r.register("CLEAVE", (kw, c) => {
+    // An edition without the ability still has to say so. Dropping the keyword quietly would give the
+    // weapon its printed attacks and no sign that a line of its profile went unread.
+    if (!rules.cleave) {
+      c.warnings.push("CLEAVE is not an ability in this edition.");
+      return;
+    }
     if (c.weaponKind !== "melee") return;
     const bonus = Math.floor(c.targetModelCount / rules.blastPerModels) * numVal(kw.value);
     if (bonus > 0) c.mods.add({ channel: CH.attacks, op: "add", value: bonus, source: "Cleave" });

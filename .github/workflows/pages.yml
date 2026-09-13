@@ -12,7 +12,10 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # A deployment that has started is allowed to finish. Cancelling actions/deploy-pages part way
+  # through leaves the live site on whatever it had already uploaded. A push that arrives during a
+  # run waits for it instead.
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -27,14 +30,35 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The CI workflow starts from the same push as this one and neither waits for the other, so on
+      # its own it does not stop a commit that fails its checks from reaching the live site. The
+      # checks run here too, against the exact commit this run is about to publish.
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm --filter @grimstat/web typecheck
+      - run: pnpm test
       # A built site is static files with no server to proxy through, and Wahapedia sends no CORS
       # headers, so the browser cannot read it from the deployed app. Its export is copied into the
       # site here instead, where it is same-origin and the Data page's one button reaches it like any
       # other source. Nothing is committed, since the directory is git-ignored and only ever exists in the
       # build. Set the repository variable SKIP_WAHAPEDIA to any value to leave it out.
+      #
+      # The step is allowed to fail. The site is worth deploying without the copy, and wahapedia.ru
+      # being down is not a reason to hold back an unrelated fix. Each edition is written only once
+      # all of its tables have arrived, so a failure leaves no half-written edition behind. The time
+      # limit is a backstop for a run that is slow rather than broken.
       - name: Copy the Wahapedia export into the site
+        id: mirror
         if: ${{ vars.SKIP_WAHAPEDIA == '' }}
+        continue-on-error: true
+        timeout-minutes: 20
         run: pnpm cli mirror --system wh40k-11e --system wh40k-10e --out apps/web/public/wahapedia
+      - name: Say so when the Wahapedia copy did not arrive
+        if: ${{ steps.mirror.outcome == 'failure' }}
+        run: |
+          echo "Copying the Wahapedia export failed, and the reason is in the previous step's log."
+          echo "This deploy goes out without it, and the Data page reports the source as unavailable."
+          echo "::warning title=Wahapedia copy skipped::The site is deploying without the Wahapedia tables. The previous step's log says why."
       - name: Build web app under the repository sub-path
         run: pnpm --filter @grimstat/web build
         env:

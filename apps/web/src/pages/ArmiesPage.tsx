@@ -17,6 +17,20 @@ import { t, tn, type I18nKey } from "../i18n";
 
 export const battleSizeKey = (s: BattleSize): I18nKey => `battleSize.${s}` as I18nKey;
 
+/**
+ * A points limit as typed into the Custom field: whole points, at least one. Nothing while the
+ * field is empty or holds something that is not a limit, so an unfinished field cannot be read as
+ * a number the army is then built to.
+ */
+export function typedPointsLimit(text: string): number | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return undefined;
+  const points = Math.floor(n);
+  return points >= 1 ? points : undefined;
+}
+
 function CardMenu({ name, busy, onDuplicate, onDelete }: { name: string; busy: boolean; onDuplicate: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -58,7 +72,7 @@ export function ArmiesPage() {
   const [factionId, setFactionId] = useState("");
   const [battleSize, setBattleSize] = useState<BattleSize>("strike-force");
   const [name, setName] = useState("");
-  const [customLimit, setCustomLimit] = useState(2000);
+  const [customLimit, setCustomLimit] = useState("2000");
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState<string | undefined>(undefined);
   /** A BattleScribe/New Recruit file is a zip rather than text, so the bytes are kept until the import runs. */
@@ -74,7 +88,7 @@ export function ArmiesPage() {
   const refresh = useCallback(async () => {
     try {
       const all = await db.rosters.toArray();
-      setItems(all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)));
+      setItems(all.sort((a, b) => (a.updatedAt === b.updatedAt ? 0 : a.updatedAt < b.updatedAt ? 1 : -1)));
       setLoadError(undefined);
     } catch (e) {
       setItems([]);
@@ -158,10 +172,14 @@ export function ArmiesPage() {
     setOver(false);
   };
 
+  /** The Custom field's value, and what the Create button waits for while that size is chosen. */
+  const customPoints = typedPointsLimit(customLimit);
+
   const create = () =>
     run(async () => {
       if (!snapshot || !factionId) return;
-      const r = newRoster({ snapshot, factionId, battleSize, ...(name.trim() ? { name: name.trim() } : {}), ...(battleSize === "custom" ? { pointsLimit: Math.max(1, Math.floor(customLimit) || 2000) } : {}) });
+      if (battleSize === "custom" && customPoints === undefined) return;
+      const r = newRoster({ snapshot, factionId, battleSize, ...(name.trim() ? { name: name.trim() } : {}), ...(customPoints !== undefined && battleSize === "custom" ? { pointsLimit: customPoints } : {}) });
       await saveRosterWithVersion(r);
       closeDialog();
       setName("");
@@ -202,13 +220,17 @@ export function ArmiesPage() {
       notify(t("armies.jsonUnreadable"), "error");
       return;
     }
-    const existing = new Set((items ?? []).map((r) => r.id));
+    // The ids are read from the database rather than the list on screen, and every army written here
+    // joins the set, so a bundle that carries the same id twice cannot overwrite its own first army.
+    const existing = new Set(await db.rosters.toCollection().primaryKeys());
     let present = 0;
     const saved: Roster[] = [];
     for (const r of parsed.rosters) {
-      const rec = existing.has(r.id) ? cloneRoster(r, t("armies.copyName", { name: r.name })) : r;
-      if (rec !== r) present++;
+      const clash = existing.has(r.id);
+      const rec = clash ? cloneRoster(r, t("armies.copyName", { name: r.name })) : r;
+      if (clash) present++;
       await saveRosterWithVersion(rec);
+      existing.add(rec.id);
       saved.push(rec);
     }
     await refresh();
@@ -354,7 +376,8 @@ export function ArmiesPage() {
             </Field>
             {battleSize === "custom" ? (
               <Field label={t("roster.pointsLimit")}>
-                <input type="number" min={1} step={5} value={customLimit} onChange={(e) => setCustomLimit(Number(e.target.value))} />
+                {/* The step is a point because the field accepts any whole number of them. At five the browser refused 2,000. */}
+                <input type="number" min={1} step={1} value={customLimit} onChange={(e) => setCustomLimit(e.target.value)} />
               </Field>
             ) : null}
           </div>
@@ -365,7 +388,7 @@ export function ArmiesPage() {
             <button type="button" className="ghost" onClick={closeDialog}>
               {t("common.cancel")}
             </button>
-            <button type="submit" className="primary" disabled={!factionId || busy}>
+            <button type="submit" className="primary" disabled={!factionId || busy || (battleSize === "custom" && customPoints === undefined)}>
               {t("armies.create")}
             </button>
           </div>

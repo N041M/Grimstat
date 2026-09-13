@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MatrixCell, MatrixResult } from "@grimstat/game-40k-11e";
 import type { SimResult } from "@grimstat/schema";
-import { HEAT_STEPS, ALPHA_BASE, ALPHA_SPAN, FLIP_AT, heatColour, heatRamp, heatT, heatmapModel, metricIsAverage, metricValue } from "./heatmap";
+import { heatColour, heatRamp, heatT, heatmapModel, metricIsAverage, metricValue } from "./heatmap";
 import { DURABILITY_CSV_HEADER, MATRIX_CSV_HEADER, TURN_PLAN_CSV_HEADER, TURN_TARGET_CSV_HEADER, TURN_TOTAL_CSV_HEADER, csvEscape, csvLine, durabilityToCsv, matrixToCsv, turnPlanToCsv } from "./matrixCsv";
 
 function result(over: Partial<SimResult>): SimResult {
@@ -43,8 +43,9 @@ describe("heatColour", () => {
     const hi = heatColour(10, 0, 10);
     expect(lo.t).toBe(0);
     expect(hi.t).toBe(1);
-    expect(lo.alpha).toBeCloseTo(ALPHA_BASE);
-    expect(hi.alpha).toBeCloseTo(ALPHA_BASE + ALPHA_SPAN);
+    // The bottom of the scale is 0.04 of ink and the top is 0.04 + 0.7.
+    expect(lo.alpha).toBeCloseTo(0.04);
+    expect(hi.alpha).toBeCloseTo(0.74);
     // Painted as the ink token at that opacity, so it is rgba(23,24,27,α) light and rgba(237,236,232,α) dark.
     expect(lo.background).toBe("color-mix(in srgb, var(--ink) 4.0%, transparent)");
     expect(hi.background).toBe("color-mix(in srgb, var(--ink) 74.0%, transparent)");
@@ -52,10 +53,10 @@ describe("heatColour", () => {
 
   it("snaps to six classes, so neighbouring cells are always separable", () => {
     const classes = [...new Set(Array.from({ length: 101 }, (_, i) => heatT(i / 10, 0, 10)))].sort((a, b) => a - b);
-    expect(classes).toHaveLength(HEAT_STEPS);
-    expect(classes[0]).toBe(0);
-    expect(classes[HEAT_STEPS - 1]).toBe(1);
-    // values within a class share a shade; the printed number carries the detail
+    expect(classes).toHaveLength(6);
+    // Six classes are evenly spaced fifths of the scale.
+    expect(classes).toEqual([0, 0.2, 0.4, 0.6, 0.8, 1]);
+    // Two values in the same class get the same shade, and the printed number carries the detail.
     expect(heatT(2.5, 0, 10)).toBe(heatT(2.9, 0, 10));
     expect(heatT(2.5, 0, 10)).not.toBe(heatT(4.5, 0, 10));
   });
@@ -65,7 +66,10 @@ describe("heatColour", () => {
     expect(heatColour(0, 0, 10).color).toBe("var(--ink-2)");
     expect(heatColour(4, 0, 10).color).toBe("var(--ink-2)");
     expect(heatColour(10, 0, 10).color).toBe("var(--btn-fg)");
-    expect(heatColour(FLIP_AT * 10 + 1, 0, 10).color).toBe("var(--btn-fg)");
+    // The flip threshold is 0.55 of the scale and the classes are fifths, so the 0.6 class is the
+    // first one above it. Half of the range snaps up into that class and a shade under half does not.
+    expect(heatColour(5, 0, 10).color).toBe("var(--btn-fg)");
+    expect(heatColour(4.9, 0, 10).color).toBe("var(--ink-2)");
   });
 
   it("clamps out-of-range values and tolerates a degenerate range", () => {
@@ -84,11 +88,11 @@ describe("heatColour", () => {
 describe("heatRamp", () => {
   it("samples the ramp end to end for the legend strip", () => {
     const swatches = heatRamp(1.2, 14.6);
-    expect(swatches).toHaveLength(HEAT_STEPS);
-    expect(swatches[0]!.alpha).toBeCloseTo(ALPHA_BASE);
-    expect(swatches[HEAT_STEPS - 1]!.alpha).toBeCloseTo(ALPHA_BASE + ALPHA_SPAN);
-    const alphas = swatches.map((s) => s.alpha);
-    expect([...alphas].sort((a, b) => a - b)).toEqual(alphas);
+    expect(swatches).toHaveLength(6);
+    // Each swatch sits a fifth further along the scale than the last, so its opacity is
+    // 0.04 + 0.7 × t for t of 0, 0.2, 0.4, 0.6, 0.8 and 1.
+    expect(swatches.map((s) => +s.alpha.toFixed(10))).toEqual([0.04, 0.18, 0.32, 0.46, 0.6, 0.74]);
+    expect(swatches.map((s) => s.t)).toEqual([0, 0.2, 0.4, 0.6, 0.8, 1]);
   });
 });
 
@@ -149,8 +153,8 @@ describe("matrix CSV", () => {
 describe("durability CSV", () => {
   it("names the defender on every row and leaves the per-100 column empty when the unit has no points", () => {
     const csv = durabilityToCsv("Intercessors", [
-      { archetype: "Bolter squad", expectedDamage: 3.21, pKill: 0.125, damageTakenPer100: 2.5 },
-      { archetype: "Lascannon team", expectedDamage: 6, pKill: 0.5 },
+      { archetype: "Bolter squad", expectedDamage: 3.21, pKill: 0.125, damageTakenPer100: 2.5, backend: "exact" },
+      { archetype: "Lascannon team", expectedDamage: 6, pKill: 0.5, backend: "exact" },
     ]);
     const lines = csv.split("\r\n").filter(Boolean);
     expect(lines[0]).toBe(DURABILITY_CSV_HEADER.join(","));
@@ -197,8 +201,9 @@ describe("turn plan CSV", () => {
 
     const assignments = blocks[0]!.split("\r\n");
     expect(assignments[0]).toBe(TURN_PLAN_CSV_HEADER.join(","));
-    // Order 0 fires first even though it is second in the array.
-    expect(assignments[1]).toBe("1,Devastators,130,Rhino,75,+1 to wound,1,7.5,0.75,0.25");
+    // Order 0 fires first even though it is second in the array. A stratagem named "+1 to wound"
+    // is a formula to a spreadsheet, so it goes out marked as text.
+    expect(assignments[1]).toBe("1,Devastators,130,Rhino,75,'+1 to wound,1,7.5,0.75,0.25");
     expect(assignments[2]).toBe("2,Assault squad,,Rhino,75,,,2,0,0.6");
 
     const targets = blocks[1]!.split("\r\n");

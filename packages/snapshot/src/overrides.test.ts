@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SnapshotData } from "@grimstat/schema";
 import { applyOverrides, mergePatch } from "./overrides";
 import { loadSyntheticSnapshot } from "./synthetic/index";
 
@@ -54,6 +55,30 @@ describe("applyOverrides", () => {
     expect(res.data.detachments.find((d) => d.id === "det:ashen-wardens:ember-vanguard")!.dp).toBe(3);
     // input untouched
     expect(data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-captain")!.fallbackPoints).toBe(80);
+  });
+
+  it("counts one override once, however many records it patched", () => {
+    const res = applyOverrides(data, [{ entity: "priceRule", id: "ds:ashen-wardens:warden-squad", patch: { tiers: [{ models: 1, points: 95 }] } }]);
+    expect(res.data.priceRules.filter((r) => r.datasheetId === "ds:ashen-wardens:warden-squad")).toHaveLength(2);
+    expect(res.applied).toBe(1);
+  });
+
+  it("drops an override that leaves a record the schema rejects, and names the entity", () => {
+    const res = applyOverrides(data, [
+      { entity: "datasheet", id: "ds:ashen-wardens:warden-captain", patch: { models: null, name: 42 } },
+      { entity: "detachment", id: "det:ashen-wardens:ember-vanguard", patch: { dp: 3 } },
+    ]);
+    expect(res.rejected).toHaveLength(1);
+    expect(res.rejected[0]).toMatchObject({ index: 0, entity: "datasheet", id: "ds:ashen-wardens:warden-captain" });
+    expect(res.rejected[0]!.error).toMatch(/name|models/);
+    expect(res.applied).toBe(1);
+    expect(res.missing).toEqual([]);
+    // the rejected patch left the datasheet as it was, and the rest of the pack still applied
+    const ds = res.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-captain")!;
+    expect(ds.name).toBe("Warden Captain");
+    expect(ds.models.length).toBeGreaterThan(0);
+    expect(res.data.detachments.find((d) => d.id === "det:ashen-wardens:ember-vanguard")!.dp).toBe(3);
+    expect(() => SnapshotData.parse(res.data)).not.toThrow();
   });
 
   it("gives every patched entity its own copy of the patch", () => {

@@ -10,9 +10,12 @@ export interface RouteInfo {
   query: URLSearchParams;
 }
 
+/** `/armies/<param>?a=b`, with the leading "#" already off. */
+const HASH = /^\/?([a-z]+)(?:\/([^?]*))?(?:\?(.*))?$/;
+
 export function parseRouteInfo(hash: string): RouteInfo {
   const h = hash.startsWith("#") ? hash.slice(1) : hash;
-  const m = /^\/?([a-z]+)(?:\/([^?]*))?(?:\?(.*))?$/.exec(h);
+  const m = HASH.exec(h);
   const r = m?.[1];
   const route = (ROUTES as string[]).includes(r ?? "") ? (r as Route) : "calculator";
   let param: string | undefined;
@@ -28,6 +31,19 @@ export function parseRouteInfo(hash: string): RouteInfo {
 
 export function parseRoute(hash: string): Route {
   return parseRouteInfo(hash).route;
+}
+
+/**
+ * Whether a hash names a screen the app does not have.
+ *
+ * Only a hash shaped like an address is judged. A permalink such as `#s=<token>` is not one, and
+ * neither is an empty hash, so neither is mistaken for a wrong address and rewritten out of the bar
+ * before the screen that reads it has had its turn.
+ */
+export function isUnknownRoute(hash: string): boolean {
+  const h = hash.startsWith("#") ? hash.slice(1) : hash;
+  const m = HASH.exec(h);
+  return m !== null && !(ROUTES as string[]).includes(m[1] ?? "");
 }
 
 export function hrefFor(route: Route, param?: string): string {
@@ -49,6 +65,11 @@ function useHash(): string {
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
+  // An address the app cannot read lands on the Calculator, so the bar is put right to match.
+  // Otherwise the address that showed nothing is the one that gets bookmarked and shared.
+  useEffect(() => {
+    if (isUnknownRoute(hash)) navigate("calculator", true);
+  }, [hash]);
   return hash;
 }
 

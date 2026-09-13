@@ -24,6 +24,39 @@ export interface PublishedImport {
 
 export type PublishedTextKind = "corpus" | "feed" | "page";
 
+/** The first character of `body` at or after `from` that is not whitespace. */
+const skipSpace = (body: string, from: number): number => {
+  let i = from;
+  while (i < body.length && /\s/.test(body[i]!)) i++;
+  return i;
+};
+
+/**
+ * Whether the document's first element is `<rss>` or `<feed>`, past an XML declaration and any
+ * comments in front of it.
+ *
+ * The prologue is stepped over one piece at a time rather than matched by one pattern. A pattern
+ * that allows a run of comments has to try every way of dividing that run up when what follows is
+ * not a feed's opening tag, and the number of ways doubles with every comment, so a file of a few
+ * hundred bytes can take hours to turn down. Every step here moves forward and never goes back, so
+ * the work is proportional to the length of the text.
+ */
+function startsWithFeedTag(body: string): boolean {
+  let i = 0;
+  if (/^<\?xml/i.test(body)) {
+    // The declaration runs to the first ">", which has to be the one closing "?>".
+    const close = body.indexOf(">", 5);
+    if (close < 0 || body[close - 1] !== "?") return false;
+    i = skipSpace(body, close + 1);
+  }
+  while (body.startsWith("<!--", i)) {
+    const end = body.indexOf("-->", i + 4);
+    if (end < 0) return false;
+    i = skipSpace(body, end + 3);
+  }
+  return /^<(?:rss|feed)\b/i.test(body.slice(i, i + 6));
+}
+
 /**
  * What a file the user handed over is, decided on content rather than the name — a page saved as
  * "article.txt" is still a page, and a feed saved as "feed.html" is still a feed.
@@ -31,7 +64,7 @@ export type PublishedTextKind = "corpus" | "feed" | "page";
 export function classifyPublishedText(text: string): PublishedTextKind | undefined {
   const body = text.replace(/^\uFEFF/, "").trimStart();
   if (body.startsWith("{")) return "corpus";
-  if (/^(?:<\?xml[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<(?:rss|feed)\b/i.test(body)) return "feed";
+  if (startsWithFeedTag(body)) return "feed";
   if (/<(?:html|article|h[1-4]|div|p)\b/i.test(body)) return "page";
   return undefined;
 }
@@ -53,28 +86,51 @@ export function readPublishedFile(name: string, text: string): { lists: StoredPu
   return { lists: article.lists.map((l) => ({ ...l, source: article.source, importedAt })), warnings: [...article.warnings] };
 }
 
-export async function storePublishedLists(lists: readonly StoredPublishedList[]): Promise<{ added: number }> {
+/**
+ * The address to link a write-up at, or nothing when it is not one a browser opens.
+ *
+ * Addresses arrive with imported data — a fetched corpus, a saved page, a pasted list — so one that
+ * is not an ordinary web address is shown as plain text instead of as a link.
+ */
+export function webHref(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Where a stored list came from, which decides whether a corpus refresh may replace it. */
+export type PublishedOrigin = NonNullable<PublishedListRecord["origin"]>;
+
+export async function storePublishedLists(lists: readonly StoredPublishedList[], origin: PublishedOrigin = "hand"): Promise<{ added: number }> {
   const records = dedupePublishedLists(lists).map((l) => ({ ...l, id: publishedListId(l) }));
-  const existing = new Set((await db.publishedLists.bulkGet(records.map((r) => r.id))).filter(Boolean).map((r) => r!.id));
-  await db.publishedLists.bulkPut(records);
+  const existing = new Map((await db.publishedLists.bulkGet(records.map((r) => r.id))).filter((r): r is PublishedListRecord => !!r).map((r) => [r.id, r] as const));
+  // A list the user imported by hand stays theirs when a corpus turns out to carry the same one, so
+  // a later refresh that has dropped it does not take their copy with it.
+  const stored = records.map((r) => ({ ...r, origin: origin === "corpus" && existing.get(r.id)?.origin === "hand" ? ("hand" as const) : origin }));
+  await db.publishedLists.bulkPut(stored);
   notifyStoreChanged("publishedLists");
-  return { added: records.filter((r) => !existing.has(r.id)).length };
+  return { added: stored.filter((r) => !existing.has(r.id)).length };
 }
 
 /**
- * Store what one publication now says, in place of what it said before.
+ * Store what one publication's corpus now says, in place of what it said before.
  *
- * Lists from the same publication that are not in the new set are removed, so a fetched corpus
- * reflects its relay's current state; lists from anywhere else are untouched.
+ * A list this corpus put here before and no longer carries is removed, so a fetched corpus follows
+ * its relay. Lists the user imported by hand are left where they are, and so are lists from any
+ * other publication.
  */
 export async function replacePublishedLists(publication: string, lists: readonly StoredPublishedList[]): Promise<{ added: number; removed: number }> {
   const keep = new Set(dedupePublishedLists(lists).map((l) => publishedListId(l)));
-  const gone = await db.publishedLists.filter((r) => r.source.publication === publication && !keep.has(r.id)).primaryKeys();
+  const gone = await db.publishedLists.filter((r) => r.origin === "corpus" && r.source.publication === publication && !keep.has(r.id)).primaryKeys();
   if (gone.length) {
     await db.publishedLists.bulkDelete(gone);
     await db.publishedResolved.where("recordId").anyOf(gone).delete();
   }
-  const { added } = lists.length ? await storePublishedLists(lists) : { added: 0 };
+  const { added } = lists.length ? await storePublishedLists(lists, "corpus") : { added: 0 };
   if (gone.length && !lists.length) notifyStoreChanged("publishedLists");
   return { added, removed: gone.length };
 }

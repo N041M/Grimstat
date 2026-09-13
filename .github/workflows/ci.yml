@@ -20,4 +20,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      # The root tsconfig covers apps/*/src and packages/*/src. The web app's own also covers its
+      # Vite config and its scripts, and nothing else typechecks those.
+      - run: pnpm --filter @grimstat/web typecheck
       - run: pnpm test
+      # A build that has stopped building should show up on the pull request that broke it, rather
+      # than for the first time during a deployment.
+      - run: pnpm build

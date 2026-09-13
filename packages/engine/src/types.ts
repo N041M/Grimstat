@@ -82,6 +82,8 @@ export interface EngineInput {
   seed?: number;
   /** Exact backend falls back to MC above this many DP states. */
   maxExactStates?: number;
+  /** Exact backend falls back to MC above this many DP state visits (states × wounds × mortal events). */
+  maxExactWork?: number;
   /** Start from this defender state distribution (from a previous EngineOutput.finalState with the same groups). */
   initialState?: number[];
 }

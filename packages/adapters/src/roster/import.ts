@@ -2,6 +2,7 @@ import type { Roster, RosterDetachment, Snapshot } from "@grimstat/schema";
 import type { AttachRole } from "./import-common";
 import { normaliseName } from "@grimstat/snapshot";
 import {
+  MAX_COPIES,
   POINTS_BY_SIZE,
   RosterImportContext,
   SIZE_BY_LABEL,
@@ -53,21 +54,270 @@ interface TextUnit {
 }
 
 const BULLET = /^[•◦▪\-*]\s*/;
+const COUNT_ITEM = /^(\d+)\s*[x×]\s+(.+)$/i;
+const WS = /\s/;
+/** `.` matches every character except a line break, so a name cannot run past one. */
+const DOT = /./;
+
+/** What one unit-header line says. Everything but the name and the points cost is optional. */
+export interface UnitHeader {
+  /** New Recruit's `Char1:` prefix, used by the `+ WARLORD:` header line. */
+  ref?: string;
+  /** The `10x` in front of the name, as the line writes it. */
+  count?: string;
+  label: string;
+  /** The points cost, with any thousands separators still in it. */
+  points: string;
+  /** Whatever follows the colon after the points cost. */
+  rest?: string;
+}
+
+/** `Char1:`, the reference New Recruit puts in front of a character. */
+const REF_HEAD = /([A-Za-z]+\d+):/y;
+/** The `10x` of `10x Warden Squad`, up to the `x` itself. */
+const COUNT_HEAD = /(\d+)\s*[x×]/iy;
+/** How the dialects spell the word after the number. */
+const POINTS_WORD = /points?|pts?/iy;
+/** The characters that can open a points cost. */
+const COST_OPENERS = new Set(["(", "[", "-", "–", "—"]);
+
 /**
  * `Char1: 2x Canis Rex (415 pts): Warlord` / `10x Squad (110 pts)` / `Unit [80pts]: …` / `Unit - 80 pts`.
  * Points are written by the dialects in parentheses, in brackets or after a dash, with or without thousands
- * separators and with any of pt/pts/point/points, so all of that has to be one pattern.
+ * separators and with any of pt/pts/point/points, so all of that has to be read together.
+ *
+ * Read as a scan for the same reason `parseDetSpec` is. A single pattern has to grow the name a character
+ * at a time and try the bracket that opens the cost against every place the spaces before it could end,
+ * which on a padded line takes a quarter of a second at four thousand characters. A scan works because the
+ * cost always opens on one of five characters. The name ends at the first of those that opens a cost the
+ * rest of the line fits.
  */
-const UNIT_HEADER = /^(?:([A-Za-z]+\d+):\s*)?(?:(\d+)\s*[x×]\s+)?(.+?)\s*(?:[([]|[-–—]\s*)(\d[\d,]*)\s*(?:points?|pts?)\s*[)\]]?\s*(?::\s*(.*))?$/i;
-const COUNT_ITEM = /^(\d+)\s*[x×]\s+(.+)$/i;
+export function parseUnitHeader(text: string): UnitHeader | undefined {
+  const n = text.length;
+  if (!n) return undefined;
+  const skipWs = (i: number): number => {
+    while (i < n && WS.test(text[i]!)) i++;
+    return i;
+  };
+  const backWs = (i: number): number => {
+    while (i > 0 && WS.test(text[i - 1]!)) i--;
+    return i;
+  };
+  // Positions the cost can open at, and positions the name cannot run past. Both are collected once so
+  // that the four ways the line can begin share the work.
+  const openers: number[] = [];
+  const breaks: number[] = [];
+  for (let i = 0; i < n; i++) {
+    if (COST_OPENERS.has(text[i]!)) openers.push(i);
+    if (!DOT.test(text[i]!)) breaks.push(i);
+  }
+  const breakFrom = (i: number): number => breaks.find((b) => b >= i) ?? n;
+
+  /** `\s* [)\]]? \s*` and then either the end of the line or `: rest`. */
+  const endOf = (i: number): { rest?: string } | undefined => {
+    const afterBracket = (j: number): { rest?: string } | undefined => {
+      const k = skipWs(j);
+      if (k >= n) return {};
+      if (text[k] !== ":") return undefined;
+      const from = skipWs(k + 1);
+      return breakFrom(from) < n ? undefined : { rest: text.slice(from) };
+    };
+    const k = skipWs(i);
+    if (text[k] === ")" || text[k] === "]") {
+      const closed = afterBracket(k + 1);
+      if (closed) return closed;
+    }
+    return afterBracket(k);
+  };
+
+  /** The points cost opening at `j`, when the rest of the line holds nothing else. */
+  const costs = new Map<number, { points: string; rest?: string } | null>();
+  const costAt = (j: number): { points: string; rest?: string } | null => {
+    const memo = costs.get(j);
+    if (memo !== undefined) return memo;
+    const read = (): { points: string; rest?: string } | null => {
+      const opener = text[j]!;
+      const digit = (i: number): boolean => i < n && text[i]! >= "0" && text[i]! <= "9";
+      const from = opener === "(" || opener === "[" ? j + 1 : skipWs(j + 1);
+      if (!digit(from)) return null;
+      let digits = from + 1;
+      while (digits < n && (digit(digits) || text[digits] === ",")) digits++;
+      POINTS_WORD.lastIndex = skipWs(digits);
+      if (!POINTS_WORD.exec(text)) return null;
+      const tail = endOf(POINTS_WORD.lastIndex);
+      return tail ? { points: text.slice(from, digits), ...tail } : null;
+    };
+    const out = read();
+    costs.set(j, out);
+    return out;
+  };
+
+  /** The name running from `s` to the first cost the rest of the line fits. */
+  const nameFrom = (s: number): UnitHeader | undefined => {
+    const limit = breakFrom(s);
+    if (s >= limit) return undefined;
+    for (const j of openers) {
+      if (j <= s) continue;
+      const cost = costAt(j);
+      if (!cost) continue;
+      // the spaces before the cost belong to the pattern, not to the name
+      const end = Math.max(s + 1, backWs(j));
+      // a later opener only starts further right, so nothing beyond this one fits either
+      if (end > limit) return undefined;
+      return { label: text.slice(s, end), ...cost };
+    }
+    return undefined;
+  };
+
+  /**
+   * The name taken to start inside the spaces that precede it. The pattern lets those spaces give a
+   * character back, which is the only way a cost opening at `w` itself can be reached.
+   */
+  const nameInsideSpaces = (w: number, floor: number): UnitHeader | undefined => {
+    if (w <= floor) return undefined;
+    const j = openers.find((o) => o >= w && costAt(o) !== null);
+    const cost = j === undefined ? null : costAt(j);
+    if (j === undefined || !cost) return undefined;
+    for (let s = w - 1; s >= floor; s--) {
+      const end = Math.max(s + 1, backWs(j));
+      if (end <= breakFrom(s)) return { label: text.slice(s, end), ...cost };
+    }
+    return undefined;
+  };
+
+  /** Everything after the optional `Char1:`, which the line may or may not carry. */
+  const fromStart = (w: number, floor: number): UnitHeader | undefined => {
+    COUNT_HEAD.lastIndex = w;
+    const counted = COUNT_HEAD.exec(text);
+    if (counted) {
+      const afterX = COUNT_HEAD.lastIndex;
+      const wb = skipWs(afterX);
+      if (wb > afterX) {
+        const hit = nameFrom(wb) ?? nameInsideSpaces(wb, afterX + 1);
+        if (hit) return { count: counted[1]!, ...hit };
+      }
+    }
+    return nameFrom(w) ?? nameInsideSpaces(w, floor);
+  };
+
+  REF_HEAD.lastIndex = 0;
+  const ref = REF_HEAD.exec(text);
+  if (ref) {
+    const hit = fromStart(skipWs(REF_HEAD.lastIndex), REF_HEAD.lastIndex);
+    if (hit) return { ref: ref[1]!, ...hit };
+  }
+  return fromStart(0, 0);
+}
+/** What one detachment line says, with the brackets stripped off. Every part but the name is optional. */
+export interface DetSpec {
+  name: string;
+  /** Detachment Points, as the line writes them. */
+  dp?: string;
+  /** The text after the DP count inside the same brackets. */
+  dpNote?: string;
+  /** A parenthesised group after the name, which is where the force disposition is written. */
+  note?: string;
+}
+
+/** The `[2 DP` / `(3 Detachment Points` that opens a DP group, matched where the group starts. */
+const DP_HEAD = /[[(]\s*(\d+)\s*(?:DP|Detachment\s+Points?)/iy;
+
 /**
  * `Ember Vanguard`, `Ember Vanguard [2 DP] (TAKE AND HOLD)`, `Ember Vanguard (2 DP, TAKE AND HOLD)`,
  * `Ember Vanguard (3 Detachment Points)`.
  *
- * The last form is the official app's, and therefore the one most pasted lists use; only New Recruit
+ * The last form is the official app's, and therefore the one most pasted lists use. Only New Recruit
  * abbreviates to DP.
+ *
+ * Read as a scan rather than as one pattern. Every part after the name is optional, so one pattern has to
+ * grow the name a character at a time and try every optional part against the rest of the line again. On a
+ * line carrying a long run of spaces that takes seconds. A scan works because both bracket groups begin at
+ * a bracket. The name ends at the first bracket that opens a group the rest of the line fits, and runs to
+ * the end of the line when there is none.
  */
-const DET_SPEC = /^(.+?)\s*(?:[[(]\s*(\d+)\s*(?:DP|Detachment\s+Points?)\s*(?:,\s*([^)\]]+?))?\s*[\])]?)?\s*(?:\(\s*([^)]*?)\s*\))?\s*$/i;
+export function parseDetSpec(text: string): DetSpec | undefined {
+  const n = text.length;
+  if (!n) return undefined;
+  let nameLimit = 0;
+  while (nameLimit < n && DOT.test(text[nameLimit]!)) nameLimit++;
+  let end = n;
+  while (end > 0 && WS.test(text[end - 1]!)) end--;
+  const skipWs = (i: number): number => {
+    while (i < n && WS.test(text[i]!)) i++;
+    return i;
+  };
+  const backWs = (i: number): number => {
+    while (i > 0 && WS.test(text[i - 1]!)) i--;
+    return i;
+  };
+
+  // A trailing "( … )" has to close on the last character of the line and cannot hold a closing bracket,
+  // so every bracket that can open one lies after the last ")" before that closing one.
+  const noteEnd = end > 0 && text[end - 1] === ")" ? end - 1 : -1;
+  const noteFrom = noteEnd < 0 ? -1 : text.lastIndexOf(")", noteEnd - 1) + 1;
+  const noteAt = (i: number): string | undefined => (noteEnd >= 0 && i >= noteFrom && i < noteEnd && text[i] === "(" ? text.slice(i + 1, noteEnd).trim() : undefined);
+
+  /** What may follow a DP group: its closing bracket, a trailing note, and nothing but space besides. */
+  const closeAt = (i: number): { note?: string } | undefined => {
+    const j = skipWs(i);
+    if (j >= n) return {};
+    if (text[j] === "]" || text[j] === ")") {
+      const k = skipWs(j + 1);
+      if (k >= n) return {};
+      const note = noteAt(k);
+      if (note !== undefined) return { note };
+    }
+    const note = noteAt(j);
+    return note === undefined ? undefined : { note };
+  };
+
+  /** A DP group starting at `i`, together with whatever follows it. */
+  const dpAt = (i: number): DetSpec | undefined => {
+    DP_HEAD.lastIndex = i;
+    const head = DP_HEAD.exec(text);
+    if (!head) return undefined;
+    const afterHead = DP_HEAD.lastIndex;
+    const comma = skipWs(afterHead);
+    if (text[comma] === ",") {
+      // the text after the comma ends at the earliest point where the rest of the line still fits,
+      // and it cannot reach past a closing bracket
+      const from = skipWs(comma + 1);
+      let stop = from;
+      while (stop < n && text[stop] !== ")" && text[stop] !== "]") stop++;
+      const noteOpen = noteEnd < 0 ? -1 : text.indexOf("(", Math.max(from + 1, noteFrom));
+      const ends = [Math.max(from + 1, end)];
+      if (stop < n) ends.push(Math.max(from + 1, backWs(stop)));
+      if (noteOpen >= 0 && noteOpen < noteEnd) ends.push(Math.max(from + 1, backWs(noteOpen)));
+      for (const g of [...new Set(ends)].sort((a, b) => a - b)) {
+        if (g > stop) continue;
+        const tail = closeAt(g);
+        if (tail) return { name: "", dp: head[1]!, dpNote: text.slice(from, g).trim(), ...tail };
+      }
+      // nothing but space after the comma still counts as a comma group, with nothing in it
+      if (from > comma + 1) {
+        const tail = closeAt(from);
+        if (tail) return { name: "", dp: head[1]!, dpNote: "", ...tail };
+      }
+    }
+    const tail = closeAt(afterHead);
+    return tail ? { name: "", dp: head[1]!, ...tail } : undefined;
+  };
+
+  for (let i = 1; i < n; i++) {
+    if (text[i] !== "[" && text[i] !== "(") continue;
+    let hit = dpAt(i);
+    if (!hit) {
+      const note = noteAt(i);
+      if (note !== undefined) hit = { name: "", note };
+    }
+    if (!hit) continue;
+    const start = Math.max(1, backWs(i));
+    if (start > nameLimit) return undefined;
+    return { ...hit, name: text.slice(0, start).trim() };
+  }
+  const start = Math.max(1, end);
+  return start > nameLimit ? undefined : { name: text.slice(0, start).trim() };
+}
 
 /** `Attached Unit 1` opens a block; `Attached Units` is the section heading above the blocks. */
 const ATTACH_BLOCK = /^attached\s+units?(?:\s+(\d+))?$/i;
@@ -114,7 +364,7 @@ export function parseWargearItems(text: string): WargearItem[] {
     const n = withCount ? Number(withCount[1]) : 0;
     for (const item of splitList(seg.trim().replace(/^\d+\s+with\s+/i, ""))) {
       const m = COUNT_ITEM.exec(item);
-      if (m) out.push({ name: m[2]!.trim(), n, copies: Math.max(1, Math.min(20, Number(m[1]))) });
+      if (m) out.push({ name: m[2]!.trim(), n, copies: Math.max(1, Math.min(MAX_COPIES, Number(m[1]))) });
       else out.push({ name: item, n, copies: 1 });
     }
   }
@@ -181,11 +431,11 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
 
   /** One entry of a `Detachment:` line or header value, with its optional DP count and force disposition. */
   const addDetachmentSpec = (spec: string) => {
-    const m = DET_SPEC.exec(spec.trim().replace(/\s*\+*$/, ""));
+    const m = parseDetSpec(spec.trim().replace(/\s*\+*$/, ""));
     if (!m) return;
     // a trailing "(…)" is a disposition only next to a DP count; otherwise it is a variant label the snapshot ignores
-    const disposition = m[3]?.trim() || (m[2] ? m[4]?.trim() : undefined) || forceDisposition;
-    const label = m[1]!.trim();
+    const disposition = m.dpNote || (m.dp ? m.note : undefined) || forceDisposition;
+    const label = m.name;
     const entry = ctx.addDetachment(label, disposition);
     const det = ctx.findDetachment(label);
     lastDetachment = entry && det ? { entry, allowed: det.forceDispositions } : undefined;
@@ -236,8 +486,11 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
    * = two of the five). Only when the count exceeds the group does it mean copies per model, which is how a
    * single-model unit writes "2x Twin hail gun".
    */
-  const addWargear = (g: RawGroup, itemName: string, count: number) => {
-    g.items.push({ name: itemName, n: count >= g.count ? 0 : count, copies: Math.max(1, Math.floor(count / Math.max(1, g.count))) });
+  const addWargear = (t: TextUnit, itemName: string, count: number) => {
+    const g = wargearTarget(t);
+    const asked = Math.max(1, Math.floor(count / Math.max(1, g.count)));
+    if (asked > MAX_COPIES) warnings.push(`${t.u.name}: kept ${MAX_COPIES} copies of "${itemName}" out of the ${asked} the list asks for.`);
+    g.items.push({ name: itemName, n: count >= g.count ? 0 : count, copies: Math.min(MAX_COPIES, asked) });
   };
 
   const startUnit = (ref: string | undefined, count: number | undefined, label: string, rest: string | undefined) => {
@@ -372,27 +625,27 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     // after the units. The app suffixes it with its Detachment Points, so the lookup has to be by the
     // name alone — a suffix that is a points cost belongs to a unit, so only a DP count counts here.
     if (!isBullet) {
-      const spec = DET_SPEC.exec(line);
-      const detName = spec?.[1]?.trim();
-      if (detName && (spec![2] || detName === line) && ctx.findDetachment(detName)) {
+      const spec = parseDetSpec(line);
+      const detName = spec?.name;
+      if (detName && (spec.dp || detName === line) && ctx.findDetachment(detName)) {
         addDetachmentSpec(line);
         continue;
       }
     }
 
     // ---- unit header
-    m = isBullet ? null : UNIT_HEADER.exec(line);
-    if (m) {
-      const [, ref, countStr, label, , rest] = m;
-      const looksLikeUnit = !!ref || !!countStr || !!ctx.matchDatasheet(label!);
+    const header = isBullet ? undefined : parseUnitHeader(line);
+    if (header) {
+      const { ref, count, label, rest } = header;
+      const looksLikeUnit = !!ref || !!count || !!ctx.matchDatasheet(label);
       if (!headerSeen && !looksLikeUnit && !units.length) {
         // "My list (2000 points)" — the roster name line
-        name = name || label!.trim();
+        name = name || label.trim();
         headerSeen = true;
         continue;
       }
       headerSeen = true;
-      startUnit(ref, countStr ? Number(countStr) : undefined, label!.trim(), rest);
+      startUnit(ref, count ? Number(count) : undefined, label.trim(), rest);
       continue;
     }
 
@@ -422,12 +675,12 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       // read as ten more Hormagaunts — a second model group, the weapon gone, and no warning.
       const prof = isWeaponOf(st.cur.u.ds, normaliseName(body)) ? undefined : ctx.profileFor(st.cur.u.ds, body);
       if (prof) st.cur.groups.push({ modelProfileId: prof.id, count, items: [] });
-      else addWargear(wargearTarget(st.cur), body, count);
+      else addWargear(st.cur, body, count);
       continue;
     }
     if (isBullet) {
       // "• Bolt pistol" style single wargear line
-      addWargear(wargearTarget(st.cur), line, 0);
+      addWargear(st.cur, line, 0);
       continue;
     }
     warnings.push(`${st.cur.u.name}: ignored line "${line}"`);

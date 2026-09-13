@@ -267,10 +267,30 @@ describe("casualty curve", () => {
   });
 
   it("splits the incoming fire in proportion to each unit's points", () => {
-    // The 300-point unit soaks three quarters of the fire, so both empty at the same moment.
+    // The two units come apart at different rates, so a proportional split and an even split give
+    // different totals and the numbers below can only come from a proportional one.
+    // Of 400 incoming points the cheap unit draws 100 × 400 / 400 = 100 and the expensive one 300.
+    // Cheap: 100 × 4 / 100 = 4 wounds and 100 × 2 / 100 = 2 models.
+    // Expensive: 300 × 1 / 100 = 3 wounds and 300 × 0.5 / 100 = 1.5 models.
+    // Split evenly the two would draw 200 points each and lose 8 + 2 wounds and 4 + 1 models.
+    const units = [
+      flat({ points: 100, wounds: 100, models: 50, woundsPer100: 4, slainPer100: 2 }),
+      flat({ points: 300, wounds: 100, models: 50, woundsPer100: 1, slainPer100: 0.5 }),
+    ];
+    const at = casualtyAt(units, 400);
+    expect(at.woundsLost).toBeCloseTo(4 + 3, 9);
+    expect(at.modelsLost).toBeCloseTo(2 + 1.5, 9);
+    expect(at.woundsFraction).toBeCloseTo(7 / 200, 9);
+    expect(at.modelsFraction).toBeCloseTo(3.5 / 100, 9);
+  });
+
+  it("measures the loss against the wounds and models of the units it was given", () => {
+    // Both units lose wounds at the same rate here, so this case pins the denominators. 400 incoming
+    // points remove 1 wound from the small unit and 3 from the large, out of the 40 wounds the two
+    // hold between them.
     const units = [flat({ points: 100, wounds: 10, models: 10 }), flat({ points: 300, wounds: 30, models: 30 })];
     const at = casualtyAt(units, 400);
-    expect(at.woundsLost).toBeCloseTo(1 + 3, 9); // 100 pts on the small unit, 300 on the large
+    expect(at.woundsLost).toBeCloseTo(1 + 3, 9);
     expect(at.woundsFraction).toBeCloseTo(4 / 40, 9);
   });
 

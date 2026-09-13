@@ -8,6 +8,7 @@
  */
 
 import { stripHtml } from "../util/html";
+import { firstHttpUrl } from "./url";
 import type { ArticleSource, PublishedArticle, PublishedList } from "./types";
 
 /**
@@ -186,7 +187,8 @@ function publisherOf(html: string): string | undefined {
  */
 export function sourceOf(html: string, fallbackTitle?: string): ArticleSource {
   const title = meta(html, "og:title") ?? titleTag(html) ?? fallbackTitle;
-  const url = /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i.exec(html)?.[1] ?? meta(html, "og:url");
+  // A saved page says where it came from in its own markup, so the address it gives is checked before it is kept.
+  const url = firstHttpUrl(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i.exec(html)?.[1], meta(html, "og:url"));
   const publication = publisherOf(html);
   const published = meta(html, "article:published_time");
   return { ...(title ? { title } : {}), ...(url ? { url } : {}), ...(publication ? { publication } : {}), ...(published ? { published } : {}) };

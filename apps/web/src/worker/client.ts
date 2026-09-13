@@ -28,6 +28,37 @@ export function isCancelled(e: unknown): e is CancelledError {
   return e instanceof CancelledError;
 }
 
+/** What a request in flight rejects with when the worker itself fails to load or to answer. */
+export class WorkerFailedError extends Error {
+  constructor(options?: ErrorOptions) {
+    super("The calculation stopped. Try again.", options);
+    this.name = "WorkerFailedError";
+  }
+}
+
+/**
+ * How a snapshot is addressed in the worker. The id on its own will not do. Applying an override
+ * rewrites a snapshot's contents and its checksum while keeping its id, so an id-keyed cache would
+ * serve the un-patched data back (see `effectiveSnapshot` in ../lib/overrides).
+ */
+export function snapshotKey(snapshot: Snapshot): string {
+  return `${snapshot.id}|${snapshot.checksum}|${snapshot.updatedAt}`;
+}
+
+/** What the browser said about a worker that failed. */
+function failureDetail(e: Event): string {
+  return "message" in e && typeof e.message === "string" && e.message ? e.message : e.type;
+}
+
+/** How a call in flight is settled from outside. A respawn supersedes it and a failure rejects it. */
+interface Interrupt {
+  supersede(): void;
+  reject(e: Error): void;
+}
+
+/** What the race in `call` yields when the worker under it was replaced. */
+const SUPERSEDED = Symbol("superseded");
+
 /**
  * Owns the simulation Web Worker. Requests are sequenced: a result is only delivered if no newer
  * request was made meanwhile. If a stale request hogs the worker for too long, the worker is
@@ -38,26 +69,48 @@ export class SimClient {
   private proxy: Comlink.Remote<SimWorkerApi> | undefined;
   private seq = 0;
   private busySince: number | undefined;
-  private cachedSnapshotIds = new Set<string>();
-  /** Rejecters of the calls in flight, so `cancel()` can settle them. */
-  private pending = new Set<(e: Error) => void>();
+  /** The snapshot keys the worker reported holding after the last hand-over. */
+  private cachedSnapshots = new Set<string>();
+  /** The calls in flight, so `cancel()`, a respawn and a worker failure can settle them. */
+  private pending = new Set<Interrupt>();
 
   private ensure(): Comlink.Remote<SimWorkerApi> {
     if (!this.proxy) {
-      this.worker = new Worker(new URL("./sim.worker.ts", import.meta.url), { type: "module", name: "grimstat-sim" });
-      this.proxy = Comlink.wrap<SimWorkerApi>(this.worker);
-      this.cachedSnapshotIds.clear();
+      const worker = new Worker(new URL("./sim.worker.ts", import.meta.url), { type: "module", name: "grimstat-sim" });
+      // A worker that fails to load or throws on its own never answers, so the calls waiting on it are
+      // rejected here. The listener ignores a worker this client has already replaced.
+      const failed = (e: Event): void => {
+        if (this.worker === worker) this.fail(new WorkerFailedError({ cause: failureDetail(e) }));
+      };
+      worker.addEventListener("error", failed);
+      worker.addEventListener("messageerror", failed);
+      this.worker = worker;
+      this.proxy = Comlink.wrap<SimWorkerApi>(worker);
+      this.cachedSnapshots.clear();
     }
     return this.proxy;
   }
 
   private respawn(): void {
+    // Comlink's request promise has no rejection path, so a call left waiting on a terminated worker
+    // would stay pending for the life of the page. Every one of them is settled as superseded.
+    const waiting = [...this.pending];
+    this.pending.clear();
     this.worker?.terminate();
     this.proxy?.[Comlink.releaseProxy]();
     this.worker = undefined;
     this.proxy = undefined;
     this.busySince = undefined;
-    this.cachedSnapshotIds.clear();
+    this.cachedSnapshots.clear();
+    for (const p of waiting) p.supersede();
+  }
+
+  /** Drop the worker and reject every call in flight. The next call spawns a fresh worker. */
+  private fail(e: Error): void {
+    const waiting = [...this.pending];
+    this.pending.clear();
+    this.respawn();
+    for (const p of waiting) p.reject(e);
   }
 
   /** Sequence id of the most recent request; used by callers to drop stale results. */
@@ -66,8 +119,9 @@ export class SimClient {
   }
 
   /**
-   * Sequence a worker call. Ships the snapshot once per worker lifetime (keyed by id + checksum so a
-   * re-imported snapshot with the same id is never served stale), then invokes `fn` with a reference.
+   * Sequence a worker call. Hands the snapshot over once per worker lifetime, under the key the worker
+   * caches it by, then invokes `fn` with that key. A call the worker can no longer answer resolves
+   * with no outcome, the same as one a newer request superseded.
    */
   private async call<T>(snapshot: Snapshot | undefined, fn: (proxy: Comlink.Remote<SimWorkerApi>, ref: SnapshotRef) => Promise<T>): Promise<Sequenced<T>> {
     const seq = ++this.seq;
@@ -75,26 +129,29 @@ export class SimClient {
     const proxy = this.ensure();
     const worker = this.worker;
     this.busySince = performance.now();
-    let reject: (e: Error) => void = () => undefined;
-    const cancelled = new Promise<never>((_, rej) => {
-      reject = rej;
+    let interrupt: Interrupt = { supersede: () => undefined, reject: () => undefined };
+    const interrupted = new Promise<typeof SUPERSEDED>((resolve, reject) => {
+      interrupt = { supersede: () => resolve(SUPERSEDED), reject };
     });
-    this.pending.add(reject);
+    this.pending.add(interrupt);
     try {
       let ref: SnapshotRef;
       if (snapshot) {
-        const key = `${snapshot.id}|${snapshot.checksum}|${snapshot.updatedAt}`;
-        if (!this.cachedSnapshotIds.has(key)) {
-          await Promise.race([proxy.putSnapshot(snapshot), cancelled]);
-          this.cachedSnapshotIds.add(key);
+        const key = snapshotKey(snapshot);
+        if (!this.cachedSnapshots.has(key)) {
+          const held = await Promise.race([proxy.putSnapshot(key, snapshot), interrupted]);
+          if (held === SUPERSEDED || this.worker !== worker) return { seq, outcome: undefined };
+          // The worker reports what it kept, so the client never refers to a snapshot it has dropped.
+          this.cachedSnapshots = new Set(held);
         }
-        ref = snapshot.id;
+        ref = key;
       }
       if (seq !== this.seq) return { seq, outcome: undefined };
-      const outcome = await Promise.race([fn(proxy, ref), cancelled]);
+      const outcome = await Promise.race([fn(proxy, ref), interrupted]);
+      if (outcome === SUPERSEDED) return { seq, outcome: undefined };
       return { seq, outcome: seq === this.seq ? outcome : undefined };
     } finally {
-      this.pending.delete(reject);
+      this.pending.delete(interrupt);
       if (this.worker === worker) this.busySince = undefined;
     }
   }
@@ -105,10 +162,7 @@ export class SimClient {
    */
   cancel(): void {
     if (!this.pending.size) return;
-    const waiting = [...this.pending];
-    this.pending.clear();
-    this.respawn();
-    for (const rej of waiting) rej(new CancelledError());
+    this.fail(new CancelledError());
   }
 
   run(scenario: Scenario, snapshot: Snapshot | undefined): Promise<Sequenced<RunOutcome>> {

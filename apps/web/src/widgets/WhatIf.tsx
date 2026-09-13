@@ -7,7 +7,7 @@ import { useWorkerTask } from "../hooks/useWorkerTask";
 import { listToggles } from "@grimstat/game-40k-11e";
 import { defaultContext, isToggleOn, setToggle } from "../lib/scenario";
 import { SENSITIVITY_VARIANTS, type SensitivityVariant, type SensitivityVariantDef } from "../lib/gameExtras";
-import { fmt, pct } from "../lib/format";
+import { fmt, fmtSampled, pct } from "../lib/format";
 import { HBarChart, type HBarRow } from "../components/charts/HBarChart";
 import { Empty, Spinner } from "../components/ui";
 import { t } from "../i18n";
@@ -71,6 +71,18 @@ function signedDisplay(v: number, f: (x: number) => string): string {
   return `${v > 0 ? "+" : ""}${f(v)}`;
 }
 
+/**
+ * A variant's change in expected damage, printed to the place the run behind it can support.
+ *
+ * The base and the variant are rolled from the same stream, so the two move together and what is
+ * left when one is subtracted from the other is much tighter than either level on its own. A sampled
+ * delta lands inside a tenth, and a tenth is what it is printed to. Quoting the two levels' own
+ * intervals here would overstate how loose the difference is by several times.
+ */
+export function deltaDisplay(delta: number, backend: SensitivityVariant["deltaBackend"]): string {
+  return signedDisplay(delta, (x) => fmtSampled(x, undefined, backend === "mc" ? 1 : 2));
+}
+
 export function WhatIf({ scenario, result, snapshot, running }: WidgetProps) {
   const { updateScenario, notify } = useApp();
   const task = useWorkerTask(runSensitivity);
@@ -121,14 +133,14 @@ export function WhatIf({ scenario, result, snapshot, running }: WidgetProps) {
         key: v.id,
         label: v.label,
         value: v.deltaDamage,
-        display: signedDisplay(v.deltaDamage, (x) => fmt(x)),
+        display: deltaDisplay(v.deltaDamage, v.deltaBackend),
         // Gains are ink, losses accent. Green is reserved for status (modelled / not modelled), and a
         // red-green pair would be the one colour combination a colour-blind reader cannot separate;
         // the bars already run left or right of centre, so colour only reinforces the sign.
         tone: v.deltaDamage < -1e-9 ? "danger" : v.deltaDamage > 1e-9 ? "bar" : "info",
         pressed: active.has(v.id),
         actionLabel: t(active.has(v.id) ? "whatIf.remove" : "whatIf.apply", { label: v.label }),
-        title: `${v.label}: ${t("whatIf.deltaDamage")} ${signedDisplay(v.deltaDamage, (x) => fmt(x))} · ${t("whatIf.deltaSlain")} ${signedDisplay(v.deltaSlain, (x) => fmt(x))} · ${t("whatIf.deltaPKill")} ${signedDisplay(v.deltaPKill, (x) => pct(x))}`,
+        title: `${v.label}: ${t("whatIf.deltaDamage")} ${deltaDisplay(v.deltaDamage, v.deltaBackend)} · ${t("whatIf.deltaSlain")} ${signedDisplay(v.deltaSlain, (x) => fmt(x))} · ${t("whatIf.deltaPKill")} ${signedDisplay(v.deltaPKill, (x) => pct(x))}`,
       }));
   const max = task.result.variants.reduce((m, v) => Math.max(m, Math.abs(v.deltaDamage)), 0);
   const attackerRows = rows("attacker");
@@ -138,7 +150,7 @@ export function WhatIf({ scenario, result, snapshot, running }: WidgetProps) {
   return (
     <div className="stack">
       <div className="row between small">
-        <span className="muted">{t("whatIf.base", { d: fmt(task.result.base.expectedDamage), s: fmt(task.result.base.expectedSlain), p: pct(task.result.base.pKill) })}</span>
+        <span className="muted">{t("whatIf.base", { d: fmtSampled(task.result.base.expectedDamage, task.result.base.ciHalfWidth), s: fmt(task.result.base.expectedSlain), p: pct(task.result.base.pKill) })}</span>
         {task.running || stale ? <Spinner label={t(task.running ? "whatIf.running" : "whatIf.stale")} /> : null}
       </div>
       <div className="grid-2 grid-fold">
@@ -181,7 +193,7 @@ export function WhatIf({ scenario, result, snapshot, running }: WidgetProps) {
                   {active.has(v.id) ? <span className="badge accent">{t("whatIf.active")}</span> : null}
                   <span className="muted small"> · {v.side === "attacker" ? t("side.attacker") : t("side.defender")}</span>
                 </td>
-                <td className="num">{signedDisplay(v.deltaDamage, (x) => fmt(x))}</td>
+                <td className="num">{deltaDisplay(v.deltaDamage, v.deltaBackend)}</td>
                 <td className="num">{signedDisplay(v.deltaSlain, (x) => fmt(x))}</td>
                 <td className="num">{signedDisplay(v.deltaPKill, (x) => pct(x))}</td>
               </tr>

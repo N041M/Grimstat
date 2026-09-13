@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import type { ScenarioUnit, Snapshot } from "@grimstat/schema";
+import { useMemo, useRef } from "react";
+import type { Snapshot } from "@grimstat/schema";
 import type { DurabilityEntry } from "@grimstat/game-40k-11e";
 import { useApp } from "../../state/AppContext";
 import { simClient } from "../../worker/client";
@@ -7,7 +7,7 @@ import { useWorkerTask } from "../../hooks/useWorkerTask";
 import { useUnitSet } from "../../hooks/useUnitSet";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { UNIT_SET_KEYS, attackerArchetypes, shortArchetypeName, type UnitEntry } from "../../lib/unitSet";
-import { fmt, pct } from "../../lib/format";
+import { fmtSampled, pct } from "../../lib/format";
 import { durabilityToCsv } from "../../lib/matrixCsv";
 import { download } from "../../lib/download";
 import { UnitSetPicker } from "./UnitSetPicker";
@@ -31,9 +31,49 @@ function parseOptions(raw: unknown): DurabilityOptions | undefined {
   return { attackerIds: ids, inCover: r.inCover === true };
 }
 
-const runDurability = (defender: ScenarioUnit, attackerIds: string[], inCover: boolean, snapshot: Snapshot | undefined) => simClient().durability(defender, { attackerIds, context: { inCover } }, snapshot);
+// The task takes the entry itself, so `task.ran` holds the defender a result was computed for.
+const runDurability = (defender: UnitEntry, attackerIds: string[], inCover: boolean, snapshot: Snapshot | undefined) => simClient().durability(defender.unit, { attackerIds, context: { inCover } }, snapshot);
 
-const fingerprint = (d: UnitEntry[], o: DurabilityOptions) => JSON.stringify([d.map((e) => e.id), o]);
+/** The arguments a run is made with, and which the store keeps beside its result. */
+export type DurabilityArgs = Parameters<typeof runDurability>;
+
+/** What a result was computed from, as one string the tab can compare against the controls. */
+export function durabilityFingerprint(defender: UnitEntry | undefined, attackerIds: readonly string[], inCover: boolean): string {
+  return JSON.stringify([defender?.id, attackerIds, inCover]);
+}
+
+/**
+ * The defender's name and the fingerprint a stored result belongs to, read back from the arguments
+ * the run was made with.
+ *
+ * The store keeps a result for as long as the app is open, so it outlives this tab. Reading these
+ * back from the result's own arguments is what lets the tab be left and returned to. Holding them
+ * in component state instead lost them on the way out, and the tab then came back with the header
+ * calling the result current while the body offered to run it.
+ */
+export function durabilityRan(ran: DurabilityArgs | undefined): { name: string; fp: string } | undefined {
+  if (!ran) return undefined;
+  const [defender, attackerIds, inCover] = ran;
+  return { name: defender.unit.name, fp: durabilityFingerprint(defender, attackerIds, inCover) };
+}
+
+/**
+ * The half-width on the per-100-points column, on that column's own scale.
+ *
+ * An entry's interval belongs to `expectedDamage`, and `damageTakenPer100` is that figure times
+ * 100 / the defender's points. The same factor is read back off the two figures, so the interval is
+ * scaled along with the column instead of being printed against a figure it does not describe.
+ * Reading the factor from the entry keeps both mounts of this table honest, including the dashboard
+ * widget, which has the entries without the defender.
+ *
+ * An entry that took no damage leaves no factor to read. Its per-100 figure is zero as well, so
+ * there is nothing there for an interval to place.
+ */
+export function per100HalfWidth(e: DurabilityEntry): number | undefined {
+  if (e.ciHalfWidth === undefined || e.damageTakenPer100 === undefined) return undefined;
+  if (!Number.isFinite(e.expectedDamage) || e.expectedDamage <= 0) return undefined;
+  return (e.ciHalfWidth * e.damageTakenPer100) / e.expectedDamage;
+}
 
 /** Three small horizontal bar charts: one per durability metric, one bar per attacker archetype. */
 export function DurabilityCharts({ entries }: { entries: DurabilityEntry[] }) {
@@ -44,7 +84,7 @@ export function DurabilityCharts({ entries }: { entries: DurabilityEntry[] }) {
     <div className="chart-trio">
       <div>
         <h4 className="chart-h">{t("analyses.durability.wounds")}</h4>
-        <HBarChart ariaLabel={t("analyses.durability.woundsAria")} rows={entries.map((e) => row(e, e.expectedDamage, fmt(e.expectedDamage)))} />
+        <HBarChart ariaLabel={t("analyses.durability.woundsAria")} rows={entries.map((e) => row(e, e.expectedDamage, fmtSampled(e.expectedDamage, e.ciHalfWidth)))} />
       </div>
       <div>
         <h4 className="chart-h">{t("analyses.metric.pKill")}</h4>
@@ -53,7 +93,7 @@ export function DurabilityCharts({ entries }: { entries: DurabilityEntry[] }) {
       {hasPoints ? (
         <div>
           <h4 className="chart-h">{t("analyses.durability.per100")}</h4>
-          <HBarChart ariaLabel={t("analyses.durability.per100Aria")} rows={entries.map((e) => row(e, e.damageTakenPer100, fmt(e.damageTakenPer100), "info"))} />
+          <HBarChart ariaLabel={t("analyses.durability.per100Aria")} rows={entries.map((e) => row(e, e.damageTakenPer100, fmtSampled(e.damageTakenPer100, per100HalfWidth(e)), "info"))} />
         </div>
       ) : null}
     </div>
@@ -78,9 +118,9 @@ export function DurabilityTable({ entries }: { entries: DurabilityEntry[] }) {
           {entries.map((e) => (
             <tr key={e.archetype}>
               <td>{e.archetype}</td>
-              <td className="num">{fmt(e.expectedDamage)}</td>
+              <td className="num">{fmtSampled(e.expectedDamage, e.ciHalfWidth)}</td>
               <td className="num">{pct(e.pKill)}</td>
-              {hasPoints ? <td className="num">{fmt(e.damageTakenPer100)}</td> : null}
+              {hasPoints ? <td className="num">{fmtSampled(e.damageTakenPer100, per100HalfWidth(e))}</td> : null}
             </tr>
           ))}
         </tbody>
@@ -94,41 +134,45 @@ export function DurabilityTab() {
   const defender = useUnitSet("analyses.durability.defender");
   const [opts, setOpts] = usePersistedSetting<DurabilityOptions>("analyses.durability.options", DEFAULT_OPTIONS, parseOptions);
   const task = useWorkerTask(runDurability, "analyses.durability");
-  const [ran, setRan] = useState<{ name: string; fp: string } | undefined>(undefined);
+  const ran = useMemo(() => durabilityRan(task.ran), [task.ran]);
   const attackers = attackerArchetypes();
   const unit = defender.entries[0];
   const canRun = !!unit && opts.attackerIds.length > 0;
-  const dirty = !!ran && ran.fp !== fingerprint(defender.entries, opts);
+  const dirty = !!ran && ran.fp !== durabilityFingerprint(unit, opts.attackerIds, opts.inCover);
 
   const run = () => {
     if (!unit) return;
-    setRan({ name: unit.unit.name, fp: fingerprint(defender.entries, opts) });
-    task.run(unit.unit, opts.attackerIds, opts.inCover, snapshot);
+    task.run(unit, opts.attackerIds, opts.inCover, snapshot);
   };
   const toggleId = (id: string, on: boolean) => setOpts((o) => ({ ...o, attackerIds: on ? [...o.attackerIds.filter((x) => x !== id), id] : o.attackerIds.filter((x) => x !== id) }));
 
-  // The name is the one the run was made under, not whatever is in the picker now.
+  /*
+   * What an export would write. The name is the one the run was made under rather than whatever is
+   * in the picker now. The button is live exactly when this exists, so it never looks available and
+   * then does nothing when it is pressed.
+   */
+  const exportable = task.result && ran ? { entries: task.result, name: ran.name } : undefined;
   const exportCsv = () => {
-    if (!task.result || !ran) return;
-    download(`grimstat-durability-${new Date().toISOString().slice(0, 10)}.csv`, durabilityToCsv(ran.name, task.result), "text/csv");
+    if (!exportable) return;
+    download(`grimstat-durability-${new Date().toISOString().slice(0, 10)}.csv`, durabilityToCsv(exportable.name, exportable.entries), "text/csv");
   };
 
   // Header actions call through a ref so they never run against a stale closure.
   const handlers = useRef({ run, cancel: task.cancel, exportCsv });
   handlers.current = { run, cancel: task.cancel, exportCsv };
-  const hasResult = !!task.result;
+  const canExport = !!exportable;
   useAnalysisHeader(
     () => ({
       subtitle: unit ? t("analyses.durability.sub", { name: unit.unit.name, n: opts.attackerIds.length }) : t("analyses.durability.subIdle"),
       actions: (
         <RunActions canRun={canRun} running={task.running} onRun={() => handlers.current.run()} onCancel={() => handlers.current.cancel()}>
-          <button type="button" disabled={!hasResult} onClick={() => handlers.current.exportCsv()}>
+          <button type="button" disabled={!canExport} onClick={() => handlers.current.exportCsv()}>
             {t("analyses.exportCsv")}
           </button>
         </RunActions>
       ),
     }),
-    [canRun, hasResult, task.running, unit?.unit.name, opts.attackerIds.length],
+    [canRun, canExport, task.running, unit?.unit.name, opts.attackerIds.length],
   );
 
   return (

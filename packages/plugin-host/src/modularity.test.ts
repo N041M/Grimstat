@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PLUGIN_API_VERSION, type ScenarioUnit } from "@grimstat/schema";
-import { compatible, PluginHost, type PluginModule } from "./index";
+import { compatible, PluginHost, type PluginContext, type PluginModule, type WidgetDef } from "./index";
 import { registerKeyword, runScenario, makeScenario, coverageFor, CH } from "@grimstat/game-40k-11e";
 
 /**
@@ -61,5 +61,83 @@ describe("plugin host modularity", () => {
     await expect(host.load(broken)).rejects.toThrow(/activation failed/);
     expect([...host.registries.widgets.keys()]).toEqual([]);
     expect([...host.registries.manifests.keys()]).toEqual([]);
+  });
+});
+
+describe("plugin host id collisions", () => {
+  const unit: ScenarioUnit = { name: "Wobbler", keywords: [], models: [{ name: "w", count: 3, T: 4, Sv: 4, W: 2, isCharacter: false, keywords: [] }], weapons: [], attached: [], effects: [] };
+  const widget = (id: string, title: string): WidgetDef => ({ id, title, inputs: ["result"], defaultSize: { w: 3, h: 2 }, render: title });
+  /** Two widget packs written apart from each other, both calling their damage widget "dps". */
+  const dpsPlugin = (id: string): PluginModule => ({ manifest: { ...thirdParty.manifest, id }, activate: (ctx) => ctx.registerWidget(widget("dps", `${id} DPS`)) });
+
+  it("leaves a widget id with the plugin that registered it first, whichever order the two load in", async () => {
+    for (const [first, second] of [["a", "b"] as const, ["b", "a"] as const]) {
+      const host = new PluginHost();
+      await host.load(dpsPlugin(first));
+      await expect(host.load(dpsPlugin(second))).rejects.toThrow(`Plugin ${second} cannot register widget "dps": plugin ${first} registered it first`);
+      expect(host.registries.widgets.get("dps")!.title).toBe(`${first} DPS`);
+      expect([...host.registries.manifests.keys()]).toEqual([first]);
+    }
+  });
+
+  const registrations: Array<[string, (ctx: PluginContext) => void]> = [
+    ['game system "gs"', (ctx) => ctx.registerGameSystem("gs", {})],
+    ['analysis "an"', (ctx) => ctx.registerAnalysis({ id: "an", title: "An", run: () => null })],
+    ['archetype "arch"', (ctx) => ctx.registerArchetype({ id: "arch", name: "Arch", unit })],
+  ];
+
+  it.each(registrations)("refuses a second %s and keeps the rest of that plugin out too", async (what, register) => {
+    const host = new PluginHost();
+    await host.load({ manifest: { ...thirdParty.manifest, id: "first" }, activate: register });
+    const second: PluginModule = {
+      manifest: { ...thirdParty.manifest, id: "second" },
+      activate(ctx) {
+        ctx.registerWidget(widget("extra", "Extra"));
+        register(ctx);
+      },
+    };
+    await expect(host.load(second)).rejects.toThrow(`Plugin second cannot register ${what}: plugin first registered it first`);
+    expect(host.registries.widgets.has("extra")).toBe(false);
+    expect([...host.registries.manifests.keys()]).toEqual(["first"]);
+  });
+
+  it("fails the load of a plugin that catches the refusal", async () => {
+    const host = new PluginHost();
+    await host.load(dpsPlugin("a"));
+    const swallows: PluginModule = {
+      manifest: { ...thirdParty.manifest, id: "swallows" },
+      activate(ctx) {
+        try {
+          ctx.registerWidget(widget("dps", "Quiet DPS"));
+        } catch {
+          // the plugin decides its own widget can wait
+        }
+        ctx.registerWidget(widget("extra", "Extra"));
+      },
+    };
+    await expect(host.load(swallows)).rejects.toThrow(/cannot register widget "dps"/);
+    expect(host.registries.widgets.get("dps")!.title).toBe("a DPS");
+    expect(host.registries.widgets.has("extra")).toBe(false);
+  });
+
+  it("refuses an id one plugin registers twice", async () => {
+    const host = new PluginHost();
+    const twice: PluginModule = {
+      manifest: { ...thirdParty.manifest, id: "twice" },
+      activate(ctx) {
+        ctx.registerWidget(widget("dps", "First"));
+        ctx.registerWidget(widget("dps", "Second"));
+      },
+    };
+    await expect(host.load(twice)).rejects.toThrow('Plugin twice cannot register widget "dps": it registered that id already');
+    expect([...host.registries.widgets.keys()]).toEqual([]);
+  });
+
+  it("loads a plugin whose ids are its own", async () => {
+    const host = new PluginHost();
+    await host.load(dpsPlugin("a"));
+    await host.load({ manifest: { ...thirdParty.manifest, id: "b" }, activate: (ctx) => ctx.registerWidget(widget("alpha-strike", "Alpha strike")) });
+    expect([...host.registries.widgets.keys()]).toEqual(["dps", "alpha-strike"]);
+    expect([...host.registries.manifests.keys()]).toEqual(["a", "b"]);
   });
 });

@@ -12,7 +12,7 @@ import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { Datasheet, ModelProfile, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import { normaliseName } from "@grimstat/snapshot";
 import { catalogueFactionName } from "../bsdata-json/index";
-import { cleanLabel, defaultGroups, isWeaponOf, mergeGroup, POINTS_BY_SIZE, RosterImportContext, SIZE_BY_LABEL, splitByWargear, type AttachRole, type PendingUnit, type WargearItem } from "./import-common";
+import { cleanLabel, defaultGroups, isWeaponOf, MAX_COPIES, mergeGroup, POINTS_BY_SIZE, RosterImportContext, SIZE_BY_LABEL, splitByWargear, type AttachRole, type PendingUnit, type WargearItem } from "./import-common";
 
 export interface RoszImportOptions {
   /** Roster name; defaults to the `name` attribute of the roster element, then "Imported army". */
@@ -267,7 +267,9 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
     // have to be written out — the way `wargearGroups` does for the text dialects.
     const copies = new Map<string, number>();
     const items = g.items.map((it) => {
-      const per = g.count > 0 && it.n > g.count ? Math.floor(it.n / g.count) : 1;
+      const asked = g.count > 0 && it.n > g.count ? Math.floor(it.n / g.count) : 1;
+      const per = Math.min(MAX_COPIES, asked);
+      if (asked > MAX_COPIES) warnings.push(`${u.name}: kept ${MAX_COPIES} copies of "${it.name}" out of the ${asked} the file asks for.`);
       if (per > 1) copies.set(it.name, Math.max(copies.get(it.name) ?? 1, per));
       return per > 1 ? { name: it.name, n: 0 } : it;
     });
@@ -362,6 +364,21 @@ function isZip(bytes: Uint8Array): boolean {
   return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
 
+/**
+ * The largest one entry of a `.rosz` archive may unpack to, and the largest the whole archive may unpack to.
+ *
+ * A roster is XML, which compresses about twenty to one, so a hand-made archive turns a few hundred
+ * kilobytes into gigabytes. The biggest real BattleScribe rosters are a few megabytes unpacked, which
+ * leaves 32 MB far above anything an army list needs and still small enough to hold in memory.
+ */
+const MAX_ENTRY_BYTES = 32 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
+
+const megabytes = (n: number): string => `${Math.max(1, Math.round(n / (1024 * 1024)))} MB`;
+
+/** `.ros` first, then `.xml`, then anything else, which is the order the roster document is looked for in. */
+const entryRank = (name: string): number => (/\.ros$/i.test(name) ? 0 : /\.xml$/i.test(name) ? 1 : 2);
+
 /** The roster document inside a `.rosz` archive; raw `.ros` bytes are accepted as well. */
 function extractRosterXml(bytes: Uint8Array): string {
   if (!isZip(bytes)) {
@@ -369,16 +386,41 @@ function extractRosterXml(bytes: Uint8Array): string {
     if (/^\uFEFF?\s*<(\?xml|roster)\b/i.test(text)) return text;
     throw new Error("Not a .rosz archive (no zip signature) and not a .ros XML document.");
   }
-  let entries: Record<string, Uint8Array>;
-  try {
-    entries = unzipSync(bytes);
-  } catch (e) {
-    throw new Error(`Could not read the .rosz archive: ${e instanceof Error ? e.message : String(e)}`);
+  const unzip = (keep: (name: string, size: number) => boolean): Record<string, Uint8Array> => {
+    try {
+      return unzipSync(bytes, { filter: (f) => keep(f.name, f.originalSize) });
+    } catch (e) {
+      throw new Error(`Could not read the .rosz archive: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  // A zip archive lists every entry with the size it unpacks to, so this pass reads the list and unpacks
+  // nothing. An entry too large to be a roster is then refused before any memory goes into it.
+  const listed: { name: string; size: number }[] = [];
+  unzip((name, size) => {
+    if (!name.endsWith("/")) listed.push({ name, size });
+    return false;
+  });
+  const ordered = [...listed].sort((a, b) => entryRank(a.name) - entryRank(b.name));
+  const first = ordered[0];
+  if (first && entryRank(first.name) < 2 && first.size > MAX_ENTRY_BYTES) {
+    throw new Error(`"${first.name}" in the .rosz archive unpacks to ${megabytes(first.size)}. An army list is never that large, so the file was not read.`);
   }
-  const names = Object.keys(entries).filter((n) => !n.endsWith("/"));
-  const pick = names.find((n) => /\.ros$/i.test(n)) ?? names.find((n) => /\.xml$/i.test(n)) ?? names.find((n) => /^\uFEFF?\s*<\?xml/.test(strFromU8(entries[n]!.subarray(0, 64))));
-  if (!pick) throw new Error(`No .ros roster found in the .rosz archive${names.length ? ` (entries: ${names.join(", ")})` : " (the archive is empty)"}.`);
-  return strFromU8(entries[pick]!);
+
+  let budget = MAX_TOTAL_BYTES;
+  for (const e of ordered) {
+    if (e.size > MAX_ENTRY_BYTES) continue;
+    if (e.size > budget) throw new Error(`The .rosz archive unpacks to more than ${megabytes(MAX_TOTAL_BYTES)}. An army list is never that large, so the file was not read.`);
+    budget -= e.size;
+    const data = unzip((name) => name === e.name)[e.name];
+    if (!data) continue;
+    // the listing is written by whoever made the archive, so the entry is checked again once it is unpacked
+    if (data.length > MAX_ENTRY_BYTES) {
+      throw new Error(`"${e.name}" in the .rosz archive unpacks to ${megabytes(data.length)}. An army list is never that large, so the file was not read.`);
+    }
+    if (entryRank(e.name) < 2 || /^\uFEFF?\s*<\?xml/.test(strFromU8(data.subarray(0, 64)))) return strFromU8(data);
+  }
+  const names = listed.map((e) => e.name);
+  throw new Error(`No .ros roster found in the .rosz archive${names.length ? ` (entries: ${names.join(", ")})` : " (the archive is empty)"}.`);
 }
 
 /** Imports a `.rosz` archive (BattleScribe / New Recruit). Raw `.ros` XML bytes are accepted too. */

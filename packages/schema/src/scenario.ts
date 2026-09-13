@@ -73,7 +73,7 @@ export const ScenarioUnit = z.object({
   attached: z.array(AttachedCharacter).default([]),
   /** Effect records contributed by the unit's own abilities, leaders, enhancements, etc. (after resolution). */
   effects: z.array(EffectRecord).default([]),
-  points: z.number().optional(),
+  points: z.number().nonnegative().optional(),
 });
 export type ScenarioUnit = z.infer<typeof ScenarioUnit>;
 

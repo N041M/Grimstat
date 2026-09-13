@@ -56,7 +56,10 @@ export function coreAbilityEffects(ability: Ability): AbilityEffects | null {
     case "FEEL NO PAIN":
       return { tier: "tier1", effects: [rec("fnp", "defender", "set", CH.fnp, Number.isFinite(v) ? v : 6, ability.name)], fnp: Number.isFinite(v) ? v : 6 };
     case "STEALTH":
-      return { tier: "tier1", effects: [rec("hit", "defender", "flag", CH.stealth, true, ability.name)] };
+      // Stealth subtracts 1 from the Hit roll of ranged attacks against the unit. Reading it as the
+      // Benefit of Cover instead left it doing nothing at all wherever cover is a save bonus the
+      // target's armour was already good enough to do without.
+      return { tier: "tier1", effects: [rec("hit", "defender", "add", CH.hitRoll, -1, ability.name, { weaponKind: "ranged" })] };
     case "INVULNERABLE SAVE":
       return { tier: "tier1", effects: [rec("save", "defender", "cap", CH.invuln, Number.isFinite(v) ? v : 6, ability.name)] };
     case "DEEP STRIKE":
@@ -106,7 +109,10 @@ const PATTERNS: Pattern[] = [
   { re: /\[?ignores cover\]? ability/i, build: (_m, t, n) => [rec("hit", "attacker", "flag", CH.ignoresCover, true, n, { ...kindCond(t) })] },
   { re: /critical hits? on (?:an? )?(?:unmodified )?(?:hit roll of )?(\d)\+/i, build: (m, t, n) => [rec("hit", "attacker", "cap", CH.critHit, Number(m[1]), n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
   { re: /critical wounds? on (?:an? )?(?:unmodified )?(?:wound roll of )?(\d)\+/i, build: (m, t, n) => [rec("wound", "attacker", "cap", CH.critWound, Number(m[1]), n, { ...kindCond(t), ...targetCond(t), ...extraConds(t) })] },
-  { re: /benefit of cover|\bstealth\b/i, build: (_m, _t, n) => [rec("hit", "defender", "flag", CH.stealth, true, n)] },
+  { re: /benefit of cover/i, build: (_m, _t, n) => [rec("hit", "defender", "flag", CH.stealth, true, n)] },
+  // Stealth is a Hit-roll penalty rather than cover, so it keeps working against a target whose
+  // armour is already too good for a cover bonus to improve.
+  { re: /\bstealth\b/i, build: (_m, _t, n) => [rec("hit", "defender", "add", CH.hitRoll, -1, n, { weaponKind: "ranged" })] },
   { re: /cannot be modified|ignore (?:any|all) (?:hit roll )?modifiers/i, build: (_m, _t, n) => [rec("hit", "defender", "flag", CH.noCritHits, false, n)] },
 ];
 

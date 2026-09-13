@@ -7,11 +7,12 @@ import { useWorkerTask } from "../../hooks/useWorkerTask";
 import { useUnitSet } from "../../hooks/useUnitSet";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { cloneUnit, modelCount } from "../../lib/scenario";
-import { UNIT_SET_KEYS, type UnitEntry } from "../../lib/unitSet";
+import { UNIT_SET_KEYS } from "../../lib/unitSet";
 import type { ReverseInput, ReverseResult, ReverseRow } from "../../lib/gameExtras";
-import { fmt, fmtInt, pct } from "../../lib/format";
+import { fmt, fmtInt, fmtSampled, pct } from "../../lib/format";
 import { download } from "../../lib/download";
 import { reverseToCsv } from "../../lib/matrixCsv";
+import { rankLabel, tieRanks } from "./EfficiencyTab";
 import { UnitSetPicker } from "./UnitSetPicker";
 import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunActions, RunStatus, WarningList, parseAnalysisContext, useAnalysisHeader, type AnalysisContext } from "./shared";
 import { Badge, Field } from "../ui";
@@ -44,8 +45,24 @@ export function metricLabel(m: Metric): string {
   return m === "pKill" ? t("analyses.metric.pKill") : m === "expectedSlain" ? t("analyses.metric.slain") : t("analyses.metric.damage");
 }
 
-function metricDisplay(m: Metric, v: number): string {
-  return m === "pKill" ? pct(v) : fmt(v);
+/**
+ * One metric's figure, printed to the place the run behind it can support.
+ *
+ * The engine quotes an interval on expected damage alone. A kill chance and a model count carry
+ * none, so they print exactly as they always have.
+ */
+export function metricDisplay(m: Metric, v: number, ciHalfWidth?: number): string {
+  if (m === "pKill") return pct(v);
+  return m === "expectedDamage" ? fmtSampled(v, ciHalfWidth) : fmt(v);
+}
+
+/**
+ * The interval on a row's ranking figure, which `value` carries only when the ranking is by expected
+ * damage. Ranked by a kill chance or a model count, the rows stand on a figure the engine quotes no
+ * interval for, and nothing is separable or tied on those terms.
+ */
+export function rowHalfWidth(row: ReverseRow, metric: Metric): number | undefined {
+  return metric === "expectedDamage" ? row.ciHalfWidth : undefined;
 }
 
 /** The threshold used when the user has not typed one. */
@@ -58,12 +75,38 @@ export function defaultThreshold(metric: Metric, target: ScenarioUnit | undefine
 
 const runReverse = (input: Omit<ReverseInput, "snapshot">, snapshot: Snapshot | undefined) => simClient().reverse(input, snapshot);
 
-const fingerprint = (target: UnitEntry[], cands: UnitEntry[], o: ReverseOptions) => JSON.stringify([target.map((e) => e.id), cands.map((e) => e.id), o]);
+/** Everything a run is made from, so `task.ran` holds what a stored result belongs to. */
+export type ReverseRun = Omit<ReverseInput, "snapshot">;
+
+/**
+ * The run a stored result belongs to, read back from the arguments it was computed with.
+ *
+ * The store keeps a result for as long as the app is open, so it outlives this tab. Holding the
+ * same facts in component state instead left the header saying the result was current while the
+ * body offered to run it, once the reader had been to another tab and back.
+ */
+export function reverseRan(ran: Parameters<typeof runReverse> | undefined): ReverseRun | undefined {
+  return ran?.[0];
+}
+
+/** What a result was computed from, as one string the tab can compare against the controls. */
+export function reverseFingerprint(run: ReverseRun | undefined): string {
+  if (!run) return "";
+  return JSON.stringify([run.target, run.candidates.map((c) => c.id), run.metric, run.threshold, run.maxCombo, run.context]);
+}
 
 export function ReverseTable({ result, metric, onOpen }: { result: ReverseResult; metric: Metric; onOpen?: (row: ReverseRow) => void }) {
   const [all, setAll] = useState(false);
   if (!result.rows.length) return <div className="empty">{t("analyses.reverse.none")}</div>;
-  const rows = all ? result.rows : result.rows.slice(0, SHOW_ROWS);
+  // Places come off the whole ranking, so the shown rows keep the numbers they hold in it.
+  const places = tieRanks(
+    result.rows,
+    (r) => r.value,
+    (r) => rowHalfWidth(r, metric),
+  );
+  const shown = all ? result.rows.length : Math.min(SHOW_ROWS, result.rows.length);
+  const rows = result.rows.slice(0, shown);
+  const anyTied = places.slice(0, shown).some((p) => p.tied);
   const isCheapest = (r: ReverseRow) => !!result.cheapest && r.candidateIds.join("|") === result.cheapest.candidateIds.join("|");
   return (
     <div className="stack">
@@ -86,9 +129,12 @@ export function ReverseTable({ result, metric, onOpen }: { result: ReverseResult
           <tbody>
             {rows.map((r, i) => {
               const best = isCheapest(r);
+              const place = places[i]!;
               return (
                 <tr key={r.candidateIds.join("|")} className={best ? "row-best" : undefined}>
-                  <td className="num">{i + 1}</td>
+                  <td className={place.tied ? "num rank-tied" : "num"} {...(place.tied ? { title: t("analyses.tie.title") } : {})}>
+                    {rankLabel(place)}
+                  </td>
                   <td className="wrap">
                     {r.names.join(" + ")}
                     {best ? (
@@ -104,7 +150,7 @@ export function ReverseTable({ result, metric, onOpen }: { result: ReverseResult
                     const v = m === "pKill" ? r.pKill : m === "expectedSlain" ? r.expectedSlain : r.expectedDamage;
                     return (
                       <td key={m} className={`num${m === metric ? " metric-col" : ""}`}>
-                        {m === metric ? <strong>{metricDisplay(m, v)}</strong> : metricDisplay(m, v)}
+                        {m === metric ? <strong>{metricDisplay(m, v, r.ciHalfWidth)}</strong> : metricDisplay(m, v, r.ciHalfWidth)}
                       </td>
                     );
                   })}
@@ -123,6 +169,7 @@ export function ReverseTable({ result, metric, onOpen }: { result: ReverseResult
           </tbody>
         </table>
       </div>
+      {anyTied ? <p className="small muted" style={{ margin: 0 }}>{t("analyses.tie")}</p> : null}
       {result.rows.length > SHOW_ROWS ? (
         <div className="row">
           <button type="button" className="sm" onClick={() => setAll((v) => !v)}>
@@ -140,25 +187,27 @@ export function ReverseTab() {
   const candidates = useUnitSet("analyses.reverse.candidates");
   const [opts, setOpts] = usePersistedSetting<ReverseOptions>("analyses.reverse.options", DEFAULT_OPTIONS, parseOptions);
   const task = useWorkerTask(runReverse, "analyses.reverse");
-  const [ran, setRan] = useState<{ target: UnitEntry; candidates: UnitEntry[]; metric: Metric; threshold: number; fp: string } | undefined>(undefined);
+  const ran = useMemo(() => reverseRan(task.ran), [task.ran]);
 
   const unit = target.entries[0];
   const auto = defaultThreshold(opts.metric, unit?.unit);
   const threshold = opts.threshold ?? auto;
   const canRun = !!unit && candidates.entries.length > 0;
-  const dirty = !!ran && ran.fp !== fingerprint(target.entries, candidates.entries, opts);
+  // The run the controls describe as they stand. Comparing it with the stored one is what marks a
+  // result as no longer matching the settings.
+  const pending: ReverseRun | undefined = unit ? { target: unit.unit, candidates: candidates.entries.map((e) => ({ id: e.id, unit: e.unit })), metric: opts.metric, threshold, context: opts.context, maxCombo: opts.maxCombo, enabledToggles: [] } : undefined;
+  const dirty = !!ran && reverseFingerprint(ran) !== reverseFingerprint(pending);
 
   const run = () => {
-    if (!unit) return;
-    setRan({ target: unit, candidates: candidates.entries, metric: opts.metric, threshold, fp: fingerprint(target.entries, candidates.entries, opts) });
-    task.run({ target: unit.unit, candidates: candidates.entries.map((e) => ({ id: e.id, unit: e.unit })), metric: opts.metric, threshold, context: opts.context, maxCombo: opts.maxCombo, enabledToggles: [] }, snapshot);
+    if (!pending) return;
+    task.run(pending, snapshot);
   };
 
   const open = async (row: ReverseRow) => {
     const c = ran?.candidates.find((e) => e.id === row.candidateIds[0]);
     if (!c || !ran) return;
-    await replaceScenario({ ...scenario, name: `${c.unit.name} vs ${ran.target.unit.name}`, attacker: cloneUnit(c.unit), defender: cloneUnit(ran.target.unit), context: { ...scenario.context, ...opts.context } }, activeSnapshotId);
-    notify(t("analyses.reverse.opened", { a: c.unit.name, d: ran.target.unit.name }), "success");
+    await replaceScenario({ ...scenario, name: `${c.unit.name} vs ${ran.target.name}`, attacker: cloneUnit(c.unit), defender: cloneUnit(ran.target), context: { ...scenario.context, ...opts.context } }, activeSnapshotId);
+    notify(t("analyses.reverse.opened", { a: c.unit.name, d: ran.target.name }), "success");
     navigate("calculator");
   };
 
@@ -245,14 +294,14 @@ export function ReverseTab() {
         <RunStatus task={task} stale={dirty} />
         {task.result && ran ? (
           <>
-            <h3 style={{ margin: 0 }}>{t("analyses.reverse.title", { name: ran.target.unit.name })}</h3>
+            <h3 style={{ margin: 0 }}>{t("analyses.reverse.title", { name: ran.target.name })}</h3>
             <WarningList warnings={task.result.warnings} />
             <p className="small muted" style={{ margin: 0 }}>
               {t("analyses.reverse.summary", { rows: task.result.rows.length, evals: fmtInt(task.result.evaluations), meeting })}
             </p>
             {task.result.cheapest ? (
               <div className="notice success" role="status" style={{ marginBottom: 0 }}>
-                <span>{t("analyses.reverse.cheapestLine", { names: task.result.cheapest.names.join(" + "), points: task.result.cheapest.points ? fmtInt(task.result.cheapest.points) : "–", metric: metricLabel(ran.metric), value: metricDisplay(ran.metric, task.result.cheapest.value) })}</span>
+                <span>{t("analyses.reverse.cheapestLine", { names: task.result.cheapest.names.join(" + "), points: task.result.cheapest.points ? fmtInt(task.result.cheapest.points) : "–", metric: metricLabel(ran.metric), value: metricDisplay(ran.metric, task.result.cheapest.value, task.result.cheapest.ciHalfWidth) })}</span>
               </div>
             ) : task.result.rows.length ? (
               <div className="notice info" role="status" style={{ marginBottom: 0 }}>

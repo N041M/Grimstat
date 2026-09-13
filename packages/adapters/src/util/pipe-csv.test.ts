@@ -55,6 +55,18 @@ describe("parsePipeCsv", () => {
     ]);
   });
 
+  it("reports a column name the rows cannot hold twice over", () => {
+    const r = parsePipeCsv("id|name|name|\n1|Alpha|Beta|\n");
+    expect(r.rows[0]).toEqual({ id: "1", name: "Beta" });
+    expect(r.warnings).toEqual([`header: column "name" appears 2 times, only the last one is read`]);
+  });
+
+  it("reports a __proto__ column instead of dropping it in silence", () => {
+    const r = parsePipeCsv("id|__proto__|\n1|x|\n");
+    expect(r.rows[0]).toEqual({ id: "1" });
+    expect(r.warnings).toEqual([`header: column "__proto__" cannot be stored and is dropped`]);
+  });
+
   it("supports another delimiter and skips blank lines", () => {
     const r = parsePipeCsv("a;b\n\n1;x\n\n", { delimiter: ";" });
     expect(r.rows).toEqual([{ a: "1", b: "x" }]);

@@ -89,9 +89,14 @@ function grantCandidates(line: string): string[] {
 /**
  * How many copies a single candidate hands one model ("2 inferno pistols" → 2), and the name left
  * once the count and its article are gone.
+ *
+ * The article is only stripped when it is a whole word. Without that, the leading letter of a weapon
+ * whose name starts with "a" was eaten — "Astartes chainsword" came out as "startes chainsword" and
+ * matched nothing on the datasheet, which is how a line that grants the weapon ended up reported as
+ * a line that does not.
  */
 function splitCount(candidate: string): { copies: number; name: string } {
-  const m = new RegExp(`^(?:an?|the|additional|${NUM})?\\s*(?:additional\\s+)?(.*)$`, "i").exec(tidy(candidate).replace(/[.;]+$/, ""));
+  const m = new RegExp(`^(?:(?:an?|the|additional|${NUM})\\b)?\\s*(?:additional\\s+)?(.*)$`, "i").exec(tidy(candidate).replace(/[.;]+$/, ""));
   const copies = toNumber(m?.[1]) ?? 1;
   return { copies, name: (m?.[2] ?? candidate).trim().toLowerCase() };
 }

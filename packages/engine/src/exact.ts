@@ -1,4 +1,4 @@
-import { type BPMF, baddScaled, bcompound, bcompoundOneReroll, bconvolve, bdelta, bmean, btrim } from "./bivariate";
+import { type BPMF, baddScaled, bcompound, bcompoundOneReroll, bcompoundOneRerollTable, bconvolve, bdelta, bmean, btrim } from "./bivariate";
 import { type PMF, convolvePow, delta, mean } from "./pmf";
 import {
   type StateDist,
@@ -16,6 +16,22 @@ import type { EngineInput, EngineOutput, WeaponParams, WeaponTrace } from "./typ
 import { survivalFromPMF } from "./stats";
 
 const DEFAULT_MAX_STATES = 40000;
+
+/**
+ * The DP walks the whole state space once per wound needing a save and once per mortal-damage
+ * event, so a weapon costs about `states × (wsMax + 1) × (mtMax + 1)` state visits and the state
+ * count on its own says little about how long a target takes. Three targets under the same attack
+ * of 30 weapons, all of them inside the state cap:
+ *
+ *   10 models of W3                      31 states   5.5e5 visits   0.06 s
+ *   + 10 of W5 behind 20 of W3        3,111 states   5.5e7 visits   0.31 s
+ *   + one W6 character               21,777 states   3.9e8 visits   1.56 s
+ *
+ * A visit costs about 4 ns here, and several times that on a slow machine, so this budget is a DP
+ * of roughly half a second and a second or two at worst. It leaves the middle target exact and
+ * sends the third one to the sampled backend, which answers it in well under a second.
+ */
+const DEFAULT_MAX_WORK = 1e8;
 
 /** Per attack die: bivariate (rolling hits, automatic wounds). */
 function perDieOutcome(w: WeaponParams): { full: BPMF; givenNotMiss: BPMF } {
@@ -98,10 +114,12 @@ function expectedDamage(space: StateSpace, dist: StateDist): number {
   return e;
 }
 
-/** Returns null when the DP state space is too large for the exact path. */
+/** Returns null when the target is too large for the exact path, by state count or by DP work. */
 export function runExact(input: EngineInput): EngineOutput | null {
   const space = makeStateSpace(input.groups);
   if (space.total > (input.maxExactStates ?? DEFAULT_MAX_STATES)) return null;
+  const maxWork = input.maxExactWork ?? DEFAULT_MAX_WORK;
+  let work = 0;
   const warnings: string[] = [];
   let dist = initialDist(space);
   if (input.initialState) {
@@ -128,9 +146,11 @@ export function runExact(input: EngineInput): EngineOutput | null {
     const rhMax = H.length - 1;
     // R[k] = outcome of k rolled wound dice; WT[rh] = outcome of rh rolling hits (one die fixed when fixedWound is set)
     const fixedW = w.fixedWound ? fixedWoundOutcome(w) : null;
-    const R: BPMF[] = [bdelta()];
-    for (let k = 1; k <= rhMax; k++) {
-      R.push(w.singleRerollWound ? bcompoundOneReroll(delta(k), hit.full, w.wound.pFail, hit.givenNotFail) : bconvolve(R[k - 1]!, hit.full));
+    let R: BPMF[];
+    if (w.singleRerollWound) R = bcompoundOneRerollTable(rhMax, hit.full, w.wound.pFail, hit.givenNotFail);
+    else {
+      R = [bdelta()];
+      for (let k = 1; k <= rhMax; k++) R.push(bconvolve(R[k - 1]!, hit.full));
     }
     const WT: BPMF[] = [bdelta()];
     for (let rh = 1; rh <= rhMax; rh++) WT.push(fixedW ? bconvolve(R[rh - 1]!, fixedW) : R[rh]!);
@@ -145,6 +165,10 @@ export function runExact(input: EngineInput): EngineOutput | null {
         for (const r of WT[rh]!) mtMax = Math.max(mtMax, r.length - 1);
       }
     }
+    // How many state visits this weapon's DP will cost, now that the two event counts are known.
+    // Weapons add up, so a unit with many profiles reaches the budget sooner than one profile does.
+    work += space.total * (wsMax + 1) * (mtMax + 1);
+    if (work > maxWork) return null;
     const J: number[][] = [];
     for (let i = 0; i <= wsMax; i++) J.push(new Array<number>(mtMax + 1).fill(0));
     for (let rh = 0; rh <= rhMax; rh++) {

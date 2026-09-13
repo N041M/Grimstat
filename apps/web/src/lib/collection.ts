@@ -52,6 +52,18 @@ export interface Totals {
 /** A number a count field may hold: whole, not negative, and not something that is not a number. */
 export const asCount = (n: number): number => (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
 
+/**
+ * What a count field commits when the user leaves it.
+ *
+ * An empty field is a count halfway through being retyped, so it keeps the count that was already
+ * there. Reading it as zero would write zero over the painted count the moment somebody cleared
+ * "10" to type "12". Anything that does not read as a number is treated the same way.
+ */
+export function commitCount(text: string, current: number, max = Infinity): number {
+  const n = Number(text);
+  return text.trim() === "" || !Number.isFinite(n) ? current : Math.min(max, asCount(n));
+}
+
 /** An entry with its counts made sane: whole numbers, and never more painted than owned. */
 export function tidyEntry<T extends { owned: number; painted: number }>(entry: T): T {
   const owned = asCount(entry.owned);

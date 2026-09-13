@@ -192,6 +192,8 @@ function charMap(p: BsProfile): Record<string, string> {
 
 type ProfileKind = "unit" | "weapon" | "ability" | "transport" | "other";
 function classifyProfile(p: BsProfile): ProfileKind {
+  // ids are built from the name, so a profile without one is nothing this reader can use
+  if (typeof p?.name !== "string") return "other";
   const t = (p.typeName ?? "").toLowerCase();
   const names = new Set((p.characteristics ?? []).map((c) => c.name));
   if (t === "unit" || (names.has("T") && names.has("Sv") && names.has("W"))) return "unit";
@@ -308,7 +310,11 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
   for (const d of docs) if (d.root.id) docById.set(d.root.id, d);
 
   const costTypes = new Map<string, string>(); // name -> id
-  for (const d of docs) for (const ct of d.root.costTypes ?? []) costTypes.set(ct.name.toLowerCase(), ct.id);
+  for (const d of docs)
+    for (const ct of d.root.costTypes ?? []) {
+      if (typeof ct?.name === "string") costTypes.set(ct.name.toLowerCase(), ct.id);
+      else warnings.push(`${d.file}: cost type without a name, ignored`);
+    }
   const ptsTypeId = costTypes.get("pts");
   const dpTypeId = costTypes.get("detachment points");
   const costValue = (costs: BsCost[] | undefined, name: string, typeId: string | undefined): number | undefined => {
@@ -323,6 +329,8 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
   const datasheets: Datasheet[] = [];
   const abilities: Ability[] = [];
   const abilityIds = new Set<string>();
+  /** Every emitted ability by id, so that a datasheet can look its own up without walking the list. */
+  const abilityById = new Map<string, Ability>();
   const detachments: Detachment[] = [];
   const enhancements: Enhancement[] = [];
   const priceRules: PriceRule[] = [];
@@ -332,10 +340,14 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
   const detIds = new Set<string>();
   const enhIds = new Set<string>();
   const staging: BsdataStaging = { catalogues: [], entries: {}, upstreamIds: {}, detachmentEntries: {}, unresolvedLinks: [], unlinkedEnhancements: [], skippedRootEntries: [] };
+  const emitAbility = (a: Ability): void => {
+    abilities.push(a);
+    abilityById.set(a.id, a);
+  };
   const addAbility = (a: Ability): Ability => {
     if (!abilityIds.has(a.id)) {
       abilityIds.add(a.id);
-      abilities.push(a);
+      emitAbility(a);
     }
     return a;
   };
@@ -356,7 +368,7 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
       name: (gsDoc.root.name ?? "Warhammer 40,000").replace(/\s*11th Edition\s*$/i, ""),
       edition: "11",
       version: gsDoc.root.revision !== undefined ? `r${gsDoc.root.revision}` : "",
-      costTypes: (gsDoc.root.costTypes ?? []).map((c) => ({ id: c.id, name: c.name })),
+      costTypes: (gsDoc.root.costTypes ?? []).filter((c) => typeof c?.name === "string").map((c) => ({ id: c.id, name: c.name })),
     };
     if (!gameSystem.version) delete gameSystem.version;
     for (const p of gsDoc.root.publications ?? []) {
@@ -401,6 +413,10 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
     if (visited.has(entry)) return;
     visited.add(entry);
     const takeProfile = (p: BsProfile): void => {
+      if (typeof p?.name !== "string") {
+        bucket.add("profile without a name (skipped)", entry.name ?? "?");
+        return;
+      }
       switch (classifyProfile(p)) {
         case "unit":
           if (!col.unitProfiles.has(p.name)) col.unitProfiles.set(p.name, p);
@@ -422,14 +438,21 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
           break;
       }
     };
+    const takeRule = (r: BsRule, shared: boolean): void => {
+      if (typeof r?.name !== "string") {
+        bucket.add("rule without a name (skipped)", entry.name ?? "?");
+        return;
+      }
+      col.rules.push({ r, shared });
+    };
     for (const p of entry.profiles ?? []) takeProfile(p);
-    if (!inUpgrade) for (const r of entry.rules ?? []) col.rules.push({ r, shared: false });
+    if (!inUpgrade) for (const r of entry.rules ?? []) takeRule(r, false);
     const takeInfoGroup = (g: BsEntry): void => {
       if (visited.has(g)) return;
       visited.add(g);
       if (/detachment/i.test(g.name ?? "")) return; // detachment rules are not unit abilities
       for (const p of g.profiles ?? []) takeProfile(p);
-      if (!inUpgrade) for (const r of g.rules ?? []) col.rules.push({ r, shared: false });
+      if (!inUpgrade) for (const r of g.rules ?? []) takeRule(r, false);
       for (const l of g.infoLinks ?? []) takeInfoLink(l);
       for (const sub of g.infoGroups ?? []) takeInfoGroup(sub);
     };
@@ -437,7 +460,7 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
       const hit = resolve(l.targetId);
       if (!hit) return;
       if (l.type === "rule" || hit.kind === "sharedRules" || hit.kind === "rules") {
-        if (!inUpgrade) col.rules.push({ r: hit.node as unknown as BsRule, shared: true });
+        if (!inUpgrade) takeRule(hit.node as unknown as BsRule, true);
       } else if (l.type === "profile" || hit.kind === "sharedProfiles" || hit.kind === "profiles") takeProfile(hit.node as unknown as BsProfile);
       else if (l.type === "infoGroup" || hit.kind === "sharedInfoGroups" || hit.kind === "infoGroups") {
         if (/detachment/i.test(l.name ?? "")) return;
@@ -718,7 +741,7 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
           continue;
         }
         const a: Ability = { id: uniqueId(datasheetAbilityId(id, p.name), abilityIds), name: p.name, scope: wargear ? "wargear" : "datasheet", text, factionId: fId, isLegends: ds.isLegends };
-        abilities.push(a);
+        emitAbility(a);
         ds.abilityIds.push(a.id);
         localAbilityIds.add(a.id);
       }
@@ -733,17 +756,16 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
           attach({ id: factionAbilityId(factionName, r.name), name: r.name, scope: "faction", text, factionId: fId, isLegends: false });
         } else {
           const a: Ability = { id: uniqueId(datasheetAbilityId(id, r.name), abilityIds), name: r.name, scope: "datasheet", text, factionId: fId, isLegends: ds.isLegends };
-          abilities.push(a);
+          emitAbility(a);
           ds.abilityIds.push(a.id);
           localAbilityIds.add(a.id);
         }
       }
       // a value-less core ability ("Deadly Demise" rule) is redundant next to a valued one ("Deadly Demise D3" profile);
       // value-carrying keywords without a value (a generic "Feel No Pain" rule reference) are unusable and dropped.
-      const byId = new Map(abilities.map((a) => [a.id, a] as const));
-      const valued = new Set(ds.abilityIds.map((x) => byId.get(x)).filter((a) => a?.coreKeyword && a.coreValue !== undefined).map((a) => a!.coreKeyword as string));
+      const valued = new Set(ds.abilityIds.map((x) => abilityById.get(x)).filter((a) => a?.coreKeyword && a.coreValue !== undefined).map((a) => a!.coreKeyword as string));
       ds.abilityIds = ds.abilityIds.filter((x) => {
-        const a = byId.get(x);
+        const a = abilityById.get(x);
         if (!a?.coreKeyword || a.coreValue !== undefined) return true;
         if (valued.has(a.coreKeyword)) return false;
         if (VALUE_REQUIRED.has(a.coreKeyword)) {
@@ -833,18 +855,22 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
           if (FORCE_DISPOSITIONS.has(n.toUpperCase())) det.forceDispositions.push(n.toUpperCase());
           else if (!det.uniqueTag) det.uniqueTag = n;
         }
-        const addDetRule = (rname: string, text: string): void => {
+        const addDetRule = (rname: string | undefined, text: string): void => {
+          if (typeof rname !== "string") {
+            bucket.add("detachment rule without a name (skipped)", `${factionName}/${name}`);
+            return;
+          }
           const a: Ability = { id: uniqueId(detachmentAbilityId(detId, rname), abilityIds), name: rname, scope: "detachment", text, factionId: fId, isLegends: false };
-          abilities.push(a);
+          emitAbility(a);
           det.ruleAbilityIds.push(a.id);
         };
-        for (const r of e.rules ?? []) addDetRule(r.name, (r.description ?? "").trim());
+        for (const r of e.rules ?? []) addDetRule(r?.name, (r?.description ?? "").trim());
         for (const l of e.infoLinks ?? []) {
           const hit = resolve(l.targetId);
           if (!hit) continue;
           if (hit.kind === "sharedRules" || hit.kind === "rules" || l.type === "rule") {
             const r = hit.node as unknown as BsRule;
-            addDetRule(r.name, (r.description ?? "").trim());
+            addDetRule(r?.name, (r?.description ?? "").trim());
           } else if (hit.kind === "sharedProfiles" || l.type === "profile") {
             const p = hit.node as unknown as BsProfile;
             if (classifyProfile(p) === "ability") addDetRule(p.name, abilityText(p));

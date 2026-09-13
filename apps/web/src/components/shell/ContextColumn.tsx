@@ -108,6 +108,28 @@ export function useContextNewAction(route: Route, run: () => void): void {
   }, [route]);
 }
 
+/**
+ * Loading a scenario drops whatever the calculator is holding, and four places do it: this column,
+ * the command palette, the Scenarios table and a permalink in the address bar. The shell registers
+ * one question here and all four ask it, so unsaved work is never dropped without being offered
+ * back. With no shell mounted the answer is yes, which is what the tests and the first render want.
+ */
+type ReplaceGuard = () => Promise<boolean>;
+let replaceGuard: ReplaceGuard | undefined;
+
+/** Install the shell's question. Returns the undo, for the effect that set it. */
+export function setReplaceScenarioGuard(guard: ReplaceGuard): () => void {
+  replaceGuard = guard;
+  return () => {
+    if (replaceGuard === guard) replaceGuard = undefined;
+  };
+}
+
+/** Whether the scenario in the calculator may be replaced, asking the user when work would be lost. */
+export function mayReplaceScenario(): Promise<boolean> {
+  return replaceGuard ? replaceGuard() : Promise.resolve(true);
+}
+
 // ---------- column frame ----------
 
 /**
@@ -176,7 +198,7 @@ function ScenariosBody({ inSheet }: BodyProps) {
     void db.scenarios
       .toArray()
       .then((all) => {
-        if (alive) setItems(all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)));
+        if (alive) setItems(all.sort((a, b) => (a.updatedAt === b.updatedAt ? 0 : a.updatedAt < b.updatedAt ? 1 : -1)));
       })
       .catch(() => undefined);
     return () => {
@@ -194,7 +216,11 @@ function ScenariosBody({ inSheet }: BodyProps) {
             meta={fmtRelative(s.updatedAt)}
             selected={s.id === scenario.id}
             onClick={() => {
-              void replaceScenario(s, s.snapshotId).then(() => navigate("calculator"));
+              void mayReplaceScenario().then(async (ok) => {
+                if (!ok) return;
+                await replaceScenario(s, s.snapshotId);
+                navigate("calculator");
+              });
             }}
           />
         ))}
@@ -215,7 +241,7 @@ function ArmiesBody({ param, inSheet }: BodyProps) {
     void db.rosters
       .toArray()
       .then((all) => {
-        if (alive) setItems(all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)));
+        if (alive) setItems(all.sort((a, b) => (a.updatedAt === b.updatedAt ? 0 : a.updatedAt < b.updatedAt ? 1 : -1)));
       })
       .catch(() => undefined);
     return () => {

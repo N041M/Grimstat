@@ -156,6 +156,22 @@ function fmt(v: unknown): string {
   return canonicalJson(v);
 }
 
+/**
+ * Deep copy of the plain data an adapter emitted. Fields taken from a single source were handed on by
+ * reference, which left the merged snapshot sharing arrays and objects with the parts it was built
+ * from, and `mergeOntoBase` sharing them with the snapshot already in the database. Editing either
+ * one would then change the other.
+ */
+function copy<T>(v: T): T {
+  if (Array.isArray(v)) return v.map((x) => copy(x)) as T;
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(v)) out[k] = copy((v as Record<string, unknown>)[k]);
+    return out as T;
+  }
+  return v;
+}
+
 // ---- the merge ----------------------------------------------------------------------------------
 
 export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> = {}): MergeResult {
@@ -292,7 +308,7 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     for (const a of part.abilities ?? []) {
       const id = rekey(adapterOf(part), a.id, "ab");
       if (abilityById.has(id)) continue;
-      const ab: Ability = { ...a, id };
+      const ab: Ability = { ...copy(a), id };
       if (ab.factionId) ab.factionId = canonFaction(ab.factionId) ?? ab.factionId;
       abilityById.set(id, { adapter: adapterOf(part), ability: ab });
     }
@@ -342,7 +358,7 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
       models.push({ id: `mp:${id.replace(/^ds:/, "")}:unknown`, name, T: 1, Sv: 7, W: 1 });
       warnings.push(`datasheet ${id} ("${name}") has no model profile in any source; a placeholder profile was added`);
     }
-    const weapons = ((firstDefined(primary, (i) => i["weapons"]) as WeaponProfile[] | undefined) ?? []).map((w) => ({ ...w, id: rekey(stats?.adapter ?? "", w.id, "wp") }));
+    const weapons = ((firstDefined(primary, (i) => i["weapons"]) as WeaponProfile[] | undefined) ?? []).map((w) => ({ ...copy(w), id: rekey(stats?.adapter ?? "", w.id, "wp") }));
     const abilityAdapter = primary.find((m) => nonEmpty(m.item["abilityIds"]));
     const abilityIds = [...new Set(((abilityAdapter?.item["abilityIds"] as string[] | undefined) ?? []).map((x) => rekey(abilityAdapter?.adapter ?? "", x, "ab")).filter((x) => abilityById.has(x)))];
 
@@ -366,16 +382,16 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
       isEpicHero: (firstDefined(primary, (i) => i["isEpicHero"]) as boolean | undefined) ?? false,
       isBattleline: (firstDefined(primary, (i) => i["isBattleline"]) as boolean | undefined) ?? false,
       isSupport: c.members.some((m) => m.item.isSupport === true || (m.item.supportTo?.length ?? 0) > 0),
-      keywords: (firstDefined(primary, (i) => i["keywords"]) as string[] | undefined) ?? [],
-      factionKeywords: (firstDefined(primary, (i) => i["factionKeywords"]) as string[] | undefined) ?? [],
+      keywords: copy((firstDefined(primary, (i) => i["keywords"]) as string[] | undefined) ?? []),
+      factionKeywords: copy((firstDefined(primary, (i) => i["factionKeywords"]) as string[] | undefined) ?? []),
       models,
       weapons,
       abilityIds,
       stratagemIds: [],
       leaderTo: resolveList(leaderTo),
       supportTo: resolveList(supportTo),
-      composition: (firstDefined(primary, (i) => i["composition"]) as Datasheet["composition"] | undefined) ?? [],
-      wargearOptions: (firstDefined(primary, (i) => i["wargearOptions"]) as string[] | undefined) ?? [],
+      composition: copy((firstDefined(primary, (i) => i["composition"]) as Datasheet["composition"] | undefined) ?? []),
+      wargearOptions: copy((firstDefined(primary, (i) => i["wargearOptions"]) as string[] | undefined) ?? []),
     };
     dsStratRefs.set(id, [...new Set(c.members.flatMap((m) => (m.item["stratagemIds"] as string[] | undefined) ?? []))]);
     for (const ref of [...(leaderTo ?? []), ...(supportTo ?? [])]) {
@@ -383,7 +399,7 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     }
     const optional = <K extends keyof Datasheet>(key: K, list = primary): void => {
       const v = firstDefined(list, (i) => i[key as string]) as Datasheet[K] | undefined;
-      if (v !== undefined) (ds as Record<string, unknown>)[key] = v;
+      if (v !== undefined) (ds as Record<string, unknown>)[key] = copy(v);
     };
     optional("role");
     optional("transportCapacity");
@@ -415,7 +431,7 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     const ruleSets = pointsFirst.map((m) => ({ adapter: m.adapter, rules: rulesByPart.get(m.adapter)?.get(m.item["id"] as string) ?? [] })).filter((x) => x.rules.length);
     const chosenRules = ruleSets[0];
     if (chosenRules) {
-      for (const r of chosenRules.rules) priceRules.push({ ...r, datasheetId: id });
+      for (const r of chosenRules.rules) priceRules.push({ ...copy(r), datasheetId: id });
       conflict("datasheet", id, "points", ruleSig(chosenRules.rules), ruleSets.map((x) => ({ adapter: x.adapter, value: ruleSig(x.rules) })));
     }
     const wgSets = pointsFirst.map((m) => ({ adapter: m.adapter, items: wargearByPart.get(m.adapter)?.get(m.item["id"] as string) ?? [] })).filter((x) => x.items.length);
@@ -504,7 +520,7 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
       id: c.id,
       name: first.name,
       cpCost: pick("stratagem", c.id, "cpCost", members, P, (i) => i["cpCost"] as number | undefined) ?? first.cpCost,
-      phases: pick("stratagem", c.id, "phases", members, T, (i) => i["phases"] as string[] | undefined, { silent: true }) ?? [],
+      phases: copy(pick("stratagem", c.id, "phases", members, T, (i) => i["phases"] as string[] | undefined, { silent: true }) ?? []),
     };
     /** A source that carries the rules text often omits the attribution ids, and the other way round. */
     const optional = <K extends keyof Stratagem>(key: K, order: string[]): void => {
@@ -543,7 +559,7 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
       factionId,
       name: sortMembers(c.members, T)[0]!.item.name,
       dp: pick("detachment", c.id, "dp", members, P, (i) => i["dp"] as number | undefined) ?? 1,
-      forceDispositions: pick("detachment", c.id, "forceDispositions", members, P, (i) => i["forceDispositions"] as string[] | undefined, { compare: (v) => [...(v ?? [])].map((x) => x.toUpperCase()).sort() }) ?? [],
+      forceDispositions: copy(pick("detachment", c.id, "forceDispositions", members, P, (i) => i["forceDispositions"] as string[] | undefined, { compare: (v) => [...(v ?? [])].map((x) => x.toUpperCase()).sort() }) ?? []),
       ruleAbilityIds: [...new Set((sortMembers(c.members, T).find((m) => m.item.ruleAbilityIds.length)?.item.ruleAbilityIds ?? []).map((x) => rekey("", x, "ab")).filter((x) => abilityById.has(x)))],
       enhancementIds: [...new Set(c.members.flatMap((m) => m.item.enhancementIds.map((x) => enhIdMap.get(x) ?? x)))].filter((x) => enhancements.some((e) => e.id === x)),
       stratagemIds: [...new Set(c.members.flatMap((m) => m.item.stratagemIds.map((x) => stratIdMap.get(x) ?? x)))].filter((x) => stratagems.some((s) => s.id === x)),
@@ -551,8 +567,11 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     const uniqueTag = pick("detachment", c.id, "uniqueTag", members, P, (i) => i["uniqueTag"] as string | undefined, { compare: (v) => (v ?? "").toLowerCase() });
     if (uniqueTag) d.uniqueTag = uniqueTag;
     detachments.push(d);
-    if (parts.length > 1 && c.members.length === 1 && c.members[0]!.adapter !== P[0]) {
-      unmatched.push({ adapter: c.members[0]!.adapter, entity: "detachment", id: c.id, name: d.name, reason: "not found in the points authority" });
+    // A stored snapshot already carries what the points authority contributed when it was built. A
+    // detachment only the base has is therefore not reported as missing from the points authority.
+    const only = c.members.length === 1 ? c.members[0]!.adapter : undefined;
+    if (parts.length > 1 && only && only !== P[0] && only !== BASE_ADAPTER) {
+      unmatched.push({ adapter: only, entity: "detachment", id: c.id, name: d.name, reason: "not found in the points authority" });
     }
   }
 
@@ -577,16 +596,12 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     for (const p of part.publications ?? []) {
       if (!seenPub.has(p.id)) {
         seenPub.add(p.id);
-        publications.push(p);
+        publications.push(copy(p));
       }
     }
   }
-  const gameSystem: GameSystem = policy.gameSystem ?? sortMembers(ordered.map((p) => ({ adapter: adapterOf(p), item: p })), T).map((m) => m.item.gameSystem).find((g): g is GameSystem => !!g) ?? {
-    id: datasheets[0]?.gameSystemId ?? "wh40k-11e",
-    name: "Warhammer 40,000",
-    edition: "11",
-    costTypes: [],
-  };
+  const declared = sortMembers(ordered.map((p) => ({ adapter: adapterOf(p), item: p })), T).map((m) => m.item.gameSystem).find((g): g is GameSystem => !!g);
+  const gameSystem: GameSystem = copy(policy.gameSystem ?? declared ?? { id: datasheets[0]?.gameSystemId ?? "wh40k-11e", name: "Warhammer 40,000", edition: "11", costTypes: [] });
 
   if (unmatched.length) {
     const byAdapter = new Map<string, number>();
@@ -644,8 +659,18 @@ export interface MergeBase {
  *
  * The base stands for every source it still holds, so it takes the rank of the best of them in each
  * precedence list. Refreshing BSData therefore leaves Wahapedia's rules text and MFM's points where
- * they are, because both outrank BSData for the fields they own, while BSData's own fields are taken
- * from the fresh copy. A base holding nothing but the refreshed source ranks last.
+ * they are, because both outrank BSData for the fields they own. A base holding nothing but the
+ * refreshed source ranks last, so its fields all give way to the fresh copy.
+ *
+ * The base also holds the stale copy of the source being refreshed, and the stored snapshot records
+ * no field-by-field provenance, so there is no way to tell those fields from the ones the base holds
+ * on behalf of a source that still outranks the refresh. The base keeps them. A refresh therefore
+ * fills in fields the base is missing and updates the fields no remaining source outranks it for,
+ * and leaves the rest as they were. Ranking the base below the refreshed source instead would update
+ * those fields, at the cost of overwriting MFM's points and Wahapedia's rules text with BSData's,
+ * which is the worse trade for a snapshot whose points and rules text are the parts that have to be
+ * right. Refreshing every source together, which is what the Data page's "Fetch everything" does,
+ * has neither problem.
  */
 export function mergeOntoBase(base: MergeBase, parts: MergePart[], policyIn: Partial<MergePolicy> = {}): MergeResult {
   const policy: MergePolicy = { ...DEFAULT_MERGE_POLICY, ...policyIn };

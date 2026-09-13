@@ -5,7 +5,8 @@ import { entityLabel, summarisePatch } from "../../lib/overrides";
 import { Badge, Empty, Field } from "../ui";
 import { t } from "../../i18n";
 
-function patchSummary(patch: Record<string, unknown>): string {
+/** What a patch does, in one phrase. */
+export function patchSummary(patch: Record<string, unknown>): string {
   const s = summarisePatch(patch);
   switch (s.kind) {
     case "effects":

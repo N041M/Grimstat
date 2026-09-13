@@ -1,8 +1,36 @@
 import { describe, expect, it } from "vitest";
-import type { Override, Snapshot } from "@grimstat/schema";
-import { buildEffect, conditionFromForm, defaultEffectForm, editingAfterRemove, effectToForm, effectiveSnapshot, fnv1a128, fnpOverride, isNoEffectPatch, mergeOverrides, noEffectOverride, overrideKey, parseOverridePack, suggestedValueKind, summarisePatch, toPack, toRecord, type EffectForm } from "./overrides";
+import type { EffectRecord, Override, Snapshot } from "@grimstat/schema";
+import { abilityEffects } from "@grimstat/game-40k-11e";
+import { abilityOverride, buildEffect, conditionFromForm, defaultEffectForm, editingAfterRemove, editorFor, effectToForm, effectiveSnapshot, fnv1a128, fnpOverride, isNoEffectPatch, mergeOverrides, noEffectOverride, overrideKey, parseOverridePack, patchBeyondEffects, suggestedValueKind, summarisePatch, toPack, toRecord, withEffect, withPatch, withoutEffect, type EffectForm } from "./overrides";
 
 const NOW = "2026-01-01T00:00:00.000Z";
+
+/** A snapshot holding nothing but the abilities under test. */
+function snapshotWith(abilities: Snapshot["data"]["abilities"]): Snapshot {
+  return {
+    id: "snap",
+    ownerId: "local",
+    createdAt: NOW,
+    updatedAt: NOW,
+    revision: 0,
+    gameSystemId: "wh40k-11e",
+    checksum: "abc",
+    sources: [],
+    conflicts: [],
+    data: {
+      gameSystem: { id: "wh40k-11e", name: "x", edition: "11", costTypes: [] },
+      factions: [],
+      publications: [],
+      datasheets: [],
+      abilities,
+      detachments: [],
+      enhancements: [],
+      stratagems: [],
+      priceRules: [],
+      wargearPrices: [],
+    },
+  };
+}
 
 describe("effect form → EffectRecord", () => {
   it("builds a numeric modifier with the ability name as source", () => {
@@ -146,30 +174,68 @@ describe("override records", () => {
   });
 });
 
+describe("the ability editor", () => {
+  const ability = { id: "ab:x", name: "X" };
+  const effect = (target: string): EffectRecord => ({ when: { stage: "hit", side: "attacker" }, op: "add", target, value: 1, source: "X" });
+  const save = (s: ReturnType<typeof editorFor>) => abilityOverride(ability, s.effects, s.note, s.patch);
+
+  it("keeps the parts of the patch it cannot show when the override is saved again", () => {
+    const stored = fnpOverride(ability, 5);
+    const editor = editorFor(ability, stored);
+    expect(editor.effects).toEqual([]);
+    expect(patchBeyondEffects(editor.patch)).toEqual({ coreKeyword: "FEEL NO PAIN", coreValue: 5 });
+    const saved = save(editor);
+    expect(saved.patch).toEqual(stored.patch);
+    expect(isNoEffectPatch(saved.patch)).toBe(false);
+    expect(summarisePatch(saved.patch).kind).toBe("fnp");
+  });
+
+  it("adds an effect beside the core keyword instead of replacing it", () => {
+    const editor = withEffect(editorFor(ability, fnpOverride(ability, 5)), effect("hit-roll"));
+    expect(save(editor).patch).toEqual({ coreKeyword: "FEEL NO PAIN", coreValue: 5, effects: [effect("hit-roll")] });
+  });
+
+  it("stores the empty list once the ability had one, and nothing at all before that", () => {
+    const emptied = withoutEffect(editorFor(ability, { patch: { effects: [effect("hit-roll")] } }), 0);
+    expect(isNoEffectPatch(save(emptied).patch)).toBe(true);
+    expect(save(editorFor(ability, undefined)).patch).toEqual({});
+  });
+
+  it("closes the effect under edit when a quick action replaces the list", () => {
+    const loaded = editorFor(ability, { patch: { effects: [effect("hit-roll"), effect("wound-roll")] } });
+    const editing = { ...loaded, editing: 1 };
+    const afterQuick = withPatch(editing, fnpOverride(ability, 5).patch, "Feel No Pain 5+");
+    expect(afterQuick.editing).toBeUndefined();
+    expect(afterQuick.effects).toEqual([]);
+    const added = withEffect(afterQuick, effect("damage"));
+    expect(added.effects).toEqual([effect("damage")]);
+  });
+
+  it("appends when the index under edit points past the list", () => {
+    const stale = { ...editorFor(ability, undefined), editing: 3 };
+    expect(withEffect(stale, effect("damage")).effects).toEqual([effect("damage")]);
+    expect(withEffect(stale, effect("damage")).editing).toBeUndefined();
+  });
+
+  it("leaves a Feel No Pain override at tier 1 after a round trip through the editor", () => {
+    const stored = fnpOverride(ability, 5);
+    const raw = snapshotWith([{ id: "ab:x", name: "X", scope: "datasheet", text: "Feel No Pain 5+", isLegends: false }]);
+    const saved = save(editorFor(ability, stored));
+    const after = effectiveSnapshot(raw, [saved]).snapshot.data.abilities[0]!;
+    expect(after.coreKeyword).toBe("FEEL NO PAIN");
+    expect(abilityEffects(after)).toMatchObject({ tier: "tier1", fnp: 5 });
+  });
+
+  it("replaces the effect under edit and closes the form", () => {
+    const loaded = editorFor(ability, { patch: { effects: [effect("hit-roll"), effect("wound-roll")] } });
+    const edited = withEffect({ ...loaded, editing: 0 }, effect("damage"));
+    expect(edited.effects).toEqual([effect("damage"), effect("wound-roll")]);
+    expect(edited.editing).toBeUndefined();
+  });
+});
+
 describe("effective snapshot", () => {
-  const raw: Snapshot = {
-    id: "snap",
-    ownerId: "local",
-    createdAt: NOW,
-    updatedAt: NOW,
-    revision: 0,
-    gameSystemId: "wh40k-11e",
-    checksum: "abc",
-    sources: [],
-    conflicts: [],
-    data: {
-      gameSystem: { id: "wh40k-11e", name: "x", edition: "11", costTypes: [] },
-      factions: [],
-      publications: [],
-      datasheets: [],
-      abilities: [{ id: "ab:x", name: "X", scope: "other", text: "t", isLegends: false }],
-      detachments: [],
-      enhancements: [],
-      stratagems: [],
-      priceRules: [],
-      wargearPrices: [],
-    },
-  };
+  const raw = snapshotWith([{ id: "ab:x", name: "X", scope: "other", text: "t", isLegends: false }]);
 
   it("returns the raw object when there are no overrides", () => {
     const r = effectiveSnapshot(raw, []);

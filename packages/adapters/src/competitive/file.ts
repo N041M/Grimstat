@@ -7,13 +7,15 @@
  */
 
 import { z } from "zod";
-import type { PublishedList, StoredPublishedList } from "./types";
+import { HttpUrl } from "./url";
+import type { ArticleSource, PublishedList, StoredPublishedList } from "./types";
 
 export const PUBLISHED_LISTS_FORMAT = "grimstat-published-lists";
 export const PUBLISHED_LISTS_VERSION = 1;
 
 const Source = z.object({
-  url: z.string().optional(),
+  // A file can come from anywhere, so a link that is not an http(s) one is left out and the list still imports.
+  url: HttpUrl.optional().catch(undefined),
   title: z.string().optional(),
   published: z.string().optional(),
   publication: z.string().optional(),
@@ -68,9 +70,15 @@ function strip(l: z.infer<typeof Entry>): StoredPublishedList {
     ...(l.placing ? { placing: l.placing } : {}),
     ...(l.listName ? { listName: l.listName } : {}),
     listText: l.listText,
-    source: l.source,
+    source: source(l.source),
     importedAt: l.importedAt,
   };
+}
+
+/** The source without a url key when the file gave no link, or gave one the schema would not take. */
+function source(s: z.infer<typeof Source>): ArticleSource {
+  const { url, ...rest } = s;
+  return url ? { ...rest, url } : rest;
 }
 
 export function stringifyPublishedListsFile(lists: readonly StoredPublishedList[], importedAt = new Date().toISOString()): string {

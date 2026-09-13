@@ -429,8 +429,10 @@ export const GENERIC_TOGGLES: ManualToggle[] = [
   { id: "fnp6", label: "Feel No Pain 6+", side: "defender", effects: [{ when: { stage: "fnp", side: "defender" }, op: "set", target: CH.fnp, value: 6, source: "Toggle" }], defaultOn: false },
   { id: "inv4", label: "4+ invulnerable save", side: "defender", effects: [{ when: { stage: "save", side: "defender" }, op: "cap", target: CH.invuln, value: 4, source: "Toggle" }], defaultOn: false },
   { id: "inv5", label: "5+ invulnerable save", side: "defender", effects: [{ when: { stage: "save", side: "defender" }, op: "cap", target: CH.invuln, value: 5, source: "Toggle" }], defaultOn: false },
-  { id: "stealth", label: "Stealth / benefit of cover", side: "defender", effects: [{ when: { stage: "hit", side: "defender" }, op: "flag", target: CH.stealth, value: true, source: "Toggle" }], defaultOn: false },
-  { id: "defender-indirect", label: "Target not visible (Indirect Fire → Snap Shooting)", side: "defender", effects: [], defaultOn: false },
+  // Stealth is its own -1 to be hit, so this toggle is the Benefit of Cover alone. The id is what
+  // saved scenarios carry, so it stays as it is.
+  { id: "stealth", label: "Benefit of cover", side: "defender", effects: [{ when: { stage: "hit", side: "defender" }, op: "flag", target: CH.stealth, value: true, source: "Toggle" }], defaultOn: false },
+  { id: "defender-indirect", label: "Target not visible", side: "defender", effects: [], defaultOn: false },
 ];
 
 /** Toggles for the abilities carried by a unit (Tier-2 ones are on by default and can be switched off). */

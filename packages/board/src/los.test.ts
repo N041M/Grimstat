@@ -6,11 +6,14 @@ import {
   circleBase,
   coverFor,
   hiddenFrom,
+  horizontalGap,
+  ovalBase,
   segmentHitsPrism,
   sight,
   terrain,
   unitSight,
   visibleFraction,
+  type Footprint,
   type ModelHull,
   type TerrainTrait,
   type Vec2,
@@ -137,6 +140,34 @@ describe("true line of sight", () => {
   });
 });
 
+describe("line of sight to an oval base", () => {
+  // A capsule's silhouette reaches `r + half` from its centre, and the rays are cast out to it. The
+  // far wall stands in the ground between the radius and the reach, so a search region sized by the
+  // radius misses it. Every ray that gets past the near wall crosses it.
+  const walls = (foot: Footprint) => [
+    terrain({ id: "near", polygon: rect(7.5, -6, 7.7, foot.r + 0.05), height: 20, traits: ["obscuring"] }),
+    terrain({ id: "far", polygon: rect(7.75, foot.r + 0.05, 7.95, 6), height: 20, traits: ["obscuring"] }),
+  ];
+
+  for (const [length, width] of [[120, 92], [105, 70], [170, 105]] as const) {
+    it(`is blocked for a ${length} x ${width} mm base as it is for a round one`, () => {
+      const foot = ovalBase(length, width);
+      // Long axis across the lane, which is where a capsule reaches furthest towards the walls.
+      const tank: ModelHull = { pos: { x: 10, y: 0, z: 0 }, facing: Math.PI / 2, foot, height: 4 };
+      const board = walls(foot);
+      const result = sight(trooper(0, 0), tank, index(...board), { exhaustive: true });
+
+      // Every ray the kernel cast really does hit one of the two walls, tested against them directly.
+      expect(result.rays.every((r) => board.some((piece) => segmentHitsPrism(r.from, r.to, piece)))).toBe(true);
+      expect(result.tested).toBe(144);
+      expect(result.clear).toBe(0);
+      expect(result.visible).toBe(false);
+      // The same board with a round base of the same width, which was answered correctly before.
+      expect(canSee(trooper(0, 0), { ...tank, foot: circleBase(width) }, index(...board))).toBe(false);
+    });
+  }
+});
+
 describe("unit-level visibility", () => {
   const board = index(terrain({ id: "wall", polygon: rect(4, -6, 5, 1), height: 4 }));
   const shooters = [trooper(0, 0), trooper(0, 2)];
@@ -158,6 +189,21 @@ describe("unit-level visibility", () => {
     expect(hiddenFrom([trooper(10, 0)], [trooper(0, 0)], index(), 15)).toBe(false);
     // Out of range: not "hidden from" anyone, because nobody is close enough to look.
     expect(hiddenFrom([trooper(40, 0)], [trooper(0, 0)], index(), 15)).toBe(true);
+  });
+
+  it("measures the range from the bases, so an oval-based model in the open is never hidden", () => {
+    // A 170 x 105 mm base with its long axis pointed at the observer reaches 3.35" from its centre.
+    // Measured as a circle of its width it looks 1.28" further away than a tape measure makes it.
+    const open = index();
+    const tank = (centres: number): ModelHull => ({ pos: { x: centres, y: 0, z: 0 }, facing: Math.PI, foot: ovalBase(170, 105), height: 4 });
+    for (const centres of [17, 17.7, 18.5]) {
+      expect(horizontalGap(trooper(0, 0), tank(centres))).toBeLessThan(15);
+      expect(canSee(trooper(0, 0), tank(centres), open)).toBe(true);
+      expect(hiddenFrom([tank(centres)], [trooper(0, 0)], open, 15)).toBe(false);
+    }
+    // Past fifteen inches of base-to-base gap nobody is close enough to look.
+    expect(horizontalGap(trooper(0, 0), tank(19.1))).toBeGreaterThan(15);
+    expect(hiddenFrom([tank(19.1)], [trooper(0, 0)], open, 15)).toBe(true);
   });
 });
 
@@ -200,5 +246,20 @@ describe("cover", () => {
 
   it("prefers heavy cover when both apply", () => {
     expect(coverFor(trooper(10, 0), trooper(0, 0), index(crater, ruin)).level).toBe("heavy");
+  });
+
+  it("does not put a model in a crater it stands twelve inches above", () => {
+    const board = index(crater);
+    // On a gantry over the crater's footprint. On the ground in the same spot he is in it.
+    expect(coverFor(trooper(10.5, 0, 12), trooper(0, 0), board)).toMatchObject({ level: "none", reason: "none" });
+    expect(coverFor(trooper(10.5, 0), trooper(0, 0), board)).toMatchObject({ level: "light", from: "crater", reason: "within" });
+    // Nor does a crater 0.4" tall intervene for a target twelve inches up: it is under the whole shot.
+    expect(coverFor(trooper(14, 0, 12), trooper(0, 0), board).level).toBe("none");
+    expect(coverFor(trooper(14, 0), trooper(0, 0), board)).toMatchObject({ level: "light", reason: "intervening" });
+  });
+
+  it("still gives a model on an upper floor the cover of the ruin around it", () => {
+    const tower = terrain({ id: "tower", polygon: rect(9, -3, 13, 3), height: 9, traits: ["heavy-cover", "obscuring"], floors: [0, 4.5] });
+    expect(coverFor(trooper(11, 0, 4.5), trooper(0, 0), index(tower))).toMatchObject({ level: "heavy", from: "tower", reason: "within" });
   });
 });

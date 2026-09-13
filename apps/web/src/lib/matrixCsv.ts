@@ -1,9 +1,24 @@
 import type { DurabilityEntry, EfficiencyRow, MatrixResult, ReverseResult, TurnPlanResult } from "@grimstat/game-40k-11e";
 
-/** RFC 4180-style escaping: quote when the value contains a comma, quote, CR or LF. */
+/**
+ * A text field a spreadsheet would read as a formula rather than as text.
+ *
+ * Excel and LibreOffice evaluate a cell that begins with one of these, and quoting the field the
+ * RFC way does not stop them. Unit and weapon names reach a CSV from pasted army lists and from the
+ * unit editor, so a name written to look like a formula would run when the file was opened.
+ */
+const FORMULA_LEAD = /^[=+\-@]/;
+
+/**
+ * RFC 4180-style escaping: quote when the value contains a comma, quote, CR or LF.
+ *
+ * A text field that starts like a formula gets a leading apostrophe, which is how a spreadsheet is
+ * told the cell is text. Numbers are written as they are, so a negative number keeps its sign.
+ */
 export function csvEscape(value: string | number | undefined): string {
   if (value === undefined) return "";
-  const s = typeof value === "number" ? (Number.isFinite(value) ? String(value) : "") : value;
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+  const s = FORMULA_LEAD.test(value) ? `'${value}` : value;
   return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 

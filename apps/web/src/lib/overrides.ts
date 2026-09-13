@@ -271,8 +271,16 @@ export function describeEffect(e: EffectRecord): string {
 
 // ---------- Override records ----------
 
-export function abilityOverride(ability: Pick<Ability, "id" | "name">, effects: EffectRecord[], note: string | undefined): Override {
-  return { entity: "ability", id: ability.id, patch: { effects }, ...(note?.trim() ? { note: note.trim() } : {}) };
+/**
+ * The override the effect editor writes. The effect list replaces `effects`, and every other key of
+ * the patch the editor loaded is carried over, so saving an ability whose patch sets a core keyword
+ * keeps that keyword. An empty list is written only when the loaded patch already carried one,
+ * because `effects: []` states that the ability has no effect on the attack sequence.
+ */
+export function abilityOverride(ability: Pick<Ability, "id" | "name">, effects: EffectRecord[], note: string | undefined, loaded: Record<string, unknown> = {}): Override {
+  const ownsList = effects.length > 0 || Array.isArray(loaded["effects"]);
+  const patch = ownsList ? { ...loaded, effects } : { ...loaded };
+  return { entity: "ability", id: ability.id, patch, ...(note?.trim() ? { note: note.trim() } : {}) };
 }
 
 /** Feel No Pain X+ as a core keyword (Tier-1); clears any explicit effects. */
@@ -288,6 +296,13 @@ export function noEffectOverride(ability: Pick<Ability, "id" | "name">, note?: s
 /** True when the patch explicitly says "no combat effect" (`effects: []`). */
 export function isNoEffectPatch(patch: Record<string, unknown>): boolean {
   return Array.isArray(patch["effects"]) && patch["effects"].length === 0;
+}
+
+/** The part of a patch the effect editor does not own, for the line that says what saving keeps. */
+export function patchBeyondEffects(patch: Record<string, unknown>): Record<string, unknown> | undefined {
+  const rest = { ...patch };
+  delete rest["effects"];
+  return Object.keys(rest).length ? rest : undefined;
 }
 
 /** Short summary of what a patch does, for the overrides list. */
@@ -356,4 +371,49 @@ export function parseOverridePack(json: unknown): PackParse {
     else errors.push(`#${i + 1}: ${p.error.issues[0]?.path.join(".") || "(root)"}: ${p.error.issues[0]?.message ?? "invalid"}`);
   });
   return { overrides, errors };
+}
+
+// ---------- Editor state ----------
+
+/** The ability editor as the overrides page holds it. */
+export interface EditorState {
+  abilityId: string;
+  abilityName: string;
+  /** The stored patch the editor was loaded from. Saving keeps the keys the effect list does not own. */
+  patch: Record<string, unknown>;
+  effects: EffectRecord[];
+  note: string;
+  /** Index of the effect being edited in place. */
+  editing: number | undefined;
+}
+
+/** The explicit effect list of a patch. A patch that carries none leaves the editor with an empty list. */
+function effectsOf(patch: Record<string, unknown>): EffectRecord[] {
+  return Array.isArray(patch["effects"]) ? (patch["effects"] as EffectRecord[]) : [];
+}
+
+/** Open the editor on an ability, with the stored override loaded whole. */
+export function editorFor(ability: Pick<Ability, "id" | "name">, override: Pick<Override, "patch" | "note"> | undefined): EditorState {
+  const patch = override?.patch ?? {};
+  return { abilityId: ability.id, abilityName: ability.name, patch, effects: effectsOf(patch), note: override?.note ?? "", editing: undefined };
+}
+
+/** Take an effect from the form. It replaces the effect being edited, or joins the end of the list. */
+export function withEffect(s: EditorState, e: EffectRecord): EditorState {
+  const at = s.editing !== undefined && s.effects[s.editing] ? s.editing : undefined;
+  return { ...s, effects: at !== undefined ? s.effects.map((x, i) => (i === at ? e : x)) : [...s.effects, e], editing: undefined };
+}
+
+/** Drop the effect at `i`. */
+export function withoutEffect(s: EditorState, i: number): EditorState {
+  return { ...s, effects: s.effects.filter((_, j) => j !== i), editing: editingAfterRemove(s.editing, i) };
+}
+
+/**
+ * Show the patch the page has just stored or cleared (a quick action, a save, a deleted override).
+ * The effect list follows the new patch, and the form closes because the index it was editing points
+ * into the list that has just been replaced.
+ */
+export function withPatch(s: EditorState, patch: Record<string, unknown>, note: string): EditorState {
+  return { ...s, patch, effects: effectsOf(patch), note, editing: undefined };
 }

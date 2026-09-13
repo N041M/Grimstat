@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { zipSync, strToU8 } from "fflate";
+import { zipSync, strFromU8, strToU8 } from "fflate";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import { SYNTHETIC_DIR } from "../test-utils";
 import { importRosterXml, importRosz } from "./rosz";
@@ -108,6 +108,42 @@ describe("rosz archive handling", () => {
   });
 });
 
+/**
+ * Rewrites the size one entry of a zip says it unpacks to. A zip lists that size for every entry, which is
+ * what a hand-made archive inflates by a thousandfold, and what the importer reads before unpacking anything.
+ */
+function claimUnpackedSize(zip: Uint8Array, entry: string, size: number): Uint8Array {
+  const out = new Uint8Array(zip);
+  const view = new DataView(out.buffer);
+  for (let i = 0; i + 46 <= out.length; i++) {
+    if (view.getUint32(i, true) !== 0x02014b50) continue;
+    const nameLen = view.getUint16(i + 28, true);
+    if (strFromU8(out.subarray(i + 46, i + 46 + nameLen)) === entry) view.setUint32(i + 24, size, true);
+  }
+  return out;
+}
+
+describe("oversized rosz archives", () => {
+  const MB = 1024 * 1024;
+
+  it("refuses a roster that unpacks to far more than an army list", () => {
+    const zip = zipSync({ "Bomb.ros": strToU8(fixture("ember-strike.ros")) });
+    expect(() => importRosz(claimUnpackedSize(zip, "Bomb.ros", 400 * MB), snapshot)).toThrow(/unpacks to 400 MB/);
+  });
+
+  it("imports the roster and leaves an oversized entry beside it alone", () => {
+    const zip = zipSync({ "Ember Strike.ros": strToU8(fixture("ember-strike.ros")), "thumbnail.bin": strToU8("x") });
+    const { roster } = importRosz(claimUnpackedSize(zip, "thumbnail.bin", 400 * MB), snapshot);
+    expect(roster.units.length).toBe(5);
+  });
+
+  it("refuses an archive whose entries add up to more than an army list", () => {
+    let zip: Uint8Array = zipSync({ "a.bin": strToU8("a"), "b.bin": strToU8("b"), "c.bin": strToU8("c") });
+    for (const name of ["a.bin", "b.bin", "c.bin"]) zip = claimUnpackedSize(zip, name, 25 * MB);
+    expect(() => importRosz(zip, snapshot)).toThrow(/unpacks to more than 64 MB/);
+  });
+});
+
 describe("weapon multiplicities in a .ros", () => {
   const xml = (inner: string) => `<roster name="Multi"><forces><force name="Ember Vanguard" catalogueName="Ashen Wardens"><selections>${inner}</selections></force></forces></roster>`;
 
@@ -118,6 +154,15 @@ describe("weapon multiplicities in a .ros", () => {
     );
     expect(warnings).toEqual([]);
     expect(roster.units[0]!.models[0]!.wargear).toEqual(["Twin hail gun", "Twin hail gun", "Crusher fists"]);
+  });
+
+  it("keeps a workable number of copies when a selection claims an absurd one", () => {
+    const { roster, warnings } = importRosterXml(
+      xml(`<selection name="Ashen Crusher" type="model" number="1"><selections><selection name="Twin hail gun" number="999999999" type="upgrade"/></selections></selection>`),
+      snapshot,
+    );
+    expect(warnings).toEqual([`Ashen Crusher: kept 20 copies of "Twin hail gun" out of the 999999999 the file asks for.`]);
+    expect(roster.units[0]!.models[0]!.wargear).toEqual(Array.from({ length: 20 }, () => "Twin hail gun"));
   });
 
   it("turns a unit-level total back into copies per model", () => {

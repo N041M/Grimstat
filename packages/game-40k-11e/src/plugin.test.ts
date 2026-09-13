@@ -78,6 +78,56 @@ describe("gates", () => {
   });
 });
 
+/**
+ * A save modifier moves the armour save. An invulnerable save is taken on the unmodified roll and
+ * the modifier never reaches it. A model takes whichever of its two saves comes out better. An
+ * unmodified 6 always saves and an unmodified 1 always fails.
+ *
+ * `armourTarget` is the model's save plus the weapon's AP, so each row's AP is already folded into
+ * that number. A 3+ save against AP-2 arrives here as `armourTarget: 5`. `saves` lists the
+ * unmodified die faces that save, which is the derivation behind each expected probability.
+ */
+describe("save maths", () => {
+  const cases: Array<{ name: string; opts: Parameters<typeof pUnsaved>[0]; saves: number[] }> = [
+    // 3+ save against AP-2 needs a 5+, and the 4++ picks up the 4 as well.
+    { name: "3+ save, AP-2, 4++ invulnerable, no modifier", opts: { armourTarget: 5, invulnTarget: 4, rollMod: 0, reroll: null }, saves: [4, 5, 6] },
+    // The armour save is at 5+ and -2 puts it out of reach, so the unmodified 4++ carries the model.
+    { name: "2+ save, AP-3, 4++ invulnerable, -2 to save", opts: { armourTarget: 5, invulnTarget: 4, rollMod: -2, reroll: null }, saves: [4, 5, 6] },
+    // The same model without an invulnerable save is left with the automatic 6.
+    { name: "2+ save, AP-3, no invulnerable, -2 to save", opts: { armourTarget: 5, invulnTarget: null, rollMod: -2, reroll: null }, saves: [6] },
+    // A 3+ save, then the same save one worse and one better.
+    { name: "3+ save, no modifier", opts: { armourTarget: 3, invulnTarget: null, rollMod: 0, reroll: null }, saves: [3, 4, 5, 6] },
+    { name: "3+ save, -1 to save", opts: { armourTarget: 3, invulnTarget: null, rollMod: -1, reroll: null }, saves: [4, 5, 6] },
+    { name: "3+ save, +1 to save", opts: { armourTarget: 3, invulnTarget: null, rollMod: 1, reroll: null }, saves: [2, 3, 4, 5, 6] },
+    // The model takes the better of its two saves. A 6+ armour save is improved by a 5++, and a 3+
+    // armour save keeps its own 3s and 4s alongside it.
+    { name: "6+ armour with a 5++ invulnerable", opts: { armourTarget: 6, invulnTarget: 5, rollMod: 0, reroll: null }, saves: [5, 6] },
+    { name: "3+ armour with a 5++ invulnerable", opts: { armourTarget: 3, invulnTarget: 5, rollMod: 0, reroll: null }, saves: [3, 4, 5, 6] },
+    // An armour save of 7+ cannot be made at all, and the 6 still saves.
+    { name: "3+ save, AP-4, -1 to save", opts: { armourTarget: 7, invulnTarget: null, rollMod: -1, reroll: null }, saves: [6] },
+    // A 1 fails however generous the modifier or the invulnerable save is.
+    { name: "2+ save, +3 to save", opts: { armourTarget: 2, invulnTarget: null, rollMod: 3, reroll: null }, saves: [2, 3, 4, 5, 6] },
+    { name: "no armour save, 2++ invulnerable", opts: { armourTarget: 8, invulnTarget: 2, rollMod: 0, reroll: null }, saves: [2, 3, 4, 5, 6] },
+    // One point of AP and one point of save penalty do the same thing to a 3+ armour save, and they stack.
+    { name: "3+ save, AP-1, no modifier", opts: { armourTarget: 4, invulnTarget: null, rollMod: 0, reroll: null }, saves: [4, 5, 6] },
+    { name: "3+ save, AP-1, -1 to save", opts: { armourTarget: 4, invulnTarget: null, rollMod: -1, reroll: null }, saves: [5, 6] },
+    // AP and the penalty together push the armour save to 6+, and the 4++ is untouched by either.
+    { name: "3+ save, AP-2, 4++ invulnerable, -1 to save", opts: { armourTarget: 5, invulnTarget: 4, rollMod: -1, reroll: null }, saves: [4, 5, 6] },
+  ];
+
+  for (const c of cases) {
+    it(c.name, () => {
+      close(pUnsaved(c.opts), (6 - c.saves.length) / 6);
+    });
+  }
+
+  it("loses the automatic 6 when the rules do not grant one", () => {
+    // A 5+ armour save under -2 is out of reach, so without the automatic 6 nothing saves at all.
+    close(pUnsaved({ armourTarget: 5, invulnTarget: null, rollMod: -2, reroll: null, sixAlwaysSaves: false }), 1);
+    close(pUnsaved({ armourTarget: 5, invulnTarget: null, rollMod: -2, reroll: null, sixAlwaysSaves: true }), 5 / 6);
+  });
+});
+
 describe("runScenario", () => {
   it("golden bolter squad vs marines: 10 × BS3+ S4 AP0 D1 vs T4 3+ → 1.111", () => {
     const r = runScenario(scenario(unit([{ name: "a", count: 10, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] }], [gun()]), marines()));

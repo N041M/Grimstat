@@ -158,6 +158,27 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
     if (selected && !build(selected, n, attached)) return;
     setCount(n);
   };
+
+  /*
+   * The model-count field holds what is typed and only commits it when the box is left or Enter is
+   * pressed.
+   *
+   * Committing each keystroke rebuilt the unit from the datasheet, which put every weapon back to
+   * the default and threw away whatever the player had ticked. It also made the field impossible to
+   * clear. A squad of ten snapped straight back to its smallest legal size the moment Backspace
+   * took a digit off.
+   */
+  const [countText, setCountText] = useState(String(count));
+  const [editingCount, setEditingCount] = useState(false);
+  useEffect(() => {
+    if (!editingCount) setCountText(String(count));
+  }, [count, editingCount]);
+  const commitCount = () => {
+    const n = Number(countText);
+    const next = countText.trim() === "" || !Number.isFinite(n) ? count : Math.min(maxCount, Math.max(minCount, Math.floor(n)));
+    setCountText(String(next));
+    if (next !== count) changeCount(next);
+  };
   const toggleAttached = (id: string, on: boolean) => {
     const next = on ? [...attached, id] : attached.filter((x) => x !== id);
     if (selected && !build(selected, count, next)) return;
@@ -283,7 +304,21 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
               <div className="stack">
                 <div className="field-row">
                   <Field label={t("picker.modelCount")} hint={compositionHint || undefined}>
-                    <input type="number" min={minCount} max={maxCount} value={count} onChange={(e) => changeCount(Math.min(maxCount, Math.max(minCount, Math.floor(Number(e.target.value) || minCount))))} />
+                    <input
+                      type="number"
+                      min={minCount}
+                      max={maxCount}
+                      value={countText}
+                      onFocus={() => setEditingCount(true)}
+                      onChange={(e) => setCountText(e.target.value)}
+                      onBlur={() => {
+                        commitCount();
+                        setEditingCount(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitCount();
+                      }}
+                    />
                   </Field>
                   {unit.points !== undefined ? <span className="badge accent">{t("unit.points", { v: fmtInt(unit.points) })}</span> : null}
                 </div>

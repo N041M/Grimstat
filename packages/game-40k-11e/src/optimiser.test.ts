@@ -52,4 +52,44 @@ describe("turn optimiser", () => {
     expect(r.targets[0]!.pKill).toBeGreaterThan(0.3);
     expect(r.assignments[1]!.pKillAfter).toBeGreaterThanOrEqual(r.assignments[0]!.pKillAfter);
   });
+  /**
+   * The Turn tab's shipped defaults: four attackers, each pinned to one 1 CP stratagem, under a
+   * budget of 3. The fourth could not afford its option and was dropped from the plan entirely, so
+   * the tab showed three rows and a total that silently left a unit's shooting out.
+   */
+  it("keeps an attacker that cannot afford its pinned stratagem, and says so", () => {
+    const pinned = [{ id: "plus1-wound", label: "+1 to wound", cp: 1, enabledToggles: ["plus1-wound"] }];
+    const input = {
+      attackers: [
+        { id: "bolters", unit: a("bolter-squad"), options: pinned },
+        { id: "melta", unit: a("melta-squad"), options: pinned },
+        { id: "las", unit: a("lascannon-team"), options: pinned },
+        { id: "choppas", unit: a("chainsword-mob"), options: pinned },
+      ],
+      targets: [{ id: "tank", unit: a("heavy-tank") }, { id: "marines", unit: a("marine-like") }],
+      context: { rangeBand: "half" as const },
+      cpBudget: 3,
+      objective: "points" as const,
+    };
+    const r = optimiseTurn(input);
+    expect(r.assignments).toHaveLength(4);
+    expect(r.assignments.map((x) => x.attackerId).sort()).toEqual(["bolters", "choppas", "las", "melta"]);
+    expect(r.cpSpent).toBe(3);
+    // Three of the four bought the stratagem; the fourth fires without it and is named.
+    expect(r.assignments.filter((x) => x.optionId === "plus1-wound")).toHaveLength(3);
+    expect(r.warnings.filter((w) => w.includes("fires with no stratagem"))).toHaveLength(1);
+  });
+
+  it("reports a plan step naming a unit that is not in the input rather than throwing", () => {
+    const input = { attackers: [{ id: "b", unit: a("bolter-squad") }], targets: [{ id: "m", unit: a("marine-like") }], cpBudget: 0, objective: "kills" as const, context: { rangeBand: "half" as const } };
+    const ghostAttacker = evaluateTurnPlan(input, [{ attackerId: "ghost", targetId: "m" }]);
+    expect(ghostAttacker.assignments).toHaveLength(0);
+    expect(ghostAttacker.warnings).toContain('The plan assigns "ghost", which is not one of the attackers.');
+    // A step naming a target that is gone costs nothing, so the budget check and `cpSpent` agree.
+    const ghostTarget = evaluateTurnPlan(input, [{ attackerId: "b", targetId: "ghost", optionId: "plus1-wound" }]);
+    expect(ghostTarget.assignments).toHaveLength(0);
+    expect(ghostTarget.cpSpent).toBe(0);
+    expect(ghostTarget.warnings.some((w) => w.includes("budget"))).toBe(false);
+    expect(ghostTarget.warnings).toContain(`${a("bolter-squad").name} is assigned to "ghost", which is not one of the targets.`);
+  });
 });

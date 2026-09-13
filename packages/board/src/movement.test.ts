@@ -214,6 +214,67 @@ describe("standing an oval base beside terrain", () => {
   });
 });
 
+describe("something to stand on", () => {
+  it("refuses a position with nothing underneath it", () => {
+    expect(canStand(model(30, 22, 20), { x: 30, y: 22, z: 20 }, index())).toBe(false);
+    expect(canStand(model(30, 22), { x: 30, y: 22, z: 0 }, index())).toBe(true);
+  });
+
+  it("offers a storey only where the storey is", () => {
+    const ruin = index(terrain({ id: "ruin", polygon: rect(4, -4, 10, 4), height: 12, traits: ["scalable"], floors: [0, 4.5, 9] }));
+    expect(canStand(model(7, 0, 4.5), { x: 7, y: 0, z: 4.5 }, ruin)).toBe(true);
+    expect(canStand(model(11, 0, 4.5), { x: 11, y: 0, z: 4.5 }, ruin)).toBe(false); // a foot past the wall
+    expect(canStand(model(7, 0, 6), { x: 7, y: 0, z: 6 }, ruin)).toBe(false); // between two storeys
+  });
+
+  it("keeps a charge from running off the edge of an upper floor", () => {
+    // A twelve-inch ruin with storeys at 0, 4.5 and 9. The charger stands on the first floor half an
+    // inch inside its wall; the target is on the ground three inches beyond it.
+    const ruin = index(terrain({ id: "ruin", polygon: rect(4, -4, 10, 4), height: 12, traits: ["scalable", "obscuring"], floors: [0, 4.5, 9] }));
+    const result = chargeGeometry([model(9.5, 0, 4.5)], [model(13, 0, 0)], ruin);
+
+    // Down the storey and then the run in, which is 5.74". A dash straight out of the window at the
+    // floor's own height measures 1.24" and needs a 2 on 2D6.
+    expect(result.distance).toBeCloseTo(5.74, 2);
+    expect(result.minimumRoll).toBe(6);
+    expect(result.path.some((p) => p.z === 0)).toBe(true);
+    for (const at of result.path) expect(canStand(model(at.x, at.y, at.z), at, ruin)).toBe(true);
+  });
+});
+
+describe("canStand and reachable answer alike", () => {
+  it("keeps a model out of a low impassable piece it could never leave", () => {
+    const bunker = terrain({ id: "bunker", polygon: rect(24, 2, 36, 10), height: 2, traits: ["impassable"] });
+    const sealed = index(bunker);
+    // Two inches is inside the step-over allowance, but the piece is impassable at any height.
+    expect(canStand(model(30, 6), { x: 30, y: 6, z: 0 }, sealed)).toBe(false);
+    expect(canStand(model(30, 6), { x: 30, y: 6, z: 0 }, index(terrain({ ...bunker, height: 2.01 })))).toBe(false);
+    // The search says the same from outside: there is nothing to walk to in there.
+    expect(reachable(model(20, 6), 12, sealed).nodes.filter((n) => containsPoint(bunker, n.at))).toEqual([]);
+    // The keywords it lets through may stand in it.
+    expect(canStand(model(30, 6), { x: 30, y: 6, z: 0 }, index(terrain({ ...bunker, passableBy: ["INFANTRY"] })), { keywords: ["INFANTRY"] })).toBe(true);
+  });
+
+  it("keeps a tank off a floor the terrain says only infantry may climb", () => {
+    const board = index(terrain({ id: "ruin", polygon: rect(2, -4, 8, 4), height: 9, traits: ["scalable"], floors: [0, 4.5], climbableBy: ["INFANTRY"] }));
+    const tank = model(5, 0, 4.5, 3.5, 100);
+    expect(canStand(tank, tank.pos, board, { keywords: ["VEHICLE"] })).toBe(false);
+    expect(reachable(model(0, 0, 0, 3.5, 100), 12, board, { keywords: ["VEHICLE"] }).nodes.some((n) => n.at.z > 0)).toBe(false);
+    // Infantry may, and both answers say so.
+    expect(canStand(model(5, 0, 4.5), { x: 5, y: 0, z: 4.5 }, board, { keywords: ["INFANTRY"] })).toBe(true);
+    expect(costTo(reachable(model(0, 0), 12, board, { keywords: ["INFANTRY"] }), 5, 0, 4.5)).toBeDefined();
+  });
+
+  it("allows every position the search settles on", () => {
+    const a1 = RUINED_CITY.pieces.find((p) => p.id === "a1")!;
+    const idx = index(a1);
+    const climber = { keywords: [...CLIMBERS] };
+    const reach = reachable(model(4, 33), 24, idx, climber);
+    expect(reach.nodes.length).toBeGreaterThan(100);
+    for (const n of reach.nodes) expect(canStand(model(n.at.x, n.at.y, n.at.z), n.at, idx, climber)).toBe(true);
+  });
+});
+
 describe("reachability around other models", () => {
   it("will not end a normal move within engagement range of an enemy", () => {
     const enemy = model(6, 0);
