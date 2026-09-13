@@ -233,7 +233,7 @@ export function Dashboard({ id, inputs, defaultHidden = [], actions }: { id: str
       if (id) needed.set(id, cell.getBoundingClientRect().height);
     }
     root.classList.remove("measuring");
-    // A panel with a long list would otherwise grow to thousands of pixels; nothing may end up
+    // A panel with a long list would otherwise grow to thousands of pixels. No panel may end up
     // taller than one screenful, and those panels keep scrolling internally.
     const capRows = rowsForHeight(Math.max(320, root.clientHeight - 2 * GUTTER));
     setLayout((cur) => {

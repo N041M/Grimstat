@@ -91,7 +91,7 @@ export async function runCompetitive(opts: CompetitiveOptions): Promise<number> 
   return 0;
 }
 
-/** The feed is fetched; it answers this tool by name and exists to be read by one. */
+/** The feed is a public one, published to be read by tools like this. The request names this tool. */
 async function readFeed(url: string): Promise<ReturnType<typeof parseFeed>> {
   const res = await fetch(url, { headers: { "user-agent": UA, accept: "application/rss+xml, application/xml;q=0.9" } });
   if (!res.ok) throw new Error(`feed ${url} → ${res.status}`);

@@ -47,7 +47,7 @@ export function widgetsFrom(host: PluginHost): ReactWidgetDef[] {
   return [...host.registries.widgets.values()].filter(isReactWidget);
 }
 
-/** Analysis widgets declare `requires: "analyses.<key>"`; they only show on dashboards providing that input. */
+/** Analysis widgets declare `requires: "analyses.<key>"` and only show on dashboards providing that input. */
 export function widgetAvailable(def: ReactWidgetDef, analyses: AnalysisInputs | undefined): boolean {
   if (!def.requires) return true;
   const [ns, key] = def.requires.split(".");

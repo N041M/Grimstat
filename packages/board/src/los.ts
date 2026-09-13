@@ -200,7 +200,7 @@ export function coverFor(target: ModelHull, attacker: ModelHull, index: TerrainI
       best = { level, from: piece.id, reason: "within" };
       continue;
     }
-    if (segPolygonDistance(eye, piece.polygon) <= attacker.foot.r) continue; // the attacker is inside it; it is not in the way
+    if (segPolygonDistance(eye, piece.polygon) <= attacker.foot.r) continue; // the attacker is inside it, so it is not in the way
     const spans = segInPolygonSpans({ a: there, b: here }, piece.polygon);
     if (spans.some(([t0, t1]) => t1 - t0 > EPS)) best = { level, from: piece.id, reason: "intervening" };
   }

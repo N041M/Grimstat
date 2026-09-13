@@ -298,7 +298,7 @@ export interface LayoutIssue {
 }
 
 /**
- * Problems with a layout, as data. An empty list means the layout is playable; it says nothing
+ * Problems with a layout, as data. An empty list means the layout is playable, and says nothing
  * about whether it is balanced. `layoutIssues` gives the same list as sentences.
  */
 export function layoutProblems(layout: TerrainLayout): LayoutIssue[] {
@@ -360,7 +360,7 @@ export function describeLayoutIssue(issue: LayoutIssue): string {
 
 /**
  * Problems with a layout, in the words a layout editor would use. An empty list means the layout is
- * playable; it says nothing about whether it is balanced.
+ * playable, and says nothing about whether it is balanced.
  */
 export function layoutIssues(layout: TerrainLayout): string[] {
   return layoutProblems(layout).map(describeLayoutIssue);

@@ -2,7 +2,7 @@
 
 An **unofficial, fan-made, local-first** statistics dashboard and army builder for Warhammer 40,000.
 
-**Live app:** https://n041m.github.io/Grimstat/ (deployed from `master` by GitHub Actions; everything runs in your browser, nothing is uploaded).
+**Live app:** https://n041m.github.io/Grimstat/ (deployed from `master` by GitHub Actions, and it all runs in your browser with nothing uploaded).
 
 - Models unit-vs-unit and army-vs-army interactions with exact probability distributions (Monte Carlo fallback).
 - Army builder with 11th-edition validation (Detachment Points, Leader/Support, tiered points).
@@ -11,7 +11,7 @@ An **unofficial, fan-made, local-first** statistics dashboard and army builder f
 
 ## Data policy
 
-This repository contains **no Games Workshop rules text, datasheets, points or artwork**. The app ships *importers*; game data is fetched onto the user's own machine from community sources (BSData, the online Munitorum Field Manual, Wahapedia CSV export) on first run and cached locally. Imported data lives in `data/` which is git-ignored.
+This repository contains **no Games Workshop rules text, datasheets, points or artwork**. The app ships *importers* only. Game data is fetched onto the user's own machine from community sources (BSData, the online Munitorum Field Manual, Wahapedia CSV export) on first run and cached locally. Imported data lives in `data/` which is git-ignored.
 
 Warhammer 40,000 and all associated marks are the property of Games Workshop Limited. This project is not affiliated with, endorsed by, or sponsored by Games Workshop.
 
@@ -49,7 +49,7 @@ Import real game data onto your own machine (never committed), then load the res
 
 ```bash
 pnpm cli import --system wh40k-11e --out data/snapshots            # MFM points + BSData structure + Wahapedia text
-pnpm cli import --system wh40k-10e --out data/snapshots            # 10th edition (Wahapedia's 10e export; 10e codexes stay legal)
+pnpm cli import --system wh40k-10e --out data/snapshots            # 10th edition (Wahapedia's 10e export, and 10e codexes stay legal)
 pnpm cli show data/snapshots/<snapshot>.json "Intercessor Squad"
 pnpm cli diff data/snapshots/<old>.json data/snapshots/<new>.json
 ```
@@ -81,7 +81,7 @@ relay yourself, create an empty public repository for the dataset, set the repos
 it; the app's Corpus URL setting points at the dataset. The same build runs locally:
 
 ```bash
-pnpm cli corpus --source minihq --since 2026-06-01 --out data/corpus     # names dropped; --keep-names for a private copy
+pnpm cli corpus --source minihq --since 2026-06-01 --out data/corpus     # names dropped, use --keep-names for a private copy
 ```
 
 An army's **Meta** tab then measures it against the placing lists of its faction —
@@ -99,6 +99,6 @@ of it ships in this repository.
 
 ## Deployment
 
-`.github/workflows/pages.yml` builds `apps/web` with `VITE_BASE=/<repo>/` and publishes it to GitHub Pages on every push to `master`; `ci.yml` runs the lint, the typecheck and the test suite. The app uses a hash router, so deep links work under the sub-path.
+`.github/workflows/pages.yml` builds `apps/web` with `VITE_BASE=/<repo>/` and publishes it to GitHub Pages on every push to `master`. `ci.yml` runs the lint, the typecheck and the test suite. The app uses a hash router, so deep links work under the sub-path.
 
 See `docs/DESIGN.md` for the research findings, architecture and roadmap, `docs/MODELLING-NOTES.md` for what the maths assumes, `docs/BATTLE-SIM.md` for the 3D battle simulator plan, and `docs/PLUGINS.md` for extension points.

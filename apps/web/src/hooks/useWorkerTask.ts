@@ -91,7 +91,7 @@ export function useWorkerTask<A extends unknown[], T>(fn: (...args: A) => Promis
           const { outcome } = await fn(...args);
           if (gen !== entry.gen) return;
           if (!outcome) {
-            // superseded by a newer worker request elsewhere (e.g. the calculator); nothing to show
+            // superseded by a newer worker request elsewhere (e.g. the calculator), so there is nothing to show
             commit(entry, { running: false });
             return;
           }

@@ -112,7 +112,7 @@ export const Scenario = RecordMeta.extend({
 });
 export type Scenario = z.infer<typeof Scenario>;
 
-/** Preset defender archetypes (data supplied by game-system plugins; contains no GW text beyond generic profile numbers). */
+/** Preset defender archetypes (data supplied by game-system plugins, containing no GW text beyond generic profile numbers). */
 export const Archetype = z.object({
   id: z.string(),
   name: z.string(),

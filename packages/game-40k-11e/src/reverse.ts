@@ -75,7 +75,7 @@ export function reverseMathhammer(input: ReverseInput): ReverseResult {
     cache.set(k, r);
     return r;
   };
-  if (input.candidates.some((c) => c.unit.points === undefined)) warnings.push("Some candidates have no points value; they rank as 0 points.");
+  if (input.candidates.some((c) => c.unit.points === undefined)) warnings.push("Some candidates have no points value. They rank as 0 points.");
   const rows: ReverseRow[] = [];
   let combosTried = 0;
   let truncated = false;

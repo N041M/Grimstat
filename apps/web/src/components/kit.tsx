@@ -6,7 +6,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
  * screen) because Armies, Analyses and Data need the same parts — a dock, a sticky table and the
  * chip/switch pair — and they must stay pixel-identical across screens.
  *
- * Styling lives in styles.css under "Kit"; nothing here carries inline colour.
+ * Styling lives in styles.css under "Kit". No component here carries inline colour.
  */
 
 // ---------- dock ----------

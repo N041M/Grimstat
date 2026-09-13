@@ -14,7 +14,7 @@ export interface SimulationState {
   resultFor: string | undefined;
   /** True from the moment an input changes until the worker's answer for it lands. */
   stale: boolean;
-  /** Set while the scenario is missing what a run needs; nothing is computing then. */
+  /** Set while the scenario is missing what a run needs, which means nothing is computing. */
   idle: IdleReason | undefined;
 }
 

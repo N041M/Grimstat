@@ -260,7 +260,7 @@ the caching the AI section describes before they run inside a search.
 4. **Missions**: ship generic layouts and a generic mission set; official mission packs and tournament
    layouts are user-imported data. Note what this does and does not mean — the app already fetches
    three sources it labels as Games Workshop copyright (MFM points, Wahapedia datasheet text, BSData
-   structure). The rule is not "avoid GW content"; it is **do not redistribute it in the repository**,
+   structure). The rule is **do not redistribute GW content in the repository**,
    fetch at runtime onto the user's own machine, and record the licence and attribution.
 5. **The published layouts are fetched at runtime and are not shipped with the app.** Games Workshop publishes 11th-edition
    terrain layouts free in its Event Companion PDFs, three per mission with objective positions, and

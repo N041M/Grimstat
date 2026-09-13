@@ -119,7 +119,7 @@ export function extractList(body: string): string | undefined {
 
   for (const line of text.split("\n")) {
     const t = line.trim();
-    // Markup leaves blank lines between every paragraph; they are spacing, not prose, and counting
+    // Markup leaves blank lines between every paragraph. They are spacing rather than prose, and counting
     // them as prose cuts every list off after its first two entries.
     if (!t) {
       if (run.length) run.push(line);

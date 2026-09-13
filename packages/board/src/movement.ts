@@ -47,7 +47,7 @@ export const MOVE_RULES: MoveRules = {
 
 export interface ReachOptions {
   readonly rules?: Partial<MoveRules>;
-  /** Keywords the moving model has; they open `passableBy` terrain. */
+  /** Keywords the moving model has, which open `passableBy` terrain. */
   readonly keywords?: readonly string[];
   /** Enemy models. The move may not end — or pass — within engagement range of one. */
   readonly enemies?: readonly ModelHull[];

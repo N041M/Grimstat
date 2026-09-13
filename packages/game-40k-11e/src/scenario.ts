@@ -107,7 +107,7 @@ export function runScenarioWith(rules: RulesParams, registry: ReturnType<typeof 
     ...defender.effects.filter((e) => (e.when.side ?? "attacker") === "defender"),
   ];
   // Only the manual toggles are added. An ability toggle was built from these same unit effects and
-  // would otherwise apply them a second time; it acts through `offSources` below instead.
+  // would otherwise apply them a second time. It acts through `offSources` below instead.
   const allEffects = [...carried, ...active.manual, ...scenario.extraEffects];
   // ability toggles that were switched off must remove the unit's own effects with that source
   const off = new Set(scenario.enabledToggles.filter((t) => t.startsWith("-")).map((t) => t.slice(1)));

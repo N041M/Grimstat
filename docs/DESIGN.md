@@ -1,6 +1,6 @@
 # Warhammer 40k Statistics Dashboard + Army Builder — Design Plan
 
-Working name (placeholder): **Grimstat**. Unofficial fan tool; no GW data shipped; free.
+Working name (placeholder): **Grimstat**. It is a free, unofficial fan tool and it ships no Games Workshop data.
 
 > **Live:** https://n041m.github.io/Grimstat/ (GitHub Pages, deployed from `master`).
 >
@@ -196,7 +196,7 @@ Semver `apiVersion`; first-party plugins in-process, third-party in a Worker san
 - **Exact path:** per-attack categorical → binomial/convolution over attack count (itself a dice-expression PMF, +Blast/Cleave); rerolls as analytic per-die adjustments; single-die reroll via order statistics; damage allocation via DP over (models left, wounds on current model) with policy; FNP as binomial thinning. State-space guard → automatic **Monte Carlo** fallback (shared stage defs) with reported CI. MC doubles as cross-validation in tests.
 - Outputs: damage PMF, models-slain PMF, P(kill), P(≥k), mean/percentiles, wasted damage, per-point metrics, and a **trace** (per-stage expected values) for the UI.
 
-### Effects tiers (data and plugins; nothing is hardcoded per unit)
+### Effects tiers (data and plugins, with nothing hardcoded per unit)
 - Ability row: `{ id, text, coreKeyword?, effects?: EffectRecord[] , manualToggle? }`. Tier-3 has only `text`; promoting to Tier-2 is a data change (override pack), no migration.
 - `EffectRecord = { when: {phase?, stage, side}, if?: Condition (keywords, range band, charged, stationary, target keyword…), op, target: channel, value, cap?, source }`.
 

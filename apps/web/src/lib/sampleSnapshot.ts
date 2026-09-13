@@ -20,7 +20,7 @@ const abilities: Ability[] = [
   { id: "ab-leader", name: "Leader", scope: "core", text: "This model can be attached to a unit.", coreKeyword: "LEADER", isLegends: false },
   { id: "ab-hardened", name: "Hardened Plating", scope: "datasheet", text: "Feel No Pain 6+", factionId: "f-test-legion", isLegends: false },
   { id: "ab-field-medic", name: "Field Medic", scope: "datasheet", text: "Models in the supported unit have Feel No Pain 5+.", coreKeyword: "FEEL NO PAIN", coreValue: 5, factionId: "f-test-legion", isLegends: false },
-  { id: "ab-battle-lore", name: "Battle Lore", scope: "datasheet", text: "Once per battle this unit may perform an action after shooting (narrative flavour; not part of the attack sequence).", factionId: "f-test-legion", isLegends: false },
+  { id: "ab-battle-lore", name: "Battle Lore", scope: "datasheet", text: "Once per battle this unit may perform an action after shooting (narrative flavour, and not part of the attack sequence).", factionId: "f-test-legion", isLegends: false },
   { id: "ab-armoured-hull", name: "Armoured Hull", scope: "datasheet", text: "Each time an attack with Damage 1 targets this model, subtract 1 from the hit roll.", factionId: "f-test-legion", isLegends: false },
   { id: "ab-deadly-demise", name: "Deadly Demise", scope: "core", text: "Explodes when destroyed.", coreKeyword: "DEADLY DEMISE", coreValue: "D3", isLegends: false },
   { id: "ab-ward-field", name: "Ward Field", scope: "datasheet", text: "Models in this unit have a 4+ invulnerable save.", coreKeyword: "INVULNERABLE SAVE", coreValue: 4, factionId: "f-test-legion", isLegends: false },
