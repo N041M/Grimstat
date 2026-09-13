@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import type { BoxSet } from "../data/boxes";
 import { BOX_SETS } from "../data/boxes";
-import { boxesFor, linesForFactions, resolveBox, unitSize } from "./boxes";
+import { boxesFor, linesForFactions, nameLine, resolveBox, unitSize } from "./boxes";
 
 const snapshot = loadSyntheticSnapshot();
 const ds = (id: string) => snapshot.data.datasheets.find((d) => d.id === `ds:${id}`)!;
@@ -61,6 +61,44 @@ describe("reading a box against a snapshot", () => {
   });
 });
 
+/**
+ * A sprue of drones builds shield, gun or marker drones in whatever mix somebody glued, and the
+ * list of what it could be is open rather than a choice of two. The box supplies the models; the
+ * datasheet is a question for whoever owns them.
+ */
+describe("a line the box leaves to its owner", () => {
+  const drones = box([{ name: "Warden Squad", models: 5 }, { name: "Drones", models: 8, ownerNames: true }]);
+
+  it("keeps its models and waits to be told what they are", () => {
+    const read = resolveBox(drones, snapshot);
+    expect(read.toName.map((l) => [l.line.name, l.models])).toEqual([["Drones", 8]]);
+    expect(read.lines[1]!.ds).toBeUndefined();
+    expect(read.lines[1]!.needsName).toBe(true);
+  });
+
+  it("is a question, not a gap in the data", () => {
+    // The distinction the screen depends on: one asks the player something, the other tells them
+    // their snapshot is behind. Reporting a drone sprue as missing data would be a lie.
+    const read = resolveBox(drones, snapshot);
+    expect(read.unknown).toEqual([]);
+  });
+
+  it("is never guessed at from the word on the sprue", () => {
+    // "Warden" alone would have taken the Warden Squad under the old containment rule.
+    const read = resolveBox(box([{ name: "Warden", models: 8, ownerNames: true }]), snapshot);
+    expect(read.lines[0]!.ds).toBeUndefined();
+  });
+
+  it("stays off the shelf until it is labelled, then counts where it is told", () => {
+    const read = resolveBox(drones, snapshot);
+    expect(linesForFactions(read, ["faction:ashen-wardens"]).map((l) => l.line.name)).toEqual(["Warden Squad"]);
+    const labelled = nameLine(read.toName[0]!, ds("verdant-swarm:thornlings"));
+    expect(labelled.needsName).toBe(false);
+    expect(labelled.models).toBe(8);
+    expect(labelled.ds!.id).toBe("ds:verdant-swarm:thornlings");
+  });
+});
+
 describe("a box holding more than one army", () => {
   const twoArmies = box([
     { name: "Warden Squad", models: 10 },
@@ -102,6 +140,16 @@ describe("the shipped seed list", () => {
       for (const l of b.lines) {
         expect(l.models ?? l.units, `${b.name}: ${l.name}`).toBeGreaterThan(0);
         expect(l.name.trim(), b.name).not.toBe("");
+      }
+    }
+  });
+
+  /** A line whose datasheet is its owner's to pick still has to say how many models that is. */
+  it("counts the models of a line it leaves to its owner", () => {
+    for (const b of BOX_SETS) {
+      for (const l of b.lines.filter((x) => x.ownerNames)) {
+        expect(l.models, `${b.name}: ${l.name}`).toBeGreaterThan(0);
+        expect(l.units, `${b.name}: ${l.name}`).toBeUndefined();
       }
     }
   });

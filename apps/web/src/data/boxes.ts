@@ -36,6 +36,14 @@ export interface BoxLine {
    * the count belongs to whichever one was actually built.
    */
   readonly or?: readonly string[];
+  /**
+   * The box gives the models but does not decide what they are, and the list of what they could be
+   * is open rather than a choice of two or three. A box of Tau drones is the case: the sprues build
+   * shield, gun or marker drones in whatever mix was glued, and only the person who glued them
+   * knows. The count is theirs to label when they add the box, and until they do it belongs to no
+   * datasheet — which is why this is not the same as a line whose unit is missing from the data.
+   */
+  readonly ownerNames?: true;
 }
 
 export type BoxKind = "combat-patrol" | "battleforce";
@@ -169,8 +177,9 @@ export const BOX_SETS: readonly BoxSet[] = [
       { name: "Commander Farsight", models: 1 },
       { name: "Riptide Battlesuit", models: 1 },
       { name: "Broadside Battlesuit", models: 1 },
-      { name: "Crisis Battlesuits", models: 3 },
-      { name: "Drones", models: 8 },
+      // Both kits build several datasheets apiece, and which ones is settled at the painting table.
+      { name: "Crisis Battlesuits", models: 3, ownerNames: true },
+      { name: "Drones", models: 8, ownerNames: true },
     ],
   },
   {

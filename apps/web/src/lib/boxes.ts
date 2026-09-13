@@ -39,6 +39,12 @@ export interface ResolvedLine {
   readonly models: number;
   /** The datasheets the line's kit could have been built as instead, that this snapshot knows. */
   readonly alternatives: readonly Datasheet[];
+  /**
+   * The box left this one to its owner, so it is waiting for them to say what it is rather than
+   * missing from the data. A screen has to tell the two apart: one asks the player a question, the
+   * other tells them their snapshot is behind.
+   */
+  readonly needsName: boolean;
 }
 
 export interface ResolvedBox {
@@ -46,6 +52,8 @@ export interface ResolvedBox {
   readonly lines: readonly ResolvedLine[];
   /** Lines whose unit this snapshot does not have, by the name the box gives them. */
   readonly unknown: readonly string[];
+  /** Lines waiting for their owner to say what they are. */
+  readonly toName: readonly ResolvedLine[];
   /** Faction ids the box touches, in the order its lines first reach them. */
   readonly factionIds: readonly string[];
   readonly models: number;
@@ -77,15 +85,21 @@ export function resolveBox(box: BoxSet, snapshot: Snapshot): ResolvedBox {
   const factionIds: string[] = [];
   let models = 0;
   for (const line of box.lines) {
+    // Nothing to look up for a line the box leaves to its owner: the models are real, the datasheet
+    // is a question, and guessing one from the word on the sprue is how drones become the wrong unit.
+    if (line.ownerNames) {
+      lines.push({ line, models: line.models ?? 0, alternatives: [], needsName: true });
+      continue;
+    }
     const ds = named(ctx, line.name);
     const alternatives = (line.or ?? []).map((n) => named(ctx, n)).filter((d): d is Datasheet => !!d);
     const n = ds ? (line.models ?? (line.units ?? 1) * unitSize(ds)) : (line.models ?? 0);
     if (!ds) unknown.push(line.name);
     else if (!factionIds.includes(ds.factionId)) factionIds.push(ds.factionId);
-    lines.push({ line, ...(ds ? { ds } : {}), models: n, alternatives });
+    lines.push({ line, ...(ds ? { ds } : {}), models: n, alternatives, needsName: false });
     if (ds) models += n;
   }
-  return { box, lines, unknown, factionIds, models };
+  return { box, lines, unknown, toName: lines.filter((l) => l.needsName), factionIds, models };
 }
 
 /**
@@ -103,4 +117,15 @@ export function linesForFactions(read: ResolvedBox, factionIds: readonly string[
 /** Boxes a snapshot can actually place: at least one line of the box names a datasheet it has. */
 export function boxesFor(boxes: readonly BoxSet[], snapshot: Snapshot): readonly ResolvedBox[] {
   return boxes.map((b) => resolveBox(b, snapshot)).filter((r) => r.lines.some((l) => l.ds));
+}
+
+/**
+ * A line the player has labelled, ready to go on the shelf beside the rest.
+ *
+ * The models come from the box and the datasheet from them, so the count is not theirs to invent:
+ * eight drones are eight drones however they were built, and the choice is only which sheet they
+ * are counted against.
+ */
+export function nameLine(line: ResolvedLine, ds: Datasheet): ResolvedLine {
+  return { ...line, ds, needsName: false, alternatives: [] };
 }
