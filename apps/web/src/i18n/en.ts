@@ -663,6 +663,8 @@ export const en = {
   "collection.box.armyCount.one": "{n} army",
   "collection.box.armyCount.many": "{n} armies",
   "collection.box.or": "or {units}",
+  "collection.box.inUnits.one": "in 1 unit",
+  "collection.box.inUnits.many": "in {n} units",
   "collection.box.undated": "Date unknown",
   "collection.box.alsoIn": "also fielded by {armies}",
   "collection.box.toName": "You decide what these are",

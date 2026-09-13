@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Datasheet, Snapshot } from "@grimstat/schema";
-import { boxesByYear, boxesFor, linesForFactions, loadBoxSets, modelsByDatasheet, type ResolvedBox } from "../../lib/boxes";
+import { boxesByYear, boxesFor, linesForFactions, loadBoxSets, modelsByDatasheet, type ResolvedBox, type ResolvedLine } from "../../lib/boxes";
 import type { BoxSet } from "../../data/boxes";
 import { Dialog } from "../ui";
 import { t, tn } from "../../i18n";
@@ -84,6 +84,7 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
                     <li key={`${l.line.name}-${i}`}>
                       <span className="box-count mono">{l.models}</span>
                       {sheetName(l.ds!)}
+                      {unitSplit(l)}
                       {l.alternatives.length ? <span className="box-or">{t("collection.box.or", { units: l.alternatives.map(sheetName).join(", ") })}</span> : null}
                       {l.alsoIn.length ? <span className="box-or">{t("collection.box.alsoIn", { armies: l.alsoIn.map((a) => factionName(a.factionId)).join(", ") })}</span> : null}
                     </li>
@@ -99,6 +100,7 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
                   <li key={`${l.line.name}-${i}`}>
                     <span className="box-count mono">{l.models}</span>
                     {l.line.name}
+                    {unitSplit(l)}
                     {l.unknownName ? <span className="box-or">{t("collection.box.noSheet")}</span> : null}
                   </li>
                 ))}
@@ -117,6 +119,20 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
       )}
     </Dialog>
   );
+}
+
+/**
+ * How many units a line's models come in, where the box said so.
+ *
+ * Thirty Intercessors are three squads and not one squad of thirty, which is a shape the rules do
+ * not have. The models are what the shelf counts either way, so the split is shown beside that
+ * count rather than in place of it, and is absent on the lines whose source gave only a number of
+ * models. Deriving it instead would mean reading the datasheet's minimum, which is wrong for every
+ * squad bought above minimum strength.
+ */
+function unitSplit(l: ResolvedLine) {
+  if (l.line.models === undefined || !l.line.units) return null;
+  return <span className="box-or">{tn(l.line.units, "collection.box.inUnits.one", "collection.box.inUnits.many")}</span>;
 }
 
 /**

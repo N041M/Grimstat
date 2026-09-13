@@ -41,6 +41,10 @@
           "models": 10
         },
         {
+          "name": "Terminator Squad",
+          "models": 5
+        },
+        {
           "name": "Captain",
           "models": 1
         },
@@ -90,11 +94,7 @@
           "models": 1
         },
         {
-          "name": "Captain",
-          "models": 1
-        },
-        {
-          "name": "Chaplain",
+          "name": "Company Master",
           "models": 1
         },
         {
@@ -705,7 +705,7 @@
           "models": 1,
           "or": [
             "The Swarmlord",
-            "Hive Tyrant with Wings"
+            "Winged Hive Tyrant"
           ]
         }
       ]
@@ -1374,11 +1374,11 @@
           "models": 4
         },
         {
-          "name": "Traitor Guardsmen",
+          "name": "Traitor Guardsmen Squad",
           "models": 14
         },
         {
-          "name": "Chaos Beastmen",
+          "name": "Fellgor Beastmen",
           "models": 4
         },
         {
@@ -1394,7 +1394,7 @@
           "models": 2
         },
         {
-          "name": "Chaos Space Marines",
+          "name": "Legionaries",
           "models": 2
         },
         {
@@ -1861,6 +1861,10 @@
           "models": 3
         },
         {
+          "name": "Canoptek Plasmacyte",
+          "models": 1
+        },
+        {
           "name": "Canoptek Reanimator",
           "models": 1
         },
@@ -1979,6 +1983,10 @@
           "models": 1
         },
         {
+          "name": "Grot Orderly",
+          "models": 1
+        },
+        {
           "name": "Weirdboy",
           "models": 1
         },
@@ -2045,11 +2053,8 @@
         },
         {
           "name": "Boyz",
-          "models": 18
-        },
-        {
-          "name": "Nobz",
-          "models": 2
+          "models": 20,
+          "units": 2
         },
         {
           "name": "Gretchin",
@@ -2162,7 +2167,8 @@
         },
         {
           "name": "Guardian Defenders",
-          "models": 10
+          "models": 11,
+          "units": 1
         },
         {
           "name": "Wraithguard",
@@ -2197,6 +2203,10 @@
       "announced": "2018",
       "source": "https://www.phoenixnestgames.com/catalog/warhammer_40k-boxed_sets/tooth_and_claw/1582233",
       "lines": [
+        {
+          "name": "Wolf Guard Battle Leader",
+          "models": 1
+        },
         {
           "name": "Intercessor Squad",
           "models": 5
@@ -2360,6 +2370,10 @@
         {
           "name": "Skorpekh Destroyers",
           "models": 3
+        },
+        {
+          "name": "Canoptek Plasmacyte",
+          "models": 1
         }
       ]
     },
@@ -2397,6 +2411,10 @@
         {
           "name": "Skorpekh Destroyers",
           "models": 3
+        },
+        {
+          "name": "Canoptek Plasmacyte",
+          "models": 1
         }
       ]
     },
@@ -2474,7 +2492,8 @@
       "id": "warhammer-40-000-introductory-set-2",
       "name": "Warhammer 40,000: Introductory Set",
       "kind": "starter",
-      "source": "https://wargameportal.com/products/warhammer-40-000-introductory-set",
+      "announced": "2026",
+      "source": "https://taleofpainters.com/2026/07/every-11th-edition-warhammer-40k-starter-set-unboxed-reviewed/",
       "lines": [
         {
           "name": "Lieutenant",
@@ -2486,11 +2505,8 @@
         },
         {
           "name": "Boyz",
-          "models": 5
-        },
-        {
-          "name": "Warboss",
-          "models": 1
+          "models": 6,
+          "units": 1
         }
       ]
     },
@@ -4390,6 +4406,2319 @@
         {
           "name": "Battle Sisters Squad",
           "models": 10
+        }
+      ]
+    },
+    {
+      "id": "forgebane",
+      "name": "Forgebane",
+      "kind": "starter",
+      "announced": "2018",
+      "source": "https://www.warhammer-community.com/2018/03/17/warhammer-40000-forgebane-pre-order-now/",
+      "lines": [
+        {
+          "name": "Tech-Priest Dominus",
+          "models": 1
+        },
+        {
+          "name": "Skitarii Rangers",
+          "models": 10,
+          "or": [
+            "Skitarii Vanguard"
+          ]
+        },
+        {
+          "name": "Armiger Warglaives",
+          "models": 2
+        },
+        {
+          "name": "Cryptek",
+          "models": 1
+        },
+        {
+          "name": "Immortals",
+          "models": 5,
+          "or": [
+            "Deathmarks"
+          ]
+        },
+        {
+          "name": "Lychguard",
+          "models": 5,
+          "or": [
+            "Triarch Praetorians"
+          ]
+        },
+        {
+          "name": "Canoptek Wraiths",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "shadowspear",
+      "name": "Shadowspear",
+      "kind": "starter",
+      "announced": "2019",
+      "source": "https://www.belloflostsouls.net/2019/03/40k-pre-order-shadowspear-next-week-full-box-revealed.html",
+      "lines": [
+        {
+          "name": "Master of Possession",
+          "models": 1
+        },
+        {
+          "name": "Greater Possessed",
+          "models": 2
+        },
+        {
+          "name": "Obliterators",
+          "models": 2
+        },
+        {
+          "name": "Venomcrawler",
+          "models": 1
+        },
+        {
+          "name": "Legionaries",
+          "models": 10
+        },
+        {
+          "name": "Captain in Phobos Armour",
+          "models": 1
+        },
+        {
+          "name": "Librarian in Phobos Armour",
+          "models": 1
+        },
+        {
+          "name": "Lieutenant in Phobos Armour",
+          "models": 1
+        },
+        {
+          "name": "Infiltrator Squad",
+          "models": 10
+        },
+        {
+          "name": "Suppressor Squad",
+          "models": 3
+        },
+        {
+          "name": "Eliminator Squad",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "blood-of-the-phoenix",
+      "name": "Blood of the Phoenix",
+      "kind": "starter",
+      "announced": "2019",
+      "source": "https://www.belloflostsouls.net/2019/10/40k-blood-of-the-phoenix-contents-first-look.html",
+      "lines": [
+        {
+          "name": "Jain Zar",
+          "models": 1
+        },
+        {
+          "name": "Howling Banshees",
+          "models": 5
+        },
+        {
+          "name": "Falcon",
+          "models": 1
+        },
+        {
+          "name": "Vyper",
+          "models": 1
+        },
+        {
+          "name": "Drazhar",
+          "models": 1
+        },
+        {
+          "name": "Incubi",
+          "models": 5
+        },
+        {
+          "name": "Scourges",
+          "models": 5,
+          "ownerNames": true
+        },
+        {
+          "name": "Hellions",
+          "models": 5
+        },
+        {
+          "name": "Venom",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "prophecy-of-the-wolf",
+      "name": "Prophecy of the Wolf",
+      "kind": "starter",
+      "announced": "2020",
+      "source": "https://elementgames.co.uk/new-releases/warhammer-40000-prophecy-of-the-wolf-english-?d=10034",
+      "lines": [
+        {
+          "name": "Ragnar Blackmane",
+          "models": 1
+        },
+        {
+          "name": "Infiltrator Squad",
+          "models": 10,
+          "or": [
+            "Incursor Squad"
+          ]
+        },
+        {
+          "name": "Ghazghkull Thraka",
+          "models": 1
+        },
+        {
+          "name": "Makari",
+          "models": 1
+        },
+        {
+          "name": "Nobz",
+          "models": 5
+        },
+        {
+          "name": "Meganobz",
+          "models": 3
+        },
+        {
+          "name": "Grot Oiler",
+          "models": 1
+        },
+        {
+          "name": "Ammo Runt",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "eldritch-omens",
+      "name": "Eldritch Omens",
+      "kind": "starter",
+      "announced": "2022",
+      "source": "https://www.fauxhammer.com/reviews/warhammer-40000-eldritch-omens-review/",
+      "lines": [
+        {
+          "name": "Autarch",
+          "models": 1
+        },
+        {
+          "name": "Rangers",
+          "models": 5
+        },
+        {
+          "name": "Shroud Runners",
+          "models": 3
+        },
+        {
+          "name": "Warpsmith",
+          "models": 1
+        },
+        {
+          "name": "Chosen",
+          "models": 5
+        },
+        {
+          "name": "Forgefiend",
+          "models": 1,
+          "or": [
+            "Maulerfiend"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-adepta-sororitas",
+      "name": "Boarding Patrol: Adepta Sororitas",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/en-gb/articles/7TdZCAQQ/new-boarding-patrols-sighted-for-the-adepta-sororitas-thousand-sons-and-adeptus-custodes/",
+      "lines": [
+        {
+          "name": "Canoness",
+          "models": 1
+        },
+        {
+          "name": "Battle Sisters Squad",
+          "models": 10
+        },
+        {
+          "name": "Incensor Cherub",
+          "models": 1
+        },
+        {
+          "name": "Celestian Sacresants",
+          "models": 5
+        },
+        {
+          "name": "Repentia Squad",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-adeptus-custodes",
+      "name": "Boarding Patrol: Adeptus Custodes",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/en-gb/articles/7TdZCAQQ/new-boarding-patrols-sighted-for-the-adepta-sororitas-thousand-sons-and-adeptus-custodes/",
+      "lines": [
+        {
+          "name": "Trajann Valoris",
+          "models": 1
+        },
+        {
+          "name": "Allarus Custodians",
+          "models": 3
+        },
+        {
+          "name": "Custodian Guard",
+          "models": 5
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-aeldari",
+      "name": "Boarding Patrol: Aeldari",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/en-gb/articles/BFdoMbzx/drukhari-and-aeldari-exercise-acrobatic-expertise-in-new-boarding-patrol-boxes/",
+      "lines": [
+        {
+          "name": "Jain Zar",
+          "models": 1
+        },
+        {
+          "name": "Howling Banshees",
+          "models": 5
+        },
+        {
+          "name": "Corsair Voidscarred",
+          "models": 20,
+          "or": [
+            "Corsair Voidreavers"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-agents-of-the-imperium",
+      "name": "Boarding Patrol: Agents of the Imperium",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.fauxhammer.com/price-savings-breakdown/boarding-patrol-agents-of-the-imperium-price-points-value-and-savings-breakdown/",
+      "lines": [
+        {
+          "name": "Eversor Assassin",
+          "models": 1
+        },
+        {
+          "name": "Elucidian Starstriders",
+          "models": 10
+        },
+        {
+          "name": "Imperial Navy Breachers",
+          "models": 20,
+          "units": 2
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-drukhari",
+      "name": "Boarding Patrol: Drukhari",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/en-gb/articles/BFdoMbzx/drukhari-and-aeldari-exercise-acrobatic-expertise-in-new-boarding-patrol-boxes/",
+      "lines": [
+        {
+          "name": "Succubus",
+          "models": 1
+        },
+        {
+          "name": "Incubi",
+          "models": 5
+        },
+        {
+          "name": "Wyches",
+          "models": 20
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-orks",
+      "name": "Boarding Patrol: Orks",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://taleofpainters.com/2023/03/review-orks-boarding-patrol-incl-boss-snikrot/",
+      "lines": [
+        {
+          "name": "Boss Snikrot",
+          "models": 1
+        },
+        {
+          "name": "Kommandos",
+          "models": 10
+        },
+        {
+          "name": "Bomb Squig",
+          "models": 1
+        },
+        {
+          "name": "Distraction Grot",
+          "models": 1
+        },
+        {
+          "name": "Beast Snagga Boyz",
+          "models": 10
+        },
+        {
+          "name": "Flash Gitz",
+          "models": 5
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-t-au-empire",
+      "name": "Boarding Patrol: T'au Empire",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://techraptor.net/tabletop/previews/warhammer-40k-boarding-patrol-orks-and-tau-preview",
+      "lines": [
+        {
+          "name": "Commander Farsight",
+          "models": 1
+        },
+        {
+          "name": "Crisis Battlesuits",
+          "models": 3,
+          "ownerNames": true
+        },
+        {
+          "name": "Breacher Team",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-thousand-sons",
+      "name": "Boarding Patrol: Thousand Sons",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/en-gb/articles/7TdZCAQQ/new-boarding-patrols-sighted-for-the-adepta-sororitas-thousand-sons-and-adeptus-custodes/",
+      "lines": [
+        {
+          "name": "Rubric Marines",
+          "models": 20
+        },
+        {
+          "name": "Chaos Spawn",
+          "models": 2
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-tyranids",
+      "name": "Boarding Patrol: Tyranids",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://theguardtower.com/products/boarding-patrol-tyranids-gw-71-51n",
+      "lines": [
+        {
+          "name": "Broodlord",
+          "models": 1
+        },
+        {
+          "name": "Tyranid Warriors",
+          "models": 6,
+          "units": 2,
+          "ownerNames": true
+        },
+        {
+          "name": "Genestealers",
+          "models": 8
+        }
+      ]
+    },
+    {
+      "id": "combat-patrol-space-marines-2023",
+      "name": "Combat Patrol: Space Marines (2023)",
+      "kind": "combat-patrol",
+      "announced": "2023",
+      "source": "https://spikeybits.com/10th-edition-40k-space-marines-combat-patrol-is-a-hard-pass/",
+      "lines": [
+        {
+          "name": "Captain in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Librarian in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Infernus Squad",
+          "models": 5
+        }
+      ]
+    },
+    {
+      "id": "combat-patrol-dark-angels-2024-edition",
+      "name": "Combat Patrol: Dark Angels (2024 Edition)",
+      "kind": "combat-patrol",
+      "announced": "2024",
+      "source": "https://www.belloflostsouls.net/2024/02/warhammer-40k-dark-angels-new-combat-patrol-pricing-breakdown.html",
+      "lines": [
+        {
+          "name": "Captain in Gravis Armour",
+          "models": 1
+        },
+        {
+          "name": "Bladeguard Veteran Squad",
+          "models": 3
+        },
+        {
+          "name": "Hellblaster Squad",
+          "models": 5
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-astra-militarum",
+      "name": "Start Collecting! Astra Militarum",
+      "kind": "starter",
+      "source": "https://theguardtower.com/products/start-collecting-astra-militarum",
+      "lines": [
+        {
+          "name": "Commissar",
+          "models": 1
+        },
+        {
+          "name": "Cadian Shock Troops",
+          "models": 10
+        },
+        {
+          "name": "Cadian Heavy Weapons Squad",
+          "models": 1
+        },
+        {
+          "name": "Leman Russ Battle Tank",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-blood-angels",
+      "name": "Start Collecting! Blood Angels",
+      "kind": "starter",
+      "announced": "2016",
+      "source": "https://www.nobleknight.com/P/2147633060/Start-Collecting---Blood-Angels-2016-Edition",
+      "lines": [
+        {
+          "name": "Captain in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Tactical Squad",
+          "models": 10
+        },
+        {
+          "name": "Baal Predator",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-chaos-space-marines",
+      "name": "Start Collecting! Chaos Space Marines",
+      "kind": "starter",
+      "source": "https://www.belloflostsouls.net/2019/11/warhammer-40k-unboxing-chaos-vanguard-space-marine-start-collecting-boxes.html",
+      "lines": [
+        {
+          "name": "Master of Possession",
+          "models": 1
+        },
+        {
+          "name": "Greater Possessed",
+          "models": 2
+        },
+        {
+          "name": "Obliterators",
+          "models": 2
+        },
+        {
+          "name": "Venomcrawler",
+          "models": 1
+        },
+        {
+          "name": "Legionaries",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-craftworlds",
+      "name": "Start Collecting! Craftworlds",
+      "kind": "starter",
+      "source": "https://www.webwaygames.com/collections/warhammer-40k/products/start-collecting-craftworlds",
+      "lines": [
+        {
+          "name": "Farseer",
+          "models": 1
+        },
+        {
+          "name": "Wraithguard",
+          "models": 5,
+          "or": [
+            "Wraithblades"
+          ]
+        },
+        {
+          "name": "Wraithlord",
+          "models": 1
+        },
+        {
+          "name": "War Walker",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-daemons-of-khorne",
+      "name": "Start Collecting! Daemons of Khorne",
+      "kind": "starter",
+      "source": "https://www.nobleknight.com/P/2147609626/Start-Collecting---Daemons-of-Khorne",
+      "lines": [
+        {
+          "name": "Rendmaster on Blood Throne",
+          "models": 1,
+          "or": [
+            "Skull Cannon"
+          ]
+        },
+        {
+          "name": "Bloodcrushers",
+          "models": 3
+        },
+        {
+          "name": "Bloodletters",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-daemons-of-nurgle",
+      "name": "Start Collecting! Daemons of Nurgle",
+      "kind": "starter",
+      "source": "https://www.undiscoveredrealm.com/products/warhammer-40k-aos-start-collecting-daemons-of-nurgle",
+      "lines": [
+        {
+          "name": "Poxbringer",
+          "models": 1
+        },
+        {
+          "name": "Plague Drones",
+          "models": 3
+        },
+        {
+          "name": "Nurglings",
+          "models": 3
+        },
+        {
+          "name": "Plaguebearers",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-daemons-of-slaanesh",
+      "name": "Start Collecting! Daemons of Slaanesh",
+      "kind": "starter",
+      "source": "https://www.thegamestore.com/products/warhammer-age-of-sigmar-daemons-of-slaanesh",
+      "lines": [
+        {
+          "name": "Exalted Seeker Chariot",
+          "models": 1
+        },
+        {
+          "name": "Seekers",
+          "models": 5
+        },
+        {
+          "name": "Daemonettes",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-daemons-of-tzeentch",
+      "name": "Start Collecting! Daemons of Tzeentch",
+      "kind": "starter",
+      "source": "https://thepitgamingshop.co.uk/product/games-workshop-warhammer-40000-age-of-sigmar-daemons-of-tzeentch-start-collecting/",
+      "lines": [
+        {
+          "name": "Burning Chariot",
+          "models": 1,
+          "or": [
+            "Changecaster"
+          ]
+        },
+        {
+          "name": "Screamers",
+          "models": 3
+        },
+        {
+          "name": "Flamers",
+          "models": 3
+        },
+        {
+          "name": "Pink Horrors",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-deathwatch",
+      "name": "Start Collecting! Deathwatch",
+      "kind": "starter",
+      "source": "https://elementgames.co.uk/games-workshop/nyna/getting-started-warhammer-40000/scdw2",
+      "lines": [
+        {
+          "name": "Watch Captain Artemis",
+          "models": 1
+        },
+        {
+          "name": "Deathwatch Kill Team",
+          "models": 10,
+          "units": 2
+        },
+        {
+          "name": "Venerable Dreadnought",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-genestealer-cults",
+      "name": "Start Collecting! Genestealer Cults",
+      "kind": "starter",
+      "source": "https://hoodedgoblin.com/products/start-collecting-genestealer-cults",
+      "lines": [
+        {
+          "name": "Acolyte Iconward",
+          "models": 1
+        },
+        {
+          "name": "Acolyte Hybrids",
+          "models": 5,
+          "ownerNames": true
+        },
+        {
+          "name": "Neophyte Hybrids",
+          "models": 10
+        },
+        {
+          "name": "Achilles Ridgerunner",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-orks",
+      "name": "Start Collecting! Orks",
+      "kind": "starter",
+      "source": "https://www.tabletopgamer.com/start-collecting-orks-unboxing-40k-starter-set/",
+      "lines": [
+        {
+          "name": "Painboy",
+          "models": 1
+        },
+        {
+          "name": "Boyz",
+          "models": 11
+        },
+        {
+          "name": "Nobz",
+          "models": 5
+        },
+        {
+          "name": "Ammo Runt",
+          "models": 1
+        },
+        {
+          "name": "Deff Dread",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-space-marines",
+      "name": "Start Collecting! Space Marines",
+      "kind": "starter",
+      "source": "https://www.mythicos.store/products/start-collecting-space-marines",
+      "lines": [
+        {
+          "name": "Captain in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Tactical Squad",
+          "models": 10
+        },
+        {
+          "name": "Venerable Dreadnought",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-space-wolves",
+      "name": "Start Collecting! Space Wolves",
+      "kind": "starter",
+      "source": "https://elementgames.co.uk/start-collecting-space-wolves",
+      "lines": [
+        {
+          "name": "Wolf Lord",
+          "models": 1
+        },
+        {
+          "name": "Grey Hunters",
+          "models": 10
+        },
+        {
+          "name": "Thunderwolf Cavalry",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-t-au-empire",
+      "name": "Start Collecting! T'au Empire",
+      "kind": "starter",
+      "source": "https://www.atomicempire.com/Item/192334",
+      "lines": [
+        {
+          "name": "Ethereal",
+          "models": 1
+        },
+        {
+          "name": "Strike Team",
+          "models": 10
+        },
+        {
+          "name": "Crisis Battlesuits",
+          "models": 3,
+          "ownerNames": true
+        },
+        {
+          "name": "Drones",
+          "models": 4,
+          "ownerNames": true
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-thousand-sons",
+      "name": "Start Collecting! Thousand Sons",
+      "kind": "starter",
+      "source": "https://www.belloflostsouls.net/2019/07/40k-start-collecting-thousand-sons-space-wolves-boxes-pricing-breakdown.html",
+      "lines": [
+        {
+          "name": "Ahriman",
+          "models": 1
+        },
+        {
+          "name": "Rubric Marines",
+          "models": 10
+        },
+        {
+          "name": "Tzaangors",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-vanguard-space-marines",
+      "name": "Start Collecting! Vanguard Space Marines",
+      "kind": "starter",
+      "source": "https://elementgames.co.uk/games-workshop/warhammer-40k/space-marines/start-collecting-vanguard-space-marines-2?d=10279",
+      "lines": [
+        {
+          "name": "Lieutenant in Phobos Armour",
+          "models": 1
+        },
+        {
+          "name": "Infiltrator Squad",
+          "models": 10
+        },
+        {
+          "name": "Suppressor Squad",
+          "models": 3
+        },
+        {
+          "name": "Eliminator Squad",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "battleforce-deathwatch-watchblade-task-force",
+      "name": "Battleforce: Deathwatch \u2013 Watchblade Task Force",
+      "kind": "battleforce",
+      "announced": "2016",
+      "source": "https://miniset.net/sets/gw-99120109011",
+      "lines": [
+        {
+          "name": "Watch Master",
+          "models": 1
+        },
+        {
+          "name": "Razorback",
+          "models": 1
+        },
+        {
+          "name": "Deathwatch Bikers",
+          "models": 5
+        },
+        {
+          "name": "Deathwatch Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Deathwatch Kill Team",
+          "models": 15,
+          "units": 3
+        }
+      ]
+    },
+    {
+      "id": "battleforce-adeptus-mechanicus-eradication-cohort",
+      "name": "Battleforce: Adeptus Mechanicus \u2013 Eradication Cohort",
+      "kind": "battleforce",
+      "announced": "2016",
+      "source": "https://miniset.net/sets/gw-99120116013",
+      "lines": [
+        {
+          "name": "Sydonian Dragoons with Taser Lances",
+          "models": 1,
+          "or": [
+            "Sydonian Dragoons with Radium Jezzails"
+          ]
+        },
+        {
+          "name": "Kastelan Robots",
+          "models": 2
+        },
+        {
+          "name": "Cybernetica Datasmith",
+          "models": 1
+        },
+        {
+          "name": "Kataphron Destroyers",
+          "models": 3
+        },
+        {
+          "name": "Sicarian Infiltrators",
+          "models": 5
+        },
+        {
+          "name": "Fulgurite Electro-Priests",
+          "models": 5
+        }
+      ]
+    },
+    {
+      "id": "battleforce-t-au-empire-targeted-reconnaissance-cadre",
+      "name": "Battleforce: T'au Empire \u2013 Targeted Reconnaissance Cadre",
+      "kind": "battleforce",
+      "announced": "2016",
+      "source": "https://miniset.net/sets/gw-99120113054",
+      "lines": [
+        {
+          "name": "Devilfish",
+          "models": 1
+        },
+        {
+          "name": "Commander in Coldstar Battlesuit",
+          "models": 1
+        },
+        {
+          "name": "Broadside Battlesuits",
+          "models": 1
+        },
+        {
+          "name": "Ghostkeel Battlesuit",
+          "models": 1
+        },
+        {
+          "name": "Stealth Battlesuits",
+          "models": 3
+        },
+        {
+          "name": "Pathfinder Team",
+          "models": 10
+        },
+        {
+          "name": "Drones",
+          "models": 9,
+          "ownerNames": true
+        }
+      ]
+    },
+    {
+      "id": "battleforce-orks-kult-of-speed",
+      "name": "Battleforce: Orks \u2013 Kult of Speed",
+      "kind": "battleforce",
+      "announced": "2017",
+      "source": "https://www.warhammer-community.com/2017/11/27/factfile-battleforce-orks-kult-of-speed-nov-27gw-homepage-post-4/",
+      "lines": [
+        {
+          "name": "Battlewagon",
+          "models": 1
+        },
+        {
+          "name": "Trukk",
+          "models": 1
+        },
+        {
+          "name": "Big Mek with Shokk Attack Gun",
+          "models": 1
+        },
+        {
+          "name": "Warbikers",
+          "models": 3
+        },
+        {
+          "name": "Boyz",
+          "models": 11
+        },
+        {
+          "name": "Lootas",
+          "models": 5
+        }
+      ]
+    },
+    {
+      "id": "battleforce-astra-militarum-battlegroup",
+      "name": "Battleforce: Astra Militarum \u2013 Battlegroup",
+      "kind": "battleforce",
+      "announced": "2017",
+      "source": "https://icv2.com/articles/news/view/38969/warhammer-40k-battleforce-boxed-sets-arrive-holidays",
+      "lines": [
+        {
+          "name": "Leman Russ Battle Tank",
+          "models": 1
+        },
+        {
+          "name": "Chimera",
+          "models": 1
+        },
+        {
+          "name": "Scout Sentinels",
+          "models": 1,
+          "or": [
+            "Armoured Sentinels"
+          ]
+        },
+        {
+          "name": "Ogryn Squad",
+          "models": 3,
+          "or": [
+            "Bullgryn Squad"
+          ]
+        },
+        {
+          "name": "Cadian Command Squad",
+          "models": 5
+        },
+        {
+          "name": "Cadian Shock Troops",
+          "models": 20
+        }
+      ]
+    },
+    {
+      "id": "battleforce-genestealer-cults-insurrection",
+      "name": "Battleforce: Genestealer Cults \u2013 Insurrection",
+      "kind": "battleforce",
+      "announced": "2017",
+      "source": "https://www.scalemates.com/kits/games-workshop-71-56-genestealer-cults-insurrection--1241199",
+      "lines": [
+        {
+          "name": "Goliath Rockgrinder",
+          "models": 1,
+          "or": [
+            "Goliath Truck"
+          ]
+        },
+        {
+          "name": "Patriarch",
+          "models": 1
+        },
+        {
+          "name": "Magus",
+          "models": 1
+        },
+        {
+          "name": "Primus",
+          "models": 1
+        },
+        {
+          "name": "Genestealer Familiars",
+          "models": 2
+        },
+        {
+          "name": "Acolyte Hybrids",
+          "models": 5,
+          "ownerNames": true
+        },
+        {
+          "name": "Neophyte Hybrids",
+          "models": 21
+        }
+      ]
+    },
+    {
+      "id": "battleforce-t-au-empire-rapid-insertion-cadre",
+      "name": "Battleforce: T'au Empire \u2013 Rapid Insertion Cadre",
+      "kind": "battleforce",
+      "announced": "2017",
+      "source": "https://www.warhammer-community.com/2017/11/29/factfile-battleforce-tau-empire-rapid-insertion-cadregw-homepage-post-4/",
+      "lines": [
+        {
+          "name": "Ghostkeel Battlesuit",
+          "models": 1
+        },
+        {
+          "name": "Stealth Battlesuits",
+          "models": 6
+        },
+        {
+          "name": "Crisis Battlesuits",
+          "models": 3,
+          "units": 1,
+          "ownerNames": true
+        },
+        {
+          "name": "Commander in Enforcer Battlesuit",
+          "models": 1,
+          "or": [
+            "Commander in Coldstar Battlesuit"
+          ]
+        },
+        {
+          "name": "Drones",
+          "models": 11,
+          "ownerNames": true
+        }
+      ]
+    },
+    {
+      "id": "battleforce-space-marines-primaris-interdiction-force",
+      "name": "Battleforce: Space Marines \u2013 Primaris Interdiction Force",
+      "kind": "battleforce",
+      "announced": "2018",
+      "source": "https://spruesandbrews.com/2018/12/01/todays-pre-orders-battleforces-necromunda-delaque-blood-bowl-shambling-undead/",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Reiver Squad",
+          "models": 10
+        },
+        {
+          "name": "Inceptor Squad",
+          "models": 3
+        },
+        {
+          "name": "Repulsor",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "battleforce-imperial-fists-supremacy-force",
+      "name": "Battleforce: Imperial Fists \u2013 Supremacy Force",
+      "kind": "battleforce",
+      "announced": "2018",
+      "source": "https://miniset.net/sets/gw-99120101241",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Hellblaster Squad",
+          "models": 5
+        },
+        {
+          "name": "Aggressor Squad",
+          "models": 3
+        },
+        {
+          "name": "Redemptor Dreadnought",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "battleforce-death-guard-infection-cluster",
+      "name": "Battleforce: Death Guard \u2013 Infection Cluster",
+      "kind": "battleforce",
+      "announced": "2018",
+      "source": "https://spruesandbrews.com/2018/12/01/todays-pre-orders-battleforces-necromunda-delaque-blood-bowl-shambling-undead/",
+      "lines": [
+        {
+          "name": "Plague Surgeon",
+          "models": 1
+        },
+        {
+          "name": "Plague Marines",
+          "models": 7
+        },
+        {
+          "name": "Blightlord Terminators",
+          "models": 5
+        },
+        {
+          "name": "Foetid Bloat-drone",
+          "models": 1
+        },
+        {
+          "name": "Plagueburst Crawler",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "battleforce-craftworlds-asuryani-bladehost",
+      "name": "Battleforce: Craftworlds \u2013 Asuryani Bladehost",
+      "kind": "battleforce",
+      "announced": "2018",
+      "source": "https://spruesandbrews.com/2018/12/01/todays-pre-orders-battleforces-necromunda-delaque-blood-bowl-shambling-undead/",
+      "lines": [
+        {
+          "name": "Farseer",
+          "models": 1
+        },
+        {
+          "name": "Guardian Defenders",
+          "models": 11,
+          "units": 1
+        },
+        {
+          "name": "Dire Avengers",
+          "models": 5
+        },
+        {
+          "name": "Windriders",
+          "models": 3
+        },
+        {
+          "name": "Vyper",
+          "models": 1
+        },
+        {
+          "name": "Wraithknight",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "battleforce-necrons-dominion-spearhead",
+      "name": "Battleforce: Necrons \u2013 Dominion Spearhead",
+      "kind": "battleforce",
+      "announced": "2018",
+      "source": "https://spruesandbrews.com/2018/12/01/todays-pre-orders-battleforces-necromunda-delaque-blood-bowl-shambling-undead/",
+      "lines": [
+        {
+          "name": "Overlord",
+          "models": 1
+        },
+        {
+          "name": "Necron Warriors",
+          "models": 12
+        },
+        {
+          "name": "Immortals",
+          "models": 10,
+          "or": [
+            "Deathmarks"
+          ]
+        },
+        {
+          "name": "Canoptek Spyders",
+          "models": 1
+        },
+        {
+          "name": "Canoptek Scarab Swarms",
+          "models": 3
+        },
+        {
+          "name": "Tomb Blades",
+          "models": 3
+        },
+        {
+          "name": "Ghost Ark",
+          "models": 1,
+          "or": [
+            "Doomsday Ark"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "battleforce-blood-angels-crimson-spear-strike-force",
+      "name": "Battleforce: Blood Angels \u2013 Crimson Spear Strike Force",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://www.tcgplayer.com/product/279506/warhammer-box-sets-warhammer-plastic-box-sets-warhammer-40k-battleforce-blood-angels-crimson-spear-strike-force",
+      "lines": [
+        {
+          "name": "Captain in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Chaplain with Jump Pack",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Death Company",
+          "models": 5,
+          "ownerNames": true
+        },
+        {
+          "name": "Sanguinary Guard",
+          "models": 5
+        },
+        {
+          "name": "Baal Predator",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "battleforce-tyranids-bioswarm",
+      "name": "Battleforce: Tyranids \u2013 Bioswarm",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://spruesandbrews.com/2019/10/30/christmas-battleforce-boxes-which-are-the-best-value/",
+      "lines": [
+        {
+          "name": "Hive Tyrant",
+          "models": 1,
+          "or": [
+            "The Swarmlord"
+          ]
+        },
+        {
+          "name": "Carnifexes",
+          "models": 2
+        },
+        {
+          "name": "Termagants",
+          "models": 12
+        },
+        {
+          "name": "Hormagaunts",
+          "models": 12
+        },
+        {
+          "name": "Genestealers",
+          "models": 8
+        },
+        {
+          "name": "Gargoyles",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "battleforce-t-au-empire-starclaimer-hunter-cadre",
+      "name": "Battleforce: T'au Empire \u2013 Starclaimer Hunter Cadre",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://spruesandbrews.com/2019/10/30/christmas-battleforce-boxes-which-are-the-best-value/",
+      "lines": [
+        {
+          "name": "Commander in Coldstar Battlesuit",
+          "models": 1
+        },
+        {
+          "name": "Crisis Battlesuits",
+          "models": 3,
+          "ownerNames": true
+        },
+        {
+          "name": "Stealth Battlesuits",
+          "models": 3
+        },
+        {
+          "name": "Breacher Team",
+          "models": 10
+        },
+        {
+          "name": "Devilfish",
+          "models": 1
+        },
+        {
+          "name": "Drones",
+          "models": 5,
+          "ownerNames": true
+        }
+      ]
+    },
+    {
+      "id": "battleforce-space-wolves-talons-of-morkai",
+      "name": "Battleforce: Space Wolves \u2013 Talons of Morkai",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://spruesandbrews.com/2019/10/30/christmas-battleforce-boxes-which-are-the-best-value/",
+      "lines": [
+        {
+          "name": "Wulfen",
+          "models": 5
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Iron Priest",
+          "models": 1
+        },
+        {
+          "name": "Stormfang Gunship",
+          "models": 1,
+          "or": [
+            "Stormwolf"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "battleforce-drukhari-poisonblade-raiding-party",
+      "name": "Battleforce: Drukhari \u2013 Poisonblade Raiding Party",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://spruesandbrews.com/2019/10/30/christmas-battleforce-boxes-which-are-the-best-value/",
+      "lines": [
+        {
+          "name": "Archon",
+          "models": 1
+        },
+        {
+          "name": "Kabalite Warriors",
+          "models": 20
+        },
+        {
+          "name": "Reavers",
+          "models": 3
+        },
+        {
+          "name": "Venom",
+          "models": 1
+        },
+        {
+          "name": "Talos",
+          "models": 1
+        },
+        {
+          "name": "Razorwing Jetfighter",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "battleforce-chaos-space-marines-vengeance-warband",
+      "name": "Battleforce: Chaos Space Marines \u2013 Vengeance Warband",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://spruesandbrews.com/2019/10/30/christmas-battleforce-boxes-which-are-the-best-value/",
+      "lines": [
+        {
+          "name": "Chaos Lord in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Chaos Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Legionaries",
+          "models": 10
+        },
+        {
+          "name": "Havocs",
+          "models": 5
+        },
+        {
+          "name": "Chaos Rhino",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-grey-knights",
+      "name": "Boarding Patrol: Grey Knights",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.wargamer.com/warhammer-40k/grey-knights-tyranids-necrons-boarding-patrol",
+      "lines": [
+        {
+          "name": "Castellan Crowe",
+          "models": 1
+        },
+        {
+          "name": "Brotherhood Terminator Squad",
+          "models": 5,
+          "or": [
+            "Paladin Squad"
+          ]
+        },
+        {
+          "name": "Strike Squad",
+          "models": 10,
+          "ownerNames": true
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-necrons",
+      "name": "Boarding Patrol: Necrons",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.adeptusars.com/miniatures/boarding-patrol-necrons",
+      "lines": [
+        {
+          "name": "Ophydian Destroyers",
+          "models": 3
+        },
+        {
+          "name": "Canoptek Plasmacyte",
+          "models": 1
+        },
+        {
+          "name": "Necron Warriors",
+          "models": 10
+        },
+        {
+          "name": "Canoptek Scarab Swarms",
+          "models": 3
+        },
+        {
+          "name": "Lychguard",
+          "models": 10,
+          "or": [
+            "Triarch Praetorians"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-primaris-space-wolves",
+      "name": "Start Collecting! Primaris Space Wolves",
+      "kind": "starter",
+      "source": "https://hoodedgoblin.com/products/start-collecting-primaris-space-wolves",
+      "lines": [
+        {
+          "name": "Wolf Guard Battle Leader",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Aggressor Squad",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-militarum-tempestus",
+      "name": "Start Collecting! Militarum Tempestus",
+      "kind": "starter",
+      "source": "https://theguardtower.com/products/start-collecting-militarum-tempestus",
+      "lines": [
+        {
+          "name": "Commissar",
+          "models": 1
+        },
+        {
+          "name": "Tempestus Scions",
+          "models": 10
+        },
+        {
+          "name": "Taurox Prime",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "start-collecting-adeptus-mechanicus",
+      "name": "Start Collecting! Adeptus Mechanicus",
+      "kind": "starter",
+      "source": "https://hoodedgoblin.com/products/start-collecting-adeptus-mechanicus",
+      "lines": [
+        {
+          "name": "Tech-Priest Enginseer",
+          "models": 1
+        },
+        {
+          "name": "Skitarii Vanguard",
+          "models": 10,
+          "or": [
+            "Skitarii Rangers"
+          ]
+        },
+        {
+          "name": "Skorpius Dunerider",
+          "models": 1,
+          "or": [
+            "Skorpius Disintegrator"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "combat-patrol-chaos-space-marines-2022",
+      "name": "Combat Patrol: Chaos Space Marines (2022)",
+      "kind": "combat-patrol",
+      "announced": "2022",
+      "source": "https://www.warhammer-community.com/en-gb/articles/vphcBxkG/let-the-galaxy-burn-with-a-little-help-from-combat-patrol-chaos-space-marines/",
+      "lines": [
+        {
+          "name": "Dark Apostle",
+          "models": 3,
+          "units": 1
+        },
+        {
+          "name": "Helbrute",
+          "models": 1
+        },
+        {
+          "name": "Havocs",
+          "models": 5
+        },
+        {
+          "name": "Legionaries",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "combat-patrol-t-au-empire-2024",
+      "name": "Combat Patrol: T'au Empire (2024)",
+      "kind": "combat-patrol",
+      "announced": "2024",
+      "source": "https://spikeybits.com/tau-combat-patrol/",
+      "lines": [
+        {
+          "name": "Commander in Enforcer Battlesuit",
+          "models": 1,
+          "or": [
+            "Commander in Coldstar Battlesuit"
+          ]
+        },
+        {
+          "name": "Devilfish",
+          "models": 1
+        },
+        {
+          "name": "Breacher Team",
+          "models": 10,
+          "or": [
+            "Strike Team"
+          ]
+        },
+        {
+          "name": "Pathfinder Team",
+          "models": 10
+        },
+        {
+          "name": "Drones",
+          "models": 6,
+          "ownerNames": true
+        },
+        {
+          "name": "DS8 Tactical Support Turret",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "combat-patrol-blood-angels-2024",
+      "name": "Combat Patrol: Blood Angels (2024)",
+      "kind": "combat-patrol",
+      "announced": "2024",
+      "source": "https://www.warhammer-community.com/en-gb/articles/uvzgPK5Q/the-new-blood-angels-combat-patrol-is-so-vicious-even-your-sanguinary-guard-end-up-bright-red/",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Sanguinary Guard",
+          "models": 6
+        },
+        {
+          "name": "Assault Intercessor Squad",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "battleforce-astra-militarum-cadian-defence-force",
+      "name": "Battleforce: Astra Militarum \u2013 Cadian Defence Force",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.fauxhammer.com/news/warhammer-40000-2023-battleforce-boxes-price-savings-breakdown/",
+      "lines": [
+        {
+          "name": "Cadian Command Squad",
+          "models": 5
+        },
+        {
+          "name": "Cadian Shock Troops",
+          "models": 20
+        },
+        {
+          "name": "Rogal Dorn Battle Tank",
+          "models": 2
+        }
+      ]
+    },
+    {
+      "id": "battleforce-leagues-of-votann-defenders-of-the-ancestors",
+      "name": "Battleforce: Leagues of Votann \u2013 Defenders of the Ancestors",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/2023/10/23/warhammer-40000-battleforces-six-awesome-boxed-sets-to-kickstart-your-winter-season/",
+      "lines": [
+        {
+          "name": "Einhyr Champion",
+          "models": 1
+        },
+        {
+          "name": "Grimnyr",
+          "units": 1
+        },
+        {
+          "name": "Einhyr Hearthguard",
+          "models": 10
+        },
+        {
+          "name": "Sagitaur",
+          "models": 1
+        },
+        {
+          "name": "Hekaton Land Fortress",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "battleforce-orks-beast-snagga-stampede",
+      "name": "Battleforce: Orks \u2013 Beast Snagga Stampede",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/2023/10/23/warhammer-40000-battleforces-six-awesome-boxed-sets-to-kickstart-your-winter-season/",
+      "lines": [
+        {
+          "name": "Mozrog Skragbad",
+          "models": 1,
+          "or": [
+            "Beastboss on Squigosaur"
+          ]
+        },
+        {
+          "name": "Painboss",
+          "models": 1
+        },
+        {
+          "name": "Beast Snagga Boyz",
+          "models": 10
+        },
+        {
+          "name": "Squighog Boyz",
+          "models": 4,
+          "units": 1
+        },
+        {
+          "name": "Bomb Squig",
+          "models": 1
+        },
+        {
+          "name": "Kill Rig",
+          "models": 1,
+          "or": [
+            "Hunta Rig"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "battleforce-space-marines-spearhead-force",
+      "name": "Battleforce: Space Marines \u2013 Spearhead Force",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/2023/10/23/warhammer-40000-battleforces-six-awesome-boxed-sets-to-kickstart-your-winter-season/",
+      "lines": [
+        {
+          "name": "Captain with Jump Pack",
+          "models": 1
+        },
+        {
+          "name": "Assault Intercessors with Jump Packs",
+          "models": 15
+        },
+        {
+          "name": "Outrider Squad",
+          "models": 3
+        },
+        {
+          "name": "Invader ATV",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "battleforce-tyranids-onslaught-swarm",
+      "name": "Battleforce: Tyranids \u2013 Onslaught Swarm",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.fauxhammer.com/news/warhammer-40000-2023-battleforce-boxes-price-savings-breakdown/",
+      "lines": [
+        {
+          "name": "Hive Tyrant",
+          "models": 1,
+          "or": [
+            "The Swarmlord",
+            "Winged Hive Tyrant"
+          ]
+        },
+        {
+          "name": "Norn Emissary",
+          "models": 1,
+          "or": [
+            "Norn Assimilator"
+          ]
+        },
+        {
+          "name": "Hormagaunts",
+          "models": 20
+        },
+        {
+          "name": "Genestealers",
+          "models": 10
+        },
+        {
+          "name": "Ripper Swarms",
+          "models": 2
+        }
+      ]
+    },
+    {
+      "id": "battleforce-world-eaters-exalted-of-the-red-angel",
+      "name": "Battleforce: World Eaters \u2013 Exalted of the Red Angel",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/2023/10/23/warhammer-40000-battleforces-six-awesome-boxed-sets-to-kickstart-your-winter-season/",
+      "lines": [
+        {
+          "name": "Angron",
+          "models": 1
+        },
+        {
+          "name": "Khorne Berzerkers",
+          "models": 10
+        },
+        {
+          "name": "Exalted Eightbound",
+          "models": 6,
+          "or": [
+            "Eightbound"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sisters-of-battle-army-set",
+      "name": "Sisters of Battle Army Set",
+      "kind": "starter",
+      "announced": "2019",
+      "source": "https://www.theswordandboardtoronto.com/products/adepta-sororitas-sisters-of-battle-army-set",
+      "lines": [
+        {
+          "name": "Canoness",
+          "models": 1
+        },
+        {
+          "name": "Battle Sisters Squad",
+          "models": 10
+        },
+        {
+          "name": "Seraphim Squad",
+          "models": 5
+        },
+        {
+          "name": "Repentia Superior",
+          "models": 1
+        },
+        {
+          "name": "Repentia Squad",
+          "models": 4
+        },
+        {
+          "name": "Arco-flagellants",
+          "models": 3
+        },
+        {
+          "name": "Penitent Engines",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "beast-snagga-orks-army-set",
+      "name": "Beast Snagga Orks Army Set",
+      "kind": "starter",
+      "announced": "2021",
+      "source": "https://spruesandbrews.com/2021/07/25/warhammer-40k-beast-snagga-orks-army-set-unboxing-and-new-codex-2021-first-impressions/",
+      "lines": [
+        {
+          "name": "Zodgrod Wortsnagga",
+          "models": 1
+        },
+        {
+          "name": "Beast Snagga Boyz",
+          "models": 20
+        },
+        {
+          "name": "Squighog Boyz",
+          "models": 4,
+          "units": 1
+        },
+        {
+          "name": "Bomb Squig",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "black-templars-army-box",
+      "name": "Black Templars Army Box",
+      "kind": "starter",
+      "announced": "2021",
+      "source": "https://spikeybits.com/new-40k-black-templars-army-box-pre-order-pricing-details/",
+      "lines": [
+        {
+          "name": "Marshal",
+          "models": 1
+        },
+        {
+          "name": "The Emperor's Champion",
+          "models": 1
+        },
+        {
+          "name": "Crusader Squad",
+          "models": 10
+        },
+        {
+          "name": "Redemptor Dreadnought",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "leagues-of-votann-army-set",
+      "name": "Leagues of Votann Army Set",
+      "kind": "starter",
+      "announced": "2022",
+      "source": "https://taleofpainters.com/2022/09/review-leagues-of-votann-army-set/",
+      "lines": [
+        {
+          "name": "Kahl",
+          "models": 1,
+          "or": [
+            "Uthar the Destined"
+          ]
+        },
+        {
+          "name": "Einhyr Champion",
+          "models": 1
+        },
+        {
+          "name": "Hearthkyn Warriors",
+          "models": 20,
+          "units": 2
+        },
+        {
+          "name": "Hernkyn Pioneers",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "cadia-stands-army-set",
+      "name": "Cadia Stands Army Set",
+      "kind": "starter",
+      "announced": "2022",
+      "source": "https://taleofpainters.com/2022/11/review-astra-militarum-cadia-stands-army-set/",
+      "lines": [
+        {
+          "name": "Cadian Command Squad",
+          "models": 5
+        },
+        {
+          "name": "Cadian Shock Troops",
+          "models": 20
+        },
+        {
+          "name": "Field Ordnance Battery",
+          "models": 2
+        },
+        {
+          "name": "Armoured Sentinel",
+          "models": 1,
+          "or": [
+            "Scout Sentinel"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "space-marines-battalion-detachment",
+      "name": "Space Marines Battalion Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://vincentknotley.wordpress.com/2019/06/17/apocalypse-battalion-boxes-value-content-price-speculation/",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 30,
+          "units": 3
+        },
+        {
+          "name": "Redemptor Dreadnought",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "chaos-space-marines-battalion-detachment",
+      "name": "Chaos Space Marines Battalion Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://vincentknotley.wordpress.com/2019/06/17/apocalypse-battalion-boxes-value-content-price-speculation/",
+      "lines": [
+        {
+          "name": "Chaos Lord in Terminator Armour",
+          "models": 1,
+          "or": [
+            "Sorcerer in Terminator Armour"
+          ]
+        },
+        {
+          "name": "Legionaries",
+          "models": 30,
+          "units": 3
+        },
+        {
+          "name": "Chaos Bikers",
+          "models": 6,
+          "units": 2
+        }
+      ]
+    },
+    {
+      "id": "astra-militarum-spearhead-detachment",
+      "name": "Astra Militarum Spearhead Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://vincentknotley.wordpress.com/2019/06/17/apocalypse-battalion-boxes-value-content-price-speculation/",
+      "lines": [
+        {
+          "name": "Leman Russ Demolisher",
+          "models": 1
+        },
+        {
+          "name": "Leman Russ Battle Tank",
+          "models": 2
+        },
+        {
+          "name": "Chimera",
+          "models": 1
+        },
+        {
+          "name": "Cadian Heavy Weapons Squad",
+          "models": 3
+        },
+        {
+          "name": "Cadian Command Squad",
+          "models": 5
+        }
+      ]
+    },
+    {
+      "id": "necron-outrider-detachment",
+      "name": "Necron Outrider Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://vincentknotley.wordpress.com/2019/06/17/apocalypse-battalion-boxes-value-content-price-speculation/",
+      "lines": [
+        {
+          "name": "Cryptek",
+          "models": 1
+        },
+        {
+          "name": "Tomb Blades",
+          "models": 6
+        },
+        {
+          "name": "Canoptek Wraiths",
+          "models": 6
+        },
+        {
+          "name": "Ghost Ark",
+          "models": 1,
+          "or": [
+            "Doomsday Ark"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "orks-spearhead-detachment",
+      "name": "Orks Spearhead Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://vincentknotley.wordpress.com/2019/06/17/apocalypse-battalion-boxes-value-content-price-speculation/",
+      "lines": [
+        {
+          "name": "Big Mek with Shokk Attack Gun",
+          "models": 1
+        },
+        {
+          "name": "Mek",
+          "models": 1
+        },
+        {
+          "name": "Killa Kans",
+          "models": 6
+        },
+        {
+          "name": "Deff Dreads",
+          "models": 2
+        }
+      ]
+    },
+    {
+      "id": "tyranids-spearhead-detachment",
+      "name": "Tyranids Spearhead Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://vincentknotley.wordpress.com/2019/06/17/apocalypse-battalion-boxes-value-content-price-speculation/",
+      "lines": [
+        {
+          "name": "Hive Tyrant",
+          "models": 1,
+          "or": [
+            "The Swarmlord"
+          ]
+        },
+        {
+          "name": "Carnifexes",
+          "models": 2,
+          "units": 1
+        },
+        {
+          "name": "Trygon",
+          "models": 1,
+          "or": [
+            "Mawloc"
+          ]
+        },
+        {
+          "name": "Tyrannofex",
+          "models": 1,
+          "or": [
+            "Tervigon"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "imperial-knights-super-heavy-detachment",
+      "name": "Imperial Knights Super-Heavy Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://vincentknotley.wordpress.com/2019/06/17/apocalypse-battalion-boxes-value-content-price-speculation/",
+      "lines": [
+        {
+          "name": "Knight Castellan",
+          "models": 1
+        },
+        {
+          "name": "Armiger Helverins",
+          "models": 2
+        }
+      ]
+    },
+    {
+      "id": "adeptus-mechanicus-vanguard-detachment",
+      "name": "Adeptus Mechanicus Vanguard Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://vincentknotley.wordpress.com/2019/06/17/apocalypse-battalion-boxes-value-content-price-speculation/",
+      "lines": [
+        {
+          "name": "Tech-Priest Dominus",
+          "models": 1
+        },
+        {
+          "name": "Kastelan Robots",
+          "models": 6
+        },
+        {
+          "name": "Cybernetica Datasmith",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "craftworlds-vanguard-detachment",
+      "name": "Craftworlds Vanguard Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://vincentknotley.wordpress.com/2019/06/17/apocalypse-battalion-boxes-value-content-price-speculation/",
+      "lines": [
+        {
+          "name": "Spiritseer",
+          "models": 1
+        },
+        {
+          "name": "Wraithguard",
+          "models": 15,
+          "or": [
+            "Wraithblades"
+          ]
+        },
+        {
+          "name": "Wraithlord",
+          "models": 2
+        }
+      ]
+    },
+    {
+      "id": "t-au-empire-vanguard-detachment",
+      "name": "T'au Empire Vanguard Detachment",
+      "kind": "battleforce",
+      "announced": "2019",
+      "source": "https://www.theswordandboardtoronto.com/products/apocalypse-tau-empire-vanguard-detachment",
+      "lines": [
+        {
+          "name": "Commander in Enforcer Battlesuit",
+          "models": 1,
+          "or": [
+            "Commander in Coldstar Battlesuit"
+          ]
+        },
+        {
+          "name": "Crisis Battlesuits",
+          "models": 6,
+          "units": 2,
+          "ownerNames": true
+        },
+        {
+          "name": "Riptide Battlesuit",
+          "models": 1
+        },
+        {
+          "name": "Drones",
+          "models": 13,
+          "ownerNames": true
+        }
+      ]
+    },
+    {
+      "id": "dark-vengeance-2014-edition",
+      "name": "Dark Vengeance (2014 Edition)",
+      "kind": "starter",
+      "announced": "2014",
+      "source": "https://www.belloflostsouls.net/2014/07/40k-dark-vengeance-contents-and-pricing.html",
+      "lines": [
+        {
+          "name": "Company Master",
+          "models": 1
+        },
+        {
+          "name": "Librarian",
+          "models": 1
+        },
+        {
+          "name": "Deathwing Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Tactical Squad",
+          "models": 10
+        },
+        {
+          "name": "Ravenwing Command Squad",
+          "models": 3
+        },
+        {
+          "name": "Chaos Lord",
+          "models": 1
+        },
+        {
+          "name": "Aspiring Champion",
+          "models": 1
+        },
+        {
+          "name": "Chosen",
+          "models": 6
+        },
+        {
+          "name": "Helbrute",
+          "models": 1
+        },
+        {
+          "name": "Cultist Mob",
+          "models": 20
         }
       ]
     }
