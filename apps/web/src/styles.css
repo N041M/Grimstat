@@ -382,8 +382,13 @@ code,
   background: var(--btn-bg);
   color: var(--btn-fg);
 }
-.rail-spacer {
+/* The rail's list takes the height between the mark and the theme control, so the item at its foot
+   can sit against the bottom instead of following the run of destinations. */
+.rail-nav-fill {
   flex: 1;
+}
+.rail-item-foot {
+  margin-top: auto;
 }
 .rail-theme {
   position: relative;
@@ -2395,22 +2400,33 @@ body.sheet-open {
 .sheet.sheet-left .sheet-handle span {
   width: 28px;
 }
+/* The drawer's own header: what this is, and the way out. Search used to sit in here as a 9px word
+   beside the close button, where it read as a label rather than something to press; it is its own
+   full-width control below instead. */
 .nav-drawer-head {
   display: flex;
-  align-items: flex-start;
-  /* Search and the close button are different actions, so they are not shoulder to shoulder. */
-  gap: 14px;
-  padding-right: 6px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 8px 14px;
+}
+.nav-drawer-brand {
+  font: 600 14px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--ink);
 }
 .nav-drawer-close {
   flex: none;
-  margin-top: 2px;
-  padding: 6px 10px;
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 0;
   border-radius: var(--radius-btn);
   color: var(--ink-2);
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
 }
@@ -2418,28 +2434,22 @@ body.sheet-open {
   background: var(--fill);
   color: var(--ink);
 }
-.nav-drawer-mark {
+.nav-drawer-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  min-width: 0;
-  padding: 6px 0 12px 14px;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
+  margin: 0 10px 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--faint);
+  font: 400 12px/1.2 var(--font);
   text-align: left;
   cursor: pointer;
 }
-.nav-drawer-brand {
-  font: 600 14px/1 var(--mono);
-  letter-spacing: 0.04em;
-  color: var(--ink);
-}
-.nav-drawer-palette {
-  margin-left: auto;
-  font: 400 9px/1 var(--mono);
-  color: var(--faint);
+.nav-drawer-search:hover {
+  color: var(--ink-2);
 }
 .nav-drawer-list {
   display: flex;
@@ -2480,11 +2490,17 @@ body.sheet-open {
 }
 .nav-drawer-foot {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px 8px calc(12px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--line);
+}
+.nav-drawer-foot .nav-drawer-item {
+  min-height: 40px;
+}
+.nav-drawer-theme {
+  padding: 0 6px;
 }
 .nav-drawer-theme {
   display: flex;
