@@ -358,9 +358,14 @@ export function Dialog({ open, onClose, title, children, className, wide }: { op
  * Bottom sheet for narrow viewports: fixed, 70vh, backdrop, drag handle (drag down or tap to close),
  * Escape closes. Locks page scrolling while open.
  */
-export function Sheet({ open, onClose, label, children, className }: { open: boolean; onClose: () => void; label: string; children: ReactNode; className?: string }) {
+/**
+ * A panel that covers part of the screen on a phone. It rises from the bottom by default; `side`
+ * "left" slides it in from the edge instead, which is what navigation uses so the drawer lands where
+ * the rail sits on a wider screen.
+ */
+export function Sheet({ open, onClose, label, children, className, side }: { open: boolean; onClose: () => void; label: string; children: ReactNode; className?: string; side?: "bottom" | "left" }) {
   const ref = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ y: number } | undefined>(undefined);
+  const drag = useRef<{ x: number; y: number } | undefined>(undefined);
   useEffect(() => {
     if (!open) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -382,20 +387,21 @@ export function Sheet({ open, onClose, label, children, className }: { open: boo
   return (
     <>
       <div className="sheet-backdrop" onClick={onClose} aria-hidden="true" />
-      <div className={`sheet ${className ?? ""}`.trim()} role="dialog" aria-modal="true" aria-label={label} ref={ref} tabIndex={-1}>
+      <div className={`sheet ${side === "left" ? "sheet-left" : ""} ${className ?? ""}`.trim()} role="dialog" aria-modal="true" aria-label={label} ref={ref} tabIndex={-1}>
         <button
           type="button"
           className="sheet-handle"
           aria-label={t("common.close")}
           onClick={onClose}
           onPointerDown={(e) => {
-            drag.current = { y: e.clientY };
+            drag.current = { x: e.clientX, y: e.clientY };
             e.currentTarget.setPointerCapture(e.pointerId);
           }}
           onPointerUp={(e) => {
             const start = drag.current;
             drag.current = undefined;
-            if (start && e.clientY - start.y > 60) onClose();
+            const travel = side === "left" ? start && start.x - e.clientX : start && e.clientY - start.y;
+            if (travel && travel > 60) onClose();
           }}
         >
           <span aria-hidden="true" />

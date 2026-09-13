@@ -2,6 +2,8 @@
 export const en = {
   // shell
   "nav.label": "Main navigation",
+  "nav.name": "Grimstat",
+  "nav.open": "Menu",
   "nav.calculator": "Calculator",
   "nav.scenarios": "Scenarios",
   "nav.data": "Data",
