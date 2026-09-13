@@ -110,9 +110,43 @@ export function isOlderThanEdition(box: BoxSet, from: string = LEGENDS_FROM): bo
   return !box.announced || box.announced.slice(0, 4) < from;
 }
 
-/** Every datasheet in the snapshot that goes by this name, in whatever faction. */
+/**
+ * The datasheets of a snapshot, under the word key a name matches them by.
+ *
+ * Reading every box asks the same question of every datasheet over and over, and the answer depends
+ * only on the two names. Asking it one pair at a time normalised each datasheet name once per line
+ * — near two million times for this list against a full snapshot — and opening the box picker took
+ * eleven seconds on a warm machine. A datasheet's key is the same whoever asks, so it is built once
+ * and kept on the snapshot, the way `nameIndexOf` keeps its own.
+ */
+const WORD_KEYS = new WeakMap<Snapshot, ReadonlyMap<string, readonly Datasheet[]>>();
+function byWordKey(snapshot: Snapshot): ReadonlyMap<string, readonly Datasheet[]> {
+  const cached = WORD_KEYS.get(snapshot);
+  if (cached) return cached;
+  const map = new Map<string, Datasheet[]>();
+  // Walked in index order, so a line's candidates arrive in the order a scan of it would have found
+  // them, and the faction a tie falls to does not change.
+  for (const { ds } of nameIndexOf(snapshot).names) {
+    const key = words(ds.name);
+    const at = map.get(key);
+    if (at) at.push(ds);
+    else map.set(key, [ds]);
+  }
+  WORD_KEYS.set(snapshot, map);
+  return map;
+}
+
+/**
+ * Every datasheet in the snapshot that goes by this name, in whatever faction.
+ *
+ * Two names match on the same spelling or on the same words, and the same spelling carries the same
+ * words, so the word key finds both kinds at once. A name with no words of its own — nothing but
+ * the joiners `words` drops — has only the strict match left, which is the index's own name key.
+ */
 function candidates(snapshot: Snapshot, name: string): readonly Datasheet[] {
-  return nameIndexOf(snapshot).names.filter((n) => sameUnitName(n.ds.name, name)).map((n) => n.ds);
+  const key = words(name);
+  if (key === "") return nameIndexOf(snapshot).dsByKey.get(normaliseName(name)) ?? [];
+  return byWordKey(snapshot).get(key) ?? [];
 }
 
 /**
