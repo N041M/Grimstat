@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { getSetting, setSetting } from "../db";
 import { PageHeader } from "../components/shell";
 import { AnalysisHeaderProvider, type AnalysisHeader } from "../components/analyses/shared";
@@ -7,6 +7,7 @@ import { DurabilityTab } from "../components/analyses/DurabilityTab";
 import { EfficiencyTab } from "../components/analyses/EfficiencyTab";
 import { TurnTab } from "../components/analyses/TurnTab";
 import { ReverseTab } from "../components/analyses/ReverseTab";
+import { useTabInView } from "../components/ui";
 import { t, type I18nKey } from "../i18n";
 
 export type AnalysisTab = "matrix" | "heatmap" | "durability" | "efficiency" | "reverse" | "turn";
@@ -58,6 +59,8 @@ export function AnalysesPage() {
 
   // Stable so a tab's publishing effect only re-runs on its own dependencies.
   const publish = useCallback((h: AnalysisHeader) => setHeader(h), []);
+  const tabbar = useRef<HTMLDivElement>(null);
+  useTabInView(tabbar, tab);
 
   let panel: ReactNode;
   switch (tab) {
@@ -83,7 +86,7 @@ export function AnalysesPage() {
   return (
     <>
       <PageHeader className="tabbed" title={t(TAB_TITLE[tab])} subtitle={header.subtitle ?? t("page.sub.analyses")} actions={header.actions}>
-        <div className="tabbar" role="tablist" aria-label={t("analyses.tabs")}>
+        <div className="tabbar" role="tablist" aria-label={t("analyses.tabs")} ref={tabbar}>
           {TABS.map((id) => (
             <button key={id} type="button" role="tab" id={`analysis-tab-${id}`} aria-selected={id === tab} aria-controls="analysis-panel" className={`tabbar-tab ${id === tab ? "on" : ""}`.trim()} onClick={() => select(id)}>
               {t(TAB_LABEL[id])}

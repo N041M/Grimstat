@@ -163,6 +163,8 @@ export function BattlePage() {
   const [targetId, setTargetId] = useState<string | undefined>();
   const [tool, setTool] = useState<BattleTool>("select");
   const [view, setView] = useState<CameraMode>("orbit");
+  /** Bumped to put the camera back where the view opened; see `Cameras`. */
+  const [recentre, setRecentre] = useState(0);
   const [drag, setDrag] = useState<DragState | undefined>();
   /** Whether `drag` is a live gesture (the readout follows the pointer) or a refused click. */
   const [dragging, setDragging] = useState(false);
@@ -930,6 +932,11 @@ export function BattlePage() {
             <button type="button" className="ghost sm" disabled={!selectedId && !grouped} onClick={clearSelection}>
               {t("battle.group.clear")}
             </button>
+            {/* Two fingers can carry the board off the screen, and a table of dark ground gives no
+                clue which way it went. This is the way back. */}
+            <button type="button" className="ghost sm" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre.title")}>
+              {t("battle.recentre")}
+            </button>
           </div>
           {webgl ? (
             <ErrorBoundary compact resetKey={layout.id}>
@@ -937,6 +944,7 @@ export function BattlePage() {
                 <BattleCanvas
                   state={state}
                   cameraMode={view}
+                  recentre={recentre}
                   selectedId={selectedId}
                   activeModelId={activeModelId}
                   incoherent={incoherent}
@@ -1212,7 +1220,7 @@ function MovePanel({
         </div>
       ) : (
         <>
-          <p className="muted small">{group.length >= 2 ? t("battle.group.moveHint") : activeModel ? t("battle.moveHint") : t("battle.unitHint")}</p>
+          <p className="muted small">{group.length >= 2 ? t(coarse ? "battle.group.moveHintTouch" : "battle.group.moveHint") : activeModel ? t(coarse ? "battle.moveHintTouch" : "battle.moveHint") : t(coarse ? "battle.unitHintTouch" : "battle.unitHint")}</p>
           {activeModel && coarse ? null : <p className="muted small">{activeModel ? t("battle.nudgeHint") : t("battle.pickModel")}</p>}
           <div className="battle-actions">
             <button type="button" className="ghost sm" onClick={() => onRotate(ROTATE_STEP)} title={t("battle.rotate.left")} aria-label={t("battle.rotate.left")}>
@@ -1320,7 +1328,7 @@ function BattlePanel({
       {tool === "deploy" ? (
         <section className="battle-section">
           <h2>{t("battle.deploy.title")}</h2>
-          <p className="muted small">{t("battle.deploy.hint")}</p>
+          <p className="muted small">{t(coarse ? "battle.deploy.hintTouch" : "battle.deploy.hint")}</p>
           <div className="battle-actions wrap">
             <button type="button" className="sm" onClick={onDeployAll}>
               {t("battle.deploy.everything")}
@@ -1366,7 +1374,7 @@ function BattlePanel({
               </ul>
             </div>
           ))}
-          {selected ? <p className="muted small">{selected.reserve ? t("battle.deploy.armed", { name: t(selected.name as I18nKey) }) : t(coarse ? "battle.deploy.selectedDeployedTouch" : "battle.deploy.selectedDeployed")}</p> : null}
+          {selected ? <p className="muted small">{selected.reserve ? t(coarse ? "battle.deploy.armedTouch" : "battle.deploy.armed", { name: t(selected.name as I18nKey) }) : t(coarse ? "battle.deploy.selectedDeployedTouch" : "battle.deploy.selectedDeployed")}</p> : null}
           {drag && !drag.legal ? (
             <ul className="battle-problems left">
               {drag.problems.map((p) => (

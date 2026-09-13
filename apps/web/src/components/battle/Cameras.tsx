@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { MOUSE, OrthographicCamera, PerspectiveCamera, Vector3 } from "three";
+import { MOUSE, OrthographicCamera, PerspectiveCamera, TOUCH, Vector3 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Aabb2, BoardSize } from "@grimstat/board";
 
@@ -19,7 +19,7 @@ const ELEVATION = 36;
 /** Headroom the fit allows above the table, so a three-storey ruin is not clipped. */
 const TABLE_HEADROOM = 14;
 
-export function Cameras({ mode, size, frame }: { mode: CameraMode; size: BoardSize; frame?: Aabb2 }) {
+export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; size: BoardSize; frame?: Aabb2; recentre?: number }) {
   const { gl, set, size: viewport, invalidate } = useThree();
   const controls = useRef<OrbitControls>();
   const centre = useMemo(() => new Vector3(size.width / 2, 0, -size.depth / 2), [size.width, size.depth]);
@@ -114,9 +114,18 @@ export function Cameras({ mode, size, frame }: { mode: CameraMode; size: BoardSi
     next.enableRotate = mode === "orbit";
     // Straight down there is nothing to orbit, so the left button pans and a drag still moves the view.
     next.mouseButtons.LEFT = mode === "orbit" ? MOUSE.ROTATE : MOUSE.PAN;
+    /*
+     * The same decision for a finger. OrbitControls starts one finger on rotate, which does nothing
+     * at all in the top-down view, where rotating is off — the view could only be panned with two
+     * fingers. One finger pans there, exactly as the left button does.
+     */
+    next.touches.ONE = mode === "orbit" ? TOUCH.ROTATE : TOUCH.PAN;
+    next.touches.TWO = TOUCH.DOLLY_PAN;
     const onChange = () => invalidate();
     next.addEventListener("change", onChange);
     next.update();
+    // The framing the view opens on, kept so `recentre` can return to it.
+    next.saveState();
     controls.current = next;
     // Publish the controls so the rest of the scene can suspend them — dragging a unit and orbiting
     // the camera are the same gesture, and only one of them can have it.
@@ -128,6 +137,16 @@ export function Cameras({ mode, size, frame }: { mode: CameraMode; size: BoardSi
       next.dispose();
     };
   }, [mode, perspective, orthographic, centre, distance, gl, set, invalidate]);
+
+  /**
+   * Two fingers can carry the board off the screen, and nothing on a table of dark ground says
+   * which way it went. Bumping `recentre` puts the camera back where the view opened.
+   */
+  useEffect(() => {
+    if (!recentre) return;
+    controls.current?.reset();
+    invalidate();
+  }, [recentre, invalidate]);
 
   useFrame(() => controls.current?.update());
   return null;

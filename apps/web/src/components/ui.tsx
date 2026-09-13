@@ -71,6 +71,20 @@ export function Switch({ checked, onChange, label, description, disabled }: { ch
   );
 }
 
+/**
+ * Keeps the selected tab in view in a tab bar too wide for the screen. Below 900px `.tabbar`
+ * scrolls sideways, so a screen reopened on its last tab would otherwise start with that tab off
+ * the edge. Give the bar a ref and pass whatever changes when the tab does.
+ */
+export function useTabInView(ref: RefObject<HTMLElement | null>, value: string): void {
+  useEffect(() => {
+    const bar = ref.current;
+    if (!bar || bar.scrollWidth <= bar.clientWidth) return;
+    const tab = bar.querySelector<HTMLElement>('[aria-selected="true"]');
+    tab?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [ref, value]);
+}
+
 /** Roving-tabindex tab strip: the selected tab is in the Tab order, the arrow keys move between tabs. */
 export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: Array<{ id: T; label: string }>; value: T; onChange: (v: T) => void; label: string }) {
   const id = useId();

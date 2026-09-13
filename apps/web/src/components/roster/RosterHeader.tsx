@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { BattleSize, Diagnostic, Roster } from "@grimstat/schema";
 import type { SaveStatus } from "../../hooks/useRosterEditor";
 import type { PointsBarModel } from "../../lib/pointsBar";
@@ -7,7 +7,7 @@ import { BATTLE_SIZE_ORDER } from "../../lib/roster";
 import { PageHeader } from "../shell";
 import { PointsBar } from "./PointsBar";
 import { battleSizeKey } from "../../pages/ArmiesPage";
-import { Icon, Popover } from "../ui";
+import { Icon, Popover, useTabInView } from "../ui";
 import { DiagnosticItem } from "./DiagnosticItem";
 import { t, tn, type I18nKey } from "../../i18n";
 
@@ -103,6 +103,8 @@ function IssueCount({ text, bad, diagnostics, onSelectUnit }: { text: string; ba
 export function RosterHeader({ roster, factionName, points, status, savedAt, errors, warns, diagnostics, onSelectUnit, mode, onMode, onRename, onBattleSize, onPointsLimit, onAddUnit, tab, onTab, children }: Props) {
   const issueText = errors || warns ? [errors ? tn(errors, "roster.issues.error.one", "roster.issues.error.many") : "", warns ? tn(warns, "roster.issues.warn.one", "roster.issues.warn.many") : ""].filter(Boolean).join(" · ") : t("roster.issues.none");
   const toggle = (m: EditorMode) => onMode(mode === m ? "unit" : m);
+  const tabbar = useRef<HTMLDivElement>(null);
+  useTabInView(tabbar, tab);
 
   const title = (
     <div className="roster-title-row">
@@ -158,7 +160,7 @@ export function RosterHeader({ roster, factionName, points, status, savedAt, err
     >
       <PointsBar model={points} />
       {children}
-      <div className="tabbar" role="tablist" aria-label={t("roster.tabs")}>
+      <div className="tabbar" role="tablist" aria-label={t("roster.tabs")} ref={tabbar}>
         {EDITOR_TABS.map((id) => (
           <button key={id} type="button" role="tab" id={`roster-tab-${id}`} aria-selected={id === tab} aria-controls="roster-panel" className={`tabbar-tab ${id === tab ? "on" : ""}`.trim()} onClick={() => onTab(id)}>
             {t(TAB_LABEL[id])}

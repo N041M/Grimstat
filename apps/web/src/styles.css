@@ -72,6 +72,8 @@
      shift sideways when the rail opens. */
   --rail-w: 56px;
   --rail-w-open: 172px;
+  /* The tablet rail, wide enough for the longest destination name ("My collection"). */
+  --rail-w-stacked: 78px;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -235,10 +237,22 @@ code,
 
 /* ---------- Shell ----------
    56px icon rail | 240–264px context column | the page. Full viewport height, each region
-   scrolls on its own. The 1040px floor only applies above 900px; below that the shell folds
-   into the phone reduction at the bottom of this section. */
+   scrolls on its own.
+
+   Three widths, set as classes by App.tsx from the queries in hooks/useMediaQuery.ts so the
+   markup and the layout can never disagree about which one is in force:
+
+     .shell            three columns, from 1040px up
+     .shell.tablet     the rail beside the page, context column in a sheet
+     .shell.phone      the page alone, navigation in the drawer, context column in a sheet
+
+   1040px is both the desktop floor and the width the desktop layout begins at, so the page is
+   never wider than the window it is in. */
 .shell {
+  /* Small viewport units measure the window a phone browser actually leaves the page, which is
+     shorter than the window it has once the address bar has scrolled away. */
   height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: var(--rail-w) minmax(240px, 264px) minmax(0, 1fr);
   overflow: hidden;
@@ -246,7 +260,7 @@ code,
   color: var(--ink);
   position: relative;
 }
-@media (min-width: 900px) {
+@media (min-width: 1040px) {
   .shell {
     min-width: 1040px;
   }
@@ -258,6 +272,16 @@ code,
   .main-region {
     grid-column: 3;
   }
+}
+/* The rail stands in the page here, so it takes the first track and the page takes the rest. */
+.shell.tablet {
+  grid-template-columns: var(--rail-w-stacked) minmax(0, 1fr);
+  min-width: 0;
+}
+.shell.phone {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
 }
 .shell-loading {
   padding: 22px;
@@ -303,6 +327,64 @@ code,
   .rail {
     transition: none;
   }
+}
+/*
+ * The tablet rail. A tablet has no pointer to hover with, so the names a hover reveals on a wider
+ * screen would never be read. Every item shows its name under its letter at all times. The rail
+ * stands in the page rather than hanging over it, and each item is a thumb high.
+ */
+.rail-stacked {
+  position: static;
+  width: var(--rail-w-stacked);
+  transition: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.rail-stacked:hover,
+.rail-stacked:has(.rail-nav :focus-visible) {
+  --rail-now: var(--rail-w-stacked);
+  box-shadow: none;
+}
+.rail-stacked > .rail-mark {
+  margin: 0 auto 12px;
+  align-self: center;
+  width: 34px;
+  height: 34px;
+}
+.rail-stacked .rail-item {
+  height: auto;
+  min-height: 48px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  margin: 0 6px;
+  padding: 6px 2px;
+  text-align: center;
+}
+.rail-stacked .rail-glyph {
+  width: auto;
+  font-size: 14px;
+}
+.rail-stacked .rail-label {
+  opacity: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 500 10px/1.15 var(--font);
+  letter-spacing: 0;
+  color: inherit;
+}
+.rail-stacked .rail-theme-btn .rail-glyph {
+  font-size: 15px;
+}
+.rail-stacked .rail-theme-menu {
+  left: calc(100% - 10px);
+}
+.rail-stacked .rail-offline {
+  margin: 0 6px 6px;
+  text-align: center;
 }
 /* The mark: one tile, one diamond, the solve dot on its corner. The same everywhere it appears, so
    the rail and the phone drawer show the reader the same thing. */
@@ -855,71 +937,107 @@ code,
   color: var(--faint);
 }
 
-/* ---- phone reduction (<900px): rail to the bottom, context column into a sheet ---- */
+/* ---- the top bar, on phones and tablets ----
+   The context column is a sheet at these widths, and this bar is what opens it. On a phone it also
+   carries the ☰ that opens the navigation drawer; on a tablet the rail is already on screen, so
+   the bar starts with the sheet button instead. Both keep the page's own actions on the right. */
 .ctx-bar {
   display: none;
 }
+.shell.compact .main-region {
+  order: 1;
+  overflow-x: hidden;
+}
+.shell.compact .ctx-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px calc(12px + env(safe-area-inset-left, 0px));
+  padding-right: calc(12px + env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line);
+  background: var(--rail);
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  min-height: 52px;
+}
+/* The rail is already on screen here, so the bar holds one button and takes a row to match. */
+.shell.tablet .ctx-bar {
+  min-height: 44px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.shell.compact .ctx-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  background: var(--panel);
+  font: 500 11px/1.3 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  cursor: pointer;
+}
+.ctx-sheet .ctx-col {
+  border-right: 0;
+  overflow: visible;
+  background: transparent;
+}
+.ctx-sheet .ctx-spacer {
+  display: none;
+}
+
+/* ---- page reduction (<900px): one column, wide content scrolls inside its own box ---- */
 @media (max-width: 899px) {
-  /* The rail is not on screen here: navigation lives in the drawer the top bar's ☰ opens, so the
-     page gets the whole height rather than giving 56px to a row of letters. */
-  .shell {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-    min-width: 0;
-  }
-  .main-region {
-    order: 1;
-  }
-  .ctx-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--line);
-    background: var(--rail);
-    flex: none;
-    position: sticky;
-    top: 0;
-    z-index: 4;
-  }
-  .ctx-bar-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 10px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-btn);
-    background: var(--panel);
-    font: 500 11px/1.3 var(--mono);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--ink);
-    cursor: pointer;
-  }
-  .ctx-sheet .ctx-col {
-    border-right: 0;
-    overflow: visible;
-    background: transparent;
-  }
-  .ctx-sheet .ctx-spacer {
-    display: none;
-  }
-  .main-region {
-    overflow-x: hidden;
-  }
   .page-header {
-    /* The context bar already owns the sticky top slot on phones. */
+    /* The context bar already owns the sticky top slot here. */
     position: static;
-    padding: 14px 16px 12px;
+    padding: 12px 16px 10px;
   }
   .page-header-row {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
   }
+  .page-header h1 {
+    font-size: 18px;
+  }
   .page-header-actions {
     flex-wrap: wrap;
     gap: 6px;
+  }
+  /* A tab strip among the header's actions is a row rather than a single control, so the
+     `flex: none` the actions share sizes it to the whole unwrapped strip and it runs off the edge
+     of the screen. It takes a line of its own here and scrolls along that line. It does not wrap,
+     because five tools on two lines cost the battle table more height than the fifth tool is
+     worth. */
+  .page-header-actions > .tabs {
+    flex: 1 1 100%;
+    min-width: 0;
+    margin-bottom: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+  }
+  .page-header-actions > .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .page-header-actions > .tabs button {
+    scroll-snap-align: start;
+    white-space: nowrap;
+  }
+  /* A second strip is a smaller choice, such as the battle table's camera, and shares its line
+     with whatever follows it. */
+  .page-header-actions > .tabs ~ .tabs {
+    flex: 0 1 auto;
+    mask-image: none;
   }
   .page-header-sub {
     white-space: normal;
@@ -935,12 +1053,14 @@ code,
     overflow-x: auto;
   }
   .page-body {
-    padding: 14px 16px 24px;
+    padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(16px + env(safe-area-inset-left, 0px));
+    padding-right: calc(16px + env(safe-area-inset-right, 0px));
   }
   .notice-layer {
     right: 12px;
     left: 12px;
-    bottom: 68px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     max-width: none;
   }
 }
@@ -1002,6 +1122,17 @@ code,
  */
 .grid-2.grid-fold {
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+}
+/*
+ * On a phone or a tablet the container itself is narrower than one 400px column, and a bare 400px
+ * holds the column at that width and pushes the panel out of the page. `min()` caps the column at
+ * the width there is. The names are then cut, so the hbar rows below give each name a line of its
+ * own at these widths.
+ */
+@media (max-width: 1039px) {
+  .grid-2.grid-fold {
+    grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr));
+  }
 }
 @media (max-width: 899px) {
   .grid-2 {
@@ -2366,12 +2497,19 @@ body.sheet-open {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 70vh;
+  /* The sheet is as tall as what it holds, up to most of the screen. A fixed 70% left a short
+     list — three armies and a snapshot line — sitting above 300px of empty panel, and stopped a
+     long one short of the room it could have had. Whatever is left shows the page behind it, so
+     the sheet reads as something laid over the screen rather than as a new screen. */
+  height: auto;
+  max-height: 78vh;
+  max-height: min(78dvh, calc(100dvh - 56px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   z-index: 41;
   background: var(--panel);
   border-top: 1px solid var(--dash);
   border-radius: 12px 12px 0 0;
-  box-shadow: var(--shadow);
+  box-shadow: 0 -8px 32px var(--shadow);
   display: flex;
   flex-direction: column;
   animation: sheet-in 0.2s ease-out;
@@ -2382,7 +2520,9 @@ body.sheet-open {
   top: 0;
   bottom: 0;
   height: auto;
+  max-height: none;
   width: min(82vw, 300px);
+  padding-left: env(safe-area-inset-left, 0px);
   border-top: 0;
   border-right: 1px solid var(--dash);
   border-radius: 0;
@@ -6089,7 +6229,36 @@ button.val-row:hover {
   font: 600 20px/1 var(--mono);
 }
 
-@media (max-width: 1040px) {
+/*
+ * A tablet in landscape keeps the table and the panel side by side. At 1024px the rail leaves the
+ * body 946px, which is a 678px table and the 268px panel, and neither of them has to scroll. The
+ * page used to stack below 1040px, which made an iPad landscape 1908px of scrolling document with
+ * the table as a strip at the top of it.
+ *
+ * The region has to hand the page the height the top bar leaves rather than the whole of itself, so
+ * it becomes a flex column for this page. It is block flow everywhere else on purpose: a flex column
+ * stretches to its widest child, which would let a wide table push a region sideways instead of
+ * scrolling inside its own box.
+ */
+@media (min-width: 900px) and (max-width: 1039px) {
+  .shell.compact .main-region:has(> .battle-page) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .shell.compact .main-region > .battle-page {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    padding-bottom: 0;
+  }
+  .shell.compact .battle-panel {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Narrower than that there is no room for two columns, so the panel goes under the table. */
+@media (max-width: 899px) {
   .battle-page {
     height: auto;
   }
@@ -7722,6 +7891,49 @@ button.battle-scope-btn:hover {
 .battle-toolbar[hidden] {
   display: none;
 }
+/*
+ * The toolbar is a dark strip over a dark table in both themes, so its controls carry their own
+ * light ink rather than the page's. In the light theme they took `--ink`, which is near-black, and
+ * everything but the one filled button was invisible against the strip.
+ *
+ * Filled means the action to take now, or a mode that is on. Everything else is an outline.
+ */
+.battle-toolbar button {
+  color: #e6e8ec;
+  background: transparent;
+  border-color: rgba(230, 232, 236, 0.3);
+}
+.battle-toolbar button.ghost {
+  border-color: transparent;
+}
+.battle-toolbar button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(230, 232, 236, 0.6);
+  color: #ffffff;
+}
+.battle-toolbar button:not(.ghost) {
+  background: #e6e8ec;
+  border-color: #e6e8ec;
+  color: #15161a;
+  font-weight: 600;
+}
+.battle-toolbar button:not(.ghost):hover:not(:disabled) {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #15161a;
+}
+/* Disabled still has to be read — it is how the toolbar says what this tool can do at all. */
+.battle-toolbar button:disabled {
+  opacity: 1;
+  color: rgba(230, 232, 236, 0.45);
+  background: transparent;
+  border-color: rgba(230, 232, 236, 0.14);
+}
+.battle-toolbar button:not(.ghost):disabled {
+  background: rgba(230, 232, 236, 0.2);
+  border-color: transparent;
+  color: rgba(230, 232, 236, 0.6);
+}
 .battle-toolbar button[aria-pressed="true"] {
   border-color: var(--accent);
 }
@@ -7810,6 +8022,16 @@ button.battle-scope-btn:hover {
 }
 .ctx-bar-actions::-webkit-scrollbar {
   display: none;
+}
+/* A phone rarely has room for all of a page's actions. A strip that ends flat at the edge looks
+   like it ends at its last button, so the last few pixels fade to say the row continues. */
+.shell.compact .ctx-bar-actions {
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+.shell.compact .ctx-bar-action {
+  scroll-snap-align: end;
 }
 .ctx-bar-action {
   flex: none;
@@ -8166,7 +8388,9 @@ button.battle-scope-btn:hover {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 14px 16px 24px;
+  padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(16px + env(safe-area-inset-left, 0px));
+  padding-right: calc(16px + env(safe-area-inset-right, 0px));
 }
 .play-over {
   flex: none;
@@ -8946,13 +9170,15 @@ input.sec-add-cap {
 }
 
 /* ===== Play: focus mode =====
-   On a phone the navigation bar sits right under the thumb that taps "next phase" all game. While
-   focus is on the rail is hidden, so the only way off the screen is the control that says so. The
-   class is on the body because the rail belongs to the shell rather than to the page. */
-body.play-focused .shell.narrow .rail {
+   At the table the screen is nothing but the game, so the rail and the top bar both go and the
+   only way off the screen is the control that says so. The class is on the body because the rail
+   and the bar belong to the shell rather than to the page. */
+body.play-focused .shell.compact .rail,
+body.play-focused .shell.compact .ctx-bar {
   display: none;
 }
-body.play-focused .shell.narrow {
+body.play-focused .shell.compact {
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
 .ctx-bar-action.on {
@@ -8966,7 +9192,7 @@ body.play-focused .shell.narrow {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 16px;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--line);
   background: var(--rail);
   font: 400 11px/1.4 var(--mono);
@@ -9198,4 +9424,339 @@ body.play-focused .shell.narrow {
   .coll-pick-row > .coll-pick-have {
     display: none;
   }
+}
+
+/* ---------- Touch sizes ----------
+   Below 1040px the pointer is a finger. Everything the reader presses is at least 40px high. The
+   controls a thumb goes to without looking, meaning the top bar, the drawer and a sheet's handle,
+   are 44. The sizes follow the width rather than `pointer: coarse` so that a touchscreen laptop
+   keeps the dense layout it has the room for. One rule really is about the input device: the type
+   size that stops iOS zooming a field on focus, and it asks about the pointer.
+
+   Controls drawn inside a figure, such as a chart's own legend and labels, are exempt. Growing
+   those would change the figure rather than the control. They are listed at the end. */
+@media (max-width: 1039px) {
+  .shell.compact button,
+  .shell.compact .btn,
+  .shell.compact select,
+  .shell.compact input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+    min-height: 40px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* A summary grows by its padding. Setting `display: flex` would buy the same target and take
+     the disclosure triangle with it. */
+  .shell.compact summary {
+    padding-block: 11px;
+  }
+  .shell.compact button.sm,
+  .shell.compact .sm > button,
+  .shell.compact .ctx-row {
+    min-height: 38px;
+  }
+  .shell.compact input[type="checkbox"],
+  .shell.compact input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* The top bar. ☰ and the sheet button are the two the thumb reaches for blind. */
+  .shell.compact .ctx-bar-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    margin-left: -8px;
+    padding: 0;
+    border-radius: var(--radius-btn);
+    font-size: 18px;
+  }
+  .shell.compact .ctx-bar-nav:hover {
+    background: var(--hover);
+  }
+  .shell.compact .ctx-bar-action {
+    min-height: 40px;
+    padding: 5px 12px;
+  }
+
+  /* A bottom sheet is dragged down by its handle, so the handle is a target. The drawer is
+     pushed aside by its own face, so its handle only marks the edge and takes the height of a
+     mark. */
+  .shell.compact .sheet-handle {
+    min-height: 44px;
+    padding: 0;
+    align-items: center;
+  }
+  .shell.compact .sheet-left .sheet-handle {
+    min-height: 26px;
+  }
+  .shell.compact .nav-drawer-close {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+  .shell.compact .nav-drawer-search,
+  .shell.compact .nav-drawer-item {
+    min-height: 44px;
+  }
+
+  /* Page furniture: header actions, tabs, the widget controls, the dashboard's toolbar. */
+  .shell.compact .page-header-actions button,
+  .shell.compact .page-header-actions .btn {
+    min-height: 40px;
+    padding: 8px 13px;
+    font-size: 13px;
+  }
+  .shell.compact .tabbar-tab {
+    min-height: 44px;
+  }
+  /* A taller pill has to stay a pill. It centres its label and scales its radius with its
+     height, so it does not become a rounded rectangle with the text against the top. */
+  .shell.compact .pill-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding-inline: 14px;
+    border-radius: 18px;
+  }
+  /* Including a source and fetching it are the two things this part of the card does, so they
+     sit on one line at either end of it. */
+  .shell.compact .src-card-select {
+    flex-direction: row;
+    align-items: center;
+  }
+  .shell.compact .dash-btn,
+  .shell.compact .mx-sets-toggle,
+  .shell.compact .dock-section-head,
+  .shell.compact .data-link,
+  .shell.compact .battle-unit {
+    min-height: 40px;
+  }
+  .shell.compact .widget-hide {
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+  }
+  .shell.compact .seg-btn {
+    min-height: 34px;
+    padding-inline: 10px;
+  }
+  /* A keyboard hint on a device with no keyboard. */
+  .shell.compact .filter-kbd {
+    display: none;
+  }
+
+  /* Inside a figure the control is part of the drawing, so it keeps the drawing's size. */
+  .shell.compact .hbar-btn,
+  .shell.compact .chart button,
+  .shell.compact .chart input,
+  .shell.compact .legend button,
+  .shell.compact .gtable-row .num button {
+    min-height: 0;
+  }
+}
+
+/* iOS zooms the page when a field smaller than 16px takes focus, and never zooms back out. */
+@media (max-width: 1039px) and (pointer: coarse) {
+  .shell.compact input,
+  .shell.compact select,
+  .shell.compact textarea {
+    font-size: 16px;
+  }
+}
+
+/* ---------- Panels on a narrow screen ----------
+   A panel's heading row is a title with a legend and a control beside it. There is no room for the
+   three of them on one line at phone width, so the row wraps and the control starts the second
+   line under the title rather than being pushed off the edge of the card. */
+@media (max-width: 899px) {
+  .panel-head-row,
+  .widget-head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  /* `flex: none` holds the aside at the width of its own contents, which is wider than the card.
+     Given the whole of the second line it can break its legend and its control apart instead. */
+  .panel-aside,
+  .widget-head > .panel-aside {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .panel-aside .legend,
+  .dist-head-aside {
+    justify-content: flex-start;
+  }
+  /* The dashboard's own toolbar reads from the same edge the cards under it start at. */
+  .dash-bar {
+    justify-content: flex-start;
+    padding: 8px 16px;
+  }
+}
+
+/* ---------- Horizontal bar charts in a narrow box ----------
+   Three columns — name, bar, number — give the name 38% of the row. Under about 380px that is
+   130px, which cuts "Re-roll all failed hit rolls" to "Re-roll all failed…" and loses what the row
+   is about. Below that the name takes a line of its own and the bar and its number share the next.
+
+   The width that matters is the panel's, not the window's, because these charts sit in a dashboard
+   the reader resizes, so this asks the container rather than the viewport. */
+.hbar {
+  container-type: inline-size;
+}
+@container (max-width: 380px) {
+  .hbar-row {
+    grid-template-columns: minmax(0, 1fr) max-content;
+    row-gap: 3px;
+    padding-bottom: 2px;
+  }
+  .hbar-label {
+    grid-column: 1 / -1;
+    overflow: visible;
+    white-space: normal;
+    text-align: left;
+  }
+}
+
+/* ---------- Tab bars on a narrow screen ----------
+   Five tabs do not fit across a phone, so the bar scrolls sideways. It fades at its right edge to
+   say there is more, hides its scrollbar, and snaps each tab to the edge it was dragged towards.
+   The selected tab scrolls itself into view when the screen opens; see `useTabInView`. */
+@media (max-width: 899px) {
+  .tabbar {
+    margin-top: 12px;
+    margin-inline: -16px;
+    padding-inline: 16px;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+  }
+  .tabbar::-webkit-scrollbar {
+    display: none;
+  }
+  .tabbar-tab {
+    scroll-snap-align: start;
+    padding-inline: 14px;
+  }
+}
+
+/* ---------- What a keyboard is for ----------
+   Hints naming arrow keys, Enter and ⌘K are addressed to a reader who has a keyboard in front of
+   them. On a touch device they are a line of text about controls that are not there. */
+@media (max-width: 1039px) and (pointer: coarse) {
+  .keys-hint,
+  .pal-foot {
+    display: none;
+  }
+}
+
+/* ---------- Cards that open something ----------
+   An army card's way in is its title, a 17px line at the top of a 90px card. Under a finger the
+   whole card should be the target, so the title's own box is stretched over it. The menu button is
+   lifted back above that box so it stays pressable. */
+@media (max-width: 1039px) and (pointer: coarse) {
+  .army-card {
+    position: relative;
+  }
+  .army-card-title::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius);
+  }
+  .army-card-top .pop-wrap {
+    position: relative;
+    z-index: 1;
+  }
+  /* A link that stands on its own as an action gets a box to be pressed in, unlike one inside
+     a sentence, which keeps the line it belongs to. */
+  .data-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+}
+
+/* ---------- Datasheet tables on a narrow screen ----------
+   A weapon table is about 780px across and a phone is 375, so it scrolls sideways inside its box.
+   Scrolled, every row became a line of numbers with nothing to say which weapon it was about, so
+   the name column stays against the left edge while the rest of the row moves under it. The row's
+   side padding moves onto the cells, because a sticky cell pinned at the edge of the box would
+   otherwise leave the row's own padding showing scrolled content beside it. */
+@media (max-width: 899px) {
+  /* A row is a block-level grid, so its box is the width of the screen even when its columns add
+     up to twice that. A cell can only stick inside its own row's box, so the rows have to be as
+     wide as the columns they hold before any of this works. */
+  .codex-table .gtable {
+    width: max-content;
+    min-width: 100%;
+  }
+  .codex-table .gtable-head,
+  .codex-table .gtable-row {
+    padding-inline: 0;
+  }
+  .codex-table .gtable-hc:first-child,
+  .codex-table .gtable-cell:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    padding: 0 10px 0 14px;
+    background: var(--bg);
+    box-shadow: 1px 0 0 var(--line-soft);
+  }
+  .codex-table .gtable-head .gtable-hc:first-child {
+    z-index: 3;
+    background: var(--rail);
+  }
+  .codex-table .gtable-row > :last-child,
+  .codex-table .gtable-head > :last-child {
+    padding-right: 14px;
+  }
+}
+
+/* ---------- Clear of the home indicator ----------
+   `.page-body` already ends above it. These three screens lay themselves out instead of using it,
+   so each ends above it on its own. */
+@media (max-width: 1039px) {
+  .shell.compact .calc-screen,
+  .shell.compact .roster-editor,
+  .shell.compact .battle-page {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* ---------- Command palette on a phone ----------
+   Nearly the whole width, and started high enough that a search field and its first few results
+   are all above the keyboard when it comes up. */
+@media (max-width: 759px) {
+  .pal-backdrop {
+    padding-top: 6vh;
+  }
+  .pal-panel {
+    width: 94vw;
+  }
+  .pal-results {
+    max-height: 58dvh;
+  }
+}
+.pal-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--muted);
+}
+.pal-close:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
