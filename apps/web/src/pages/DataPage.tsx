@@ -308,7 +308,6 @@ export function DataPage() {
         }
       />
       <div className="page-body data-body">
-        <p className="page-lede">{t("data.intro")}</p>
 
         <FetchSources ref={sources} />
 

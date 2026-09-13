@@ -198,7 +198,6 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   return (
     <section className="src-block" aria-labelledby="data-fetch-h">
       <PanelHead id="data-fetch-h" title={t("data.fetch.title")} />
-      <p className="data-note src-intro">{t("data.fetch.intro")}</p>
       <div className="src-cards">
         {CARD_SOURCES.map((id) => {
           const stored = rawSnapshot?.sources.find((s) => s.adapter === id);

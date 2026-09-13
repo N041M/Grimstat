@@ -216,7 +216,6 @@ export const en = {
   "scenario.snapshotMissingInline": "Data snapshot “{id}” is not stored here, so the run uses the unit stats embedded in the scenario.",
 
   // scenarios page
-  "scenarios.intro": "A shared link carries the whole scenario, so it opens without an account.",
   "scenarios.saveCurrent": "Save current: {name}",
   "scenarios.empty": "No saved scenarios yet. Build one in the calculator and press Save.",
   "scenarios.current": "current",
@@ -547,7 +546,6 @@ export const en = {
   "warnings.none": "No warnings.",
 
   // data page
-  "data.intro": "Fetch the community sources straight from this browser, import a data file you saved earlier, or load the sample data to try the app.",
   "data.loadSample": "Load sample data",
   "data.importSnapshot": "Import snapshot JSON…",
   "data.fetchAll": "Fetch everything",
@@ -858,7 +856,7 @@ export const en = {
   "roster.tabs": "Army views",
   "roster.tab.strats": "Stratagems",
   "roster.strat.title": "Stratagems this list can use",
-  "roster.strat.intro": "The detachments this list took, its faction's own, and the core ones. This is the same set the printable reference pack carries.",
+  "roster.strat.intro": "The detachments this list took, its faction’s own, and the core ones.",
   "roster.strat.summary": "{n} · {min}–{max} CP",
   "roster.strat.count.one": "1 stratagem",
   "roster.strat.count.many": "{n} stratagems",
@@ -1599,7 +1597,6 @@ export const en = {
   "data.published.empty": "None yet. Fetch the published corpus, drop in a write-up page you saved from your browser, or paste a single list.",
   "data.published.imported": "{added} new lists stored ({found} in the files).",
   "data.published.nothing": "No lists were found in those files.",
-  "data.published.note": "Fetch the published corpus with the button above, drop in a write-up page you saved, or paste a single list with where you saw it.",
   "data.published.col.writeUp": "Write-up",
   "data.published.col.publication": "Publication",
   "data.published.col.lists": "Lists",
@@ -1705,7 +1702,6 @@ export const en = {
 
   // rules overrides
   "overrides.title": "Rules overrides",
-  "overrides.intro": "Corrections layered on top of every imported snapshot: model an ability the app missed, set a Feel No Pain, or mark an ability as having no combat effect. They survive re-imports and can be shared as a pack.",
   "overrides.open": "Open the override editor",
   "overrides.back": "Back to Data",
   "overrides.appliedPill": "{n} override(s) applied",
@@ -1817,7 +1813,6 @@ export const en = {
   "coverage.markedNone": "{n} marked as no combat effect",
   // ---- Data: fetch from community sources (browser import) ----
   "data.fetch.title": "Fetch from community sources",
-  "data.fetch.intro": "Downloads the community data straight from GitHub into this browser and builds a checksummed snapshot on your device.",
   "data.fetch.sourcesLabel": "Sources",
   "data.fetch.source.mfm-yaml": "MFM points",
   "data.fetch.source.bsdata-json": "BSData structure (11th edition)",
@@ -2358,7 +2353,6 @@ export const en = {
   "odds.log.applied": "{att} puts {n} wounds on {name}.",
 
   /* ---- Play: starting a game, the game column, stratagems at the table, scoring ---- */
-  "play.setup.lede": "Follows a game as it is played, counting the round, the score and the command points, and keeping a log.",
   "play.setup.count.one": "1 game",
   "play.setup.count.many": "{n} games",
   "play.setup.start": "Start a game",
@@ -2422,7 +2416,7 @@ export const en = {
   "play.sec.removeTitle": "Remove this secondary?",
   "play.sec.removeBody": "Its points in every round go with it.",
   "play.sec.none": "No secondaries yet. Add the ones the players agreed on.",
-  "play.sec.note": "No mission data ships with the app, so the secondaries are the ones you enter here.",
+  "play.sec.note": "The secondaries are the ones you enter here.",
   "play.sec.addName": "Secondary name",
   "play.sec.addPlaceholder": "Name of the secondary",
   "play.sec.addCap": "Cap",

@@ -63,7 +63,6 @@ export function GameSetup({ games, onOpen, notify }: Props) {
     <>
       <PageHeader title={t("play.title")} subtitle={tn(games.length, "play.setup.count.one", "play.setup.count.many", { n: games.length })} />
       <div className="page-body stack">
-        <p className="page-lede">{t("play.setup.lede")}</p>
 
         <section className="setup-panel" aria-label={t("play.setup.start")}>
           <PanelHead title={t("play.setup.start")} />
