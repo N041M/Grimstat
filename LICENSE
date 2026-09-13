@@ -16,10 +16,25 @@ You may not, without prior written permission from the copyright holder:
   - copy, adapt or redistribute this source or any substantial part of it;
   - host, deploy or otherwise make available a service derived from it;
   - incorporate any part of it into another product, whether or not that
-    product is free, and whether or not it is published.
+    product is free, and whether or not it is published;
+  - extract it in bulk by automated means;
+  - use it, in whole or in part, as training, fine-tuning, validation or
+    retrieval material for a machine-learning model or for any other automated
+    system, or supply it to anyone else for that purpose.
 
 This applies to the source, to the assets that accompany it, and to the data
 files in `apps/web/public/`, which are additionally covered by LICENSE-DATA.
+
+TEXT AND DATA MINING
+
+The rights to mine this work for text or data are expressly reserved. The
+reservation is made for the purposes of Article 4(3) of Directive (EU) 2019/790
+and of any equivalent provision elsewhere, and it holds however a copy was
+obtained, including from a mirror, an archive, a package registry or a
+third-party dataset.
+
+Reading this source, and the ordinary operation of a search engine's index, are
+not affected by it.
 
 Warhammer 40,000 and all associated marks are the property of Games Workshop
 Limited. This project is unofficial and is neither affiliated with, endorsed by,

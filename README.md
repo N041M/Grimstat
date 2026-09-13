@@ -40,7 +40,9 @@ Warhammer 40,000 and all associated marks are the property of Games Workshop Lim
 
 The source is published to be read and checked, not to be reused. [LICENSE](LICENSE) reserves all rights. You may read it, run it locally to audit what the app does with your data, use the hosted app for your own play, and send changes back. Without written permission you may not copy, adapt or redistribute the source or any substantial part of it, host or deploy a service derived from it, or fold any part of it into another product — whether that product is free or paid, published or not.
 
-The boxed-set catalogue has separate terms in [LICENSE-DATA](LICENSE-DATA), which claim the compilation and not the facts in it. That a given box holds ten of a unit is a fact about a product somebody else sells, and facts are nobody's property.
+Both licences reserve the rights to mine this work for text or data, which covers bulk automated extraction and use as training, fine-tuning, validation or retrieval material for a machine-learning model. Reading the source, and a search engine indexing it, are not affected.
+
+The boxed-set catalogue has separate terms in [LICENSE-DATA](LICENSE-DATA), which claim the compilation and not the facts in it. That a given box holds ten of a unit is a fact about a product somebody else sells, and facts are nobody's property. The compilation is also asserted as a database right in the EU and the UK.
 
 Corrections and additions are welcome under both.
 
