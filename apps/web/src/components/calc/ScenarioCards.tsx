@@ -83,6 +83,14 @@ function CoverageBlock({ coverage }: { coverage: CoverageReport }) {
   if (!total) return null;
   const modelled = coverage.tier1 + coverage.tier2;
   const pct = (n: number) => (total ? `${(n / total) * 100}%` : "0%");
+  // Nothing unmodelled is the ordinary case and needs no breakdown: a bar at 100%, two rows
+  // reading (0) and a sentence repeating the count all say what "8 of 8 modelled" already said.
+  const short = coverage.tier3 === 0 && coverage.unmodelled.length === 0;
+  const tiers = [
+    { cls: "t1", n: coverage.tier1, label: t("coverage.tier1", { n: coverage.tier1 }), title: t("coverage.tier1.title") },
+    { cls: "t2", n: coverage.tier2, label: t("coverage.tier2", { n: coverage.tier2 }), title: t("coverage.tier2.title") },
+    { cls: "t3", n: coverage.tier3, label: t("coverage.tier3", { n: coverage.tier3 }), title: t("coverage.tier3.title") },
+  ].filter((x) => x.n > 0);
   return (
     <section className="calc-ctx-cov" aria-labelledby="calc-cov-h">
       <div className="calc-ctx-cov-head">
@@ -91,42 +99,38 @@ function CoverageBlock({ coverage }: { coverage: CoverageReport }) {
         </span>
         <span className="calc-ctx-cov-count mono">{t("coverage.summary", { modelled, total })}</span>
       </div>
-      <div className="calc-ctx-cov-bar" role="img" aria-label={t("coverage.aria", { t1: coverage.tier1, t2: coverage.tier2, t3: coverage.tier3 })}>
-        <span className="t1" style={{ width: pct(coverage.tier1) }} />
-        <span className="t2" style={{ width: pct(coverage.tier2) }} />
-        <span className="t3" style={{ width: pct(coverage.tier3) }} />
-      </div>
-      {/* The same three words the Coverage widget uses; the tier numbers stay in the tooltips. */}
-      <ul className="calc-ctx-cov-legend" aria-hidden="true">
-        <li title={t("coverage.tier1.title")}>
-          <span className="sw t1" />
-          {t("coverage.tier1", { n: coverage.tier1 })}
-        </li>
-        <li title={t("coverage.tier2.title")}>
-          <span className="sw t2" />
-          {t("coverage.tier2", { n: coverage.tier2 })}
-        </li>
-        <li title={t("coverage.tier3.title")}>
-          <span className="sw t3" />
-          {t("coverage.tier3", { n: coverage.tier3 })}
-        </li>
-      </ul>
-      {coverage.unmodelled.length ? (
+      {short ? null : (
         <>
-          <div className="calc-ctx-cov-label t-micro">{t("calc.coverage.notModelled")}</div>
-          <ul className="calc-ctx-cov-list">
-            {coverage.unmodelled.map((u) => (
-              <li key={u}>
-                <span title={u}>{u}</span>
-                <a href={`${hrefFor("data", "overrides")}?q=${encodeURIComponent(u)}`} title={t("calc.coverage.fixHint", { name: u })}>
-                  {t("coverage.override")}
-                </a>
+          <div className="calc-ctx-cov-bar" role="img" aria-label={t("coverage.aria", { t1: coverage.tier1, t2: coverage.tier2, t3: coverage.tier3 })}>
+            <span className="t1" style={{ width: pct(coverage.tier1) }} />
+            <span className="t2" style={{ width: pct(coverage.tier2) }} />
+            <span className="t3" style={{ width: pct(coverage.tier3) }} />
+          </div>
+          {/* The same words the Coverage widget uses, limited to the kinds this scenario has. */}
+          <ul className="calc-ctx-cov-legend" aria-hidden="true">
+            {tiers.map((x) => (
+              <li key={x.cls} title={x.title}>
+                <span className={`sw ${x.cls}`} />
+                {x.label}
               </li>
             ))}
           </ul>
+          {coverage.unmodelled.length ? (
+            <>
+              <div className="calc-ctx-cov-label t-micro">{t("calc.coverage.notModelled")}</div>
+              <ul className="calc-ctx-cov-list">
+                {coverage.unmodelled.map((u) => (
+                  <li key={u}>
+                    <span title={u}>{u}</span>
+                    <a href={`${hrefFor("data", "overrides")}?q=${encodeURIComponent(u)}`} title={t("calc.coverage.fixHint", { name: u })}>
+                      {t("coverage.override")}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </>
-      ) : (
-        <p className="calc-ctx-cov-all">{t("calc.coverage.allModelled")}</p>
       )}
     </section>
   );
