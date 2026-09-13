@@ -5184,6 +5184,35 @@ button.val-row:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
+/* Whether the stored copy is still the one upstream serves, beside what the card already says it is. */
+.src-card-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.src-fresh {
+  padding: 3px 7px;
+  border-radius: 10px;
+  font: 400 10px/1.4 var(--mono);
+  white-space: nowrap;
+  background: var(--fill);
+  color: var(--ink-2);
+}
+.src-fresh.stale {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+/* The row that asks upstream what it is serving, under the panel's heading. */
+.src-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 10px;
+}
+.src-card-fetch {
+  margin-left: auto;
+}
 .src-card-foot {
   display: flex;
   justify-content: space-between;

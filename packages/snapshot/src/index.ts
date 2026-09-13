@@ -1,7 +1,7 @@
 export { normaliseName, factionKey, slugToNameKey, FACTION_KEY_ALIASES } from "./normalise";
 export { canonicalJson, sortKeys, sha256Hex, checksumOf } from "./checksum";
-export { mergeSources, DEFAULT_MERGE_POLICY } from "./merge";
-export type { MergePart, MergePolicy, MergeResult, PartialDatasheet, Unmatched } from "./merge";
+export { mergeSources, mergeOntoBase, BASE_ADAPTER, DEFAULT_MERGE_POLICY } from "./merge";
+export type { MergeBase, MergePart, MergePolicy, MergeResult, PartialDatasheet, Unmatched } from "./merge";
 export { applyOverrides, mergePatch } from "./overrides";
 export type { ApplyOverridesResult } from "./overrides";
 export { buildSnapshot, normaliseData, verifySnapshot } from "./build";
