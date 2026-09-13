@@ -430,12 +430,16 @@ export function opponentScenarioUnit(u: OpponentUnit, state?: UnitState): Scenar
  * weapon counts fall with the models carrying them. The tracker does not know which specific models
  * died, so this is proportional rather than exact. It is far closer than solving at full strength,
  * which is what a companion would otherwise report in the middle of a game.
+ *
+ * A group nobody survived in is left out rather than returned at zero, because a scenario model
+ * group has to hold at least one model. A destroyed unit therefore comes back with no models at
+ * all, which is what the odds panel reads to say there is nothing left to attack.
  */
 export function atStrength(unit: ScenarioUnit, state: UnitState, startingModels: number): ScenarioUnit {
   const alive = modelsLeft(state, startingModels);
   const start = Math.max(1, Math.floor(startingModels));
   if (alive >= start) return unit;
-  if (alive <= 0) return { ...unit, models: unit.models.map((m) => ({ ...m, count: 0 })), weapons: unit.weapons.map((w) => ({ ...w, count: 0 })) };
+  if (alive <= 0) return { ...unit, models: [], weapons: unit.weapons.map((w) => ({ ...w, count: 0 })) };
 
   /*
    * Fill the groups from the front until the survivors run out, but keep any attached character
@@ -455,7 +459,10 @@ export function atStrength(unit: ScenarioUnit, state: UnitState, startingModels:
     left -= keep;
     kept.set(i, keep);
   }
-  const models = unit.models.map((m, i) => ({ ...m, count: kept.get(i) ?? 0 }));
+  const models = unit.models.flatMap((m, i) => {
+    const count = kept.get(i) ?? 0;
+    return count > 0 ? [{ ...m, count }] : [];
+  });
   const ratio = alive / start;
   const weapons = unit.weapons.map((w) => ({ ...w, count: w.count === 0 ? 0 : Math.max(1, Math.round(w.count * ratio)) }));
   return { ...unit, models, weapons };

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { atStrength, logEntry, summarise, applyAction, applyDamage, applyHeal, advance, modelsLeft, newGameState, newOpponentUnit, NEW_UNIT_STATE, opponentScenarioUnit, PHASES, scoredIn, totalsFor, woundsLeft, type GameState, type Secondary } from "./game";
+import { newScenario } from "./scenario";
+import { idleReason } from "../hooks/useSimulation";
 
 const run = (state: GameState, ...actions: Parameters<typeof applyAction>[1][]): GameState => actions.reduce(applyAction, state);
 
@@ -255,7 +257,7 @@ describe("atStrength", () => {
   it("empties a destroyed unit", () => {
     const dead = applyDamage(NEW_UNIT_STATE, 99, 2, 10);
     const now = atStrength(unit, dead, 10);
-    expect(now.models.every((m) => m.count === 0)).toBe(true);
+    expect(now.models).toEqual([]);
     expect(now.weapons[0]?.count).toBe(0);
   });
 
@@ -277,6 +279,23 @@ describe("atStrength", () => {
 
     // Only when the squad is gone does the character start taking them.
     const wiped = applyDamage(NEW_UNIT_STATE, 20, 2, 11);
-    expect(atStrength(led, wiped, 11).models.map((m) => m.count)).toEqual([0, 0, 1]);
+    expect(atStrength(led, wiped, 11).models.map((m) => `${m.name}x${m.count}`)).toEqual(["Captainx1"]);
+  });
+
+  /**
+   * The scenario schema requires every model group to hold at least one model, so a unit that has
+   * lost a group has to come back without it. The odds panel builds a scenario straight out of
+   * `current` and reads `idleReason` off it, and an emptied group threw during that render instead.
+   * Both of these units can be picked on the Play page: the selects list destroyed units too.
+   */
+  it("leaves a unit the odds panel can read, however little is left of it", () => {
+    const led = { ...unit, models: [...unit.models, { name: "Captain", count: 1, T: 4, Sv: 3, W: 2, isCharacter: true, keywords: [] }] };
+    const wiped = applyDamage(NEW_UNIT_STATE, 20, 2, 11);
+    // One of eleven left, so there is still something to shoot at.
+    expect(idleReason(newScenario({ defender: atStrength(led, wiped, 11) }))).toBeUndefined();
+
+    const dead = applyDamage(NEW_UNIT_STATE, 99, 2, 10);
+    expect(idleReason(newScenario({ defender: atStrength(unit, dead, 10) }))).toBe("no-models");
+    expect(idleReason(newScenario({ attacker: atStrength(unit, dead, 10) }))).toBe("no-weapons");
   });
 });
