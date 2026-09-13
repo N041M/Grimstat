@@ -15,6 +15,30 @@ describe("normaliseName", () => {
   ])("%s -> %s", (input, expected) => {
     expect(normaliseName(input)).toBe(expected);
   });
+
+  it.each([
+    ["Anrakyr ( Legends )", "anrakyr"],
+    ["Anrakyr(Legends)", "anrakyr"],
+    ["Anrakyr   (Legends)   ", "anrakyr"],
+    // the marker's two brackets are read on their own, so a name that opens with one and closes with the other still counts
+    ["Anrakyr (legend]", "anrakyr"],
+    ["Anrakyr [Legends)", "anrakyr"],
+    ["Anrakyr (legendss)", "anrakyr legendss"],
+    ["Anrakyr (legend", "anrakyr legend"],
+    ["Legends", "legends"],
+  ])("%s -> %s", (input, expected) => {
+    expect(normaliseName(input)).toBe(expected);
+  });
+
+  // A name padded with spaces used to take the pattern the marker was read with time quadratic in its
+  // length, and the list importer calls this two to three times for every line it reads.
+  it("reads a name padded with spaces in bounded time", () => {
+    for (const pad of [2000, 20000]) {
+      const started = performance.now();
+      normaliseName(`Anrakyr${" ".repeat(pad)}(`);
+      expect(performance.now() - started).toBeLessThan(50);
+    }
+  });
 });
 
 describe("factionKey", () => {

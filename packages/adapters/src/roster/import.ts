@@ -32,10 +32,84 @@ const SECTION_NAMES = new Set(["characters", "battleline", "dedicated transports
 const SIZES = "Combat Patrol|Incursion|Strike Force|Onslaught";
 /** Points as `(2,000 points)`, `[2000pts]` or nothing at all. */
 const LIMIT = String.raw`(?:[([]\s*(\d[\d,]*)\s*(?:points?|pts?)\s*[)\]]?)?`;
-/** `Ashen Wardens — Strike Force [2000pts]`, the faction/size line of the NR-tournament dialect. */
-const FACTION_SIZE_LINE = new RegExp(String.raw`^(.+?)\s+[—–-]\s+(${SIZES})\s*${LIMIT}$`, "i");
 /** `Strike Force (2,000 points)`, the GW app's battle-size line. */
 const SIZE_LINE = new RegExp(String.raw`^(${SIZES})\s*${LIMIT}$`, "i");
+
+const WS = /\s/;
+/** `.` matches every character except a line break, so a name cannot run past one. */
+const DOT = /./;
+/** How the dialects spell the word after the number. */
+const POINTS_WORD = /points?|pts?/iy;
+/** A battle size, matched where the size is expected to start. */
+const SIZE_WORD = new RegExp(SIZES, "iy");
+/** The three dashes the faction/size line separates its two halves with. */
+const DASHES = new Set(["—", "–", "-"]);
+
+/** What the faction/size line says. The points limit is the only part the line may leave out. */
+export interface FactionSize {
+  faction: string;
+  /** The battle size as the line spells it. */
+  size: string;
+  /** The points limit, with any thousands separators still in it. */
+  points?: string;
+}
+
+/**
+ * `Ashen Wardens — Strike Force [2000pts]`, the faction/size line of the NR-tournament dialect.
+ *
+ * Read as a scan for the same reason `parseDetSpec` is. A single pattern has to grow the faction name a
+ * character at a time and try the dash against every place the spaces before it could end, which on a
+ * padded line takes twenty-six milliseconds at four thousand characters. A scan works because the line
+ * always turns on a dash. The faction name ends at the first dash with a battle size behind it.
+ */
+export function parseFactionSize(text: string): FactionSize | undefined {
+  const n = text.length;
+  const digit = (i: number): boolean => i < n && text[i]! >= "0" && text[i]! <= "9";
+  const skipWs = (i: number): number => {
+    while (i < n && WS.test(text[i]!)) i++;
+    return i;
+  };
+  const backWs = (i: number): number => {
+    while (i > 0 && WS.test(text[i - 1]!)) i--;
+    return i;
+  };
+  // the faction name is read with `.`, so it cannot run past a line break
+  let nameLimit = 0;
+  while (nameLimit < n && DOT.test(text[nameLimit]!)) nameLimit++;
+
+  /** The points limit after the battle size, when the rest of the line holds nothing else. */
+  const limitAt = (i: number): { points?: string } | undefined => {
+    const j = skipWs(i);
+    if (j >= n) return {};
+    if (text[j] !== "(" && text[j] !== "[") return undefined;
+    const from = skipWs(j + 1);
+    if (!digit(from)) return undefined;
+    let digits = from;
+    while (digits < n && (digit(digits) || text[digits] === ",")) digits++;
+    POINTS_WORD.lastIndex = skipWs(digits);
+    if (!POINTS_WORD.exec(text)) return undefined;
+    let k = skipWs(POINTS_WORD.lastIndex);
+    if (text[k] === ")" || text[k] === "]") k = skipWs(k + 1);
+    return k >= n ? { points: text.slice(from, digits) } : undefined;
+  };
+
+  for (let d = 0; d < n; d++) {
+    if (!DASHES.has(text[d]!)) continue;
+    // the spaces before the dash belong to the pattern, and one of them at most can be given back to the
+    // name, which is the only way a line that opens on a space can be read at all
+    const end = Math.max(1, backWs(d));
+    if (end >= d || end > nameLimit) continue;
+    const size = skipWs(d + 1);
+    if (size === d + 1) continue;
+    SIZE_WORD.lastIndex = size;
+    const named = SIZE_WORD.exec(text);
+    if (!named) continue;
+    const limit = limitAt(SIZE_WORD.lastIndex);
+    if (!limit) continue;
+    return { faction: text.slice(0, end), size: named[0]!, ...limit };
+  }
+  return undefined;
+}
 
 /** A group of models as a list line describes it, before profiles and wargear are partitioned (see `finishUnit`). */
 interface RawGroup {
@@ -54,10 +128,35 @@ interface TextUnit {
 }
 
 const BULLET = /^[•◦▪\-*]\s*/;
+
+/**
+ * The `+` marks New Recruit and Grimstat's own dialect wrap header lines in, taken off both ends.
+ *
+ * Written out rather than replaced with a pattern because the pattern is a global replace whose trailing
+ * half starts again at every position in a run of spaces, which costs twenty-six milliseconds on a line
+ * padded to four thousand characters and runs on every line of the list.
+ *
+ * Three marks come off the front along with the spaces behind them. At the back the pattern reaches the
+ * end of the line, so a run of more than three leaves the spaces in front of it alone and gives up three.
+ */
+export function stripPlusMarks(text: string): string {
+  const n = text.length;
+  let start = 0;
+  if (text[0] === "+") {
+    while (start < 3 && text[start] === "+") start++;
+    while (start < n && WS.test(text[start]!)) start++;
+  }
+  let marks = n;
+  while (marks > start && text[marks - 1] === "+") marks--;
+  let end = n;
+  if (n - marks > 3) end = n - 3;
+  else if (n - marks > 0) {
+    end = marks;
+    while (end > start && WS.test(text[end - 1]!)) end--;
+  }
+  return start === 0 && end === n ? text : text.slice(start, end);
+}
 const COUNT_ITEM = /^(\d+)\s*[x×]\s+(.+)$/i;
-const WS = /\s/;
-/** `.` matches every character except a line break, so a name cannot run past one. */
-const DOT = /./;
 
 /** What one unit-header line says. Everything but the name and the points cost is optional. */
 export interface UnitHeader {
@@ -76,8 +175,6 @@ export interface UnitHeader {
 const REF_HEAD = /([A-Za-z]+\d+):/y;
 /** The `10x` of `10x Warden Squad`, up to the `x` itself. */
 const COUNT_HEAD = /(\d+)\s*[x×]/iy;
-/** How the dialects spell the word after the number. */
-const POINTS_WORD = /points?|pts?/iy;
 /** The characters that can open a points cost. */
 const COST_OPENERS = new Set(["(", "[", "-", "–", "—"]);
 
@@ -92,6 +189,62 @@ const COST_OPENERS = new Set(["(", "[", "-", "–", "—"]);
  * cost always opens on one of five characters. The name ends at the first of those that opens a cost the
  * rest of the line fits.
  */
+/** The `2x` that opens a model group, up to the `x` itself. */
+const GROUP_HEAD = /(\d+)\s*[x×]/y;
+
+/** What one `2x Warden (Flux carbine)` group of a unit-header line says. */
+export interface GroupSpec {
+  /** The count in front of the `x`, as the line writes it. */
+  count: string;
+  /** The model name, with the spaces around it still on it. */
+  name: string;
+  /** What the brackets after the name hold, when the line carries them. */
+  body?: string;
+}
+
+/**
+ * `2x Warden`, `2x Warden (Flux carbine, Shock maul)` — one group of a New Recruit unit-header line.
+ *
+ * Read as a scan for the same reason `parseDetSpec` is. A single pattern has to grow the model name a
+ * character at a time and try the bracket against every place the spaces before it could end, which on a
+ * padded line takes forty-two milliseconds at four thousand characters. A scan works because the name
+ * holds no brackets, so the group after it opens at the first bracket on the line.
+ */
+export function parseGroupSpec(text: string): GroupSpec | undefined {
+  const n = text.length;
+  GROUP_HEAD.lastIndex = 0;
+  const head = GROUP_HEAD.exec(text);
+  if (!head) return undefined;
+  const afterX = GROUP_HEAD.lastIndex;
+  const backWs = (i: number): number => {
+    while (i > 0 && WS.test(text[i - 1]!)) i--;
+    return i;
+  };
+  let from = afterX;
+  while (from < n && WS.test(text[from]!)) from++;
+  if (from === afterX) return undefined;
+
+  let open = from;
+  while (open < n && text[open] !== "(" && text[open] !== ")") open++;
+  // the brackets after the name have to close on the last character of the line, and `.` cannot cross a
+  // line break, so either the whole of what they hold reads or the line carries no group at all
+  let holds = text[open] === "(" && open + 1 < n && text[n - 1] === ")";
+  for (let i = open + 1; holds && i < n - 1; i++) holds = DOT.test(text[i]!);
+  if (open < n && !holds) return undefined;
+  const nameEnd = open < n ? backWs(open) : backWs(n);
+
+  // the spaces after the `x` belong to the pattern, and they give characters back to the name one at a
+  // time until it fits in front of the brackets
+  for (let s = Math.min(from, n - 1); s > afterX; s--) {
+    const end = Math.max(s + 1, nameEnd);
+    if (open < n && end > open) continue;
+    const group: GroupSpec = { count: head[1]!, name: text.slice(s, end) };
+    if (open < n) group.body = text.slice(open + 1, n - 1);
+    return group;
+  }
+  return undefined;
+}
+
 export function parseUnitHeader(text: string): UnitHeader | undefined {
   const n = text.length;
   if (!n) return undefined;
@@ -235,6 +388,68 @@ const DP_HEAD = /[[(]\s*(\d+)\s*(?:DP|Detachment\s+Points?)/iy;
  * a bracket. The name ends at the first bracket that opens a group the rest of the line fits, and runs to
  * the end of the line when there is none.
  */
+/** The word an enhancement flag opens with. */
+const ENHANCEMENT_HEAD = /enhancements?:/iy;
+/** The spellings of the word inside `(+15 pts)`, in the order the pattern they replace tried them. */
+const COST_WORDS = ["points", "point", "pts", "pt"];
+
+/**
+ * `Enhancement: Ember Blade (+15 pts)` — the name, with the cost taken off when the line writes one.
+ * The GW app writes "(+15 Points)", New Recruit "(+15 pts)".
+ *
+ * Read as a scan for the same reason `parseDetSpec` is. A single pattern has to grow the name a character
+ * at a time and try the cost against every place the spaces before it could end, which on a padded line
+ * takes twenty-six milliseconds at four thousand characters. A scan works because the cost closes on the
+ * last character of the line, so reading it backwards from there finds the one bracket it can open at.
+ */
+export function parseEnhancement(text: string): string | undefined {
+  const n = text.length;
+  ENHANCEMENT_HEAD.lastIndex = 0;
+  if (!ENHANCEMENT_HEAD.exec(text)) return undefined;
+  const head = ENHANCEMENT_HEAD.lastIndex;
+  const backWs = (i: number): number => {
+    while (i > head && WS.test(text[i - 1]!)) i--;
+    return i;
+  };
+  let from = head;
+  while (from < n && WS.test(text[from]!)) from++;
+
+  /** The bracket the cost opens at, read back from the closing one, or -1 when the line carries no cost. */
+  const costOpen = ((): number => {
+    if (text[n - 1] !== ")") return -1;
+    for (const word of COST_WORDS) {
+      const at = n - 1 - word.length;
+      if (at <= head || text.slice(at, n - 1).toLowerCase() !== word) continue;
+      const spaced = backWs(at);
+      let digits = spaced;
+      while (digits > head && text[digits - 1]! >= "0" && text[digits - 1]! <= "9") digits--;
+      if (digits === spaced) continue;
+      const plus = text[digits - 1] === "+" ? digits - 1 : digits;
+      if (text[plus - 1] === "(") return plus - 1;
+    }
+    return -1;
+  })();
+  const costFrom = costOpen < 0 ? -1 : backWs(costOpen);
+
+  // the spaces after the colon belong to the pattern, and they give characters back to the name one at a
+  // time until it fits in front of the cost
+  let limit = n;
+  for (let i = n - 1; i >= from; i--) if (!DOT.test(text[i]!)) limit = i;
+  for (let s = from; s >= head; s--) {
+    if (s < n && !DOT.test(text[s]!)) limit = s;
+    if (s >= limit) continue;
+    if (costOpen >= 0) {
+      const end = Math.max(s + 1, costFrom);
+      if (end <= costOpen) {
+        if (end <= limit) return text.slice(s, end);
+        continue;
+      }
+    }
+    if (n <= limit) return text.slice(s, n);
+  }
+  return undefined;
+}
+
 export function parseDetSpec(text: string): DetSpec | undefined {
   const n = text.length;
   if (!n) return undefined;
@@ -446,13 +661,12 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       t.u.warlord = true;
       return true;
     }
-    // the GW app writes "(+15 Points)", New Recruit "(+15 pts)"
-    let m = /^enhancements?:\s*(.+?)(?:\s*\(\+?\d+\s*(?:points?|pts?)\))?$/i.exec(f);
-    if (m) {
-      t.u.enhancementName = m[1]!.trim();
+    const enhancement = parseEnhancement(f);
+    if (enhancement !== undefined) {
+      t.u.enhancementName = enhancement.trim();
       return true;
     }
-    m = /^(leads|leader of|attached to|supports|support of):\s*(.+)$/i.exec(f);
+    let m = /^(leads|leader of|attached to|supports|support of):\s*(.+)$/i.exec(f);
     if (m) {
       t.u.attach = { hostName: m[2]!.trim(), role: /^support/i.test(m[1]!) ? "support" : "leader" };
       return true;
@@ -508,14 +722,13 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     if (!rest) return;
     // NR "Unit [80pts]: 2x Model (a, b), 1x Other (c) — Warlord; Enhancement: X", or inline wargear
     const [groupsPart = "", ...flagParts] = rest.split(/\s+[—–]\s+/);
-    const groupRe = /^(\d+)\s*[x×]\s+([^()]+?)\s*(?:\((.*)\))?$/;
     const chunks = groupsPart.split(/,\s*(?=\d+\s*[x×]\s+[^(),]+(?:\(|,|$))/);
-    const asGroups = chunks.length > 0 && chunks.every((c) => groupRe.test(c.trim()) && (c.includes("(") || ctx.profileFor(ds, groupRe.exec(c.trim())![2]!)));
+    const specs = chunks.map((c) => parseGroupSpec(c.trim()));
+    const asGroups = chunks.length > 0 && specs.every((spec, i) => spec && (chunks[i]!.includes("(") || ctx.profileFor(ds, spec.name)));
     if (asGroups) {
-      for (const part of chunks) {
-        const m = groupRe.exec(part.trim())!;
-        const prof = ctx.profileFor(ds, m[2]!);
-        const g: RawGroup = { count: Number(m[1]), items: m[3] ? parseWargearItems(m[3]) : [] };
+      for (const spec of specs) {
+        const prof = ctx.profileFor(ds, spec!.name);
+        const g: RawGroup = { count: Number(spec!.count), items: spec!.body ? parseWargearItems(spec!.body) : [] };
         if (prof) g.modelProfileId = prof.id;
         t.groups.push(g);
       }
@@ -573,19 +786,19 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     }
     if (/^(exported with|created with)/i.test(trimmed)) continue;
     const isBullet = BULLET.test(trimmed);
-    const line = trimmed.replace(BULLET, "").replace(/^\+{1,3}\s*|\s*\+{1,3}$/g, "").trim();
+    const line = stripPlusMarks(trimmed.replace(BULLET, "")).trim();
     if (!line) continue;
 
     // ---- header lines: faction, battle size, detachments
-    let m = FACTION_SIZE_LINE.exec(line);
-    if (m) {
-      setFaction(m[1]!);
-      battleSize = SIZE_BY_LABEL[m[2]!.toLowerCase().replace(/\s+/g, " ")] ?? battleSize;
-      if (m[3]) pointsLimit = points(m[3]);
+    const factionSize = parseFactionSize(line);
+    if (factionSize) {
+      setFaction(factionSize.faction);
+      battleSize = SIZE_BY_LABEL[factionSize.size.toLowerCase().replace(/\s+/g, " ")] ?? battleSize;
+      if (factionSize.points) pointsLimit = points(factionSize.points);
       headerSeen = true;
       continue;
     }
-    m = SIZE_LINE.exec(line);
+    let m = SIZE_LINE.exec(line);
     if (m) {
       battleSize = SIZE_BY_LABEL[m[1]!.toLowerCase().replace(/\s+/g, " ")] ?? battleSize;
       if (m[2]) pointsLimit = points(m[2]);

@@ -1,3 +1,29 @@
+const WS = /\s/;
+
+/**
+ * The trailing `(Legends)` / `[Legends]` marker, taken off the end of a name.
+ *
+ * Written out rather than read with a pattern because the pattern tries the opening bracket against every
+ * place a run of spaces in front of it could end, which costs twenty-six milliseconds on a name padded to
+ * four thousand characters. The list importer calls `normaliseName` two to three times for every line it
+ * reads. A scan works because the marker closes on the end of the name, so reading it backwards from
+ * there finds the one bracket it can open at.
+ */
+function stripLegends(text: string): string {
+  const backWs = (i: number): number => {
+    while (i > 0 && WS.test(text[i - 1]!)) i--;
+    return i;
+  };
+  const close = backWs(text.length);
+  if (close === 0 || (text[close - 1] !== ")" && text[close - 1] !== "]")) return text;
+  const word = backWs(close - 1);
+  const start = ["legends", "legend"].find((w) => word >= w.length && text.slice(word - w.length, word).toLowerCase() === w);
+  if (start === undefined) return text;
+  const open = backWs(word - start.length);
+  if (open === 0 || (text[open - 1] !== "(" && text[open - 1] !== "[")) return text;
+  return text.slice(0, backWs(open - 1));
+}
+
 /**
  * Name normalisation used to join entities across sources: lower-case, ASCII-folded, punctuation and
  * apostrophes removed, whitespace collapsed, trailing "(Legends)" / "[Legends]" markers stripped.
@@ -6,11 +32,12 @@
  *   normaliseName("Anrakyr The Traveller (Legends)") === "anrakyr the traveller"
  */
 export function normaliseName(s: string): string {
-  return s
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s*[([]\s*legends?\s*[)\]]\s*$/i, "")
+  return stripLegends(
+    s
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase(),
+  )
     .replace(/[‘’ʼ'`´]/g, "")
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9]+/g, " ")
