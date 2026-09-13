@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
-import type { BoxSet } from "../data/boxes";
-import { BOX_SETS } from "../data/boxes";
-import { boxesByYear, boxesFor, linesForFactions, modelsByDatasheet, nameLine, resolveBox, unitSize } from "./boxes";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { BoxFileSchema, type BoxSet } from "../data/boxes";
+import { boxesByYear, boxesFor, forgetBoxSets, linesForFactions, loadBoxSets, modelsByDatasheet, nameLine, resolveBox, unitSize } from "./boxes";
 
 const snapshot = loadSyntheticSnapshot();
+
+/** The file the app ships and reads at runtime, checked here as the app would check it. */
+const BOXES_FILE = fileURLToPath(new URL("../../public/boxes.json", import.meta.url));
+const file = BoxFileSchema.parse(JSON.parse(readFileSync(BOXES_FILE, "utf8")));
+const BOX_SETS: readonly BoxSet[] = file.boxes;
 const ds = (id: string) => snapshot.data.datasheets.find((d) => d.id === `ds:${id}`)!;
 
 /** Boxes in the synthetic vocabulary, so nothing here asserts a real product's contents. */
@@ -202,42 +208,20 @@ describe("ordering the boxes", () => {
   });
 });
 
-describe("the shipped seed list", () => {
-  it("has an id, a name, a source and at least one line for every box", () => {
+describe("the list the app ships", () => {
+  /**
+   * The boxes are typed in by hand off announcements, so the file is checked rather than trusted.
+   * Parsing it above is most of that: an id that is not a slug, a source that is not a URL, a line
+   * that counts nothing, or a line left to its owner without a model count all stop the parse and
+   * name what they are. What is left here is what one line cannot know about another.
+   */
+  it("holds boxes", () => {
     expect(BOX_SETS.length).toBeGreaterThan(0);
-    for (const b of BOX_SETS) {
-      expect(b.id, b.name).toMatch(/^[a-z0-9-]+$/);
-      expect(b.name.length, b.id).toBeGreaterThan(0);
-      expect(b.source, b.name).toMatch(/^https:\/\//);
-      expect(b.lines.length, b.name).toBeGreaterThan(0);
-    }
-  });
-
-  it("gives every line a count, one way or the other", () => {
-    for (const b of BOX_SETS) {
-      for (const l of b.lines) {
-        expect(l.models ?? l.units, `${b.name}: ${l.name}`).toBeGreaterThan(0);
-        expect(l.name.trim(), b.name).not.toBe("");
-      }
-    }
-  });
-
-  /** A line whose datasheet is its owner's to pick still has to say how many models that is. */
-  it("counts the models of a line it leaves to its owner", () => {
-    for (const b of BOX_SETS) {
-      for (const l of b.lines.filter((x) => x.ownerNames)) {
-        expect(l.models, `${b.name}: ${l.name}`).toBeGreaterThan(0);
-        expect(l.units, `${b.name}: ${l.name}`).toBeUndefined();
-      }
-    }
+    expect(BOX_SETS.reduce((n, b) => n + b.lines.length, 0)).toBeGreaterThan(BOX_SETS.length);
   });
 
   it("uses ids that are its own", () => {
     expect(new Set(BOX_SETS.map((b) => b.id)).size).toBe(BOX_SETS.length);
-  });
-
-  it("dates every box, as a day", () => {
-    for (const b of BOX_SETS) expect(b.announced, b.name).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   /**
@@ -247,16 +231,53 @@ describe("the shipped seed list", () => {
    * then nothing on screen tells them apart.
    */
   it("never repeats a name on the same day", () => {
-    const seen = new Map<string, string>();
+    const seen = new Set<string>();
     for (const b of BOX_SETS) {
       const key = `${b.name.toLowerCase()}\u0000${b.announced}`;
-      expect(seen.get(key), `${b.name} (${b.announced}) is in the list twice`).toBeUndefined();
-      seen.set(key, b.id);
+      expect(seen.has(key), `${b.name} (${b.announced}) is in the list twice`).toBe(false);
+      seen.add(key);
     }
+  });
+
+  it("dates every box to a day that reads as one", () => {
+    for (const b of BOX_SETS) expect(Number.isNaN(Date.parse(b.announced)), b.name).toBe(false);
   });
 
   /** The synthetic snapshot shares no unit with the real world, so none of these can place. */
   it("offers no box a snapshot cannot place a single line of", () => {
     expect(boxesFor(BOX_SETS, snapshot)).toEqual([]);
+  });
+});
+
+describe("reading the list at runtime", () => {
+  const respond = (body: unknown, ok = true) => () => Promise.resolve({ ok, status: ok ? 200 : 404, json: () => Promise.resolve(body) } as Response);
+
+  beforeEach(() => {
+    forgetBoxSets();
+    // The two failures below are the point of those tests; their report is not the test's output.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  it("reads the file and keeps it, rather than fetching it again for every screen", async () => {
+    let reads = 0;
+    const fetcher = ((...a: unknown[]) => {
+      reads += 1;
+      return respond(file)(...(a as []));
+    }) as typeof fetch;
+    expect((await loadBoxSets(fetcher)).length).toBe(BOX_SETS.length);
+    await loadBoxSets(fetcher);
+    expect(reads).toBe(1);
+  });
+
+  /**
+   * The boxes are a convenience on a page that counts models perfectly well without them, so a
+   * stray comma in a data file must not cost the reader the page.
+   */
+  it("gives an empty list when the file will not parse, rather than throwing", async () => {
+    expect(await loadBoxSets(respond({ boxes: [{ id: "no", name: "Bad" }] }) as typeof fetch)).toEqual([]);
+  });
+
+  it("gives an empty list when the file is not there", async () => {
+    expect(await loadBoxSets(respond({}, false) as typeof fetch)).toEqual([]);
   });
 });

@@ -20,7 +20,7 @@
 import type { Datasheet, Snapshot } from "@grimstat/schema";
 import { nameIndexOf } from "@grimstat/adapters";
 import { normaliseName } from "@grimstat/snapshot";
-import type { BoxLine, BoxSet } from "../data/boxes";
+import { BOXES_URL, BoxFileSchema, type BoxLine, type BoxSet } from "../data/boxes";
 
 /**
  * The words of a name that carry it, in a fixed order.
@@ -190,4 +190,30 @@ export function modelsByDatasheet(lines: readonly ResolvedLine[]): ReadonlyMap<s
  */
 export function nameLine(line: ResolvedLine, ds: Datasheet): ResolvedLine {
   return { ...line, ds, needsName: false, alternatives: [] };
+}
+
+/**
+ * The list of boxes, read from the file it lives in.
+ *
+ * Fetched once and kept, because it does not change while the app is open and every screen that
+ * wants it wants the same list. A file that will not parse gives an empty list rather than a broken
+ * screen: the boxes are a convenience on a page that works without them, and a reader who came to
+ * count their models should not lose the page to a stray comma in a data file.
+ */
+let pending: Promise<readonly BoxSet[]> | undefined;
+
+export function loadBoxSets(fetcher: typeof fetch = fetch): Promise<readonly BoxSet[]> {
+  pending ??= fetcher(BOXES_URL)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status} for ${BOXES_URL}`))))
+    .then((raw) => BoxFileSchema.parse(raw).boxes as readonly BoxSet[])
+    .catch((e) => {
+      console.error("Could not read the list of boxes", e);
+      return [];
+    });
+  return pending;
+}
+
+/** Forget the list that was read, so the next call reads it again. For tests. */
+export function forgetBoxSets(): void {
+  pending = undefined;
 }

@@ -664,6 +664,7 @@ export const en = {
   "collection.box.toName": "You decide what these are",
   "collection.box.unknown": "Not in your data",
   "collection.box.add": "Add {models} models",
+  "collection.box.reading": "Reading the boxes…",
   "collection.box.none": "No boxes match the data you have loaded.",
   "collection.box.added": "Added {models} from {name}.",
   "collection.loading": "Reading the shelf…",

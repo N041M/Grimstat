@@ -224,7 +224,7 @@ export default defineConfig({
         // add about 69 KiB to the precache. Without them an offline visit falls back to system
         // fonts and every screen reflows. The pattern also picks up the icons and the manifest,
         // because public/ is copied into the build output this globs.
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest,woff2}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest,woff2,json}"],
         navigateFallback: "index.html",
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },

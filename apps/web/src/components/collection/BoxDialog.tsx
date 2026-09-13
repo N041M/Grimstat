@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Snapshot } from "@grimstat/schema";
-import { BOX_SETS } from "../../data/boxes";
-import { boxesByYear, boxesFor, linesForFactions, modelsByDatasheet, type ResolvedBox } from "../../lib/boxes";
+import { boxesByYear, boxesFor, linesForFactions, loadBoxSets, modelsByDatasheet, type ResolvedBox } from "../../lib/boxes";
+import type { BoxSet } from "../../data/boxes";
 import { Dialog } from "../ui";
 import { t } from "../../i18n";
 
@@ -18,7 +18,12 @@ import { t } from "../../i18n";
  * behind, which is theirs to fix and not something to pretend about.
  */
 export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; onClose: () => void; snapshot: Snapshot | undefined; onAdd: (box: ResolvedBox, factionIds: readonly string[]) => void }) {
-  const boxes = useMemo(() => (snapshot ? boxesFor(BOX_SETS, snapshot) : []), [snapshot]);
+  // Read once, the first time somebody opens this, rather than on every visit to the page.
+  const [sets, setSets] = useState<readonly BoxSet[] | undefined>(undefined);
+  useEffect(() => {
+    if (open && !sets) void loadBoxSets().then(setSets);
+  }, [open, sets]);
+  const boxes = useMemo(() => (snapshot && sets ? boxesFor(sets, snapshot) : []), [snapshot, sets]);
   const [pickedId, setPickedId] = useState<string | undefined>(undefined);
   const picked = boxes.find((b) => b.box.id === pickedId);
   const [ticked, setTicked] = useState<readonly string[]>([]);
@@ -40,7 +45,11 @@ export function BoxDialog({ open, onClose, snapshot, onAdd }: { open: boolean; o
   return (
     <Dialog open={open} onClose={onClose} wide title={t("collection.box.title")} className="box-dialog">
       {!picked ? (
-        <BoxList boxes={boxes} onPick={setPickedId} />
+        sets ? (
+          <BoxList boxes={boxes} onPick={setPickedId} />
+        ) : (
+          <p className="muted">{t("collection.box.reading")}</p>
+        )
       ) : (
         <>
           <div className="box-head">
