@@ -1375,9 +1375,15 @@ label.inline {
   height: 14px;
   flex: none;
 }
+/* A button holding nothing but an icon is square. The touch rules give it a minimum height and
+   nothing was giving it the width to match, so the dialog's close button stood 24 wide and 38 tall. */
 .icon-btn {
   padding: 0.3rem;
   line-height: 1;
+  aspect-ratio: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .icon-btn.sm {
   padding: 0.25rem;
@@ -2629,6 +2635,11 @@ body.sheet-open {
   flex: 1 1 190px;
   min-width: 0;
 }
+/* The two menus share a line where there is room for them, rather than taking one each. */
+.box-filters select {
+  flex: 1 1 140px;
+  min-width: 0;
+}
 .box-shown {
   margin-left: auto;
   font-size: 11px;
@@ -2640,13 +2651,21 @@ body.sheet-open {
   margin: 0;
   padding: 0;
   display: grid;
+  /* An implicit column sizes itself to its widest content, so one long box name stretched the whole
+     column past the dialog and the list scrolled sideways. This holds it to the width on offer. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
+/* The name and its counts sit at either end of the row, and drop to two lines when the name is too
+   long to share one. A flex child will not shrink below its own text by default, so without this a
+   name like "Battleforce: Leagues of Votann - Defenders of the Ancestors" pushed the row past the
+   dialog holding it and the list scrolled sideways on a phone. */
 .box-picker button {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 2px 12px;
   width: 100%;
   padding: 11px 12px;
   border: 1px solid var(--line);
@@ -2661,11 +2680,14 @@ body.sheet-open {
 }
 .box-name {
   font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .box-meta {
   font-size: 10px;
   color: var(--muted);
   white-space: nowrap;
+  margin-left: auto;
 }
 /* The year a box was announced in, over the boxes announced in it. */
 .box-year h3 {
@@ -5833,7 +5855,9 @@ button.val-row:hover {
 .data-table-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  overflow: hidden;
+  /* The columns have widths of their own and stop shrinking, so on a narrow screen the card was
+     cutting the last three off with no way to reach them. It scrolls sideways instead. */
+  overflow: auto hidden;
   background: var(--panel);
   margin-top: 10px;
 }
@@ -9784,6 +9808,12 @@ body.play-focused .shell.compact {
     width: 20px;
     height: 20px;
   }
+  /* A round control grows into a bigger circle, not an ellipse. The minimum height above is a touch
+     target, and the codex's compare button carries its own 22px width, so it was being drawn 22
+     wide and 40 tall. It is the only round control in the app that the rule reaches. */
+  .shell.compact .codex-card-cmp {
+    min-width: 40px;
+  }
 
   /* The top bar. ☰ and the sheet button are the two the thumb reaches for blind. */
   .shell.compact .ctx-bar-nav {
@@ -9833,6 +9863,12 @@ body.play-focused .shell.compact {
     min-height: 40px;
     padding: 8px 13px;
     font-size: 13px;
+    /* Header buttons wrap onto more than one line here, and sized to their own labels they came out
+       ragged: two of different widths on one line and a third, narrower still, alone under them.
+       An equal basis makes every button on a line the same width, and one alone on a line fills it.
+       The basis is wider than the longest label so no button is squeezed under its own text, which
+       is what leaves a phone stacking them one to a line. */
+    flex: 1 1 200px;
   }
   .shell.compact .tabbar-tab {
     min-height: 44px;
