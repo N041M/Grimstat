@@ -137,7 +137,7 @@ export interface UnitPresetRecord {
  * Keyed by datasheet rather than by anything of its own, because that is the question a collection
  * answers — "how many of these do I have?" — and because it is what an army asks for. The name and
  * faction are copied in at the time of adding, so an entry still reads when the active snapshot is
- * one the datasheet has left. Changing data source does not empty the collection.
+ * one the datasheet has left, and changing data source does not empty the collection.
  */
 export interface CollectionEntryRecord {
   /** The datasheet's id. One record per datasheet. */

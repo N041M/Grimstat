@@ -3,7 +3,7 @@
  *
  * A collection is counted per datasheet, because that is the question the shelf answers — "how many
  * of these have I got?" — and because it is the question an army asks back. Nothing here knows about
- * loadouts. Two squads built with different weapons are the same ten models as far as owning them
+ * loadouts, because two squads built with different weapons are the same ten models as far as owning them
  * goes, and pretending otherwise would make the count a fiction nobody could keep up to date.
  *
  * Pure functions over plain records, so the arithmetic of "can I field this list?" is testable
