@@ -27,6 +27,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # A built site is static files with no server to proxy through, and Wahapedia sends no CORS
+      # headers, so the browser cannot read it from the deployed app. Its export is copied into the
+      # site here instead, where it is same-origin and the Data page's one button reaches it like any
+      # other source. Nothing is committed. The directory is git-ignored and only ever exists in the
+      # build. Set the repository variable SKIP_WAHAPEDIA to any value to leave it out.
+      - name: Copy the Wahapedia export into the site
+        if: ${{ vars.SKIP_WAHAPEDIA == '' }}
+        run: pnpm cli mirror --system wh40k-11e --system wh40k-10e --out apps/web/public/wahapedia
       - name: Build web app under the repository sub-path
         run: pnpm --filter @grimstat/web build
         env:

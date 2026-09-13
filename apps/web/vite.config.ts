@@ -9,6 +9,17 @@ import { VitePWA } from "vite-plugin-pwa";
 /** Deployed under a sub-path on GitHub Pages (e.g. "/Grimstat/"); "/" for local dev. */
 const base = process.env.VITE_BASE ?? "/";
 
+/**
+ * Where the dev server answers for Wahapedia, and which of its exports each edition maps to.
+ *
+ * Node loads this config directly, so it cannot import the workspace's TypeScript. The path is
+ * `WAHAPEDIA_DEV_PROXY` in `src/lib/importProgress.ts` and the upstream mapping is `wahapediaUrlFor`
+ * in `packages/adapters/src/sources.ts`; the proxy test in `importProgress.test.ts` holds the two
+ * copies together.
+ */
+const WAHAPEDIA_DEV_PROXY = "/wahapedia/";
+const WAHAPEDIA_DEV_PATHS: Record<string, string> = { "wh40k-11e": "/wh40k11ed", "wh40k-10e": "/wh40k10ed" };
+
 /* ---- About-screen facts, measured at build time rather than typed by hand ---- */
 
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
@@ -145,7 +156,25 @@ export default defineConfig({
     }),
   ],
   worker: { format: "es" },
-  server: { port: 5173, strictPort: false },
+  server: {
+    port: 5173,
+    strictPort: false,
+    /**
+     * Wahapedia sends no CORS headers, so the browser cannot read it. The dev server can, because it talks to
+     * Wahapedia server to server and hands the result back from this origin. So a local run needs no
+     * mirror at all. The Data page's default mirror URL in dev is this path, and the fetch button
+     * gets the stratagems, enhancements and rules text straight away.
+     *
+     * A built site has no server of its own, so a deployment reads a published mirror instead. Both
+     * paths end up at `<base>/<gameSystemId>/<Table>.csv`, which is the one shape the app fetches.
+     */
+    proxy: Object.fromEntries(
+      Object.entries(WAHAPEDIA_DEV_PATHS).map(([id, upstream]) => [
+        `${WAHAPEDIA_DEV_PROXY}${id}`,
+        { target: "https://wahapedia.ru", changeOrigin: true, rewrite: (path: string) => path.replace(`${WAHAPEDIA_DEV_PROXY}${id}`, upstream) },
+      ]),
+    ),
+  },
   build: {
     target: "es2022",
     sourcemap: false,

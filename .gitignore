@@ -8,5 +8,7 @@ coverage/
 
 # Imported game data (fetched to the user's machine at runtime; never committed)
 /data/
+# Wahapedia's export, copied into the site by the Pages build so the deployed app can read it
+apps/web/public/wahapedia/
 .grimstat/
 apps/web/dev-dist/

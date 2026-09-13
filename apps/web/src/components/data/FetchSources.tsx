@@ -5,7 +5,7 @@ import { db } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { ImportCancelledError, importClient } from "../../worker/importClient";
-import { BROWSER_SOURCES, IDLE_PROGRESS, classifyError, errorMessage, importRequestFor, isRunning, reduceProgress, type BrowserSourceId, type ImportErrorKind, type ImportSelection, type SourceProgress } from "../../lib/importProgress";
+import { BROWSER_SOURCES, DEFAULT_WAHAPEDIA_MIRROR, IDLE_PROGRESS, MIRRORED_SOURCE, WAHAPEDIA_MIRROR_SETTING, classifyError, errorMessage, hasMirror, importRequestFor, isRunning, reduceProgress, type BrowserSourceId, type ImportErrorKind, type ImportSelection, type SourceProgress } from "../../lib/importProgress";
 import { fmtDay, fmtInt } from "../../lib/format";
 import { PanelHead, PillChip, ProportionBar } from "../kit";
 import { t, type I18nKey } from "../../i18n";
@@ -13,17 +13,17 @@ import { t, type I18nKey } from "../../i18n";
 export const CLI_IMPORT_COMMAND = "pnpm cli import --system wh40k-11e --out data/snapshots";
 export const README_URL = "https://github.com/N041M/Grimstat#getting-started";
 const SETTING_KEY = "data.fetch.selection";
-const DEFAULT_SELECTION: ImportSelection = { sources: { "mfm-yaml": true, "bsdata-json": true }, factionFilter: "" };
+const DEFAULT_SELECTION: ImportSelection = { sources: { "mfm-yaml": true, "bsdata-json": true, "wahapedia-csv": true }, factionFilter: "" };
 
-/** The card deck: the two sources a browser can reach, then the CLI-only Wahapedia export. */
-const CARD_SOURCES = [...BROWSER_SOURCES, "wahapedia-csv"] as const;
-type CardSourceId = (typeof CARD_SOURCES)[number];
+/** The card deck: every source a browser can reach, Wahapedia through its mirror. */
+const CARD_SOURCES = BROWSER_SOURCES;
+type CardSourceId = BrowserSourceId;
 
 function parseSelection(raw: unknown): ImportSelection | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const r = raw as { sources?: unknown; factionFilter?: unknown };
   const src = r.sources && typeof r.sources === "object" ? (r.sources as Record<string, unknown>) : {};
-  return { sources: { "mfm-yaml": src["mfm-yaml"] !== false, "bsdata-json": src["bsdata-json"] !== false }, factionFilter: typeof r.factionFilter === "string" ? r.factionFilter : "" };
+  return { sources: { "mfm-yaml": src["mfm-yaml"] !== false, "bsdata-json": src["bsdata-json"] !== false, "wahapedia-csv": src["wahapedia-csv"] !== false }, factionFilter: typeof r.factionFilter === "string" ? r.factionFilter : "" };
 }
 
 const NAME_KEY: Record<CardSourceId, I18nKey> = { "mfm-yaml": "data.fetch.source.mfm-yaml", "bsdata-json": "data.fetch.source.bsdata-json", "wahapedia-csv": "data.fetch.source.wahapedia-csv" };
@@ -38,7 +38,8 @@ function sourceName(id: CardSourceId): string {
 }
 
 function sourceSize(id: BrowserSourceId): string {
-  return id === "mfm-yaml" ? t("data.fetch.size.mfm-yaml") : t("data.fetch.size.bsdata-json");
+  if (id === "mfm-yaml") return t("data.fetch.size.mfm-yaml");
+  return id === "bsdata-json" ? t("data.fetch.size.bsdata-json") : t("data.fetch.size.wahapedia-csv");
 }
 
 function stageLabel(stage: SourceProgress["stage"]): string {
@@ -130,6 +131,7 @@ export interface FetchSourcesHandle {
 export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources(_props, ref) {
   const { refreshSnapshots, setActiveSnapshot, notify, rawSnapshot } = useApp();
   const [selection, setSelection] = usePersistedSetting<ImportSelection>(SETTING_KEY, DEFAULT_SELECTION, parseSelection);
+  const [mirror, setMirror] = usePersistedSetting<string>(WAHAPEDIA_MIRROR_SETTING, DEFAULT_WAHAPEDIA_MIRROR, (raw) => (typeof raw === "string" ? raw : undefined));
   const [progress, dispatch] = useReducer(reduceProgress, IDLE_PROGRESS);
   const clientRunning = useSyncExternalStore(subscribeToImport, importIsRunning);
   const alive = useRef(true);
@@ -147,12 +149,13 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   // and it ends without this panel's own code hearing about it, so the client is asked each render
   // rather than remembered from mount time.
   const background = clientRunning && !running;
-  const request = importRequestFor(selection);
+  const mirrored = hasMirror(mirror);
+  const request = importRequestFor(selection, undefined, mirror);
   const pointsOnly = selection.sources["mfm-yaml"] && !selection.sources["bsdata-json"];
   const datasheetCount = rawSnapshot?.data.datasheets.length;
 
   const start = useCallback(async () => {
-    const req = importRequestFor(selection);
+    const req = importRequestFor(selection, undefined, mirror);
     if (!req.sources.length) {
       notify(t("data.fetch.select"), "error");
       return;
@@ -181,7 +184,7 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
       }
       dispatch({ type: "error", message: errorMessage(e), kind: classifyError(e) });
     }
-  }, [selection, notify, refreshSnapshots, setActiveSnapshot]);
+  }, [selection, mirror, notify, refreshSnapshots, setActiveSnapshot]);
 
   const cancel = useCallback(() => {
     importClient().cancel();
@@ -190,6 +193,7 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   useImperativeHandle(ref, () => ({ run: start }), [start]);
 
   const toggle = (id: BrowserSourceId, on: boolean) => setSelection((s) => ({ ...s, sources: { ...s.sources, [id]: on } }));
+  const mirrorId = `${filterId}-mirror`;
 
   return (
     <section className="src-block" aria-labelledby="data-fetch-h">
@@ -199,17 +203,17 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
         {CARD_SOURCES.map((id) => {
           const stored = rawSnapshot?.sources.find((s) => s.adapter === id);
           const model = cardModel(id, progress.sources.find((s) => s.id === id), stored, id === "bsdata-json" ? datasheetCount : undefined);
-          const browser = id !== "wahapedia-csv";
+          const needsMirror = id === MIRRORED_SOURCE && !mirrored;
           return (
             <SourceCard
               key={id}
               id={id}
               model={model}
-              selectable={browser}
-              selected={browser ? selection.sources[id as BrowserSourceId] : false}
+              selectable={!needsMirror}
+              selected={!needsMirror && selection.sources[id]}
               disabled={running}
-              onSelect={(on) => toggle(id as BrowserSourceId, on)}
-              footer={browser ? undefined : <div className="src-card-note">{t("data.fetch.wahapedia")}</div>}
+              onSelect={(on) => toggle(id, on)}
+              footer={id === MIRRORED_SOURCE ? <div className="src-card-note">{needsMirror ? t("data.fetch.wahapedia") : t("data.fetch.wahapediaMirrored")}</div> : undefined}
             />
           );
         })}
@@ -219,6 +223,10 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
         <label className="src-filter" htmlFor={filterId}>
           <span>{t("data.fetch.filter")}</span>
           <input id={filterId} type="text" value={selection.factionFilter} placeholder={t("data.fetch.filterPlaceholder")} disabled={running || !selection.sources["bsdata-json"]} onChange={(e) => setSelection((s) => ({ ...s, factionFilter: e.target.value }))} />
+        </label>
+        <label className="src-filter" htmlFor={mirrorId}>
+          <span>{t("data.fetch.mirror")}</span>
+          <input id={mirrorId} type="url" value={mirror} spellCheck={false} placeholder={DEFAULT_WAHAPEDIA_MIRROR} disabled={running} onChange={(e) => setMirror(e.target.value)} />
         </label>
         <button type="button" className="primary" disabled={running || background || request.sources.length === 0} onClick={() => void start()}>
           {t("data.fetch.run")}
@@ -236,9 +244,13 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
       {progress.merge ? <p className="src-note">{t("data.fetch.merged", { conflicts: fmtInt(progress.merge.conflicts), unmatched: fmtInt(progress.merge.unmatched), warnings: fmtInt(progress.merge.warnings) })}</p> : null}
 
       {progress.stage === "done" && progress.summary ? (
-        <p className="src-note" role="status">
-          {t("data.fetch.done", { label: progress.summary.label ?? progress.summary.snapshotId, s: (progress.summary.elapsedMs / 1000).toFixed(1) })}
-        </p>
+        <>
+          <p className="src-note" role="status">
+            {t("data.fetch.done", { label: progress.summary.label ?? progress.summary.snapshotId, s: (progress.summary.elapsedMs / 1000).toFixed(1) })}
+          </p>
+          {/* Said here rather than three screens later, where an empty Stratagems tab was the first sign of it. */}
+          {progress.summary.counts.stratagems === 0 ? <p className="src-note warn-text">{t("data.fetch.noStratagems")}</p> : null}
+        </>
       ) : null}
 
       {progress.stage === "cancelled" ? (

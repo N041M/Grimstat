@@ -54,6 +54,22 @@ pnpm cli show data/snapshots/<snapshot>.json "Intercessor Squad"
 pnpm cli diff data/snapshots/<old>.json data/snapshots/<new>.json
 ```
 
+The Data page's **Fetch from community sources** button reads MFM and BSData straight from GitHub,
+which sends CORS headers. Wahapedia does not, and it is the only source carrying stratagems,
+enhancements and rules text, so a snapshot built in the browser has none of them until a **mirror**
+is pointed at. A mirror is a copy of Wahapedia's own CSV export in a dataset repository, which
+`raw.githubusercontent.com` then serves to the browser like the other two. `.github/workflows/wahapedia.yml`
+keeps one up to date once a week. To run it, create an empty public repository for the dataset, set
+the repository variable `WAHAPEDIA_REPO` to `owner/name` and the secret `WAHAPEDIA_TOKEN` to a token
+with contents read/write on it. Without the variable the job does not run and nothing is published.
+Paste the dataset's raw URL into **Wahapedia mirror URL** on the Data page and the one button then
+builds a complete snapshot. The dataset is Wahapedia's export as it stands and carries their
+attribution, which the mirror's README and the app both state. The same build runs locally:
+
+```bash
+pnpm cli mirror --system wh40k-11e --system wh40k-10e --out data/mirror
+```
+
 Gather published tournament lists onto your own machine. The CLI reads the feed directly but does not
 fetch article pages, because their publishers gate them. Open the ones you want, save the page, and
 point `--dir` at the folder:

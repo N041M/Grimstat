@@ -1,5 +1,7 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { IDLE_PROGRESS, catalogueFilter, catalogueTerms, classifyError, fetchedLabel, importRequestFor, isRunning, reduceProgress, type ImportProgress, type ImportSummary, type SourceCounts } from "./importProgress";
+import { wahapediaUrlFor } from "@grimstat/adapters";
+import { IDLE_PROGRESS, WAHAPEDIA_DEV_PROXY, WAHAPEDIA_EDITIONS, catalogueFilter, catalogueTerms, classifyError, fetchedLabel, hasMirror, importRequestFor, isRunning, reduceProgress, wahapediaMirrorBase, type ImportProgress, type ImportSummary, type SourceCounts } from "./importProgress";
 
 const COUNTS: SourceCounts = { factions: 1, datasheets: 2, abilities: 3, detachments: 4, enhancements: 5, stratagems: 6, priceRules: 7, wargearPrices: 8 };
 const SUMMARY: ImportSummary = { snapshotId: "snap_20260910_abcdef01", label: "Fetched 2026-09-10", checksum: "abcdef01", counts: COUNTS, conflicts: 0, sources: [{ adapter: "mfm-yaml", ref: "mfm-v1" }], elapsedMs: 1234 };
@@ -20,16 +22,42 @@ describe("catalogue filter", () => {
   });
 });
 
+const MIRROR = "https://raw.githubusercontent.com/someone/mirror/main/";
+const all = (over: Partial<Record<"mfm-yaml" | "bsdata-json" | "wahapedia-csv", boolean>> = {}) => ({ "mfm-yaml": true, "bsdata-json": true, "wahapedia-csv": true, ...over });
+
 describe("selection → worker request", () => {
   it("keeps the canonical source order, forwards the filter only with BSData and labels by date", () => {
-    const req = importRequestFor({ sources: { "bsdata-json": true, "mfm-yaml": true }, factionFilter: " Necrons " }, NOW);
-    expect(req).toEqual({ gameSystemId: "wh40k-11e", sources: ["mfm-yaml", "bsdata-json"], catalogueFilter: "Necrons", label: "Fetched 2026-09-10 · Necrons" });
-    const pointsOnly = importRequestFor({ sources: { "bsdata-json": false, "mfm-yaml": true }, factionFilter: "Necrons" }, NOW);
+    const req = importRequestFor({ sources: all(), factionFilter: " Necrons " }, NOW, MIRROR);
+    expect(req).toEqual({
+      gameSystemId: "wh40k-11e",
+      sources: ["mfm-yaml", "bsdata-json", "wahapedia-csv"],
+      catalogueFilter: "Necrons",
+      wahapediaMirror: `${MIRROR}wh40k-11e/`,
+      label: "Fetched 2026-09-10 · Necrons",
+    });
+    const pointsOnly = importRequestFor({ sources: all({ "bsdata-json": false, "wahapedia-csv": false }), factionFilter: "Necrons" }, NOW, MIRROR);
     expect(pointsOnly.sources).toEqual(["mfm-yaml"]);
     expect(pointsOnly.catalogueFilter).toBeUndefined();
     expect(pointsOnly.label).toBe("Fetched 2026-09-10");
-    expect(importRequestFor({ sources: { "bsdata-json": true, "mfm-yaml": false }, factionFilter: " " }, NOW).catalogueFilter).toBeUndefined();
+    expect(importRequestFor({ sources: all({ "mfm-yaml": false }), factionFilter: " " }, NOW, MIRROR).catalogueFilter).toBeUndefined();
     expect(fetchedLabel(NOW)).toBe("Fetched 2026-09-10");
+  });
+
+  it("leaves Wahapedia out when no mirror is configured, so the run still goes ahead", () => {
+    for (const mirror of [undefined, "", "   "]) {
+      const req = importRequestFor({ sources: all(), factionFilter: "" }, NOW, mirror);
+      expect(req.sources, String(mirror)).toEqual(["mfm-yaml", "bsdata-json"]);
+      expect(req.wahapediaMirror).toBeUndefined();
+    }
+  });
+
+  it("points the mirror at the edition's own directory, however the URL was typed", () => {
+    expect(wahapediaMirrorBase("https://x/y/", "wh40k-11e")).toBe("https://x/y/wh40k-11e/");
+    expect(wahapediaMirrorBase("https://x/y", "wh40k-10e")).toBe("https://x/y/wh40k-10e/");
+    expect(wahapediaMirrorBase("  https://x/y///  ", "wh40k-11e")).toBe("https://x/y/wh40k-11e/");
+    expect(hasMirror(undefined)).toBe(false);
+    expect(hasMirror("  ")).toBe(false);
+    expect(hasMirror(MIRROR)).toBe(true);
   });
 });
 
@@ -94,5 +122,19 @@ describe("error classification", () => {
     expect(classifyError(abort)).toBe("cancelled");
     expect(classifyError(new Error("GET https://raw.githubusercontent.com/x -> HTTP 404"))).toBe("other");
     expect(classifyError("boom")).toBe("other");
+  });
+});
+
+describe("the dev proxy", () => {
+  it("keeps the config's copy of the path and the edition list in step with this module", async () => {
+    const config = await readFile(new URL("../../vite.config.ts", import.meta.url), "utf8");
+    expect(config).toContain(`const WAHAPEDIA_DEV_PROXY = "${WAHAPEDIA_DEV_PROXY}"`);
+    for (const id of WAHAPEDIA_EDITIONS) expect(config, id).toContain(`"${id}":`);
+    // The upstream paths the config rewrites to are the ones the adapter names.
+    for (const id of WAHAPEDIA_EDITIONS) expect(config).toContain(new URL(wahapediaUrlFor(id)).pathname.replace(/\/$/, ""));
+  });
+
+  it("points the mirror base at the proxy's own directory for the edition", () => {
+    expect(wahapediaMirrorBase(WAHAPEDIA_DEV_PROXY, "wh40k-11e")).toBe("/wahapedia/wh40k-11e/");
   });
 });

@@ -6,6 +6,7 @@ import { runShow } from "./commands/show";
 import { runSynthetic } from "./commands/synthetic";
 import { parseCompetitiveArgs, runCompetitive } from "./commands/competitive";
 import { parseCorpusArgs, runCorpus } from "./commands/corpus";
+import { parseMirrorArgs, runMirror } from "./commands/mirror";
 
 const USAGE = `grimstat <command> [options]
 
@@ -23,6 +24,9 @@ Commands:
   corpus   [--source minihq] [--since YYYY-MM-DD] [--out data/corpus] [--limit n] [--keep-names] [--delay ms]
            Build the published corpus: read a tournament platform whose pages a machine may read, one
            request a second, and fold its ended tournaments' lists and placings into monthly files.
+  mirror   [--system wh40k-11e] [--out data/mirror] [--delay ms] [--quiet]
+           Copy Wahapedia's CSV export onto disk, one directory per game system, for publishing as a
+           dataset a browser can read. Repeat --system to copy more than one edition.
 `;
 
 export async function main(argv: string[]): Promise<number> {
@@ -54,6 +58,9 @@ export async function main(argv: string[]): Promise<number> {
       }
       case "corpus": {
         return await runCorpus(parseCorpusArgs(rest));
+      }
+      case "mirror": {
+        return await runMirror(parseMirrorArgs(rest));
       }
       case "synthetic": {
         const { values } = parseArgs({ args: rest, options: { check: { type: "boolean", default: false } } });

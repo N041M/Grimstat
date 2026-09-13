@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Override, Roster, Scenario, Snapshot } from "@grimstat/schema";
-import { db, exportAll, importAll, overrideKey, type ExportBundle, type OverrideRecord, type PublishedListRecord, type SnapshotMeta, type TerrainLayoutRecord, type UnitPresetRecord } from "../db";
+import { db, exportAll, importAll, overrideKey, type CollectionEntryRecord, type ExportBundle, type OverrideRecord, type PublishedListRecord, type SnapshotMeta, type TerrainLayoutRecord, type UnitPresetRecord } from "../db";
 import { nowIso } from "../lib/ids";
 import { download } from "../lib/download";
 import { useApp } from "../state/AppContext";
@@ -274,12 +274,13 @@ export function DataPage() {
       const terrainLayouts = kept<TerrainLayoutRecord>(b.stores.terrainLayouts, "layout", (r) => isText(r.id) && isText(r.name) && isText(r.json));
       const publishedLists = kept<PublishedListRecord>(b.stores.publishedLists, "list", (r) => isText(r.id));
       const unitPresets = kept<UnitPresetRecord>(b.stores.unitPresets, "preset", (r) => isText(r.id) && isText(r.name) && !!r.unit && typeof r.unit === "object");
+      const collection = kept<CollectionEntryRecord>(b.stores.collection, "collection entry", (r) => isText(r.id) && isText(r.name) && Number.isFinite(r.owned));
 
       const counts = await importAll({
         format: "grimstat-export",
         version: 1,
         exportedAt: b.exportedAt ?? new Date().toISOString(),
-        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings: Array.isArray(b.stores.settings) ? b.stores.settings : [], rosters, overrides: overridesIn, terrainLayouts, publishedLists, unitPresets },
+        stores: { snapshots, scenarios, layouts: Array.isArray(b.stores.layouts) ? b.stores.layouts : [], settings: Array.isArray(b.stores.settings) ? b.stores.settings : [], rosters, overrides: overridesIn, terrainLayouts, publishedLists, unitPresets, collection },
       });
       await refreshSnapshots();
       await refreshOverrides();
