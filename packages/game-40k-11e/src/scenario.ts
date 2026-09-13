@@ -209,7 +209,9 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
     } else {
       hitRollMod = mods.num(CH.hitRoll, 0, POLICY[CH.hitRoll]);
     }
-    const snap = ctx.snapShooting || (indirectUnseen && rules.indirectNotVisibleSnap);
+    // Snap Shooting is a rule about shooting, so it leaves melee weapons alone. Without the kind
+    // test the Snap shot control cut a fight-phase result to the quarter of it that rolls a 6.
+    const snap = w.kind === "ranged" && (ctx.snapShooting || (indirectUnseen && rules.indirectNotVisibleSnap));
     const target = w.skill === null ? null : Math.max(2, Math.min(7, w.skill + skillPenalty));
     const critHit = mods.num(CH.critHit, 6, POLICY[CH.critHit]);
     const hitOpts = { target: target === 7 ? null : target, rollMod: hitRollMod, critThreshold: critHit, snap, reroll: snap ? null : mods.reroll(CH.rerollHit) };

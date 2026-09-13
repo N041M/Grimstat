@@ -1,6 +1,7 @@
 import { defineWidget, type WidgetProps } from "./registry";
 import { fmt, pct, fmtInt } from "../lib/format";
 import { headlineOf, signed, type Headline } from "../lib/headline";
+import { IDLE_MESSAGE } from "../hooks/useSimulation";
 import { t } from "../i18n";
 
 /**
@@ -11,7 +12,7 @@ import { t } from "../i18n";
  * It is a widget (so it takes part in the rearrangeable dashboard) but renders flush — no card
  * chrome, no widget title; see HEADLESS in Dashboard.tsx.
  */
-export function SummaryTiles({ result, running, pinned }: WidgetProps) {
+export function SummaryTiles({ result, running, pinned, idle }: WidgetProps) {
   const now: Headline | undefined = result ? headlineOf(result) : undefined;
   const dash = "–";
   // The change against the pinned result, or nothing when either side is missing.
@@ -47,6 +48,8 @@ export function SummaryTiles({ result, running, pinned }: WidgetProps) {
             {t("hero.vsPinned", { v: heroDelta })}
           </div>
         ) : null}
+        {/* The one place the reason is written. The panels below say only that there is no result. */}
+        {idle ? <div className="hero-idle">{t(IDLE_MESSAGE[idle])}</div> : null}
       </div>
       <div className="hero-stats">
         {stats.map((s) => (

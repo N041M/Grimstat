@@ -1,25 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { isDiceExpr, type ScenarioModel, type ScenarioUnit, type ScenarioWeapon } from "@grimstat/schema";
+import { keywordRegistry } from "@grimstat/game-40k-11e";
 import { keywordsToText, parseKeywordText } from "../lib/keywordParser";
+import { unitKeywordVocabulary } from "../lib/keywordSuggest";
 import { defaultModel, defaultWeapon } from "../lib/scenario";
+import { useApp } from "../state/AppContext";
+import { KeywordField } from "./KeywordField";
 import { numOrNull } from "./ui";
 import { t } from "../i18n";
 
 /** The schema's own test, so the field refuses exactly what the engine would refuse to parse. */
 export const isDice = (s: string): boolean => isDiceExpr(s);
-const normKeywords = (s: string) => keywordsToText(parseKeywordText(s));
 
 /** Text input that keeps local text while typing and only commits valid values; resyncs when the prop changes elsewhere. */
-function TextCell({ value, onCommit, validate, normalize, className, label }: { value: string; onCommit: (v: string) => void; validate?: (v: string) => boolean; normalize?: (v: string) => string; className?: string; label: string }) {
+function TextCell({ value, onCommit, validate, className, label }: { value: string; onCommit: (v: string) => void; validate?: (v: string) => boolean; className?: string; label: string }) {
   const [text, setText] = useState(value);
   const last = useRef(value);
   useEffect(() => {
-    const norm = normalize ?? ((v: string) => v);
-    if (norm(value) !== norm(last.current)) {
+    if (value !== last.current) {
       last.current = value;
       setText(value);
     }
-  }, [value, normalize]);
+  }, [value]);
   const invalid = validate ? !validate(text) : false;
   return (
     <input
@@ -103,6 +105,11 @@ const whole = (n: number) => Math.floor(n);
 const absWhole = (n: number) => Math.floor(Math.abs(n));
 
 export function CustomUnitEditor({ unit, onChange }: { unit: ScenarioUnit; onChange: (u: ScenarioUnit) => void }) {
+  const { snapshot } = useApp();
+  // Weapon keywords come from the game system, which is what decides whether one is modelled at
+  // all. Unit keywords come from the loaded data, because they are whatever the datasheets carry.
+  const weaponKeywords = useMemo(() => keywordRegistry.suggestions(), []);
+  const unitKeywords = useMemo(() => unitKeywordVocabulary(snapshot), [snapshot]);
   const setModels = (models: ScenarioModel[]) => onChange({ ...unit, models });
   const setWeapons = (weapons: ScenarioWeapon[]) => onChange({ ...unit, weapons });
   const um = (i: number, patch: Partial<ScenarioModel>) => setModels(unit.models.map((m, j) => (j === i ? { ...m, ...patch } : m)));
@@ -121,7 +128,7 @@ export function CustomUnitEditor({ unit, onChange }: { unit: ScenarioUnit; onCha
         </label>
         <label className="field" style={{ flex: 1 }}>
           <span>{t("unit.keywords")}</span>
-          <TextCell label={t("unit.keywords")} value={unit.keywords.join(", ")} normalize={(s) => s.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean).join(",")} onCommit={(v) => onChange({ ...unit, keywords: v.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean) })} />
+          <KeywordField label={t("unit.keywords")} value={unit.keywords.join(", ")} suggestions={unitKeywords} unknownLabel="editor.kw.unknownUnit" onCommit={(v) => onChange({ ...unit, keywords: v.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean) })} />
         </label>
       </div>
 
@@ -213,13 +220,13 @@ export function CustomUnitEditor({ unit, onChange }: { unit: ScenarioUnit; onCha
                 <th className="num">S</th>
                 <th className="num">AP</th>
                 <th className="num">D</th>
-                <th>{t("weapon.keywords")}</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {unit.weapons.map((w, i) => (
-                <tr key={i}>
+                <Fragment key={i}>
+                <tr className="wpn-row">
                   <td className="cell-on" data-label={t("weapon.on")}>
                     <input type="checkbox" aria-label={t("weapon.enableAria", { name: w.name })} checked={w.enabled} onChange={(e) => uw(i, { enabled: e.target.checked })} />
                   </td>
@@ -253,15 +260,23 @@ export function CustomUnitEditor({ unit, onChange }: { unit: ScenarioUnit; onCha
                   <td className="num" data-label="D">
                     <TextCell label="D" className="dice" value={String(w.D)} validate={isDice} onCommit={(v) => uw(i, { D: v.trim().toUpperCase() })} />
                   </td>
-                  <td className="cell-keywords" data-label={t("weapon.keywords")}>
-                    <TextCell label={t("weapon.keywords")} value={keywordsToText(w.keywords)} normalize={normKeywords} onCommit={(v) => uw(i, { keywords: parseKeywordText(v) })} />
-                  </td>
                   <td className="cell-remove">
                     <button type="button" className="sm ghost danger" aria-label={t("editor.removeWeaponAria", { name: w.name })} onClick={() => setWeapons(unit.weapons.filter((_, j) => j !== i))}>
                       ×
                     </button>
                   </td>
                 </tr>
+                {/* Keywords are prose next to ten numbers. On their own line they are reachable
+                    without scrolling the table sideways, and the suggestions have room to be read. */}
+                <tr className="kw-row">
+                  <td colSpan={11}>
+                    <div className="kw-cell">
+                      <span className="kw-cell-label">{t("weapon.keywords")}</span>
+                      <KeywordField label={t("weapon.keywordsFor", { name: w.name })} value={keywordsToText(w.keywords)} suggestions={weaponKeywords} unknownLabel="editor.kw.unknownWeapon" onCommit={(v) => uw(i, { keywords: parseKeywordText(v) })} />
+                    </div>
+                  </td>
+                </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>

@@ -1,9 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import type { Scenario, SimResult, Snapshot } from "@grimstat/schema";
 import { simClient } from "../worker/client";
+import type { I18nKey } from "../i18n";
 
-/** Why the scenario cannot run at all: nothing to attack with, or nothing to attack. */
-export type IdleReason = "no-weapons" | "no-models";
+/**
+ * Why the scenario cannot run at all: nothing to attack with, nothing to attack, or weapons of the
+ * kind the chosen phase does not use.
+ */
+export type IdleReason = "no-weapons" | "no-models" | "melee-only" | "ranged-only";
+
+/** What the screen says about each reason. The dock and the Play screen both read it from here. */
+export const IDLE_MESSAGE: Record<IdleReason, I18nKey> = {
+  "no-weapons": "dock.idle.noWeapons",
+  "no-models": "dock.idle.noModels",
+  "melee-only": "dock.idle.meleeOnly",
+  "ranged-only": "dock.idle.rangedOnly",
+};
 
 export interface SimulationState {
   result: SimResult | undefined;
@@ -19,8 +31,14 @@ export interface SimulationState {
 }
 
 export function idleReason(s: Scenario): IdleReason | undefined {
-  if (!s.attacker.weapons.some((w) => w.enabled && w.count > 0)) return "no-weapons";
+  const live = s.attacker.weapons.filter((w) => w.enabled && w.count > 0);
+  if (!live.length) return "no-weapons";
   if (!s.defender.models.some((m) => m.count > 0)) return "no-models";
+  // The engine resolves only the weapons the phase uses, so an attacker holding nothing of that
+  // kind has no attacks to make. Without this the screen answered a melee profile in the shooting
+  // phase with a flat 0.0 and said nothing about the phase.
+  const kind = s.context.phase === "fight" ? "melee" : "ranged";
+  if (!live.some((w) => w.kind === kind)) return kind === "melee" ? "ranged-only" : "melee-only";
   return undefined;
 }
 

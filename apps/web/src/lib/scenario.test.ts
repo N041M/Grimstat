@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Snapshot } from "@grimstat/schema";
-import { hasUnsavedEdits, isDefaultScenario, newScenario, sameScenario, touch } from "./scenario";
+import { archetypeUnit, defaultContext, defaultModel, defaultWeapon, emptyUnit, hasUnsavedEdits, isDefaultScenario, newScenario, phaseForUnit, sameScenario, touch } from "./scenario";
 
 /** Only the field `newScenario` reads off the loaded data. */
 const loaded = (gameSystemId: string) => ({ gameSystemId }) as Snapshot;
@@ -36,6 +36,31 @@ describe("unsaved edits", () => {
     const stored = { ...newScenario(), name: "Saved" };
     expect(hasUnsavedEdits(stored, stored)).toBe(false);
     expect(hasUnsavedEdits({ ...stored, enabledToggles: ["x"] }, stored)).toBe(true);
+  });
+});
+
+describe("the phase a loadout can act in", () => {
+  const withWeapons = (kinds: Array<"ranged" | "melee">) => ({ ...emptyUnit("A"), models: [defaultModel()], weapons: kinds.map((k) => defaultWeapon(k)) });
+
+  it("moves to the fight phase for a melee-only unit and back for a ranged-only one", () => {
+    expect(phaseForUnit(defaultContext(), withWeapons(["melee"])).phase).toBe("fight");
+    expect(phaseForUnit({ ...defaultContext(), phase: "fight" }, withWeapons(["ranged"])).phase).toBe("shooting");
+  });
+
+  it("leaves the phase alone when the unit can act in it", () => {
+    const both = withWeapons(["ranged", "melee"]);
+    const shooting = defaultContext();
+    expect(phaseForUnit(shooting, both)).toBe(shooting);
+    const fight = { ...defaultContext(), phase: "fight" as const };
+    expect(phaseForUnit(fight, both)).toBe(fight);
+    // Nothing enabled at all is a different problem, and moving the phase would not fix it.
+    expect(phaseForUnit(shooting, emptyUnit("A"))).toBe(shooting);
+  });
+
+  it("keeps the charged flag as the player set it", () => {
+    const melee = archetypeUnit("chainsword-mob")!;
+    expect(phaseForUnit(defaultContext(), melee)).toEqual({ ...defaultContext(), phase: "fight" });
+    expect(phaseForUnit(defaultContext(), melee).charged).toBe(false);
   });
 });
 

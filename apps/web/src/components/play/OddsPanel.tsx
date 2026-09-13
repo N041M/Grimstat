@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Scenario, ScenarioContext, Snapshot } from "@grimstat/schema";
 import { simClient } from "../../worker/client";
 import { useWorkerTask } from "../../hooks/useWorkerTask";
-import { idleReason } from "../../hooks/useSimulation";
+import { IDLE_MESSAGE, idleReason } from "../../hooks/useSimulation";
 import { cloneUnit, defaultContext, newScenario } from "../../lib/scenario";
 import { fmt, pct } from "../../lib/format";
 import { PHASE_LABEL } from "./labels";
@@ -173,7 +173,7 @@ export function OddsPanel({ ctx }: { ctx: PlayContext }) {
       <p className="odds-tracked small muted">{t("odds.tracked", { phase: t(PHASE_LABEL[game.state.phase]) })}</p>
 
       {idle ? (
-        <p className="odds-idle small muted">{t(idle === "no-weapons" ? "dock.idle.noWeapons" : "dock.idle.noModels")}</p>
+        <p className="odds-idle small muted">{t(IDLE_MESSAGE[idle])}</p>
       ) : task.error ? (
         <p className="odds-idle small">{t("odds.error", { msg: task.error })}</p>
       ) : !result ? (

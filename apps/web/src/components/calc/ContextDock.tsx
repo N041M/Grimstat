@@ -56,12 +56,13 @@ function fields(context: ScenarioContext) {
 }
 
 /**
- * The dock header only carries states the reader can act on: what the scenario still lacks, a
- * failure, or that a new answer is on its way. A finished run says nothing, because "exact · 4 ms"
- * is a fact about the solver rather than about the units.
+ * The dock header only carries states the reader can act on: a failure, or that a new answer is on
+ * its way. A finished run says nothing, because "exact · 4 ms" is a fact about the solver rather
+ * than about the units. Why a scenario has no result at all is written once, under the headline
+ * figure it stands in for, rather than a second time in a 10px line up here.
  */
 function statusLine(sim: SimulationState): string | undefined {
-  if (sim.idle) return t(sim.idle === "no-weapons" ? "dock.idle.noWeapons" : "dock.idle.noModels");
+  if (sim.idle) return undefined;
   if (sim.error) return t("results.error");
   if (sim.stale || !sim.result) return t("dock.computing");
   return undefined;
@@ -83,8 +84,17 @@ export function ContextDock({ scenario, snapshot, sim, onContext, onToggles }: {
   return (
     <Dock label={t("dock.title")} meta={statusLine(sim)}>
       <DockSection className="dock-fields">
+        {/* The phase decides which half of a unit's weapons are read at all, so it leads the dock as
+            a pair of chips rather than sharing a row with the range band as a menu. */}
+        <div className="dock-phase" role="group" aria-label={t("ctx.phase")}>
+          <span className="dock-field-label">{t("dock.phase")}</span>
+          <div className="dock-phase-opts">
+            {opts.phase.map((o) => (
+              <PillChip key={o.value} label={o.label} title={t("ctx.phase")} on={ctx.phase === o.value} onChange={() => onContext({ phase: o.value })} />
+            ))}
+          </div>
+        </div>
         <SelectBox label={t("dock.rangeBand")} title={t("ctx.rangeBand")} value={ctx.rangeBand} options={opts.rangeBand} onChange={(rangeBand) => onContext({ rangeBand })} />
-        <SelectBox label={t("dock.phase")} title={t("ctx.phase")} value={ctx.phase} options={opts.phase} onChange={(phase) => onContext({ phase })} />
       </DockSection>
 
       <DockSection className="dock-chip-groups">
