@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { hrefFor, type Route } from "../../router";
 import type { ThemePreference, useTheme } from "../../theme";
 import { useApp } from "../../state/AppContext";
-import { menuKeys, useDismiss } from "../ui";
+import { Sheet, menuKeys, useDismiss } from "../ui";
 import { t, type I18nKey } from "../../i18n";
 
 export interface RailEntry {
@@ -107,5 +107,64 @@ export function IconRail({ route, theme, offline }: { route: Route; theme: Retur
       ) : null}
       <ThemeControl theme={theme} />
     </div>
+  );
+}
+
+/**
+ * Navigation on a phone: the rail, slid in from the left.
+ *
+ * The bar along the bottom could not hold ten destinations, a theme control and the mark, and its
+ * single letters said nothing without the labels a hover reveals on a wider screen. This is the same
+ * list in the same order, always with its labels, in a drawer at the edge the rail lives on. The mark
+ * keeps its place at the top and still opens the command palette.
+ */
+export function NavDrawer({ open, onClose, route, theme, offline }: { open: boolean; onClose: () => void; route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean }) {
+  const { solveState, openPalette } = useApp();
+  const pending = solveState === "pending";
+  return (
+    <Sheet open={open} onClose={onClose} side="left" label={t("nav.label")} className="nav-drawer">
+      <div className="nav-drawer-head">
+        <button
+          type="button"
+          className="nav-drawer-mark"
+          onClick={() => {
+            onClose();
+            openPalette();
+          }}
+        >
+          <span className="rail-mark-diamond" aria-hidden="true" />
+          <span className="nav-drawer-brand">{t("nav.name")}</span>
+          <span className={`rail-dot ${pending ? "pending" : "current"}`} title={t(pending ? "solve.pending" : "solve.current")} />
+          <span className="nav-drawer-palette">{t("nav.search")}</span>
+        </button>
+        <button type="button" className="nav-drawer-close" onClick={onClose} aria-label={t("common.close")}>
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+      <nav className="nav-drawer-list" aria-label={t("nav.label")}>
+        {RAIL_ENTRIES.map((e) => (
+          <a key={e.route} className="nav-drawer-item" href={hrefFor(e.route)} aria-current={route === e.route ? "page" : undefined} onClick={onClose}>
+            <span className="nav-drawer-glyph" aria-hidden="true">
+              {e.glyph}
+            </span>
+            {t(e.labelKey)}
+          </a>
+        ))}
+      </nav>
+      <div className="nav-drawer-foot">
+        {offline ? (
+          <span className="rail-offline" role="status">
+            {t("shell.offline")}
+          </span>
+        ) : null}
+        <div className="nav-drawer-theme" role="group" aria-label={t("theme.menuLabel")}>
+          {PREFERENCES.map((p) => (
+            <button key={p.value} type="button" className={theme.preference === p.value ? "sm primary" : "sm"} aria-pressed={theme.preference === p.value} onClick={() => theme.setPreference(p.value)}>
+              {t(p.key)}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Sheet>
   );
 }

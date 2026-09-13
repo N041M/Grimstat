@@ -848,49 +848,12 @@ code,
   display: none;
 }
 @media (max-width: 899px) {
+  /* The rail is not on screen here: navigation lives in the drawer the top bar's ☰ opens, so the
+     page gets the whole height rather than giving 56px to a row of letters. */
   .shell {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) 56px;
+    grid-template-rows: minmax(0, 1fr);
     min-width: 0;
-  }
-  /* No flyout on a phone: the rail is the bottom bar and goes back into the grid. */
-  .rail {
-    order: 2;
-    position: static;
-    width: auto;
-    transition: none;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 2px;
-    padding: 0 10px;
-    border-right: 0;
-    border-top: 1px solid var(--line);
-  }
-  .rail:hover,
-  .rail:focus-within {
-    width: auto;
-    box-shadow: none;
-  }
-  .rail-mark {
-    margin-bottom: 0;
-    margin-left: 0;
-  }
-  .rail-nav {
-    flex-direction: row;
-    gap: 2px;
-  }
-  .rail-item {
-    width: 36px;
-    height: 36px;
-  }
-  .rail-spacer {
-    display: none;
-  }
-  .rail-theme-menu {
-    left: auto;
-    right: 0;
-    bottom: 46px;
   }
   .main-region {
     order: 1;
@@ -2400,6 +2363,144 @@ body.sheet-open {
   display: flex;
   flex-direction: column;
   animation: sheet-in 0.2s ease-out;
+}
+/* ---- navigation drawer (phones): the rail's list, slid in from the edge it lives on ---- */
+.sheet.sheet-left {
+  right: auto;
+  top: 0;
+  bottom: 0;
+  height: auto;
+  width: min(82vw, 300px);
+  border-top: 0;
+  border-right: 1px solid var(--dash);
+  border-radius: 0;
+  animation: drawer-in 0.18s ease-out;
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet.sheet-left {
+    animation: none;
+  }
+}
+.sheet.sheet-left .sheet-handle {
+  width: auto;
+  padding: 10px 12px 6px;
+  justify-content: flex-start;
+  cursor: default;
+}
+.sheet.sheet-left .sheet-handle span {
+  width: 28px;
+}
+.nav-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  /* Search and the close button are different actions, so they are not shoulder to shoulder. */
+  gap: 14px;
+  padding-right: 6px;
+}
+.nav-drawer-close {
+  flex: none;
+  margin-top: 2px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-btn);
+  color: var(--ink-2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.nav-drawer-close:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+.nav-drawer-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0 12px 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.nav-drawer-brand {
+  font: 600 14px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+.nav-drawer-palette {
+  margin-left: auto;
+  font: 400 9px/1 var(--mono);
+  color: var(--faint);
+}
+.nav-drawer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.nav-drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 13px;
+}
+.nav-drawer-item:hover {
+  background: var(--fill);
+}
+.nav-drawer-item[aria-current="page"] {
+  background: var(--fill);
+  color: var(--ink);
+  font-weight: 600;
+}
+.nav-drawer-glyph {
+  font: 500 12px/1 var(--mono);
+  width: 1.4em;
+  text-align: center;
+  color: var(--faint);
+}
+.nav-drawer-item[aria-current="page"] .nav-drawer-glyph {
+  color: var(--accent);
+}
+.nav-drawer-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+}
+.nav-drawer-theme {
+  display: flex;
+  gap: 6px;
+}
+/* The top bar's two buttons: navigation on the left, then what this page's column holds. */
+.ctx-bar-nav {
+  background: transparent;
+  border: 0;
+  padding: 0 10px 0 0;
+  font-size: 15px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.ctx-bar-nav:hover {
+  color: var(--ink);
 }
 .sheet-handle {
   background: transparent;
@@ -7302,28 +7403,6 @@ button.battle-scope-btn:hover {
   }
 }
 @media (max-width: 899px) {
-  .rail-item {
-    flex-direction: column;
-    justify-content: center;
-    gap: 3px;
-    width: auto;
-    min-width: 34px;
-    height: 44px;
-    padding: 0 3px;
-    margin: 0;
-    overflow: visible;
-  }
-  .rail-glyph {
-    width: auto;
-  }
-  .rail-label {
-    opacity: 1;
-    color: inherit;
-    font: 500 7px/1 var(--mono);
-    letter-spacing: 0.04em;
-    transition: none;
-    text-transform: uppercase;
-  }
   .rail-offline {
     margin-bottom: 0;
     margin-right: 6px;
@@ -7700,7 +7779,8 @@ button.battle-scope-btn:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
+  /* Beside the page's name rather than across the bar from it, within reach of the same thumb. */
+  margin-left: 4px;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;

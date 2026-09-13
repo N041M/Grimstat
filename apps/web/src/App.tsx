@@ -21,7 +21,7 @@ import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sheet } from "./components/ui";
-import { CommandPalette, ContextColumn, contextEyebrow, IconRail, useBarHostRef } from "./components/shell";
+import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, useBarHostRef } from "./components/shell";
 import { swStore, useOnline, useServiceWorker } from "./lib/sw";
 import { t } from "./i18n";
 
@@ -33,6 +33,7 @@ export function App() {
   const online = useOnline();
   const narrow = useMediaQuery(NARROW_QUERY);
   const [sheet, setSheet] = useState(false);
+  const [nav, setNav] = useState(false);
   const barHostRef = useBarHostRef();
 
   // The context sheet is per-screen; leaving the screen closes it.
@@ -97,14 +98,17 @@ export function App() {
 
   return (
     <div className={`shell ${narrow ? "narrow" : ""}`.trim()}>
-      <IconRail route={route} theme={theme} offline={!online} />
+      {narrow ? null : <IconRail route={route} theme={theme} offline={!online} />}
       {narrow ? null : <ContextColumn route={route} param={param} />}
       <main className="main-region">
         {narrow ? (
           <div className="ctx-bar">
-            <button type="button" className="ctx-bar-btn" onClick={() => setSheet(true)} aria-haspopup="dialog" aria-expanded={sheet} aria-label={t("ctxcol.openSheet")}>
+            <button type="button" className="ctx-bar-nav" onClick={() => setNav(true)} aria-haspopup="dialog" aria-expanded={nav} aria-label={t("nav.open")}>
               <span aria-hidden="true">☰</span>
+            </button>
+            <button type="button" className="ctx-bar-btn" onClick={() => setSheet(true)} aria-haspopup="dialog" aria-expanded={sheet} aria-label={t("ctxcol.openSheet")}>
               {contextEyebrow(route)}
+              <span aria-hidden="true">⌄</span>
             </button>
             {/* A screen with no page header of its own puts its primary actions here. */}
             <div className="ctx-bar-actions" ref={barHostRef} />
@@ -113,9 +117,12 @@ export function App() {
         {page}
       </main>
       {narrow ? (
-        <Sheet open={sheet} onClose={() => setSheet(false)} label={contextEyebrow(route)} className="ctx-sheet">
-          <ContextColumn route={route} param={param} inSheet />
-        </Sheet>
+        <>
+          <NavDrawer open={nav} onClose={() => setNav(false)} route={route} theme={theme} offline={!online} />
+          <Sheet open={sheet} onClose={() => setSheet(false)} label={contextEyebrow(route)} className="ctx-sheet">
+            <ContextColumn route={route} param={param} inSheet />
+          </Sheet>
+        </>
       ) : null}
       {sw.needRefresh ? (
         <div className="update-banner" role="status">
