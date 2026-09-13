@@ -25,7 +25,7 @@ describe("cardModel: the one thing a card says about the stored copy", () => {
   });
 
   it("lets a run in progress win over all of it", () => {
-    const m = cardModel("mfm-yaml", { id: "mfm-yaml", stage: "downloading", index: 2, total: 5 }, stored, undefined, "stale");
+    const m = cardModel("mfm-yaml", { id: "mfm-yaml", stage: "downloading", index: 2, total: 5, files: 0, warnings: 0, sample: [] }, stored, undefined, "stale");
     expect(m.live).toBe(true);
     expect(m.status).not.toBe("outdated");
   });
