@@ -7,7 +7,7 @@ import { DurabilityTab } from "../components/analyses/DurabilityTab";
 import { EfficiencyTab } from "../components/analyses/EfficiencyTab";
 import { TurnTab } from "../components/analyses/TurnTab";
 import { ReverseTab } from "../components/analyses/ReverseTab";
-import { useTabInView } from "../components/ui";
+import { useTabInView, useEdgeFade } from "../components/ui";
 import { t, type I18nKey } from "../i18n";
 
 export type AnalysisTab = "matrix" | "heatmap" | "durability" | "efficiency" | "reverse" | "turn";
@@ -61,6 +61,7 @@ export function AnalysesPage() {
   const publish = useCallback((h: AnalysisHeader) => setHeader(h), []);
   const tabbar = useRef<HTMLDivElement>(null);
   useTabInView(tabbar, tab);
+  useEdgeFade(tabbar, tab);
 
   let panel: ReactNode;
   switch (tab) {

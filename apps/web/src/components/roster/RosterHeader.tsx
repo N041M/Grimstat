@@ -7,7 +7,7 @@ import { BATTLE_SIZE_ORDER } from "../../lib/roster";
 import { PageHeader } from "../shell";
 import { PointsBar } from "./PointsBar";
 import { battleSizeKey } from "../../pages/ArmiesPage";
-import { Icon, Popover, useTabInView } from "../ui";
+import { Icon, Popover, useTabInView, useEdgeFade } from "../ui";
 import { DiagnosticItem } from "./DiagnosticItem";
 import { t, tn, type I18nKey } from "../../i18n";
 
@@ -105,6 +105,7 @@ export function RosterHeader({ roster, factionName, points, status, savedAt, err
   const toggle = (m: EditorMode) => onMode(mode === m ? "unit" : m);
   const tabbar = useRef<HTMLDivElement>(null);
   useTabInView(tabbar, tab);
+  useEdgeFade(tabbar, tab);
 
   const title = (
     <div className="roster-title-row">

@@ -6,7 +6,7 @@ import { hrefFor, navigate } from "../router";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
 import { ALL_FACTIONS, CODEX_COMPARE_KEY, CODEX_DIFF_KEY, CODEX_FACTION_KEY, codexFactions, codexGroups, COMPARE_CAP, effectiveFaction, parseCompareSet, parseFaction, parseFlag, sheetsById, sizeBounds, toggleCompare, type CodexView } from "../lib/codex";
 import { ContextSlot, PageHeader } from "../components/shell";
-import { Empty, Icon, Popover, useTabInView } from "../components/ui";
+import { Empty, Icon, Popover, useTabInView, useEdgeFade } from "../components/ui";
 import { CodexBrowser } from "../components/codex/CodexBrowser";
 import { CodexLanding } from "../components/codex/CodexLanding";
 import { DatasheetCard } from "../components/codex/DatasheetCard";
@@ -154,6 +154,7 @@ export function CodexPage({ id }: { id: string | undefined }) {
 
   const tabbar = useRef<HTMLDivElement>(null);
   useTabInView(tabbar, view);
+  useEdgeFade(tabbar, view);
 
   return (
     <>

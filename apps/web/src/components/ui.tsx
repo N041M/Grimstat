@@ -72,6 +72,47 @@ export function Switch({ checked, onChange, label, description, disabled }: { ch
 }
 
 /**
+ * Marks which ends of a sideways-scrolling strip have more content beyond them, as
+ * `data-fade="start"`, `"end"` or `"both"`. The CSS fades the ends that are marked.
+ *
+ * The fade has to follow the scroll rather than be painted once. A strip that always faded its
+ * right edge went on fading it after it had been scrolled to the end, where there is nothing more
+ * to say, and never faded the left, where by then there was. Fading both ends unconditionally is
+ * no better: it dims the first tab of a strip nobody has scrolled yet.
+ *
+ * `watch` re-runs the setup when the element itself is replaced — the phone bar's action strip is
+ * only mounted at compact widths, so it comes and goes with them.
+ */
+export function useEdgeFade(ref: RefObject<HTMLElement | null>, watch?: unknown): void {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      // A sub-pixel margin: a strip scrolled to its end can land a fraction short of the maximum.
+      const room = el.scrollWidth - el.clientWidth;
+      const start = el.scrollLeft > 1;
+      const end = el.scrollLeft < room - 1;
+      const mark = start && end ? "both" : start ? "start" : end ? "end" : "";
+      if (mark) el.setAttribute("data-fade", mark);
+      else el.removeAttribute("data-fade");
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    // Its own width, and the width of what it holds: the actions change with the screen, and the
+    // tabs change with the army.
+    const resize = new ResizeObserver(update);
+    resize.observe(el);
+    const mutate = new MutationObserver(update);
+    mutate.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => {
+      el.removeEventListener("scroll", update);
+      resize.disconnect();
+      mutate.disconnect();
+    };
+  }, [ref, watch]);
+}
+
+/**
  * Keeps the selected tab in view in a tab bar too wide for the screen. Below 900px `.tabbar`
  * scrolls sideways, so a screen reopened on its last tab would otherwise start with that tab off
  * the edge. Give the bar a ref and pass whatever changes when the tab does.
@@ -89,6 +130,7 @@ export function useTabInView(ref: RefObject<HTMLElement | null>, value: string):
 export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: Array<{ id: T; label: string }>; value: T; onChange: (v: T) => void; label: string }) {
   const id = useId();
   const list = useRef<HTMLDivElement>(null);
+  useEdgeFade(list, value);
   const onKeyDown = (e: ReactKeyboardEvent) => {
     const i = tabs.findIndex((tb) => tb.id === value);
     let next: number | undefined;

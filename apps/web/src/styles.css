@@ -1024,7 +1024,6 @@ code,
     overflow-x: auto;
     scrollbar-width: none;
     scroll-snap-type: x proximity;
-    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
   }
   .page-header-actions > .tabs::-webkit-scrollbar {
     display: none;
@@ -1037,7 +1036,6 @@ code,
      with whatever follows it. */
   .page-header-actions > .tabs ~ .tabs {
     flex: 0 1 auto;
-    mask-image: none;
   }
   .page-header-sub {
     white-space: normal;
@@ -8023,12 +8021,11 @@ button.battle-scope-btn:hover {
 .ctx-bar-actions::-webkit-scrollbar {
   display: none;
 }
-/* A phone rarely has room for all of a page's actions. A strip that ends flat at the edge looks
-   like it ends at its last button, so the last few pixels fade to say the row continues. */
+/* A phone rarely has room for all of a page's actions, so the strip scrolls. `useEdgeFade` marks
+   the ends that have more beyond them and the rule below fades them. */
 .shell.compact .ctx-bar-actions {
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
-  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
 }
 .shell.compact .ctx-bar-action {
   scroll-snap-align: end;
@@ -9620,9 +9617,9 @@ body.play-focused .shell.compact {
 }
 
 /* ---------- Tab bars on a narrow screen ----------
-   Five tabs do not fit across a phone, so the bar scrolls sideways. It fades at its right edge to
-   say there is more, hides its scrollbar, and snaps each tab to the edge it was dragged towards.
-   The selected tab scrolls itself into view when the screen opens; see `useTabInView`. */
+   Five tabs do not fit across a phone, so the bar scrolls sideways. It hides its scrollbar and
+   snaps each tab to the edge it was dragged towards. The selected tab scrolls itself into view when
+   the screen opens; see `useTabInView`. The ends fade through `useEdgeFade`. */
 @media (max-width: 899px) {
   .tabbar {
     margin-top: 12px;
@@ -9631,7 +9628,6 @@ body.play-focused .shell.compact {
     scrollbar-width: none;
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
-    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
   }
   .tabbar::-webkit-scrollbar {
     display: none;
@@ -9788,4 +9784,24 @@ body.play-focused .shell.compact {
   .shell.compact .data-published-actions > .t-meta {
     white-space: nowrap;
   }
+}
+
+/* ---------- The ends of a strip that scrolls sideways ----------
+   A tab bar, the phone bar's actions and the battle table's tool strip all scroll when they hold
+   more than the width takes. Each fades at whichever end has more beyond it, so the fade says
+   "there is more this way" rather than decorating one edge for good.
+
+   `useEdgeFade` in components/ui.tsx sets the attribute as the strip is scrolled and resized. The
+   selector is the attribute alone: nothing else in the app sets it. */
+[data-fade] {
+  --fade-w: 20px;
+}
+[data-fade="start"] {
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade-w));
+}
+[data-fade="end"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--fade-w)), transparent);
+}
+[data-fade="both"] {
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade-w), #000 calc(100% - var(--fade-w)), transparent);
 }

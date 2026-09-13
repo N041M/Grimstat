@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { COMPACT_QUERY, PHONE_QUERY, useMediaQuery } from "./hooks/useMediaQuery";
 import { useApp } from "./state/AppContext";
 import { navigate, useRouteInfo } from "./router";
@@ -20,7 +20,7 @@ import { DataPage } from "./pages/DataPage";
 import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { Sheet } from "./components/ui";
+import { Sheet, useEdgeFade } from "./components/ui";
 import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, useBarHostRef } from "./components/shell";
 import { swStore, useOnline, useServiceWorker } from "./lib/sw";
 import { t } from "./i18n";
@@ -38,7 +38,18 @@ export function App() {
   const tablet = compact && !phone;
   const [sheet, setSheet] = useState(false);
   const [nav, setNav] = useState(false);
-  const barHostRef = useBarHostRef();
+  // The bar's action strip scrolls when a page has more actions than the width takes, and it is
+  // only mounted at compact widths, so the fade is set up again whenever that changes.
+  const setBarHost = useBarHostRef();
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const barHostRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      barRef.current = el;
+      setBarHost(el);
+    },
+    [setBarHost],
+  );
+  useEdgeFade(barRef, compact);
 
   // The context sheet is per-screen; leaving the screen closes it.
   useEffect(() => setSheet(false), [route, param]);
