@@ -3938,13 +3938,15 @@ a.btn:hover {
 .dash-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   padding: 10px 22px;
   flex: none;
   border-bottom: 1px solid var(--line-soft);
 }
+/* Only the loading line uses this now; it keeps to the left while the buttons stay right. */
 .dash-hint {
+  margin-right: auto;
   font: 400 10px/1.4 var(--mono);
   color: var(--faint);
   min-width: 0;
@@ -4291,6 +4293,23 @@ a.btn:hover {
   padding: 10px 22px 22px;
   font: 400 10px/1.4 var(--mono);
   color: var(--faint);
+}
+
+/*
+ * Shortcut strips answer a question only someone already driving the list by keyboard is asking,
+ * so they wait for focus to land inside their surface. They keep their space rather than being
+ * removed from flow, so nothing below them jumps when they appear.
+ */
+.ut-keys,
+.stat-keys,
+.battle-keys {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+:focus-within > .ut-keys,
+:focus-within > .stat-keys,
+:focus-within > .battle-keys {
+  opacity: 1;
 }
 
 /* ---------- Armies: Statistics tab ----------

@@ -459,7 +459,6 @@ export const en = {
   "results.elapsed": "{ms} ms",
 
   // dashboard
-  "dashboard.hint": "Drag titles to move, corners to resize. Saved on this device.",
   "dashboard.autoFit": "Fit heights",
   "dashboard.autoFitHint": "Resize every panel to the height its content needs",
   "dashboard.reset": "Reset layout",
@@ -1524,7 +1523,7 @@ export const en = {
   "whatIf.applied": "Applied “{label}”.",
   "whatIf.removed": "Removed “{label}”.",
   "whatIf.active": "active",
-  "whatIf.hint": "Bars show the change in expected damage against the current result. Applying a variant toggles it in the scenario (click again to remove it).",
+  "whatIf.hint": "Click a row to apply it to the scenario; click again to remove it.",
   "whatIf.none": "No variants were evaluated.",
   "whatIf.base": "Now: {d} damage · {s} slain · {p} to kill",
 

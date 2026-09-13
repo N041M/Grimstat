@@ -360,8 +360,8 @@ export function Dashboard({ id, inputs, defaultHidden = [], actions }: { id: str
   return (
     <div className="dashboard" ref={gridRef}>
       {dialog}
+      {/* Each panel head carries its own "drag to move" tooltip, so the bar needs no standing caption. */}
       <div className="dash-bar">
-        <span className="dash-hint">{t("dashboard.hint")}</span>
         <span className="dash-actions">
           {actions}
           {hiddenMenu}
