@@ -5,7 +5,7 @@
       "name": "Battle for Macragge",
       "kind": "starter",
       "announced": "2004",
-      "source": "https://www.wargamer.com/warhammer-40k/starter-set",
+      "source": "https://www.warhammer-community.com/en-gb/articles/5ZMtOnOE/saturday-pre-orders-dont-miss-out-on-the-battle-for-macragge/",
       "lines": [
         {
           "name": "Tactical Squad",
@@ -1358,6 +1358,1126 @@
         },
         {
           "name": "Impulsor",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "warhammer-quest-blackstone-fortress",
+      "name": "Warhammer Quest: Blackstone Fortress",
+      "kind": "starter",
+      "announced": "2018",
+      "source": "https://wanderingdragon.com/2018/11/17/warhammer-quest-blackstone-fortress/",
+      "lines": [
+        {
+          "name": "Negavolt Cultists",
+          "models": 4
+        },
+        {
+          "name": "Traitor Guardsmen",
+          "models": 14
+        },
+        {
+          "name": "Chaos Beastmen",
+          "models": 4
+        },
+        {
+          "name": "Ur-Ghuls",
+          "models": 4
+        },
+        {
+          "name": "Spindle Drones",
+          "models": 4
+        },
+        {
+          "name": "Rogue Psykers",
+          "models": 2
+        },
+        {
+          "name": "Chaos Space Marines",
+          "models": 2
+        },
+        {
+          "name": "Obsidius Mallex",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "piety-and-pain",
+      "name": "Piety and Pain",
+      "kind": "starter",
+      "announced": "2021",
+      "source": "https://levelonegameshop.com/products/games-workshop-warhammer-40k-piety-and-pain-pp-60",
+      "lines": [
+        {
+          "name": "Lelith Hesperax",
+          "models": 1
+        },
+        {
+          "name": "Wyches",
+          "models": 10
+        },
+        {
+          "name": "Scourges",
+          "models": 5,
+          "ownerNames": true
+        },
+        {
+          "name": "Venom",
+          "models": 1
+        },
+        {
+          "name": "Palatine",
+          "models": 1
+        },
+        {
+          "name": "Retributor Squad",
+          "models": 5
+        },
+        {
+          "name": "Immolator",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "hexfire",
+      "name": "Hexfire",
+      "kind": "starter",
+      "announced": "2021",
+      "source": "https://www.toysoldiergames.com/products/40k-hexfire-box-set",
+      "lines": [
+        {
+          "name": "Castellan Crowe",
+          "models": 1
+        },
+        {
+          "name": "Purifier Squad",
+          "models": 10
+        },
+        {
+          "name": "Nemesis Dreadknight",
+          "models": 1
+        },
+        {
+          "name": "Infernal Master",
+          "models": 1
+        },
+        {
+          "name": "Scarab Occult Terminators",
+          "models": 5
+        },
+        {
+          "name": "Tzaangors",
+          "models": 10
+        },
+        {
+          "name": "Tzaangor Shaman",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "shadow-throne",
+      "name": "Shadow Throne",
+      "kind": "starter",
+      "announced": "2021-12-11",
+      "source": "https://www.fauxhammer.com/reviews/warhammer-40000-shadow-throne-review/",
+      "lines": [
+        {
+          "name": "Blade Champion",
+          "models": 1
+        },
+        {
+          "name": "Allarus Custodians",
+          "models": 3
+        },
+        {
+          "name": "Witchseekers",
+          "models": 5
+        },
+        {
+          "name": "Reductus Saboteur",
+          "models": 1
+        },
+        {
+          "name": "Patriarch",
+          "models": 1
+        },
+        {
+          "name": "Magus",
+          "models": 1
+        },
+        {
+          "name": "Primus",
+          "models": 1
+        },
+        {
+          "name": "Neophyte Hybrids",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "wrath-of-the-soul-forge-king",
+      "name": "Wrath of the Soul Forge King",
+      "kind": "starter",
+      "announced": "2023-03-11",
+      "source": "https://taleofpainters.com/2023/03/review-wrath-of-the-soul-forge-king/",
+      "lines": [
+        {
+          "name": "Azrael",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Deathwing Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Vashtorr the Arkifane",
+          "models": 1
+        },
+        {
+          "name": "Venomcrawler",
+          "models": 1
+        },
+        {
+          "name": "Obliterators",
+          "models": 2
+        },
+        {
+          "name": "Cultist Mob",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "battleforce-arks-of-omen-balefleet",
+      "name": "Battleforce: Arks of Omen Balefleet",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/2023/01/09/enter-the-new-season-of-warhammer-40000-with-two-boarding-patrols-and-a-battleforce/",
+      "lines": [
+        {
+          "name": "Heretic Astartes Daemon Prince",
+          "models": 1
+        },
+        {
+          "name": "Heldrake",
+          "models": 1
+        },
+        {
+          "name": "Chaos Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Possessed",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-space-marines",
+      "name": "Boarding Patrol: Space Marines",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/2023/01/09/enter-the-new-season-of-warhammer-40000-with-two-boarding-patrols-and-a-battleforce/",
+      "lines": [
+        {
+          "name": "Captain in Gravis Armour",
+          "models": 1
+        },
+        {
+          "name": "Heavy Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Assault Intercessor Squad",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-chaos-space-marines",
+      "name": "Boarding Patrol: Chaos Space Marines",
+      "kind": "battleforce",
+      "announced": "2023",
+      "source": "https://www.warhammer-community.com/2023/01/09/enter-the-new-season-of-warhammer-40000-with-two-boarding-patrols-and-a-battleforce/",
+      "lines": [
+        {
+          "name": "Abaddon the Despoiler",
+          "models": 1
+        },
+        {
+          "name": "Legionaries",
+          "models": 10
+        },
+        {
+          "name": "Cultist Mob",
+          "models": 20
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-adeptus-mechanicus",
+      "name": "Boarding Patrol: Adeptus Mechanicus",
+      "kind": "battleforce",
+      "announced": "2023-03-11",
+      "source": "https://www.warhammer-community.com/2023/03/11/saturday-pre-orders-vashtorr-the-arkifane-takes-matters-into-his-own-hands/",
+      "lines": [
+        {
+          "name": "Tech-Priest Dominus",
+          "models": 1
+        },
+        {
+          "name": "Kataphron Breachers",
+          "models": 3
+        },
+        {
+          "name": "Sicarian Infiltrators",
+          "models": 5
+        },
+        {
+          "name": "Skitarii Vanguard",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-chaos-daemons",
+      "name": "Boarding Patrol: Chaos Daemons",
+      "kind": "battleforce",
+      "announced": "2023-03-11",
+      "source": "https://www.warhammer-community.com/2023/03/11/saturday-pre-orders-vashtorr-the-arkifane-takes-matters-into-his-own-hands/",
+      "lines": [
+        {
+          "name": "Karanak",
+          "models": 1
+        },
+        {
+          "name": "Bloodletters",
+          "models": 10
+        },
+        {
+          "name": "Flesh Hounds",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-death-guard",
+      "name": "Boarding Patrol: Death Guard",
+      "kind": "battleforce",
+      "announced": "2023-03-11",
+      "source": "https://www.warhammer-community.com/2023/03/11/saturday-pre-orders-vashtorr-the-arkifane-takes-matters-into-his-own-hands/",
+      "lines": [
+        {
+          "name": "Lord of Virulence",
+          "models": 1
+        },
+        {
+          "name": "Deathshroud Terminators",
+          "models": 3
+        },
+        {
+          "name": "Plague Marines",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "boarding-patrol-genestealer-cults",
+      "name": "Boarding Patrol: Genestealer Cults",
+      "kind": "battleforce",
+      "announced": "2023-03-11",
+      "source": "https://www.warhammer-community.com/2023/03/11/saturday-pre-orders-vashtorr-the-arkifane-takes-matters-into-his-own-hands/",
+      "lines": [
+        {
+          "name": "Kelermorph",
+          "models": 1
+        },
+        {
+          "name": "Acolyte Hybrids",
+          "models": 10,
+          "ownerNames": true
+        },
+        {
+          "name": "Aberrants",
+          "models": 5
+        },
+        {
+          "name": "Abominant",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-leviathan",
+      "name": "Warhammer 40,000: Leviathan",
+      "kind": "starter",
+      "announced": "2023-06-24",
+      "source": "https://store.tngames.ca/products/warhammer-40k-leviathan-box-40-01",
+      "lines": [
+        {
+          "name": "Captain in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Lieutenant with Combi-weapon",
+          "models": 1
+        },
+        {
+          "name": "Librarian in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Apothecary Biologis",
+          "models": 1
+        },
+        {
+          "name": "Ballistus Dreadnought",
+          "models": 1
+        },
+        {
+          "name": "Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Sternguard Veteran Squad",
+          "models": 5
+        },
+        {
+          "name": "Infernus Squad",
+          "models": 10
+        },
+        {
+          "name": "Winged Tyranid Prime",
+          "models": 1
+        },
+        {
+          "name": "Neurotyrant",
+          "models": 1
+        },
+        {
+          "name": "Screamer-Killer",
+          "models": 1
+        },
+        {
+          "name": "Psychophage",
+          "models": 1
+        },
+        {
+          "name": "Von Ryan's Leapers",
+          "models": 3
+        },
+        {
+          "name": "Barbgaunts",
+          "models": 5
+        },
+        {
+          "name": "Neurogaunts",
+          "models": 11
+        },
+        {
+          "name": "Termagants",
+          "models": 20
+        },
+        {
+          "name": "Ripper Swarms",
+          "models": 2
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-indomitus",
+      "name": "Warhammer 40,000: Indomitus",
+      "kind": "starter",
+      "announced": "2020",
+      "source": "https://store.tngames.ca/products/warhammer-40k-indomitus-40-01",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Lieutenant",
+          "models": 1
+        },
+        {
+          "name": "Chaplain",
+          "models": 1
+        },
+        {
+          "name": "Judiciar",
+          "models": 1
+        },
+        {
+          "name": "Bladeguard Ancient",
+          "models": 1
+        },
+        {
+          "name": "Bladeguard Veteran Squad",
+          "models": 3
+        },
+        {
+          "name": "Outrider Squad",
+          "models": 3
+        },
+        {
+          "name": "Eradicator Squad",
+          "models": 3
+        },
+        {
+          "name": "Assault Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Overlord",
+          "models": 1
+        },
+        {
+          "name": "Royal Warden",
+          "models": 1
+        },
+        {
+          "name": "Plasmancer",
+          "models": 1
+        },
+        {
+          "name": "Skorpekh Lord",
+          "models": 1
+        },
+        {
+          "name": "Cryptothralls",
+          "models": 2
+        },
+        {
+          "name": "Skorpekh Destroyers",
+          "models": 3
+        },
+        {
+          "name": "Canoptek Reanimator",
+          "models": 1
+        },
+        {
+          "name": "Canoptek Scarab Swarms",
+          "models": 6
+        },
+        {
+          "name": "Necron Warriors",
+          "models": 20
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-dark-imperium",
+      "name": "Warhammer 40,000: Dark Imperium",
+      "kind": "starter",
+      "announced": "2017",
+      "source": "https://elementgames.co.uk/warhammer-40000-dark-imperium",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Lieutenant",
+          "models": 2
+        },
+        {
+          "name": "Ancient",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Inceptor Squad",
+          "models": 3
+        },
+        {
+          "name": "Hellblaster Squad",
+          "models": 5
+        },
+        {
+          "name": "Lord of Contagion",
+          "models": 1
+        },
+        {
+          "name": "Noxious Blightbringer",
+          "models": 1
+        },
+        {
+          "name": "Malignant Plaguecaster",
+          "models": 1
+        },
+        {
+          "name": "Plague Marines",
+          "models": 7
+        },
+        {
+          "name": "Foetid Bloat-drone",
+          "models": 1
+        },
+        {
+          "name": "Poxwalkers",
+          "models": 20
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-armageddon",
+      "name": "Warhammer 40,000: Armageddon",
+      "kind": "starter",
+      "announced": "2026-03-26",
+      "source": "https://www.wargamer.com/warhammer-40k/whats-in-the-warhammer-40k-armageddon-box",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Librarian",
+          "models": 1
+        },
+        {
+          "name": "Chaplain with Jump Pack",
+          "models": 1
+        },
+        {
+          "name": "Ancient",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 10
+        },
+        {
+          "name": "Vanguard Veteran Squad with Jump Packs",
+          "models": 5
+        },
+        {
+          "name": "Eradicator Squad",
+          "models": 3
+        },
+        {
+          "name": "Land Speeder",
+          "models": 1
+        },
+        {
+          "name": "Warboss",
+          "models": 1
+        },
+        {
+          "name": "Painboy",
+          "models": 1
+        },
+        {
+          "name": "Weirdboy",
+          "models": 1
+        },
+        {
+          "name": "Boyz",
+          "models": 20
+        },
+        {
+          "name": "Gretchin",
+          "models": 10
+        },
+        {
+          "name": "Wartrakk",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-starter-set",
+      "name": "Warhammer 40,000: Starter Set",
+      "kind": "starter",
+      "announced": "2026-06-26",
+      "source": "https://taleofpainters.com/2026/07/every-11th-edition-warhammer-40k-starter-set-unboxed-reviewed/",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Librarian",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Vanguard Veteran Squad with Jump Packs",
+          "models": 5
+        },
+        {
+          "name": "Land Speeder",
+          "models": 1
+        },
+        {
+          "name": "Warboss",
+          "models": 1
+        },
+        {
+          "name": "Weirdboy",
+          "models": 1
+        },
+        {
+          "name": "Boyz",
+          "models": 18
+        },
+        {
+          "name": "Nobz",
+          "models": 2
+        },
+        {
+          "name": "Gretchin",
+          "models": 10
+        },
+        {
+          "name": "Wartrakk",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "sanctus-reach-stormclaw",
+      "name": "Sanctus Reach: Stormclaw",
+      "kind": "starter",
+      "announced": "2014",
+      "source": "https://ttgamingdiary.wordpress.com/2014/07/16/stormclaw-box-set/",
+      "lines": [
+        {
+          "name": "Krom Dragongaze",
+          "models": 1
+        },
+        {
+          "name": "Wolf Guard Terminators",
+          "models": 5
+        },
+        {
+          "name": "Grey Hunters",
+          "models": 5
+        },
+        {
+          "name": "Blood Claws",
+          "models": 5
+        },
+        {
+          "name": "Grukk Face-Rippa",
+          "models": 1
+        },
+        {
+          "name": "Nobz",
+          "models": 5
+        },
+        {
+          "name": "Gretchin",
+          "models": 10
+        },
+        {
+          "name": "Runtherd",
+          "models": 1
+        },
+        {
+          "name": "Killa Kans",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "shield-of-baal-deathstorm",
+      "name": "Shield of Baal: Deathstorm",
+      "kind": "starter",
+      "announced": "2014",
+      "source": "http://natfka.blogspot.com/2014/11/shield-of-baal-deathstorm-box-set-and.html",
+      "lines": [
+        {
+          "name": "Captain Karlaen",
+          "models": 1
+        },
+        {
+          "name": "Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Death Company",
+          "models": 5,
+          "ownerNames": true
+        },
+        {
+          "name": "Death Company Dreadnought",
+          "models": 1
+        },
+        {
+          "name": "The Spawn of Cryptus",
+          "models": 1
+        },
+        {
+          "name": "Tyranid Warriors",
+          "models": 3,
+          "ownerNames": true
+        },
+        {
+          "name": "Genestealers",
+          "models": 8
+        },
+        {
+          "name": "Carnifexes",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "wake-the-dead",
+      "name": "Wake the Dead",
+      "kind": "starter",
+      "announced": "2018",
+      "source": "http://natfka.blogspot.com/2018/09/wake-dead-40k-battlebox-contents-and.html",
+      "lines": [
+        {
+          "name": "Spiritseer",
+          "models": 1
+        },
+        {
+          "name": "Guardian Defenders",
+          "models": 10
+        },
+        {
+          "name": "Wraithguard",
+          "models": 5
+        },
+        {
+          "name": "Wave Serpent",
+          "models": 1
+        },
+        {
+          "name": "Lieutenant",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Reiver Squad",
+          "models": 5
+        },
+        {
+          "name": "Inceptor Squad",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "tooth-and-claw",
+      "name": "Tooth and Claw",
+      "kind": "starter",
+      "announced": "2018",
+      "source": "https://www.phoenixnestgames.com/catalog/warhammer_40k-boxed_sets/tooth_and_claw/1582233",
+      "lines": [
+        {
+          "name": "Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Aggressor Squad",
+          "models": 3
+        },
+        {
+          "name": "Redemptor Dreadnought",
+          "models": 1
+        },
+        {
+          "name": "Abominant",
+          "models": 1
+        },
+        {
+          "name": "Aberrants",
+          "models": 5
+        },
+        {
+          "name": "Acolyte Iconward",
+          "models": 1
+        },
+        {
+          "name": "Hybrid Metamorphs",
+          "models": 5
+        },
+        {
+          "name": "Purestrain Genestealers",
+          "models": 8
+        }
+      ]
+    },
+    {
+      "id": "know-no-fear",
+      "name": "Know No Fear",
+      "kind": "starter",
+      "announced": "2017",
+      "source": "https://eu.nobleknight.com/P/2147671328/Know-No-Fear---A-Warhammer-40000-Starter-Set",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Inceptor Squad",
+          "models": 3
+        },
+        {
+          "name": "Hellblaster Squad",
+          "models": 5
+        },
+        {
+          "name": "Lord of Contagion",
+          "models": 1
+        },
+        {
+          "name": "Plague Marines",
+          "models": 5
+        },
+        {
+          "name": "Foetid Bloat-drone",
+          "models": 1
+        },
+        {
+          "name": "Poxwalkers",
+          "models": 10
+        }
+      ]
+    },
+    {
+      "id": "first-strike",
+      "name": "First Strike",
+      "kind": "starter",
+      "announced": "2017",
+      "source": "https://eu.nobleknight.com/P/2147671156/First-Strike---A-Warhammer-40000-Starter-Set",
+      "lines": [
+        {
+          "name": "Intercessor Squad",
+          "models": 3
+        },
+        {
+          "name": "Reiver Squad",
+          "models": 3
+        },
+        {
+          "name": "Plague Marines",
+          "models": 3
+        },
+        {
+          "name": "Poxwalkers",
+          "models": 6
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-recruit-edition",
+      "name": "Warhammer 40,000: Recruit Edition",
+      "kind": "starter",
+      "announced": "2020",
+      "source": "https://www.undiscoveredrealm.com/products/warhammer-40k-recruit-edition-starter-set-9th-edition",
+      "lines": [
+        {
+          "name": "Lieutenant",
+          "models": 1
+        },
+        {
+          "name": "Assault Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Royal Warden",
+          "models": 1
+        },
+        {
+          "name": "Necron Warriors",
+          "models": 10
+        },
+        {
+          "name": "Canoptek Scarab Swarms",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-elite-edition",
+      "name": "Warhammer 40,000: Elite Edition",
+      "kind": "starter",
+      "announced": "2020",
+      "source": "https://www.undiscoveredrealm.com/products/warhammer-40k-elite-edition-starter-set-9th-edition",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Assault Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Outrider Squad",
+          "models": 3
+        },
+        {
+          "name": "Overlord",
+          "models": 1
+        },
+        {
+          "name": "Necron Warriors",
+          "models": 10
+        },
+        {
+          "name": "Canoptek Scarab Swarms",
+          "models": 3
+        },
+        {
+          "name": "Skorpekh Destroyers",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-command-edition",
+      "name": "Warhammer 40,000: Command Edition",
+      "kind": "starter",
+      "announced": "2020",
+      "source": "https://www.undiscoveredrealm.com/products/warhammer-40k-command-edition-starter-set-9th-edition",
+      "lines": [
+        {
+          "name": "Captain",
+          "models": 1
+        },
+        {
+          "name": "Assault Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Outrider Squad",
+          "models": 3
+        },
+        {
+          "name": "Overlord",
+          "models": 1
+        },
+        {
+          "name": "Necron Warriors",
+          "models": 10
+        },
+        {
+          "name": "Canoptek Scarab Swarms",
+          "models": 3
+        },
+        {
+          "name": "Skorpekh Destroyers",
+          "models": 3
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-ultimate-starter-set",
+      "name": "Warhammer 40,000: Ultimate Starter Set",
+      "kind": "starter",
+      "announced": "2023-07-03",
+      "source": "https://www.warhammer-community.com/en-gb/articles/v6ZAlCFn/warhammer-40000-starter-sets-get-cracking-with-the-new-edition/",
+      "lines": [
+        {
+          "name": "Captain in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Librarian in Terminator Armour",
+          "models": 1
+        },
+        {
+          "name": "Terminator Squad",
+          "models": 5
+        },
+        {
+          "name": "Infernus Squad",
+          "models": 5
+        },
+        {
+          "name": "Winged Tyranid Prime",
+          "models": 1
+        },
+        {
+          "name": "Psychophage",
+          "models": 1
+        },
+        {
+          "name": "Von Ryan's Leapers",
+          "models": 3
+        },
+        {
+          "name": "Barbgaunts",
+          "models": 5
+        },
+        {
+          "name": "Termagants",
+          "models": 20
+        },
+        {
+          "name": "Ripper Swarms",
+          "models": 2
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-introductory-set",
+      "name": "Warhammer 40,000: Introductory Set",
+      "kind": "starter",
+      "announced": "2023-07-03",
+      "source": "https://www.warhammer-community.com/en-gb/articles/v6ZAlCFn/warhammer-40000-starter-sets-get-cracking-with-the-new-edition/",
+      "lines": [
+        {
+          "name": "Infernus Squad",
+          "models": 5
+        },
+        {
+          "name": "Termagants",
+          "models": 10
+        },
+        {
+          "name": "Ripper Swarms",
+          "models": 1
+        }
+      ]
+    },
+    {
+      "id": "warhammer-40-000-introductory-set-2",
+      "name": "Warhammer 40,000: Introductory Set",
+      "kind": "starter",
+      "source": "https://wargameportal.com/products/warhammer-40-000-introductory-set",
+      "lines": [
+        {
+          "name": "Lieutenant",
+          "models": 1
+        },
+        {
+          "name": "Intercessor Squad",
+          "models": 5
+        },
+        {
+          "name": "Boyz",
+          "models": 5
+        },
+        {
+          "name": "Warboss",
           "models": 1
         }
       ]

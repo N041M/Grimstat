@@ -1,0 +1,34 @@
+Copyright (c) 2026 Ronald Karel Grant. All rights reserved.
+
+Grimstat's source is published so that anyone may read it, check what the app
+does with their data, and report faults in it. Publishing it is not a grant of
+permission to use it.
+
+You may:
+
+  - read this source, and run it locally to evaluate or audit the app;
+  - use the hosted application at its published address for your own play;
+  - submit changes back to this repository, on the understanding that a change
+    you submit may be included here under this same licence.
+
+You may not, without prior written permission from the copyright holder:
+
+  - copy, adapt or redistribute this source or any substantial part of it;
+  - host, deploy or otherwise make available a service derived from it;
+  - incorporate any part of it into another product, whether or not that
+    product is free, and whether or not it is published.
+
+This applies to the source, to the assets that accompany it, and to the data
+files in `apps/web/public/`, which are additionally covered by LICENSE-DATA.
+
+Warhammer 40,000 and all associated marks are the property of Games Workshop
+Limited. This project is unofficial and is neither affiliated with, endorsed by,
+nor sponsored by Games Workshop. Nothing in this licence asserts any claim over
+their property.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

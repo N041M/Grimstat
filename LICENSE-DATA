@@ -1,0 +1,37 @@
+Copyright (c) 2026 Ronald Karel Grant. All rights reserved.
+
+This covers the data files in `apps/web/public/`, and `boxes.json` in
+particular: the catalogue of boxed sets, what each one holds, when it was
+announced, and where that was read from.
+
+WHAT IS CLAIMED, AND WHAT IS NOT
+
+No claim is made over the underlying facts. That a given boxed set contains ten
+of a unit is a fact about a product somebody else sells, and facts are nobody's
+property. Every entry names the page its contents were read from, and those
+pages belong to their own publishers.
+
+The claim is over the compilation: which boxes are listed, how their contents
+are recorded against a game's datasheets, the corrections applied to make the
+two agree, and the arrangement of the whole. That is the work — each box was
+read off a published source, and each unit was checked against a full game-data
+snapshot and corrected where the marketing name and the datasheet name differ.
+
+In the European Union and the United Kingdom this compilation is asserted as a
+database in which there has been substantial investment in obtaining and
+verifying the contents, and the maker's rights in it are reserved
+(Directive 96/9/EC and the equivalent retained law).
+
+TERMS
+
+You may not extract or re-use the whole, or a substantial part, of this
+compilation without prior written permission.
+
+You may quote individual entries — to correct one, to discuss one, or to cite
+one — with attribution to this project.
+
+CONTRIBUTIONS
+
+A correction or an addition submitted to this repository may be included here
+under these terms. Contributions are welcome; the catalogue is far from
+complete, and a box added with its source is worth more than a box guessed at.

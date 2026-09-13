@@ -13,7 +13,13 @@ An **unofficial, fan-made, local-first** statistics dashboard and army builder f
 
 This repository contains **no Games Workshop rules text, datasheets, points or artwork**. The app ships only *importers*, and game data is fetched onto the user's own machine from community sources (BSData, the online Munitorum Field Manual, Wahapedia CSV export) on first run and cached locally. Imported data lives in `data/` which is git-ignored.
 
+The one thing shipped here that describes a product is `apps/web/public/boxes.json`, which lists boxed sets and how many models of each unit are in them, so a collection can be filled in a box at a time. It carries no rules, no points and no profiles, and every entry names the published page its contents were read from.
+
 Warhammer 40,000 and all associated marks are the property of Games Workshop Limited. This project is not affiliated with, endorsed by, or sponsored by Games Workshop.
+
+## Licence
+
+The source is published to be read and checked, not to be reused: see [LICENSE](LICENSE). The boxed-set catalogue has its own terms in [LICENSE-DATA](LICENSE-DATA), which claim the compilation rather than the facts in it. Corrections and additions are welcome under both.
 
 ## Layout
 
