@@ -457,6 +457,7 @@ export const en = {
   // dashboard
   "dashboard.autoFit": "Fit to content",
   "dashboard.autoFitHint": "Resize every panel to the height its content needs",
+  "dashboard.autoFitStacked": "Stacked panels already take the height their content needs. Widen the window to set heights for the side-by-side layout.",
   "dashboard.reset": "Reset layout",
   "dashboard.dragHint": "Drag to move this panel",
 

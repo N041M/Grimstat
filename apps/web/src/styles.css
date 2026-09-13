@@ -3979,6 +3979,11 @@ a.btn:hover {
   border-color: var(--ink);
   color: var(--ink);
 }
+.dash-btn:disabled {
+  color: var(--faint);
+  border-color: var(--line-soft);
+  cursor: default;
+}
 .dash-btn.on,
 .dash-btn.on:hover:not(:disabled) {
   background: var(--btn-bg);
