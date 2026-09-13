@@ -10,6 +10,7 @@ import { db, saveRosterWithVersion } from "./db";
 import { CalculatorPage } from "./pages/CalculatorPage";
 import { ScenariosPage } from "./pages/ScenariosPage";
 import { ArmiesPage } from "./pages/ArmiesPage";
+import { CollectionPage } from "./pages/CollectionPage";
 import { RosterEditorPage } from "./pages/RosterEditorPage";
 import { CodexPage } from "./pages/CodexPage";
 import { AnalysesPage } from "./pages/AnalysesPage";
@@ -90,7 +91,7 @@ export function App() {
     <p className="muted shell-loading">{t("shell.loading")}</p>
   ) : (
     <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
-      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "codex" ? <CodexPage id={param} /> : route === "analyses" ? <AnalysesPage /> : route === "battle" ? <BattlePage /> : route === "play" ? <PlayPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
+      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "collection" ? <CollectionPage /> : route === "codex" ? <CodexPage id={param} /> : route === "analyses" ? <AnalysesPage /> : route === "battle" ? <BattlePage /> : route === "play" ? <PlayPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
     </ErrorBoundary>
   );
 

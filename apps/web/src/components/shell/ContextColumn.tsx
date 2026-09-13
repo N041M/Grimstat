@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Roster, Scenario, Snapshot } from "@grimstat/schema";
 import { rosterSummary } from "@grimstat/resolver";
 import { useStoreVersion } from "../../hooks/useStoreVersion";
-import { db } from "../../db";
+import { db, type CollectionEntryRecord } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { useUnitSet } from "../../hooks/useUnitSet";
 import { hrefFor, navigate, type Route } from "../../router";
-import { fmtInt, fmtRelative, shortRef } from "../../lib/format";
+import { fmtInt, fmtRelative, pct, shortRef } from "../../lib/format";
 import { totalPoints } from "../../lib/unitSet";
+import { canField, collectionTotals, coverage, rosterNeeds } from "../../lib/collection";
 import { useContextHostRef, useContextSlotFilled } from "./ContextSlot";
 import { t, type I18nKey, tn } from "../../i18n";
 
@@ -336,6 +337,65 @@ function BattleBody({ inSheet }: BodyProps) {
 }
 
 /**
+ * The shelf in summary: what is owned, how much of it is painted, and how many stored armies it
+ * could field.
+ */
+function CollectionBody({ inSheet }: BodyProps) {
+  const { snapshot } = useApp();
+  const version = useStoreVersion("collection");
+  const rosterVersion = useStoreVersion("rosters");
+  const [entries, setEntries] = useState<CollectionEntryRecord[]>([]);
+  const [rosters, setRosters] = useState<Roster[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void db.collection
+      .toArray()
+      .then((all) => {
+        if (alive) setEntries(all);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [version]);
+  useEffect(() => {
+    let alive = true;
+    void db.rosters
+      .toArray()
+      .then((all) => {
+        if (alive) setRosters(all);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [rosterVersion]);
+
+  const totals = useMemo(() => collectionTotals(entries), [entries]);
+  const ready = useMemo(() => {
+    const nameOf = (id: string) => snapshot?.data.datasheets.find((d) => d.id === id)?.name;
+    return rosters.filter((r) => canField(coverage(entries, rosterNeeds(r, nameOf)))).length;
+  }, [rosters, entries, snapshot]);
+
+  return (
+    <ContextFrame eyebrow={t("ctxcol.collection")} meta={String(totals.models)} inSheet={inSheet}>
+      <ContextList>
+        {entries.length === 0 ? <ContextEmpty>{t("ctxcol.noCollection")}</ContextEmpty> : null}
+        {entries.length > 0 ? (
+          <>
+            <ContextRow name={t("collection.stat.models")} value={fmtInt(totals.models)} meta={t("ctxcol.collPainted", { n: fmtInt(totals.painted) })} />
+            <ContextRow name={t("collection.stat.datasheets")} value={fmtInt(totals.datasheets)} meta={pct(totals.paintedFraction, 0)} />
+            <ContextRow name={t("ctxcol.collFactions")} value={fmtInt(totals.factions)} />
+            {rosters.length > 0 ? <ContextRow name={t("ctxcol.collReady")} value={t("ctxcol.collReadyOf", { ready: fmtInt(ready), total: fmtInt(rosters.length) })} href={hrefFor("collection")} /> : null}
+          </>
+        ) : null}
+      </ContextList>
+      <ContextNewRow label={t("ctxcol.addModels")} onClick={() => requestNew("collection")} />
+    </ContextFrame>
+  );
+}
+
+/**
  * Placeholder until a game is open; the Play screen fills the slot with the game's log and score.
  */
 function PlayBody({ inSheet }: BodyProps) {
@@ -356,6 +416,8 @@ export function ContextColumn({ route, param, inSheet }: { route: Route; param?:
       return <ScenariosBody {...props} />;
     case "armies":
       return <ArmiesBody {...props} />;
+    case "collection":
+      return <CollectionBody {...props} />;
     case "codex":
       return <CodexBody {...props} />;
     case "analyses":
@@ -380,6 +442,8 @@ export function contextEyebrow(route: Route): string {
       return t("ctxcol.scenarios");
     case "armies":
       return t("ctxcol.armies");
+    case "collection":
+      return t("ctxcol.collection");
     case "codex":
       return t("ctxcol.datasheets");
     case "analyses":

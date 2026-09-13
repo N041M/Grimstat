@@ -12,11 +12,12 @@ export interface RailEntry {
   labelKey: I18nKey;
 }
 
-/** `C S A X N B D ?` — the rail's whole vocabulary. Reused by the command palette's "Go to" group. */
+/** `C S A M X N B P D ?` — the rail's whole vocabulary. Reused by the command palette's "Go to" group. */
 export const RAIL_ENTRIES: readonly RailEntry[] = [
   { route: "calculator", glyph: "C", labelKey: "nav.calculator" },
   { route: "scenarios", glyph: "S", labelKey: "nav.scenarios" },
   { route: "armies", glyph: "A", labelKey: "nav.armies" },
+  { route: "collection", glyph: "M", labelKey: "nav.collection" },
   { route: "codex", glyph: "X", labelKey: "nav.codex" },
   { route: "analyses", glyph: "N", labelKey: "nav.analyses" },
   { route: "battle", glyph: "B", labelKey: "nav.battle" },
