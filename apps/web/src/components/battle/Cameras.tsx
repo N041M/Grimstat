@@ -19,6 +19,17 @@ const ELEVATION = 36;
 /** Headroom the fit allows above the table, so a three-storey ruin is not clipped. */
 const TABLE_HEADROOM = 14;
 
+/**
+ * The canvas height the orbit was tuned at, in CSS pixels.
+ *
+ * OrbitControls turns the view by the fraction of the canvas height a drag covers, so one
+ * full-height drag is always a full turn however tall the canvas is. A phone gives the table about
+ * 480px where a desktop gives it 820, which turned the same finger travel almost twice as far. The
+ * speed is scaled by the height against this figure, so a given drag turns the table by the same
+ * amount on every screen. It only ever slows the turn down: a canvas taller than this keeps 1.
+ */
+const ROTATE_REFERENCE = 800;
+
 export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; size: BoardSize; frame?: Aabb2; recentre?: number }) {
   const { gl, set, size: viewport, invalidate } = useThree();
   const controls = useRef<OrbitControls>();
@@ -36,6 +47,7 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
   const orthographic = useMemo(() => new OrthographicCamera(-1, 1, 1, -1, 0.1, 600), []);
 
   const aspect = Math.max(viewport.width / Math.max(1, viewport.height), 0.2);
+  const viewportHeight = Math.max(1, viewport.height);
 
   /**
    * How far back the perspective camera has to sit to hold the whole scene.
@@ -121,6 +133,12 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
      */
     next.touches.ONE = mode === "orbit" ? TOUCH.ROTATE : TOUCH.PAN;
     next.touches.TWO = TOUCH.DOLLY_PAN;
+    next.rotateSpeed = Math.min(1, viewportHeight / ROTATE_REFERENCE);
+    /*
+     * Panning and pinching are left alone. A pan is measured so the table keeps up with the finger
+     * that is dragging it, and a pinch by the ratio between the two fingers; both are already the
+     * same gesture at any size, and slowing either would leave the table lagging behind the hand.
+     */
     const onChange = () => invalidate();
     next.addEventListener("change", onChange);
     next.update();
@@ -136,7 +154,7 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
       set({ controls: null as unknown as never });
       next.dispose();
     };
-  }, [mode, perspective, orthographic, centre, distance, gl, set, invalidate]);
+  }, [mode, perspective, orthographic, centre, distance, viewportHeight, gl, set, invalidate]);
 
   /**
    * Two fingers can carry the board off the screen, and nothing on a table of dark ground says

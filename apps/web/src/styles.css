@@ -9760,3 +9760,32 @@ body.play-focused .shell.compact {
   background: var(--hover);
   color: var(--ink);
 }
+
+/* ---------- Rows of buttons on a narrow screen ----------
+   A button's name is one line. Squeezed into a row too narrow for it, "Fetch the published corpus"
+   took three lines and "Paste a list" took two, so a row of four actions was four different heights.
+   The name stays on one line and the row wraps instead, which leaves every button the same 40px.
+
+   `align-items` is not enough on its own: these rows centre their items, and a wrapped label makes
+   the button taller whatever it is aligned to. */
+@media (max-width: 1039px) {
+  .shell.compact .page-body button,
+  .shell.compact .page-body .btn,
+  .shell.compact .ctx-sheet button {
+    white-space: nowrap;
+  }
+  .shell.compact .data-published-actions,
+  .shell.compact .data-actions,
+  .shell.compact .published-feed-head,
+  .shell.compact .src-run,
+  .shell.compact .src-card-select,
+  .shell.compact .battle-actions,
+  .shell.compact .setup-game,
+  .shell.compact .odds-apply {
+    flex-wrap: wrap;
+  }
+  /* The count that opens the row reads as one thing, not a number above a word. */
+  .shell.compact .data-published-actions > .t-meta {
+    white-space: nowrap;
+  }
+}
