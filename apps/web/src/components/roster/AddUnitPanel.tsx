@@ -3,7 +3,7 @@ import { UnitArt } from "../UnitArt";
 import type { Datasheet, Roster, Snapshot } from "@grimstat/schema";
 import { pointsFor } from "@grimstat/game-40k-11e";
 import type { PointsBarModel } from "../../lib/pointsBar";
-import { compositionBounds, duplicateCap, PICKER_GROUP_ORDER, pickerGroupOf, type PickerGroup } from "../../lib/roster";
+import { compositionBounds, duplicateCap, factionLineage, PICKER_GROUP_ORDER, pickerGroupOf, type PickerGroup } from "../../lib/roster";
 import { fmtInt } from "../../lib/format";
 import { battleSizeKey } from "../../pages/ArmiesPage";
 import { Icon } from "../ui";
@@ -76,11 +76,14 @@ export function AddUnitPanel({ roster, snapshot, points, onAdd, onClose }: Props
     return m;
   }, [roster.units]);
 
+  // A sub-faction army fields its own datasheets and its parent codex's.
+  const lineage = useMemo(() => new Set(factionLineage(snapshot, roster.factionId)), [snapshot, roster.factionId]);
+
   const groups = useMemo(() => {
     const q = search.trim().toLowerCase();
     const sizeName = t(battleSizeKey(roster.battleSize));
     const rows: Row[] = snapshot.data.datasheets
-      .filter((d) => d.factionId === roster.factionId && (!q || d.name.toLowerCase().includes(q) || (d.role ?? "").toLowerCase().includes(q)))
+      .filter((d) => lineage.has(d.factionId) && (!q || d.name.toLowerCase().includes(q) || (d.role ?? "").toLowerCase().includes(q)))
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((ds) => {
         const n = copies.get(ds.id) ?? 0;
@@ -89,7 +92,7 @@ export function AddUnitPanel({ roster, snapshot, points, onAdd, onClose }: Props
         return { ds, size: sizeLabel(ds), points: pointsFor(ds, snapshot, compositionBounds(ds).min), copies: n, blocked };
       });
     return PICKER_GROUP_ORDER.map((group) => ({ group, rows: rows.filter((r) => pickerGroupOf(r.ds) === group) })).filter((g) => g.rows.length);
-  }, [snapshot, roster.factionId, roster.battleSize, search, copies]);
+  }, [snapshot, lineage, roster.battleSize, search, copies]);
 
   const flat = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
 

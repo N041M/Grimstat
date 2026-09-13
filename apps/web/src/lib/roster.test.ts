@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
-import { canAddCopy, compositionBounds, duplicateUnit, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
+import { canAddCopy, compositionBounds, duplicateUnit, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, factionLineage, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
 import { decodeRosterPermalink, encodeRosterPermalink, rosterPermalinkUrl, rosterTokenFromHash } from "./rosterPermalink";
 
 const NOW = "2026-09-09T10:00:00.000Z";
@@ -495,5 +495,28 @@ describe("removing a transport", () => {
 
   it("does not put a copy of a unit into the transport the original rides in", () => {
     expect(duplicateUnit(u("squad", { embarkedIn: "rhino" })).embarkedIn).toBeUndefined();
+  });
+});
+
+describe("factionLineage", () => {
+  const snap = (factions: Array<{ id: string; parentFactionId?: string }>) =>
+    ({ data: { factions: factions.map((f) => ({ gameSystemId: "wh40k-11e", name: f.id, keywords: [], ...f })) } }) as unknown as Snapshot;
+
+  it("returns the faction alone when it has no parent", () => {
+    expect(factionLineage(snap([{ id: "faction:orks" }]), "faction:orks")).toEqual(["faction:orks"]);
+  });
+
+  it("walks up to the codex a chapter belongs to", () => {
+    const s = snap([{ id: "faction:black-templars", parentFactionId: "faction:space-marines" }, { id: "faction:space-marines" }]);
+    expect(factionLineage(s, "faction:black-templars")).toEqual(["faction:black-templars", "faction:space-marines"]);
+  });
+
+  it("stops on a cycle instead of hanging", () => {
+    const s = snap([{ id: "a", parentFactionId: "b" }, { id: "b", parentFactionId: "a" }]);
+    expect(factionLineage(s, "a")).toEqual(["a", "b"]);
+  });
+
+  it("keeps the faction even when the snapshot does not list it", () => {
+    expect(factionLineage(snap([]), "faction:ghost")).toEqual(["faction:ghost"]);
   });
 });
