@@ -67,3 +67,23 @@ export function freshnessOf(id: BrowserSourceId, stored: string | undefined, lat
   if (!a || !b) return "unknown";
   return a === b ? "current" : "stale";
 }
+
+/**
+ * What is known about upstream once a run finishes.
+ *
+ * A run that fetched one source proves nothing about the others: the snapshot it produced carries
+ * their refs forward untouched, and reading those back as "this is what upstream serves" would mark
+ * a stale source current. Only the sources the run actually fetched move.
+ */
+export function knownAfterFetch(
+  previous: Partial<Record<BrowserSourceId, string>>,
+  fetched: readonly BrowserSourceId[],
+  sources: readonly { adapter: string; ref?: string }[],
+): Partial<Record<BrowserSourceId, string>> {
+  const next = { ...previous };
+  for (const src of sources) {
+    const id = fetched.find((f) => f === src.adapter);
+    if (id && src.ref) next[id] = src.ref;
+  }
+  return next;
+}

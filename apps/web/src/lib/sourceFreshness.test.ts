@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { freshnessOf, latestRefFor, type FetchText } from "./sourceFreshness";
+import { freshnessOf, knownAfterFetch, latestRefFor, type FetchText } from "./sourceFreshness";
 
 const serve = (body: Record<string, string>): FetchText => async (url: string) => {
   const key = Object.keys(body).find((k) => url.endsWith(k));
@@ -44,5 +44,28 @@ describe("freshnessOf", () => {
   it("is unknown when either side is missing", () => {
     expect(freshnessOf("bsdata-json", undefined, "abc123")).toBe("unknown");
     expect(freshnessOf("bsdata-json", "abc123", undefined)).toBe("unknown");
+  });
+});
+
+describe("knownAfterFetch", () => {
+  const sources = [
+    { adapter: "mfm-yaml", ref: "mfm-v0.1@2026-01-01" },
+    { adapter: "wahapedia-csv", ref: "2026-09-13 03:43:55" },
+  ];
+
+  it("moves only the source the run fetched", () => {
+    const next = knownAfterFetch({ "mfm-yaml": "mfm-v1.5" }, ["wahapedia-csv"], sources);
+    expect(next["wahapedia-csv"]).toBe("2026-09-13 03:43:55");
+    // The run carried MFM's stored ref into the new snapshot; that is not news from upstream.
+    expect(next["mfm-yaml"]).toBe("mfm-v1.5");
+  });
+
+  it("records every source of a full run", () => {
+    const next = knownAfterFetch({}, ["mfm-yaml", "wahapedia-csv"], sources);
+    expect(next).toEqual({ "mfm-yaml": "mfm-v0.1@2026-01-01", "wahapedia-csv": "2026-09-13 03:43:55" });
+  });
+
+  it("leaves a source that came back without a ref alone", () => {
+    expect(knownAfterFetch({ "bsdata-json": "abc" }, ["bsdata-json"], [{ adapter: "bsdata-json" }])["bsdata-json"]).toBe("abc");
   });
 });
