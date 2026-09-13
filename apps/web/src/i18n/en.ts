@@ -1374,6 +1374,13 @@ export const en = {
   "battle.deploy.selectedDeployedTouch": "Drag it to reposition, or send it back with the × beside its name.",
   "battle.recentre": "Recentre",
   "battle.recentre.title": "Put the camera back where the view opened",
+  // battle: what each cluster of table controls acts on, for the rule between them and for anyone
+  // reading the toolbar with a screen reader.
+  "battle.actions.plan": "Planned move",
+  "battle.actions.history": "Undo",
+  "battle.actions.turn": "Turn",
+  "battle.actions.selection": "Selection",
+  "battle.actions.view": "View",
   "battle.focus.on": "Focus",
   "battle.focus.off": "Leave focus",
   "battle.focus.onTitle": "Give the table the whole screen",

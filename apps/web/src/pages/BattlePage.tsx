@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { ModelHull, ReachNode, TerrainLayout, Vec2, Vec3 } from "@grimstat/board";
 import { reachable } from "@grimstat/board";
 import { PageHeader } from "../components/shell";
@@ -181,13 +182,31 @@ export function BattlePage() {
    * Safari on iPhone has no Fullscreen API at all — so the mode works with or without it.
    */
   const wentFullscreen = useRef(false);
+
+  /**
+   * Entering and leaving focus moves nearly everything on the screen at once, so the browser
+   * animates between the two rather than cutting. A view transition takes the whole page rather
+   * than each part of it, which is what this needs: the bar, the title, the rail, the panel and the
+   * table itself all change together.
+   *
+   * `flushSync` because the browser wants the new layout inside the callback, and React would
+   * otherwise still be holding the old one. Where the API is missing the change is simply made.
+   */
+  const withTransition = useCallback((change: () => void) => {
+    const start = document.startViewTransition?.bind(document);
+    if (!start || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      change();
+      return;
+    }
+    start(() => flushSync(change));
+  }, []);
   // In focus the toolbar is one row along the foot of the table, so it scrolls and its ends fade.
   // Which buttons it holds changes with the tool, which the hook's own observer picks up.
   const toolbarRef = useRef<HTMLDivElement>(null);
   useEdgeFade(toolbarRef, focused);
   const toggleFocus = useCallback(() => {
     const next = !focus;
-    setFocus(next);
+    withTransition(() => setFocus(next));
     try {
       if (next && !document.fullscreenElement) {
         void document.documentElement
@@ -203,7 +222,7 @@ export function BattlePage() {
     } catch {
       // Refused by the browser. Giving the table the screen is the part that matters.
     }
-  }, [focus, setFocus]);
+  }, [focus, setFocus, withTransition]);
 
   // Leaving full screen by the browser's own gesture leaves focus too, so the two cannot disagree
   // about which one the screen is in.
@@ -946,8 +965,21 @@ export function BattlePage() {
           {/* Everything the keys do to the table, as buttons over it: a finger has no ⌘ and no arrows,
               and a mouse user should not have to learn a chord to approve a move. */}
           <div className="battle-toolbar" role="group" aria-label={t("battle.table.actions")} hidden={!webgl} ref={toolbarRef}>
+            {/* One cluster per thing the controls act on — the plan, the history, the facing, the
+                selection, the view — with a rule between them. Nine controls in one undivided row
+                read as nine unrelated things; in five clusters the eye finds the one it wants. */}
+            {tool === "select" ? (
+              <div className="battle-group" role="group" aria-label={t("battle.actions.plan")}>
+                <button type="button" className="sm" disabled={!plan} onClick={approvePlan}>
+                  {t("battle.plan.approve")}
+                </button>
+                <button type="button" className="ghost sm" disabled={!plan} onClick={() => setPlan(undefined)}>
+                  {t("battle.plan.discard")}
+                </button>
+              </div>
+            ) : null}
             {tool === "terrain" ? (
-              <div className="battle-hist" role="group" aria-label={t("battle.terrain.history")}>
+              <div className="battle-group" role="group" aria-label={t("battle.terrain.history")}>
                 <button type="button" className="ghost sm" disabled={!canUndo(editor)} onClick={() => dispatch({ type: "undo" })} title={t("battle.terrain.undo")} aria-label={t("battle.terrain.undo")}>
                   ↶
                 </button>
@@ -956,48 +988,44 @@ export function BattlePage() {
                 </button>
               </div>
             ) : (
-              <button type="button" className="ghost sm" disabled={!canUndoUnits(editor)} onClick={undoUnits} title={t("battle.undoMove.title")}>
-                {t("battle.undoMove")}
-              </button>
+              <div className="battle-group" role="group" aria-label={t("battle.actions.history")}>
+                <button type="button" className="ghost sm" disabled={!canUndoUnits(editor)} onClick={undoUnits} title={t("battle.undoMove.title")}>
+                  {t("battle.undoMove")}
+                </button>
+              </div>
             )}
-            {tool === "select" ? (
-              <>
-                <button type="button" className="sm" disabled={!plan} onClick={approvePlan}>
-                  {t("battle.plan.approve")}
-                </button>
-                <button type="button" className="ghost sm" disabled={!plan} onClick={() => setPlan(undefined)}>
-                  {t("battle.plan.discard")}
-                </button>
-              </>
-            ) : null}
             {tool === "select" || tool === "deploy" ? (
-              <>
+              <div className="battle-group" role="group" aria-label={t("battle.actions.turn")}>
                 <button type="button" className="ghost sm" disabled={!canTurn} onClick={() => rotateSelection(ROTATE_STEP)} title={t("battle.rotate.left")} aria-label={t("battle.rotate.left")}>
                   ⟲
                 </button>
                 <button type="button" className="ghost sm" disabled={!canTurn} onClick={() => rotateSelection(-ROTATE_STEP)} title={t("battle.rotate.right")} aria-label={t("battle.rotate.right")}>
                   ⟳
                 </button>
-              </>
+              </div>
             ) : null}
-            {tool === "select" ? (
-              <>
-                <button type="button" className={`sm ${boxSelect ? "" : "ghost"}`.trim()} aria-pressed={boxSelect} onClick={() => setBoxSelect((on) => !on)} title={t("battle.boxSelect.title")}>
-                  {t("battle.boxSelect")}
-                </button>
-                <button type="button" className={`sm ${addSelect ? "" : "ghost"}`.trim()} aria-pressed={addSelect} onClick={() => setAddSelect((on) => !on)} title={t("battle.addToSelection.title")}>
-                  {t("battle.addToSelection")}
-                </button>
-              </>
-            ) : null}
-            <button type="button" className="ghost sm" disabled={!selectedId && !grouped} onClick={clearSelection}>
-              {t("battle.group.clear")}
-            </button>
+            <div className="battle-group" role="group" aria-label={t("battle.actions.selection")}>
+              {tool === "select" ? (
+                <>
+                  <button type="button" className={`sm ${boxSelect ? "" : "ghost"}`.trim()} aria-pressed={boxSelect} onClick={() => setBoxSelect((on) => !on)} title={t("battle.boxSelect.title")}>
+                    {t("battle.boxSelect")}
+                  </button>
+                  <button type="button" className={`sm ${addSelect ? "" : "ghost"}`.trim()} aria-pressed={addSelect} onClick={() => setAddSelect((on) => !on)} title={t("battle.addToSelection.title")}>
+                    {t("battle.addToSelection")}
+                  </button>
+                </>
+              ) : null}
+              <button type="button" className="ghost sm" disabled={!selectedId && !grouped} onClick={clearSelection}>
+                {t("battle.group.clear")}
+              </button>
+            </div>
             {/* Two fingers can carry the board off the screen, and a table of dark ground gives no
                 clue which way it went. This is the way back. */}
-            <button type="button" className="ghost sm" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre.title")}>
-              {t("battle.recentre")}
-            </button>
+            <div className="battle-group" role="group" aria-label={t("battle.actions.view")}>
+              <button type="button" className="ghost sm" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre.title")}>
+                {t("battle.recentre")}
+              </button>
+            </div>
           </div>
           {/* Where a video player and a map both put it: the far corner of the picture, on its own,
               clear of the row of controls. The way in and the way out are the same button. */}

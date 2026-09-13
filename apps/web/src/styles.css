@@ -7935,6 +7935,18 @@ button.battle-scope-btn:hover {
 .battle-toolbar button[aria-pressed="true"] {
   border-color: var(--accent);
 }
+/* A cluster of controls that act on the same thing, with a hairline between clusters. */
+.battle-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.battle-group + .battle-group {
+  margin-left: 3px;
+  padding-left: 7px;
+  border-left: 1px solid rgba(230, 232, 236, 0.22);
+}
 .battle-toolbar .battle-hist {
   gap: 2px;
 }
@@ -8027,10 +8039,32 @@ button.battle-scope-btn:hover {
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
 }
-/* The toolbar shares the top of the table with the full-screen control, so it stops short of it
-   rather than wrapping a row underneath it. */
+/* The toolbar shares the top of the table with the full-screen control, so it stops short of it.
+   It is one row that scrolls rather than three that wrap: wrapped, it covered 130px of a 487px
+   board, and the rule between two clusters ended up at the start of a line instead of between
+   them. `useEdgeFade` fades whichever end has more beyond it. */
 .shell.compact .battle-toolbar {
-  max-width: calc(100% - 64px);
+  max-width: calc(100% - 54px);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.shell.compact .battle-toolbar::-webkit-scrollbar {
+  display: none;
+}
+.shell.compact .battle-toolbar button,
+.shell.compact .battle-group {
+  flex: none;
+}
+.shell.compact .battle-group > button {
+  scroll-snap-align: start;
+}
+/* The 40px floor every other control gets would square this one off; its target is the box around
+   it instead, which is the 44 a thumb needs. */
+.shell.compact .battle-fullscreen {
+  min-height: 0;
+  height: 30px;
 }
 .shell.compact .ctx-bar-action {
   scroll-snap-align: end;
@@ -9885,23 +9919,49 @@ body.battle-focused .battle-toolbar button {
   z-index: 5;
   top: 8px;
   right: 8px;
-  width: 40px;
-  height: 40px;
-  min-height: 40px;
+  width: 30px;
+  height: 30px;
+  min-height: 0;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: 0;
   border-radius: var(--radius-input);
-  border: 1px solid rgba(230, 232, 236, 0.3);
-  background: rgba(21, 22, 26, 0.72);
+  background: rgba(21, 22, 26, 0.6);
   color: #e6e8ec;
   cursor: pointer;
 }
+/* The mark is 30px so it sits lightly on the board; the target around it is the 44 a thumb needs. */
+.battle-fullscreen::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+}
 .battle-fullscreen:hover:not(:disabled) {
-  background: rgba(21, 22, 26, 0.9);
-  border-color: rgba(230, 232, 236, 0.6);
+  background: rgba(21, 22, 26, 0.88);
   color: #ffffff;
 }
 /* It stays in that corner in focus as well. A control that moves when it is used is a control you
    have to find twice, and the corner is free there anyway: focus sends the toolbar to the foot. */
+
+/* ---------- Entering and leaving the battle table's focus ----------
+   The whole screen changes at once — the bar, the title, the rail, the panel and the table — so the
+   browser animates between the two states rather than cutting. The default half-second is slow for
+   a control you press to get on with something, and the page's own reduced-motion rule cannot reach
+   a view transition's pseudo-elements, so that is stated again here. */
+::view-transition-group(root) {
+  animation-duration: 220ms;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.001s !important;
+  }
+}
