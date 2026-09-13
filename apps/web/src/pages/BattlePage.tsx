@@ -15,7 +15,7 @@ import { db } from "../db";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
 import { canRedo, canUndo, canUndoUnits, editorReducer, initialEditor } from "../lib/battleEditor";
-import { Badge, Icon, Tabs, useConfirm, useEdgeFade } from "../components/ui";
+import { Badge, Icon, useConfirm, useDismiss, useEdgeFade } from "../components/ui";
 import { UnitArt } from "../components/UnitArt";
 import { silhouetteFor, type SilhouetteId } from "../lib/silhouettes";
 import {
@@ -204,6 +204,17 @@ export function BattlePage() {
   // Which buttons it holds changes with the tool, which the hook's own observer picks up.
   const toolbarRef = useRef<HTMLDivElement>(null);
   useEdgeFade(toolbarRef, focused);
+  const toolstripRef = useRef<HTMLDivElement>(null);
+  useEdgeFade(toolstripRef, focused);
+  /*
+   * The camera's options fold away. Which way the view looks and putting it back are settings
+   * rather than things done every few seconds, and a column of four marks down the edge of the
+   * table is four marks of board covered for the whole game to save one press now and then.
+   */
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const cameraRef = useRef<HTMLDivElement>(null);
+  const closeCamera = useCallback(() => setCameraOpen(false), []);
+  useDismiss(cameraRef, cameraOpen, closeCamera);
   const toggleFocus = useCallback(() => {
     const next = !focus;
     withTransition(() => setFocus(next));
@@ -941,23 +952,6 @@ export function BattlePage() {
       <PageHeader
         title={t("battle.title")}
         subtitle={t("battle.subtitle", { layout: layout.name, w: layout.size.width, d: layout.size.depth, units: state.units.length })}
-        actions={
-          <>
-            <Tabs tabs={TOOLS.map((x) => ({ id: x.id, label: t(x.label) }))} value={tool} onChange={setTool} label={t("battle.tool")} />
-            <Tabs
-              tabs={[
-                { id: "orbit" as const, label: t("battle.view.orbit") },
-                { id: "top" as const, label: t("battle.view.top") },
-              ]}
-              value={view}
-              onChange={setView}
-              label={t("battle.view")}
-            />
-            <button type="button" className="ghost sm" onClick={() => void resetDeployment()}>
-              {t("battle.reset")}
-            </button>
-          </>
-        }
       />
 
       <div className="battle-body">
@@ -1019,21 +1013,50 @@ export function BattlePage() {
                 {t("battle.group.clear")}
               </button>
             </div>
+            <div className="battle-group" role="group" aria-label={t("battle.actions.board")}>
+              <button type="button" className="ghost sm" onClick={() => void resetDeployment()}>
+                {t("battle.reset")}
+              </button>
+            </div>
 
           </div>
-          {/* Split by what a control acts on. These two act on the view, so they sit in the corner of
-              the picture, which is where a video player and a map both put them. Everything that
-              acts on the units is in the row along the foot, under the thumb. */}
+          {/* Everything that acts on the table is on the table, at every width. Which tool is in hand
+              along the head, what acts on the view in the corner, and what acts on the units in the
+              row along the foot. The page header keeps the table's name and nothing else. */}
           {webgl ? (
-            <div className="battle-view-tools" role="group" aria-label={t("battle.actions.view")}>
-              <button type="button" className="battle-view-btn" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre")}>
-                <Icon name="target" />
-              </button>
+            <div className="battle-head">
+              <div className="battle-toolstrip" role="group" aria-label={t("battle.tool")} ref={toolstripRef}>
+                {TOOLS.map((x) => (
+                  <button key={x.id} type="button" className={`sm ${tool === x.id ? "" : "ghost"}`.trim()} aria-pressed={tool === x.id} onClick={() => setTool(x.id)}>
+                    {t(x.label)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {webgl ? (
+            <div className="battle-view-tools" ref={cameraRef}>
+              {/* Full screen on top: it is the one here that is pressed mid-game. */}
               {compact ? (
                 <button type="button" className="battle-view-btn battle-fullscreen" aria-pressed={focused} onClick={toggleFocus} title={t(focused ? "battle.focus.offTitle" : "battle.focus.onTitle")} aria-label={t(focused ? "battle.focus.off" : "battle.focus.on")}>
                   <Icon name={focused ? "collapse" : "expand"} />
                 </button>
               ) : null}
+              <button type="button" className="battle-view-btn" aria-expanded={cameraOpen} aria-controls="battle-camera" onClick={() => setCameraOpen((on) => !on)} title={t("battle.view.cameraTitle")} aria-label={t("battle.view.camera")}>
+                {/* The glyph is the view the table is in, so the folded control still says which. */}
+                <Icon name={view === "orbit" ? "cube" : "plan"} />
+              </button>
+              <div className="battle-camera" id="battle-camera" role="group" aria-label={t("battle.view.camera")} hidden={!cameraOpen}>
+                <button type="button" className="battle-view-btn" aria-pressed={view === "orbit"} onClick={() => { setView("orbit"); closeCamera(); }} title={t("battle.view.orbit")} aria-label={t("battle.view.orbit")}>
+                  <Icon name="cube" />
+                </button>
+                <button type="button" className="battle-view-btn" aria-pressed={view === "top"} onClick={() => { setView("top"); closeCamera(); }} title={t("battle.view.top")} aria-label={t("battle.view.top")}>
+                  <Icon name="plan" />
+                </button>
+                <button type="button" className="battle-view-btn" onClick={() => setRecentre((n) => n + 1)} title={t("battle.recentre.title")} aria-label={t("battle.recentre")}>
+                  <Icon name="target" />
+                </button>
+              </div>
             </div>
           ) : null}
           {webgl ? (

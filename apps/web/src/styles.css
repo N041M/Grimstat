@@ -6064,6 +6064,20 @@ button.val-row:hover {
   flex: 1;
   min-height: 0;
 }
+/*
+ * A gutter under the table on a desktop, so the dark stage ends above the foot of the window
+ * rather than running into it. Every other screen sits inside a gutter — `.page-body` keeps 26px
+ * under it — and the table was the one that did not.
+ *
+ * Not below 1040px: there the window is short enough that the height is worth more than the
+ * margin, and in focus the whole point is that the table reaches the edges.
+ */
+@media (min-width: 1040px) {
+  .battle-body {
+    padding-bottom: 22px;
+    background: var(--bg);
+  }
+}
 .battle-stage {
   position: relative;
   min-width: 0;
@@ -7889,6 +7903,24 @@ button.battle-scope-btn:hover {
   padding: 4px;
   border-radius: var(--radius-input);
   background: rgba(21, 22, 26, 0.72);
+  /* One row that scrolls, at every width. The stage is about 300px across on a 1060px desktop
+     with both columns open, which is narrower than a phone's, and wrapped these labels broke over
+     two and three lines and left the row a ragged set of heights. `useEdgeFade` fades whichever
+     end has more beyond it. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.battle-toolbar::-webkit-scrollbar {
+  display: none;
+}
+.battle-toolbar button,
+.battle-group {
+  flex: none;
+}
+.battle-toolbar button {
+  white-space: nowrap;
+  scroll-snap-align: start;
 }
 /* `display: flex` above would otherwise win against the browser's rule for the hidden attribute. */
 .battle-toolbar[hidden] {
@@ -7901,38 +7933,45 @@ button.battle-scope-btn:hover {
  *
  * Filled means the action to take now, or a mode that is on. Everything else is an outline.
  */
-.battle-toolbar button {
+.battle-toolbar button,
+.battle-toolstrip button {
   color: #e6e8ec;
   background: transparent;
   border-color: rgba(230, 232, 236, 0.3);
 }
-.battle-toolbar button.ghost {
+.battle-toolbar button.ghost,
+.battle-toolstrip button.ghost {
   border-color: transparent;
 }
-.battle-toolbar button:hover:not(:disabled) {
+.battle-toolbar button:hover:not(:disabled),
+.battle-toolstrip button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.14);
   border-color: rgba(230, 232, 236, 0.6);
   color: #ffffff;
 }
-.battle-toolbar button:not(.ghost) {
+.battle-toolbar button:not(.ghost),
+.battle-toolstrip button:not(.ghost) {
   background: #e6e8ec;
   border-color: #e6e8ec;
   color: #15161a;
   font-weight: 600;
 }
-.battle-toolbar button:not(.ghost):hover:not(:disabled) {
+.battle-toolbar button:not(.ghost):hover:not(:disabled),
+.battle-toolstrip button:not(.ghost):hover:not(:disabled) {
   background: #ffffff;
   border-color: #ffffff;
   color: #15161a;
 }
 /* Disabled still has to be read — it is how the toolbar says what this tool can do at all. */
-.battle-toolbar button:disabled {
+.battle-toolbar button:disabled,
+.battle-toolstrip button:disabled {
   opacity: 1;
   color: rgba(230, 232, 236, 0.45);
   background: transparent;
   border-color: rgba(230, 232, 236, 0.14);
 }
-.battle-toolbar button:not(.ghost):disabled {
+.battle-toolbar button:not(.ghost):disabled,
+.battle-toolstrip button:not(.ghost):disabled {
   background: rgba(230, 232, 236, 0.2);
   border-color: transparent;
   color: rgba(230, 232, 236, 0.6);
@@ -8043,25 +8082,6 @@ button.battle-scope-btn:hover {
 .shell.compact .ctx-bar-actions {
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
-}
-/* One row that scrolls rather than several that wrap. Wrapped, it covered 130px of a 487px board,
-   and the rule between two clusters ended up at the start of a line instead of between them.
-   `useEdgeFade` fades whichever end has more beyond it. */
-.shell.compact .battle-toolbar {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  scroll-snap-type: x proximity;
-}
-.shell.compact .battle-toolbar::-webkit-scrollbar {
-  display: none;
-}
-.shell.compact .battle-toolbar button,
-.shell.compact .battle-group {
-  flex: none;
-}
-.shell.compact .battle-group > button {
-  scroll-snap-align: start;
 }
 /* The 40px floor every other control gets would square these off; their target is the box around
    each instead, which is the 44 a thumb needs. */
@@ -9859,7 +9879,7 @@ body.play-focused .shell.compact {
    focus is one press on the same control that entered it. */
 body.battle-focused .shell.compact .rail,
 body.battle-focused .shell.compact .ctx-bar,
-body.battle-focused .battle-page .page-header-title,
+body.battle-focused .battle-page .page-header,
 body.battle-focused .battle-panel {
   display: none;
 }
@@ -9877,10 +9897,6 @@ body.battle-focused .shell.compact .battle-page {
   min-height: 0;
   height: auto;
 }
-body.battle-focused .battle-page .page-header {
-  padding-top: calc(6px + env(safe-area-inset-top, 0px));
-  padding-bottom: 4px;
-}
 body.battle-focused .battle-body {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
@@ -9894,15 +9910,85 @@ body.battle-focused .battle-stage {
    The far corner of the picture, away from the row of controls, so it reads as something done to
    the view rather than to the units on it. It carries its own light ink for the same reason the
    toolbar does: the table is dark under both themes. */
-/* What acts on the view: recentring it, and giving it the screen. */
+/*
+ * Which tool is in hand, along the head of the table. The same chip as the row at the foot, so the
+ * two read as one set of controls on one surface. It stops short of the corner, where what acts on
+ * the view sits, and scrolls when five tools are wider than the table.
+ */
+/*
+ * The head of the table: which tool is in hand on the left, what acts on the view on the right.
+ * One row holding both, so the tools take the width the corner leaves rather than a width written
+ * down here — the corner holds three marks on a desktop and four where focus is offered.
+ */
+.battle-head {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.battle-head > * {
+  pointer-events: auto;
+}
+.battle-toolstrip {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-input);
+  background: rgba(21, 22, 26, 0.72);
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.battle-toolstrip::-webkit-scrollbar {
+  display: none;
+}
+.battle-toolstrip button {
+  flex: none;
+  scroll-snap-align: start;
+  white-space: nowrap;
+}
+
+/* What acts on the view: which way it looks at the table, recentring it, and giving it the screen. */
+/*
+ * What acts on the view, in a column down the right edge under the tool strip.
+ *
+ * It shared the head row with the tools until five tool names came to 344px against the 359 a
+ * phone's table is wide. Beside a 30px column the tools had 321 and "Terrain" was cut off. Under
+ * it they have the whole row and all five read; the marks are glyphs, so a column suits them and
+ * costs 30px of width rather than a row of height.
+ */
 .battle-view-tools {
   position: absolute;
   z-index: 5;
-  top: 8px;
+  /* Clear of the tool strip above: 8px inset, a 32px strip, and 8px between them. */
+  top: 48px;
   right: 8px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 6px;
+}
+/* The camera's options, folded away until the mark above them is pressed. */
+.battle-camera {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.battle-camera[hidden] {
+  display: none;
+}
+/* The mark that opens them is the one that is on while they are showing. */
+.battle-view-btn[aria-expanded="true"] {
+  background: #e6e8ec;
+  color: #15161a;
 }
 .battle-view-btn {
   position: relative;
@@ -9929,6 +10015,16 @@ body.battle-focused .battle-stage {
   background: rgba(21, 22, 26, 0.88);
   color: #ffffff;
 }
+/* The view the table is in, and the mode focus is in: the same filled treatment the row at the
+   foot uses for a mode that is on. */
+.battle-view-btn[aria-pressed="true"] {
+  background: #e6e8ec;
+  color: #15161a;
+}
+.battle-view-btn[aria-pressed="true"]:hover:not(:disabled) {
+  background: #ffffff;
+  color: #15161a;
+}
 /* The corner is the corner in focus as well. A control that moves when it is used is one you have
    to find twice. */
 
@@ -9953,6 +10049,9 @@ body.battle-focused .battle-stage {
 }
 .battle-toolbar {
   view-transition-name: battle-tools;
+}
+.battle-head {
+  view-transition-name: battle-head;
 }
 .battle-view-tools {
   view-transition-name: battle-view;

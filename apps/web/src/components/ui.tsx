@@ -198,7 +198,7 @@ export function numOrNull(v: string): number | null {
 
 // ---------- icons (16px line icons, currentColor) ----------
 
-export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse" | "target";
+export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse" | "target" | "cube" | "plan";
 
 const PATHS: Record<IconName, ReactNode> = {
   export: (
@@ -281,6 +281,20 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M14 6h-4V2" />
       <path d="M2 10h4v4" />
       <path d="M14 10h-4v4" />
+    </>
+  ),
+  /* The two ways of looking at a table: from an angle, and straight down. */
+  cube: (
+    <>
+      <path d="M8 1.9 13.8 5v6L8 14.1 2.2 11V5z" />
+      <path d="M2.2 5 8 8.1 13.8 5" />
+      <path d="M8 8.1v6" />
+    </>
+  ),
+  plan: (
+    <>
+      <path d="M2.4 2.4h11.2v11.2H2.4z" />
+      <path d="M2.4 8h11.2M8 2.4v11.2" />
     </>
   ),
   /* A sight on the middle of something: what recentring the camera does. */

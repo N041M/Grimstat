@@ -19,6 +19,9 @@ const ELEVATION = 36;
 /** Headroom the fit allows above the table, so a three-storey ruin is not clipped. */
 const TABLE_HEADROOM = 14;
 
+/** How long the camera takes to travel back to the framing the view opened on. */
+const RECENTRE_MS = 420;
+
 /**
  * The canvas height the orbit was tuned at, in CSS pixels.
  *
@@ -33,6 +36,8 @@ const ROTATE_REFERENCE = 800;
 export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; size: BoardSize; frame?: Aabb2; recentre?: number }) {
   const { gl, set, size: viewport, invalidate } = useThree();
   const controls = useRef<OrbitControls>();
+  /** Where the view opens: what `recentre` travels back to. */
+  const home = useRef<{ position: Vector3; target: Vector3; zoom: number } | undefined>(undefined);
   const centre = useMemo(() => new Vector3(size.width / 2, 0, -size.depth / 2), [size.width, size.depth]);
   /**
    * What has to be in shot is more than the play area. A player's units start on the muster
@@ -142,8 +147,8 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
     const onChange = () => invalidate();
     next.addEventListener("change", onChange);
     next.update();
-    // The framing the view opens on, kept so `recentre` can return to it.
-    next.saveState();
+    // The framing the view opens on, kept so `recentre` can travel back to it.
+    home.current = { position: camera.position.clone(), target: centre.clone(), zoom: camera.zoom };
     controls.current = next;
     // Publish the controls so the rest of the scene can suspend them — dragging a unit and orbiting
     // the camera are the same gesture, and only one of them can have it.
@@ -158,12 +163,45 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
 
   /**
    * Two fingers can carry the board off the screen, and nothing on a table of dark ground says
-   * which way it went. Bumping `recentre` puts the camera back where the view opened.
+   * which way it went. Bumping `recentre` travels the camera back to where the view opened.
+   *
+   * It flies rather than cuts. A cut leaves the player to work out what just happened to the view
+   * they were looking at; watching it travel says where the board went and which way it came back.
    */
   useEffect(() => {
     if (!recentre) return;
-    controls.current?.reset();
-    invalidate();
+    const next = controls.current;
+    const to = home.current;
+    if (!next || !to) return;
+    // OrbitControls types its subject as an Object3D; here it is always one of the two cameras
+    // above, and both carry a zoom and a projection matrix.
+    const camera = next.object as PerspectiveCamera | OrthographicCamera;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      camera.position.copy(to.position);
+      next.target.copy(to.target);
+      camera.zoom = to.zoom;
+      camera.updateProjectionMatrix();
+      next.update();
+      invalidate();
+      return;
+    }
+    const from = { position: camera.position.clone(), target: next.target.clone(), zoom: camera.zoom };
+    const start = performance.now();
+    let frame = 0;
+    const fly = () => {
+      const k = Math.min(1, (performance.now() - start) / RECENTRE_MS);
+      // Decelerating, so it arrives rather than stops.
+      const e = 1 - Math.pow(1 - k, 3);
+      camera.position.lerpVectors(from.position, to.position, e);
+      next.target.lerpVectors(from.target, to.target, e);
+      camera.zoom = from.zoom + (to.zoom - from.zoom) * e;
+      camera.updateProjectionMatrix();
+      next.update();
+      invalidate();
+      if (k < 1) frame = requestAnimationFrame(fly);
+    };
+    frame = requestAnimationFrame(fly);
+    return () => cancelAnimationFrame(frame);
   }, [recentre, invalidate]);
 
   useFrame(() => controls.current?.update());
