@@ -2,7 +2,7 @@
 import * as Comlink from "comlink";
 import type { Snapshot } from "@grimstat/schema";
 import { SOURCES, fetchSource, type AdapterOutput, type FetchLike, type ParseOptions } from "@grimstat/adapters";
-import { buildSnapshot, mergeSources, pruneFactionsWithoutDatasheets } from "@grimstat/snapshot";
+import { buildSnapshot, mergeOntoBase, mergeSources, pruneFactionsWithoutDatasheets } from "@grimstat/snapshot";
 import { MIRRORED_SOURCE, catalogueFilter, type BrowserSourceId, type ImportEvent, type ImportRequest, type ImportSummary, type SourceCounts } from "../lib/importProgress";
 
 /**
@@ -103,16 +103,21 @@ const api: ImportWorkerApi = {
       const parts = settled.filter((p): p is AdapterOutput => p !== undefined);
       if (!parts.length) throw new Error("Every source failed, so there is nothing to merge.");
       emit({ type: "merging" });
-      const merge = mergeSources(parts);
+      // Refreshing one source keeps the rest of the snapshot it was fetched into, so the fresh part
+      // is merged over that data rather than standing alone.
+      const base = request.base;
+      const merge = base ? mergeOntoBase({ data: base.data, adapters: base.sources.map((s) => s.adapter), fetchedAt: base.fetchedAt }, parts) : mergeSources(parts);
       // a catalogue filter limits the structure source; drop the factions the points source added on its own
-      if ((request.catalogueFilter ?? "").trim()) {
+      if (!base && (request.catalogueFilter ?? "").trim()) {
         const pruned = pruneFactionsWithoutDatasheets(merge.data);
         merge.data = pruned.data;
         if (pruned.removedFactions.length) merge.warnings.push(`Pruned ${pruned.removedFactions.length} factions without datasheets (catalogue filter).`);
       }
       emit({ type: "merged", conflicts: merge.conflicts.length, warnings: merge.warnings.length, unmatched: merge.unmatched.length });
       emit({ type: "building" });
-      const snapshot = await buildSnapshot({ data: merge.data, sources: parts.map((p) => p.sourceRef), conflicts: merge.conflicts, label: request.label });
+      const refreshed = new Set(parts.map((p) => p.sourceRef.adapter));
+      const sources = base ? [...base.sources.filter((s) => !refreshed.has(s.adapter)), ...parts.map((p) => p.sourceRef)] : parts.map((p) => p.sourceRef);
+      const snapshot = await buildSnapshot({ data: merge.data, sources, conflicts: merge.conflicts, label: request.label });
       const summary: ImportSummary = {
         snapshotId: snapshot.id,
         label: snapshot.label,
