@@ -85,6 +85,8 @@ function errorHint(kind: ImportErrorKind): string {
 /** What one card shows: a status pill, a 5px bar and a detail/timestamp row. */
 interface CardModel {
   status: string;
+  /** Upstream has moved on, so the pill asks for attention without claiming a run is under way. */
+  stale?: boolean;
   /** Accent-tinted pill + bar while something is in flight or wrong; neutral otherwise. */
   live: boolean;
   fraction: number;
@@ -94,10 +96,11 @@ interface CardModel {
 
 /**
  * Reconcile a source's live fetch progress with what the active snapshot already carries. A run in
- * progress always wins; otherwise a snapshot that lists the adapter is "current", and anything else
- * has simply never been fetched onto this device.
+ * progress always wins. Otherwise the card says one thing about the stored copy: current when it
+ * matches what upstream serves, outdated when it does not, not checked when nobody has asked, and
+ * not fetched when there is no copy at all.
  */
-export function cardModel(id: CardSourceId, progress: SourceProgress | undefined, stored: SourceRef | undefined, storedCount: number | undefined): CardModel {
+export function cardModel(id: CardSourceId, progress: SourceProgress | undefined, stored: SourceRef | undefined, storedCount: number | undefined, freshness: Freshness = "unknown"): CardModel {
   if (progress && progress.stage !== "pending") {
     switch (progress.stage) {
       case "downloading":
@@ -110,17 +113,14 @@ export function cardModel(id: CardSourceId, progress: SourceProgress | undefined
         return { status: stageLabel(progress.stage), live: true, fraction: 0, detail: progress.message ?? t("data.fetch.stage.failed"), when: t("data.source.failed") };
     }
   }
-  if (stored) return { status: t("data.source.current"), live: false, fraction: 1, detail: storedCount === undefined ? (stored.ref ?? t("data.source.stored")) : t("data.source.datasheets", { n: fmtInt(storedCount) }), when: fmtDay(stored.fetchedAt) };
+  if (stored) {
+    const status = freshness === "current" ? t("data.source.current") : freshness === "stale" ? t("data.source.outdated") : t("data.source.notChecked");
+    return { status, live: false, stale: freshness === "stale", fraction: 1, detail: storedCount === undefined ? (stored.ref ?? t("data.source.stored")) : t("data.source.datasheets", { n: fmtInt(storedCount) }), when: fmtDay(stored.fetchedAt) };
+  }
   return { status: t("data.source.notFetched"), live: false, fraction: 0, detail: SOURCES[id].role, when: "–" };
 }
 
-/** "up to date", "update available", or nothing at all until something has asked. */
-function FreshnessPill({ state }: { state: Freshness }) {
-  if (state === "unknown") return null;
-  return <span className={`src-fresh ${state}`}>{state === "current" ? t("data.source.upToDate") : t("data.source.updateReady")}</span>;
-}
-
-function SourceCard({ id, model, freshness, selectable, selected, disabled, onSelect, onRefresh, footer }: { id: CardSourceId; model: CardModel; freshness: Freshness; selectable: boolean; selected?: boolean; disabled?: boolean; onSelect?: (on: boolean) => void; onRefresh?: () => void; footer?: ReactNode }) {
+function SourceCard({ id, model, selectable, selected, disabled, onSelect, onRefresh, footer }: { id: CardSourceId; model: CardModel; selectable: boolean; selected?: boolean; disabled?: boolean; onSelect?: (on: boolean) => void; onRefresh?: () => void; footer?: ReactNode }) {
   return (
     <article className="src-card">
       <div className="src-card-top">
@@ -128,10 +128,7 @@ function SourceCard({ id, model, freshness, selectable, selected, disabled, onSe
           <div className="src-card-name">{sourceName(id)}</div>
           <div className="src-card-kind">{t(KIND_KEY[id])}</div>
         </div>
-        <span className="src-card-state">
-          <FreshnessPill state={freshness} />
-          <span className={`src-pill ${model.live ? "live" : ""}`.trim()}>{model.status}</span>
-        </span>
+        <span className={`src-pill ${model.live ? "live" : model.stale ? "stale" : ""}`.trim()}>{model.status}</span>
       </div>
       <ProportionBar value={model.fraction} height={5} tone={model.live ? "accent" : "ink"} />
       <div className="src-card-foot">
@@ -294,14 +291,13 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
       <div className="src-cards">
         {CARD_SOURCES.map((id) => {
           const stored = rawSnapshot?.sources.find((s) => s.adapter === id);
-          const model = cardModel(id, progress.sources.find((s) => s.id === id), stored, id === "bsdata-json" ? datasheetCount : undefined);
+          const model = cardModel(id, progress.sources.find((s) => s.id === id), stored, id === "bsdata-json" ? datasheetCount : undefined, freshnessOf(id, stored?.ref, freshness.latest[id]));
           const needsMirror = id === MIRRORED_SOURCE && !mirrored;
           return (
             <SourceCard
               key={id}
               id={id}
               model={model}
-              freshness={freshnessOf(id, stored?.ref, freshness.latest[id])}
               onRefresh={rawSnapshot && !needsMirror ? () => void refreshOne(id) : undefined}
               selectable={!needsMirror}
               selected={!needsMirror && selection.sources[id]}
