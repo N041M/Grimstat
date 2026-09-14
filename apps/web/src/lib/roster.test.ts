@@ -141,6 +141,24 @@ describe("compositionBounds", () => {
     const ds = sheet({ id: "x", name: "x", models: squad.models, composition: [{ description: "1 Sergeant", min: 1, max: 1 }, { description: "5-10 Troopers", min: 5, max: 10 }] });
     expect(compositionBounds(ds)).toEqual({ min: 6, max: 11 });
   });
+  it("reads the lines either side of an OR as alternatives, not as parts of one unit", () => {
+    const ds = sheet({
+      id: "x",
+      name: "x",
+      models: squad.models,
+      composition: [{ description: "1 Runtherd and 10 Gretchin", min: 11, max: 11 }, { description: "OR" }, { description: "2 Runtherds and 20 Gretchin", min: 22, max: 22 }],
+    });
+    expect(compositionBounds(ds)).toEqual({ min: 11, max: 22 });
+  });
+  it("reads the lines under a 'One of the following:' heading as alternatives", () => {
+    const ds = sheet({
+      id: "x",
+      name: "x",
+      models: squad.models,
+      composition: [{ description: "One of the following:" }, { description: "1 Sergeant and 9 Grenadiers", min: 10, max: 10 }, { description: "1 Sergeant, 7 Grenadiers and 1 Weapons Team", min: 9, max: 9 }],
+    });
+    expect(compositionBounds(ds)).toEqual({ min: 9, max: 10 });
+  });
 });
 
 describe("loadout-based wargear prefill", () => {

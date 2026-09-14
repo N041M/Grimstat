@@ -16,7 +16,7 @@ const tiersFor = (rows: string): unknown => parse(costTable(rows)).priceRules!.m
 describe("wahapedia-csv adapter (synthetic fixture)", () => {
   it("uses the last update as the source ref and skips virtual datasheets", () => {
     expect(out.sourceRef.ref).toBe("2026-01-01 00:00:00");
-    expect(out.datasheets).toHaveLength(8);
+    expect(out.datasheets).toHaveLength(9);
     expect(out.warnings.some((w) => w.includes("virtual"))).toBe(true);
   });
 
@@ -85,6 +85,12 @@ describe("wahapedia-csv adapter (synthetic fixture)", () => {
       { description: "4-9 Wardens", min: 4, max: 9 },
     ]);
     expect(ds("Thornlings").composition).toEqual([{ description: "10-20 Thornlings", min: 10, max: 20 }]);
+    // A line that names two kinds of model counts both of them, and the "OR" between two such lines is kept.
+    expect(ds("Sporeling Drove").composition).toEqual([
+      { description: "1 Thorn Shepherd and 10 Sporelings", min: 11, max: 11 },
+      { description: "OR" },
+      { description: "2 Thorn Shepherds and 20 Sporelings", min: 22, max: 22 },
+    ]);
     expect(ds("Ashen Crusher").wargearOptions).toEqual(["This model’s twin hail gun can be replaced with one of the following:\n\n- 1 fusion beamer\n- 1 vortex cannon"]);
   });
 

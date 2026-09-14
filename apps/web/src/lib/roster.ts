@@ -1,6 +1,6 @@
 import { Roster, type BattleSize, type Datasheet, type RosterUnit, type Snapshot } from "@grimstat/schema";
 import { BATTLE_SIZES, baseWeaponName, parseLoadout } from "@grimstat/game-40k-11e";
-import { rosterSummary } from "@grimstat/resolver";
+import { compositionBranches, rosterSummary } from "@grimstat/resolver";
 import { newId, nowIso } from "./ids";
 
 /** Pure roster helpers shared by the Armies pages. No DOM, no storage. */
@@ -113,25 +113,35 @@ export interface ModelBounds {
 }
 
 /**
- * Total model-count bounds of a datasheet. A single composition line gives the bounds directly;
- * several lines (one per model profile, e.g. "1 Sergeant" + "4-9 Troopers") are summed.
+ * Bounds of one way of building the unit. A single composition line gives them directly; several
+ * lines (one per model profile, e.g. "1 Sergeant" + "4-9 Troopers") are summed.
  *
  * A total maximum needs every line to carry one. "1 Sergeant" beside an open-ended "5+ Troopers"
  * puts no ceiling on the unit, and saying the ceiling is the sergeant's 1 would pin the unit to its
  * minimum size for good.
  */
-export function compositionBounds(ds: Datasheet): ModelBounds {
-  const lines = ds.composition;
+function branchBounds(lines: Datasheet["composition"], fallbackMin: number): { min: number; max: number | undefined } {
   const mins = lines.map((c) => c.min).filter((m): m is number => typeof m === "number" && m >= 0);
   const maxs = lines.map((c) => c.max).filter((m): m is number => typeof m === "number" && m >= 0);
-  const fallbackMin = ds.models.length > 1 ? ds.models.length : 1;
-  if (lines.length <= 1) {
-    const min = mins[0] ?? fallbackMin;
-    const max = maxs[0];
-    return { min: Math.max(1, min), max: max !== undefined ? Math.max(max, min, 1) : undefined };
-  }
+  if (lines.length <= 1) return { min: mins[0] ?? fallbackMin, max: maxs[0] };
   const min = mins.length === lines.length ? mins.reduce((s, m) => s + m, 0) : mins.length ? Math.max(...mins) : fallbackMin;
   const max = maxs.length === lines.length ? maxs.reduce((s, m) => s + m, 0) : undefined;
+  return { min, max };
+}
+
+/**
+ * Total model-count bounds of a datasheet.
+ *
+ * A sheet that writes "OR" between its lines offers alternatives rather than parts of one unit, so
+ * the unit is as small as the smallest alternative and as large as the largest. A ceiling needs
+ * every alternative to have one.
+ */
+export function compositionBounds(ds: Datasheet): ModelBounds {
+  const fallbackMin = ds.models.length > 1 ? ds.models.length : 1;
+  const branches = compositionBranches(ds.composition).map((b) => branchBounds(b, fallbackMin));
+  const min = Math.min(...branches.map((b) => b.min));
+  const maxs = branches.map((b) => b.max);
+  const max = maxs.every((m): m is number => m !== undefined) ? Math.max(...maxs) : undefined;
   return { min: Math.max(1, min), max: max !== undefined ? Math.max(max, min, 1) : undefined };
 }
 

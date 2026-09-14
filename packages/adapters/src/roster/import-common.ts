@@ -1,5 +1,6 @@
 import type { Datasheet, Detachment, Enhancement, Faction, ModelProfile, Roster, RosterDetachment, RosterUnit, Snapshot } from "@grimstat/schema";
 import { normaliseName } from "@grimstat/snapshot";
+import { compositionBranches } from "@grimstat/resolver";
 
 /** Battle-size labels as written by the GW app, New Recruit and BattleScribe. */
 export const SIZE_BY_LABEL: Record<string, Roster["battleSize"]> = { "combat patrol": "combat-patrol", incursion: "incursion", "strike force": "strike-force", onslaught: "onslaught" };
@@ -341,11 +342,16 @@ export class RosterImportContext {
   }
 }
 
-/** Minimum-size model groups for a datasheet (one group per profile; the last profile absorbs the remainder). */
+/**
+ * Minimum-size model groups for a datasheet (one group per profile; the last profile absorbs the
+ * remainder). A sheet that writes "OR" between its lines offers alternatives rather than parts of
+ * one unit, so the smallest alternative is the size to fall back to.
+ */
 export function defaultGroups(ds: Datasheet): RosterUnit["models"] {
-  const mins = ds.composition.map((c) => c.min).filter((m): m is number => typeof m === "number" && m > 0);
-  const total = mins.length ? mins.reduce((s, m) => s + m, 0) : 1;
-  return profileGroups(ds, Math.max(1, total));
+  const totals = compositionBranches(ds.composition)
+    .map((lines) => lines.map((c) => c.min).filter((m): m is number => typeof m === "number" && m > 0).reduce((s, m) => s + m, 0))
+    .filter((t) => t > 0);
+  return profileGroups(ds, Math.max(1, totals.length ? Math.min(...totals) : 1));
 }
 
 /**

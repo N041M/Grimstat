@@ -73,10 +73,17 @@ wargear and the unit arrived at the size of its minimum composition. A ten-model
 - **The army builder does not add the second datasheet for you.** Adding Canis Rex adds only Canis Rex,
   and Sir Hekhtur has to be added beside it. Nothing in the snapshot says the two belong together.
   Wahapedia links them only in the ability text, so the app cannot know which pairs to offer.
-- **A composition line that names two kinds of model counts only the first number.** "1 Runtherd and 10
-  Gretchin" is read as a minimum of one model, which is what the builder starts a new unit at and what an
-  importer falls back to when a list gives no size. Fourteen datasheets in the 11th-edition export are
-  written this way.
+- **A composition line counts every kind of model it names.** "1 Runtherd and 10 Gretchin" is eleven
+  models, which is what the builder starts a new unit at and what an importer falls back to when a list
+  gives no size. Text in brackets breaks one model into its pieces rather than naming more models, so
+  "1 Imperial Fortress Walls (1 gate section, 2 tower sections)" is one model.
+- **Lines with an "OR" between them are alternatives.** Gretchin is a unit of eleven models or a unit of
+  twenty-two, so the smallest alternative is the minimum and the largest is the maximum. A "One of the
+  following:" heading introduces the same thing without the word. Fourteen datasheets in the
+  11th-edition export are written one of these two ways. The reading lives in
+  `packages/resolver/src/composition.ts`, which the Wahapedia adapter, the army builder, the importers
+  and the loadout check all go through. A row of the points table names its models in the same shape
+  and is split by the same reader, though a points row is a size only when every part of it is a count.
 
 ## Play companion (the in-game tracker)
 - **Attached characters are folded into their host** everywhere the app resolves a roster unit, so a

@@ -128,6 +128,8 @@ describe("11e constraints", () => {
     expect(compositionBounds({ composition: [{ min: 1 }, { min: 4, max: 9 }] })).toEqual({ min: 5, max: 10 });
     expect(compositionBounds({ composition: [{ min: 10, max: 20 }] })).toEqual({ min: 10, max: 20 });
     expect(compositionBounds({ composition: [{ min: 1 }] })).toEqual({ min: 1 });
+    // "OR" between two lines makes them alternatives: the unit is one of them, never both.
+    expect(compositionBounds({ composition: [{ description: "1 Runtherd and 10 Gretchin", min: 11, max: 11 }, { description: "OR" }, { description: "2 Runtherds and 20 Gretchin", min: 22, max: 22 }] })).toEqual({ min: 11, max: 22 });
   });
   it("leader / support legality", () => {
     const base = roster().units;

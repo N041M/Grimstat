@@ -15,13 +15,18 @@ describe("synthetic snapshot fixture", () => {
   it("covers the shapes the engine and builder need", () => {
     const d = snap.data;
     expect(d.factions).toHaveLength(2);
-    expect(d.datasheets).toHaveLength(8);
+    expect(d.datasheets).toHaveLength(9);
     const byName = new Map(d.datasheets.map((x) => [x.name, x]));
     expect(byName.get("Warden Captain")!.leaderTo).toEqual(["ds:ashen-wardens:warden-squad"]);
     expect(byName.get("Warden Squad")!.models.map((m) => m.name)).toEqual(["Warden Sergeant", "Warden"]);
     expect(byName.get("Warden Squad")!.composition).toEqual([
       { description: "1 Warden Sergeant", min: 1, max: 1 },
       { description: "4-9 Wardens", min: 4, max: 9 },
+    ]);
+    expect(byName.get("Sporeling Drove")!.composition).toEqual([
+      { description: "1 Thorn Shepherd and 10 Sporelings", min: 11, max: 11 },
+      { description: "OR" },
+      { description: "2 Thorn Shepherds and 20 Sporelings", min: 22, max: 22 },
     ]);
     expect(byName.get("Ashen Crusher")!.keywords).toContain("VEHICLE");
     expect(byName.get("Thornlings")!.composition[0]).toMatchObject({ min: 10, max: 20 });

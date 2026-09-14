@@ -3,7 +3,7 @@
   "createdAt": "2026-01-01T00:00:00.000Z",
   "updatedAt": "2026-01-01T00:00:00.000Z",
   "revision": 0,
-  "id": "snap_20260101_007a6ecc",
+  "id": "snap_20260101_e3b939d8",
   "gameSystemId": "wh40k-11e",
   "label": "synthetic fixture",
   "sources": [
@@ -29,7 +29,7 @@
       "notes": "Powered by Wahapedia (https://wahapedia.ru); text (c) Games Workshop"
     }
   ],
-  "checksum": "007a6ecc8e31cff311eac7128f2351ed7db2372a23a123c1462d42d2e44e1beb",
+  "checksum": "e3b939d85c3edcc317cfcaf1d76061ffdee3489e27f44a15927870f824cd9873",
   "conflicts": [
     {
       "entity": "datasheet",
@@ -806,6 +806,108 @@
         "fallbackPoints": 210
       },
       {
+        "id": "ds:verdant-swarm:sporeling-drove",
+        "gameSystemId": "wh40k-11e",
+        "factionId": "faction:verdant-swarm",
+        "name": "Sporeling Drove",
+        "role": "Battleline",
+        "isLegends": false,
+        "isCharacter": false,
+        "isEpicHero": false,
+        "isBattleline": true,
+        "isSupport": false,
+        "keywords": [
+          "INFANTRY",
+          "SWARM",
+          "BATTLELINE",
+          "SPORELING DROVE"
+        ],
+        "factionKeywords": [
+          "VERDANT SWARM"
+        ],
+        "models": [
+          {
+            "id": "mp:verdant-swarm:sporeling-drove:thorn-shepherd",
+            "name": "Thorn Shepherd",
+            "M": 7,
+            "T": 4,
+            "Sv": 5,
+            "InvSv": null,
+            "W": 3,
+            "Ld": 7,
+            "OC": 1,
+            "baseSize": "28mm"
+          },
+          {
+            "id": "mp:verdant-swarm:sporeling-drove:sporeling",
+            "name": "Sporeling",
+            "M": 7,
+            "T": 3,
+            "Sv": 6,
+            "InvSv": null,
+            "W": 1,
+            "Ld": 8,
+            "OC": 1,
+            "baseSize": "25mm"
+          }
+        ],
+        "weapons": [
+          {
+            "id": "wp:verdant-swarm:sporeling-drove:barbed-goad",
+            "name": "Barbed goad",
+            "kind": "melee",
+            "range": null,
+            "A": 3,
+            "skill": 4,
+            "S": 4,
+            "AP": 1,
+            "D": 1,
+            "keywords": [
+              {
+                "name": "SUSTAINED HITS",
+                "value": 1,
+                "raw": "Sustained Hits 1"
+              }
+            ]
+          },
+          {
+            "id": "wp:verdant-swarm:sporeling-drove:sporeling-teeth",
+            "name": "Sporeling teeth",
+            "kind": "melee",
+            "range": null,
+            "A": 2,
+            "skill": 5,
+            "S": 2,
+            "AP": 0,
+            "D": 1,
+            "keywords": []
+          }
+        ],
+        "abilityIds": [],
+        "stratagemIds": [],
+        "leaderTo": [],
+        "supportTo": [],
+        "composition": [
+          {
+            "description": "1 Thorn Shepherd and 10 Sporelings",
+            "min": 11,
+            "max": 11
+          },
+          {
+            "description": "OR"
+          },
+          {
+            "description": "2 Thorn Shepherds and 20 Sporelings",
+            "min": 22,
+            "max": 22
+          }
+        ],
+        "loadout": "Every model is equipped with: sporeling teeth.\nThe Thorn Shepherd is also equipped with a barbed goad.",
+        "wargearOptions": [],
+        "sourceId": "pub:wahapedia:000000001",
+        "fallbackPoints": 55
+      },
+      {
         "id": "ds:verdant-swarm:swarm-seer",
         "gameSystemId": "wh40k-11e",
         "factionId": "faction:verdant-swarm",
@@ -1337,6 +1439,23 @@
           {
             "models": 1,
             "points": 210
+          }
+        ]
+      },
+      {
+        "datasheetId": "ds:verdant-swarm:sporeling-drove",
+        "copyRange": {
+          "min": 1
+        },
+        "label": "Your Unit Costs",
+        "tiers": [
+          {
+            "models": 11,
+            "points": 55
+          },
+          {
+            "models": 22,
+            "points": 110
           }
         ]
       },

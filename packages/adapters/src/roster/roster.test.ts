@@ -268,6 +268,13 @@ describe("text import edge cases", () => {
     }
   });
 
+  it("falls back to the smallest way of building a unit the list gives no size for", () => {
+    // Sporeling Drove is 11 models or 22, never 33: the two composition lines have an OR between them.
+    const { roster: r, warnings } = importLines("Verdant Swarm", "Thorn Tide", "Sporeling Drove (55 pts)");
+    expect(warnings).toEqual([]);
+    expect(r.units[0]!.models.reduce((n, g) => n + g.count, 0)).toBe(11);
+  });
+
   it("accepts a detachment named after the first unit, with or without its DP count", () => {
     const { roster: r, warnings } = importLines("Ashen Wardens", "1x Warden Captain (80 pts): Flux pistol", "Detachment: Ember Vanguard");
     expect(warnings).toEqual([]);

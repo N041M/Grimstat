@@ -13,6 +13,7 @@ import type {
   WargearPrice,
   WeaponProfile,
 } from "@grimstat/schema";
+import { compositionLineBounds, compositionPart, compositionSegments } from "@grimstat/resolver";
 import {
   DEFAULT_GAME_SYSTEM_ID,
   fetchedAtOrNow,
@@ -148,14 +149,6 @@ function decomposeStratagem(text: string): { when?: string; target?: string; eff
   return out;
 }
 
-function parseCompositionRange(desc: string): { min?: number; max?: number } {
-  const m = /^(\d+)(?:\s*[-–]\s*(\d+))?\s+/.exec(desc);
-  if (!m) return {};
-  const min = Number(m[1]);
-  const max = m[2] !== undefined ? Number(m[2]) : min;
-  return { min, max };
-}
-
 /**
  * How many models a points-table row covers. Most rows say "5 models", but some export rows name the
  * models instead, either one kind ("10 Gretchin") or a unit made of several ("1 Spanner and 4 Burna
@@ -167,10 +160,10 @@ function parseModelsCount(desc: string): number | null {
   const m = /^(\d+)\s+models?\b/i.exec(text);
   if (m) return Number(m[1]);
   let total = 0;
-  for (const part of text.split(/\s*,\s*|\s+and\s+/i)) {
-    const p = /^(\d+)\s+\S/.exec(part.trim());
-    if (!p) return null;
-    total += Number(p[1]);
+  for (const segment of compositionSegments(text)) {
+    const part = compositionPart(segment);
+    if (!part) return null; // a row is a size only when every segment of it is one
+    total += part.min;
   }
   return total > 0 ? total : null;
 }
@@ -530,7 +523,7 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
     if (!ds) continue;
     const description = stripHtml(col(r, "description"));
     if (!description) continue;
-    const range = parseCompositionRange(description);
+    const range = compositionLineBounds(description);
     const comp: { description: string; min?: number; max?: number } = { description };
     if (range.min !== undefined) comp.min = range.min;
     if (range.max !== undefined) comp.max = range.max;

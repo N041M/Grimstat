@@ -42,3 +42,10 @@ units:
         costs:
           - { models: 10, points: 60 }
           - { models: 20, points: 120 }
+  - name: Sporeling Drove
+    pricing:
+      - range: "[1,)"
+        label: Your Unit Costs
+        costs:
+          - { models: 11, points: 55 }
+          - { models: 22, points: 110 }
