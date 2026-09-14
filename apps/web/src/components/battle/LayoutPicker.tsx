@@ -29,7 +29,7 @@ export function LayoutPicker({ options, current, dirty, onPick }: { options: rea
   const deployment = deploymentOf(current.note);
 
   return (
-    <section className="battle-section battle-pick">
+    <section className="battle-section battle-pick" data-tour="battle-layout">
       <div className="battle-section-head">
         <h2>{t("battle.pick.title")}</h2>
         <button type="button" className={`sm ${open ? "ghost" : ""}`.trim()} aria-expanded={open} onClick={() => setOpen((v) => !v)}>

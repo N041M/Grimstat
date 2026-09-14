@@ -944,16 +944,27 @@ code,
 /* ---- the tour of the app ----
    Three layers over the shell. `.tour-block` swallows clicks, because the steps drive the address
    themselves and a click that changed screen underneath would leave the card describing something
-   else. `.tour-spot` dims the page with its own outward shadow, which leaves the rail item inside
+   else. A card that offers an action replaces it with four `.tour-pane` around the hole, so the one
+   control inside can be pressed and nothing else can. `.tour-spot` dims the page with its own outward shadow, which leaves the rail item inside
    the hole in its own colours with nothing drawn over it; that shadow is painted but never
    hit-tested, which is why the blocking layer is separate. The card is placed by `lib/tour.ts` and
    carries the arrow's offset in `--tour-arrow`. */
 body.tour-open {
+  /* How long the highlight and the card take to travel. A card moves on a click, so this is short
+     enough to answer the press and long enough to follow across the window. The ring that leaves
+     the control waits the same time, so it fires as the highlight arrives rather than over it. */
+  --tour-travel: 0.45s;
   overflow: hidden;
 }
 .tour-block {
   position: fixed;
   inset: 0;
+  z-index: 48;
+}
+/* One of the four panes that stand in for `.tour-block` on a card that lets the reader work the
+   control it points at. Each is placed by Tour.tsx, so this sets no edges of its own. */
+.tour-pane {
+  position: fixed;
   z-index: 48;
 }
 .tour-dim {
@@ -963,8 +974,9 @@ body.tour-open {
   pointer-events: none;
   background: rgba(10, 10, 12, 0.55);
 }
-/* The hole travels: it opens on the rail item that names the screen and then slides to the control
-   the step is about, which is the whole point of walking somebody through a screen. */
+/* The hole travels. A screen's first card opens it on the rail item that names the screen, and the
+   next card slides it to the control that screen is about, which is the whole point of walking
+   somebody through a screen. */
 .tour-spot {
   position: fixed;
   z-index: 48;
@@ -973,22 +985,23 @@ body.tour-open {
   outline: 2px solid var(--accent);
   box-shadow: 0 0 0 9999px rgba(10, 10, 12, 0.55);
   transition:
-    left 0.36s cubic-bezier(0.32, 0.72, 0, 1),
-    top 0.36s cubic-bezier(0.32, 0.72, 0, 1),
-    width 0.36s cubic-bezier(0.32, 0.72, 0, 1),
-    height 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+    left var(--tour-travel) cubic-bezier(0.32, 0.72, 0, 1),
+    top var(--tour-travel) cubic-bezier(0.32, 0.72, 0, 1),
+    width var(--tour-travel) cubic-bezier(0.32, 0.72, 0, 1),
+    height var(--tour-travel) cubic-bezier(0.32, 0.72, 0, 1);
 }
 /* A ring leaving the control, twice, so the eye lands on it after the hole has stopped moving. The
-   ring is drawn outside the hole and must not darken it, so it carries no background. */
-.tour-spot::after {
-  content: "";
+   ring is drawn outside the hole and must not darken it, so it carries no background. It is an
+   element rather than a pseudo-element because Tour.tsx replaces it on every card, which is what
+   starts the animation again where two cards in a row both point at a control. */
+.tour-ring {
   position: absolute;
   inset: -2px;
   border-radius: inherit;
   border: 2px solid var(--accent);
 }
-.tour-spot[data-phase="focus"]::after {
-  animation: tour-ring 1.5s ease-out 0.36s 2;
+.tour-spot[data-at="control"] > .tour-ring {
+  animation: tour-ring 1.5s ease-out var(--tour-travel) 2;
 }
 @keyframes tour-ring {
   0% {
@@ -1008,8 +1021,8 @@ body.tour-open {
   position: fixed;
   z-index: 49;
   transition:
-    left 0.36s cubic-bezier(0.32, 0.72, 0, 1),
-    top 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+    left var(--tour-travel) cubic-bezier(0.32, 0.72, 0, 1),
+    top var(--tour-travel) cubic-bezier(0.32, 0.72, 0, 1);
   width: min(360px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   overflow: auto;
@@ -1106,7 +1119,7 @@ body.tour-open {
 @media (prefers-reduced-motion: reduce) {
   .tour-card,
   .tour-spot,
-  .tour-spot::after {
+  .tour-ring {
     animation: none;
     transition: none;
   }

@@ -127,6 +127,10 @@ export function useEdgeFade(ref: RefObject<HTMLElement | null>, watch?: unknown)
  * Keeps the selected tab in view in a tab bar too wide for the screen. Below 900px `.tabbar`
  * scrolls sideways, so a screen reopened on its last tab would otherwise start with that tab off
  * the edge. Give the bar a ref and pass whatever changes when the tab does.
+ *
+ * The bar is scrolled by hand rather than with `scrollIntoView`, which scrolls every scrollable
+ * ancestor as well. A tab that needs moving a little sideways would take the page it is on with it,
+ * and a screen that opened on its last tab would jump as it arrived.
  */
 export function useTabInView(ref: RefObject<HTMLElement | null>, value: string): void {
   useEffect(() => {
@@ -135,7 +139,12 @@ export function useTabInView(ref: RefObject<HTMLElement | null>, value: string):
     // A tab strip marks its own with `aria-selected`; the battle table's tools are toggles and
     // mark theirs with `aria-pressed`. Either way there is one.
     const tab = bar.querySelector<HTMLElement>('[aria-selected="true"], [aria-pressed="true"]');
-    tab?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    if (!tab) return;
+    const barBox = bar.getBoundingClientRect();
+    const box = tab.getBoundingClientRect();
+    // Whichever edge it is over, moved just far enough to clear it.
+    if (box.left < barBox.left) bar.scrollLeft += box.left - barBox.left;
+    else if (box.right > barBox.right) bar.scrollLeft += box.right - barBox.right;
   }, [ref, value]);
 }
 

@@ -1074,7 +1074,7 @@ export function BattlePage() {
               row along the foot. The page header keeps the table's name and nothing else. */}
           {webgl ? (
             <div className="battle-head">
-              <div className="battle-toolstrip" role="group" aria-label={t("battle.tool")} ref={toolstripRef}>
+              <div className="battle-toolstrip" data-tour="battle-tool" role="group" aria-label={t("battle.tool")} ref={toolstripRef}>
                 {TOOLS.map((x) => (
                   <button key={x.id} type="button" className={`sm ${tool === x.id ? "" : "ghost"}`.trim()} aria-pressed={tool === x.id} onClick={() => setTool(x.id)}>
                     {t(x.label)}

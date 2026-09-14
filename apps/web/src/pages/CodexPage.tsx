@@ -164,7 +164,7 @@ export function CodexPage({ id }: { id: string | undefined }) {
         </ContextSlot>
       ) : null}
       <PageHeader className="tabbed" title={title} subtitle={subtitle} actions={actions}>
-        <div className="tabbar" role="tablist" aria-label={t("codex.tabs")} ref={tabbar}>
+        <div className="tabbar" data-tour="codex-tabs" role="tablist" aria-label={t("codex.tabs")} ref={tabbar}>
           <button type="button" role="tab" id="codex-tab-sheets" aria-selected={view === "sheets"} aria-controls="codex-panel" className={`tabbar-tab ${view === "sheets" ? "on" : ""}`.trim()} onClick={showSheets}>
             {t("codex.tab.sheets")}
           </button>

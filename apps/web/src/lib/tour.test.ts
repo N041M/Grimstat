@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ROUTES } from "../router";
-import { CARD_GAP, VIEWPORT_MARGIN, clampStep, isLastStep, placeCard, shouldAutoOpen, stepAt, TOUR_SCREEN_COUNT, TOUR_STEPS, type Rect } from "./tour";
+import { CARD_GAP, VIEWPORT_MARGIN, clampStep, isLastStep, placeCard, screenAt, shouldAutoOpen, stepAt, TOUR_SCREEN_COUNT, TOUR_STEPS, type Rect } from "./tour";
 
 const VIEWPORT = { width: 1440, height: 900 };
 const CARD = { width: 340, height: 200 };
@@ -12,19 +12,71 @@ const railItem = (top: number): Rect => ({ left: 0, top, width: 56, height: 38 }
 
 describe("TOUR_STEPS", () => {
   it("visits every screen in the app exactly once", () => {
-    const visited = TOUR_STEPS.map((s) => s.route).filter((r) => r !== undefined);
+    const visited = [...new Set(TOUR_STEPS.filter((s) => !s.bookend).map((s) => s.route))];
     expect([...visited].sort()).toEqual([...ROUTES].sort());
-    expect(new Set(visited).size).toBe(visited.length);
+    expect(visited).toHaveLength(TOUR_SCREEN_COUNT);
+  });
+
+  it("opens a screen with one card for its rail letter, then a card per control", () => {
+    const withControl = new Set(TOUR_STEPS.filter((s) => !s.bookend && s.focus).map((s) => s.route));
+    // Every screen but About, whose only control would be the button that starts this tour.
+    expect([...ROUTES].filter((r) => !withControl.has(r))).toEqual(["about"]);
+    expect(TOUR_STEPS.filter((s) => !s.bookend && !s.focus)).toHaveLength(TOUR_SCREEN_COUNT);
+  });
+
+  /*
+   * The page under the tour is dead to clicks, so a card that offers an action opens the blocking
+   * layer out around its control. Only the data cards do it: the tour is meant to be walked with
+   * data in the app, and pressing anything else would put a dialog or a long job over the card.
+   */
+  it("lets the reader work the control on the two data cards and on no others", () => {
+    expect(TOUR_STEPS.filter((s) => s.act).map((s) => s.id)).toEqual(["data-fetch", "fetch"]);
+  });
+
+  it("gives a card that offers an action a control to point at and something to say once it is done", () => {
+    for (const step of TOUR_STEPS.filter((s) => s.act)) {
+      expect(step.focus).toBe("data-fetch");
+      expect(step.loadedBodyKey).toBeDefined();
+    }
+  });
+
+  it("walks the battle table in parts, because it holds more than the other screens do", () => {
+    expect(TOUR_STEPS.filter((s) => s.route === "battle" && s.focus).map((s) => s.focus)).toEqual(["battle-tool", "battle-tools", "battle-layout"]);
+  });
+
+  it("keeps a screen's cards together, so the tour opens each screen once", () => {
+    const runs = TOUR_STEPS.filter((s) => !s.bookend).map((s) => s.route).filter((r, i, all) => r !== all[i - 1]);
+    expect(new Set(runs).size).toBe(runs.length);
   });
 
   it("opens with a card that names no screen, so nothing is navigated to before the offer is accepted", () => {
+    expect(TOUR_STEPS[0]?.bookend).toBe(true);
     expect(TOUR_STEPS[0]?.route).toBeUndefined();
     expect(TOUR_STEPS.slice(1).every((s) => s.route !== undefined)).toBe(true);
   });
 
-  it("counts only the screen stops", () => {
-    expect(TOUR_SCREEN_COUNT).toBe(TOUR_STEPS.length - 1);
+  it("closes on the button that loads the data, which is what to do next", () => {
+    const end = TOUR_STEPS[TOUR_STEPS.length - 1];
+    expect(end?.bookend).toBe(true);
+    expect(end?.route).toBe("data");
+    expect(end?.focus).toBe("data-fetch");
+  });
+
+  it("counts only the screen stops, so the two bookends carry no number", () => {
     expect(TOUR_SCREEN_COUNT).toBe(ROUTES.length);
+    expect(TOUR_STEPS.filter((s) => s.bookend)).toHaveLength(2);
+  });
+
+  it("counts a screen once, whichever of its two cards is up", () => {
+    expect(screenAt(0)).toBeUndefined();
+    expect(screenAt(1)).toBe(1);
+    expect(screenAt(2)).toBe(1);
+    expect(screenAt(3)).toBe(2);
+    expect(screenAt(4)).toBe(2);
+    // The battle table's four cards all carry its one number.
+    expect(new Set(TOUR_STEPS.map((s, i) => (s.route === "battle" ? screenAt(i) : null)).filter((n) => n !== null)).size).toBe(1);
+    expect(screenAt(TOUR_STEPS.length - 2)).toBe(TOUR_SCREEN_COUNT);
+    expect(screenAt(TOUR_STEPS.length - 1)).toBeUndefined();
   });
 
   it("gives every step its own id", () => {
@@ -77,6 +129,7 @@ describe("clampStep", () => {
 describe("stepAt / isLastStep", () => {
   it("answers with a step for any index", () => {
     expect(stepAt(0).id).toBe("welcome");
+    expect(stepAt(TOUR_STEPS.length - 1).id).toBe("fetch");
     expect(stepAt(-1).id).toBe("welcome");
     expect(stepAt(TOUR_STEPS.length + 5)).toBe(TOUR_STEPS[TOUR_STEPS.length - 1]);
   });
