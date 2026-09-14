@@ -5,7 +5,7 @@ import { Empty } from "../ui";
 import { CODEX_PAGE, COMPARE_CAP, representativeProfile, shownGroups, sizeBounds, unitFigures, type CodexFaction, type CodexGroup } from "../../lib/codex";
 import { hrefFor } from "../../router";
 import { CodexTools, GROUP_KEY, NoMatch, pointsText, sizeText } from "./shared";
-import { t } from "../../i18n";
+import { t, tn } from "../../i18n";
 import { useOwnedModels } from "../../hooks/useOwnedModels";
 import { useGrowingList } from "../../hooks/useGrowingList";
 
@@ -89,7 +89,7 @@ export function CodexLanding({ snapshot, factions, factionId, onFaction, query, 
       <p className="codex-lede">{t("codex.landing.lede")}</p>
       <div className="codex-landing-tools" data-tour="codex-filter">
         <CodexTools factions={factions} factionId={factionId} onFaction={onFaction} query={query} onQuery={onQuery} />
-        <span className="t-meta codex-landing-count">{t("codex.landing.count", { n: total })}</span>
+        <span className="t-meta codex-landing-count">{tn(total, "codex.landing.count.one", "codex.landing.count.many")}</span>
       </div>
       {groups.length === 0 ? (
         <Empty>
