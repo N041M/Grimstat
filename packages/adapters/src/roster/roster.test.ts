@@ -418,6 +418,57 @@ describe("the GW app's attached-unit blocks", () => {
     expect(warnings.join(" ")).not.toMatch(/Attached as/i);
   });
 
+  it("works the block out from the datasheets when the app names no roles", () => {
+    // The same export in another language writes the same flags in words this parser has none of, and
+    // one English dialect leaves them out. The sheets say who can join what, so the block still resolves.
+    const french = [
+      "Ashen Wardens",
+      "Ember Vanguard (3 Detachment Points)",
+      "Incursion (1,000 points)",
+      "",
+      "Unités Attachées",
+      "",
+      "Unité 1 Attachée",
+      "",
+      "Warden Captain (95 points)",
+      "  • Attachée en tant que : Meneur (Personnage)",
+      "  • 1x Flux pistol",
+      "",
+      "Warden Squad (180 points)",
+      "  • Attachée en tant que : Gardes du Corps (Ligne)",
+      "  • 5x Warden",
+      "",
+      "AUTRES FICHES TECHNIQUES",
+      "",
+      "Ashen Crusher (150 points)",
+      "  • 1x Vortex cannon",
+    ].join("\n");
+    const { roster: r } = importRosterText(french, snapshot);
+    const captain = r.units.find((u) => u.datasheetId.includes("captain"))!;
+    const squad = r.units.find((u) => u.datasheetId.includes("squad"))!;
+    const crusher = r.units.find((u) => u.datasheetId.includes("crusher"))!;
+    expect(captain.attachedTo).toEqual({ unitId: squad.id, role: "leader" });
+    // the section heading closes the block, so the unit after it is not swept into the attachment
+    expect(crusher.attachedTo).toBeUndefined();
+    expect(captain.models.flatMap((g) => g.wargear).join(" ")).not.toMatch(/Attachée/);
+  });
+
+  it("reads an enhancement whose label it has no word for, and reports a flag it cannot read", () => {
+    const text = [
+      "Ashen Wardens",
+      "Ember Vanguard",
+      "",
+      "Warden Captain (95 points)",
+      "  • Optimisation : Ember Blade",
+      "  • Daemonic Allegiance : Slaanesh",
+      "  • 1x Flux pistol",
+    ].join("\n");
+    const { roster: r, warnings } = importRosterText(text, snapshot);
+    expect(r.units[0]!.enhancementId).toBe("enh:ashen-wardens:ember-blade");
+    expect(r.units[0]!.models.flatMap((g) => g.wargear)).toEqual(["Flux pistol"]);
+    expect(warnings).toEqual([`Warden Captain: ignored "Daemonic Allegiance : Slaanesh".`]);
+  });
+
   it("leaves a unit outside any block unattached", () => {
     const { roster: r } = importRosterText(text, snapshot);
     const crusher = r.units.find((u) => u.datasheetId.includes("crusher"));

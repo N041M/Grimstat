@@ -124,6 +124,10 @@ interface RawGroup {
 
 interface TextUnit {
   u: PendingUnit;
+  /** Flags whose label this parser has no word for, reported only if nothing else accounts for them. */
+  ignored?: string[];
+  /** The unit took its part in an attached-unit block, as the host or as a rider. */
+  inBlock?: boolean;
   /** New Recruit's `Char1:` prefix, used by the `+ WARLORD:` header line. */
   ref?: string;
   headerCount?: number;
@@ -538,7 +542,23 @@ export function parseDetSpec(text: string): DetSpec | undefined {
 }
 
 /** `Attached Unit 1` opens a block; `Attached Units` is the section heading above the blocks. */
-const ATTACH_BLOCK = /^attached\s+units?(?:\s+(\d+))?$/i;
+/**
+ * The heading that introduces a block of units attached to one another, numbered once per block. The
+ * official app writes it in the language it is set to, and the number moves with the language:
+ * "Attached Unit 1", "Unité 1 Attachée", "Unité Attachée 2".
+ */
+const ATTACH_BLOCK = /^(?:attached\s+units?(?:\s+\d+)?|unit[ée]s?(?:\s+\d+)?\s+attach[ée]es?(?:\s+\d+)?)$/i;
+
+/**
+ * A section heading the parser does not have the word for. The app writes the sections it lays a list
+ * out in — characters, battleline, the rest — in capitals, whatever language it is set to, so a line in
+ * capitals that is none of the things read before this one is one of those headings. It is only read as
+ * one once the list has started, because the name of a list can be written in capitals too.
+ */
+const CAPITALS = /^[^a-z]*[A-Z\u00C0-\u00DE][^a-z]*$/;
+
+/** `<label> : <value>`, the shape the app writes a unit's flags in, whatever its language calls them. */
+const LABELLED_FLAG = /^[^:0-9]{2,40}\s*:\s*(.+)$/;
 
 export function splitList(text: string): string[] {
   return text
@@ -712,10 +732,39 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
    * Supports beside it. The leader is usually listed first, so the host is only known once the block
    * ends — which is why these are collected and resolved on close rather than as they are read.
    */
-  let block: { host?: TextUnit; riders: { t: TextUnit; role: AttachRole }[] } | undefined;
+  let block: { host?: TextUnit; riders: { t: TextUnit; role: AttachRole }[]; members: TextUnit[] } | undefined;
+
+  /**
+   * Who leads whom in a block nothing marked, worked out from the datasheets rather than from the words.
+   *
+   * The app writes each unit's part in the block as a flag ("Attached as: Bodyguard"), and it writes it
+   * in whatever language it is set to, so a list exported in French carries the same block with none of
+   * its parts named. The sheets themselves say who can join what: the host is the member another member
+   * can lead or support, and that member is the rider. A block whose members have no such relation is
+   * left alone, which is what an unattached pair of units in the same block should be.
+   */
+  const inferAttachments = (members: readonly TextUnit[]) => {
+    const joins = (rider: TextUnit, host: TextUnit): boolean => rider.u.ds.leaderTo.includes(host.u.ds.id) || rider.u.ds.supportTo.includes(host.u.ds.id);
+    const host = members.find((h) => members.some((r) => r !== h && joins(r, h)));
+    if (!host) return;
+    host.inBlock = true;
+    for (const rider of members) {
+      if (rider === host || rider.u.attachHost || !joins(rider, host)) continue;
+      const supports = rider.u.ds.supportTo.includes(host.u.ds.id) && !rider.u.ds.leaderTo.includes(host.u.ds.id);
+      rider.u.attachHost = { unitId: host.u.id, role: supports ? "support" : "leader" };
+      rider.inBlock = true;
+    }
+  };
+
   const closeAttachBlock = () => {
     const host = block?.host;
-    if (host) for (const r of block!.riders) r.t.u.attachHost = { unitId: host.u.id, role: r.role };
+    if (host) {
+      host.inBlock = true;
+      for (const r of block!.riders) {
+        r.t.u.attachHost = { unitId: host.u.id, role: r.role };
+        r.t.inBlock = true;
+      }
+    } else if (block) inferAttachments(block.members);
     block = undefined;
   };
   let headerSeen = false;
@@ -806,6 +855,31 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
   };
 
   /**
+   * A bullet the app writes as `<label> : <value>` whose label this parser has no word for: the official
+   * app's French export writes "Optimisation : Murdermind" where the English writes "Enhancement:
+   * Murdermind", and "Attachée en tant que : Meneur" where it writes "Attached as: Leader".
+   *
+   * The label cannot be read, but the value often can: the snapshot knows every enhancement by name, and
+   * the app leaves those names alone in most of its languages. A value that names one is an enhancement
+   * line whatever the label says. Anything else is reported as a line that was not understood, which is
+   * what it is — read as wargear it would put the words of the flag on the models as a weapon.
+   */
+  const readLabelledFlag = (t: TextUnit, line: string): boolean => {
+    const m = LABELLED_FLAG.exec(line);
+    if (!m) return false;
+    // Thirty-two enhancements are printed with a word in brackets after the name, and the app adds one of
+    // its own to say that the line is an enhancement at all, so both spellings are tried.
+    const raw = m[1]!.trim();
+    const value = [raw, raw.replace(/\s*\([^)]*\)\s*$/, "").trim()].find((v) => v && ctx.findEnhancement(v));
+    if (value) {
+      t.u.enhancementName = value;
+      return true;
+    }
+    (t.ignored ??= []).push(line);
+    return true;
+  };
+
+  /**
    * A line that names a model: one of the unit's own, or a model carrying a datasheet of its own.
    * Returns false when the line names neither, so that the caller reads it as wargear as before.
    */
@@ -848,6 +922,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     if (ref) t.ref = ref;
     if (count) t.headerCount = count;
     units.push(t);
+    block?.members.push(t);
     st.cur = t;
     st.sub = null;
     if (!rest) return;
@@ -956,7 +1031,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     if (!isBullet && ATTACH_BLOCK.test(line)) {
       closeAttachBlock();
       // "Attached Unit 1" opens a block; the bare "Attached Units" heading only introduces them.
-      if (/\d/.test(line)) block = { riders: [] };
+      if (/\d/.test(line)) block = { riders: [], members: [] };
       st.cur = null;
       st.sub = null;
       continue;
@@ -967,7 +1042,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       lastDetachment.entry.forceDisposition = line;
       continue;
     }
-    if (!isBullet && SECTION_NAMES.has(normaliseName(line))) {
+    if (!isBullet && (SECTION_NAMES.has(normaliseName(line)) || (headerSeen && CAPITALS.test(line)))) {
       closeAttachBlock();
       st.cur = null;
       st.sub = null;
@@ -1009,6 +1084,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       continue;
     }
     if (applyFlag(st.cur, line)) continue;
+    if (isBullet && readLabelledFlag(st.cur, line)) continue;
 
     // ---- lines under a unit: "1x Sir Hekhtur: Close combat weapon, …" | "9x Battle Sister: 9 with …" | "1x Power fist"
     m = COUNT_ITEM.exec(line);
@@ -1053,6 +1129,13 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
   // The last block has no heading after it to close it.
   closeAttachBlock();
   for (const t of units) finishUnit(t, warnings);
+  // A flag whose label this parser has no word for is worth reporting only when nothing else answered it.
+  // The blocks those lines mark out are resolved from the datasheets, so a unit that came out attached has
+  // lost nothing by the line being unreadable, and saying so would be noise on every unit of every list.
+  for (const t of units) {
+    if (t.u.attachHost || t.u.attach || t.inBlock) continue;
+    for (const f of t.ignored ?? []) warnings.push(`${t.u.name}: ignored "${f}".`);
+  }
   if (warlordRef) {
     const refMatch = /^([A-Za-z]+\d+):\s*(.*)$/.exec(warlordRef);
     const byRef = refMatch ? units.find((t) => t.ref?.toLowerCase() === refMatch[1]!.toLowerCase()) : undefined;

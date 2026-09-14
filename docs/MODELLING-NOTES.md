@@ -91,6 +91,33 @@ wargear and the unit arrived at the size of its minimum composition. A ten-model
   writes only "Garran Branatar" has to reach "1 Kill Team Terminator (Garran Branatar)". The reader that
   counts models drops both, which is right for a count and wrong for a name.
 
+## A list exported in another language
+
+The official app writes a list in whatever language it is set to, and 16 of the 55 lists in
+`data/corpus` are French. The datasheet and weapon names come through in English, so the units and
+their weapons read normally. What changes are the app's own words: "Attachée en tant que : Meneur"
+where the English writes "Attached as: Leader", "Optimisation :" where it writes "Enhancement:".
+Those lines used to be stored on the models as wargear, and the lists lost every attachment and most
+of their enhancements.
+
+- **One phrase is known in both languages**: the heading that opens a block of attached units. Nothing
+  else about a block can be inferred without knowing where it starts and ends.
+- **Which unit hosts the block comes from the datasheets, not from the words.** The host is the member
+  another member can lead or support, and `leaderTo` and `supportTo` say which is which. This is the
+  same reading the `.rosz` importer has always done when the file does not say which side is which. It
+  also resolves two English lists in the corpus whose blocks name no roles at all.
+- **An enhancement is found by its value.** The app leaves the game's own names alone in most of its
+  languages, so a line whose value names an enhancement of this faction is an enhancement line whatever
+  the label in front of it says. 17 of the 22 in the corpus resolve this way.
+- **A section heading is recognised by its capitals** once the list has started. The app writes them in
+  capitals in every language, and the parser needs them because in English they are what closes a block.
+- **A flag that is still unread is reported, and only when nothing else answered it.** A unit that came
+  out attached lost nothing by its role line being unreadable, so saying so would be noise on every unit
+  of every list.
+- **Still lost**: the warlord mark, which is one word and nothing else, and an enhancement whose name was
+  translated too — 5 of the 22. Neither is recoverable without translated game data, which no source
+  ships.
+
 ## Play companion (the in-game tracker)
 - **Attached characters are folded into their host** everywhere the app resolves a roster unit, so a
   led squad is one row, one wound bar and one target — which is how the rules treat it. Who is
