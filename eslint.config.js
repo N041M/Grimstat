@@ -10,6 +10,8 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/dev-dist/**",
       "data/**",
+      // The recogniser's own bundles, copied in by scripts/ocr-assets.mjs rather than written here.
+      "apps/web/public/ocr/**",
       // A git worktree is a second checkout of this same repo. Linting it from the parent reports
       // every file twice, against a node_modules it does not have.
       ".claude/worktrees/**",
@@ -45,7 +47,7 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules,
   },
   {
-    files: ["apps/cli/**/*.ts", "**/scripts/**/*.ts", "**/*.config.{ts,js}"],
+    files: ["apps/cli/**/*.ts", "**/scripts/**/*.{ts,mjs}", "**/*.config.{ts,js}"],
     rules: { "no-console": "off" },
   },
   {

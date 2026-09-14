@@ -1,0 +1,782 @@
+[
+ {
+  "file": "01-slide-wardens-mixed-clean.png",
+  "list": "wardens-mixed",
+  "format": "slide",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "02-slide-wardens-small-clean.png",
+  "list": "wardens-small",
+  "format": "slide",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "03-slide-swarm-clean.png",
+  "list": "swarm",
+  "format": "slide",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "04-slide-swarm-big-clean.png",
+  "list": "swarm-big",
+  "format": "slide",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "20 x Thornlings",
+   "1 x Spine Drake",
+   "1 x Spine Drake",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "05-slide-allies-clean.png",
+  "list": "allies",
+  "format": "slide",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "06-slide-split-clean.png",
+  "list": "split",
+  "format": "slide",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "5 x Warden Squad",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "asksFaction": true
+ },
+ {
+  "file": "07-cards-wardens-mixed-clean.png",
+  "list": "wardens-mixed",
+  "format": "cards",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "08-cards-swarm-clean.png",
+  "list": "swarm",
+  "format": "cards",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "09-cards-allies-clean.png",
+  "list": "allies",
+  "format": "cards",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "10-cards1-wardens-small-clean.png",
+  "list": "wardens-small",
+  "format": "cards1",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "11-cardslight-wardens-mixed-clean.png",
+  "list": "wardens-mixed",
+  "format": "cardslight",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "12-cardslight-swarm-big-clean.png",
+  "list": "swarm-big",
+  "format": "cardslight",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "20 x Thornlings",
+   "1 x Spine Drake",
+   "1 x Spine Drake",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "13-table-wardens-mixed-clean.png",
+  "list": "wardens-mixed",
+  "format": "table",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "14-table-swarm-clean.png",
+  "list": "swarm",
+  "format": "table",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "15-table-allies-clean.png",
+  "list": "allies",
+  "format": "table",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "16-phone-wardens-mixed-clean.png",
+  "list": "wardens-mixed",
+  "format": "phone",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "17-phone-swarm-clean.png",
+  "list": "swarm",
+  "format": "phone",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "18-phone-split-clean.png",
+  "list": "split",
+  "format": "phone",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "5 x Warden Squad",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "asksFaction": true
+ },
+ {
+  "file": "19-chat-wardens-mixed-clean.png",
+  "list": "wardens-mixed",
+  "format": "chat",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "20-chat-swarm-big-clean.png",
+  "list": "swarm-big",
+  "format": "chat",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "20 x Thornlings",
+   "1 x Spine Drake",
+   "1 x Spine Drake",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "21-pagemono-wardens-mixed-clean.png",
+  "list": "wardens-mixed",
+  "format": "pagemono",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "22-pagesans-swarm-clean.png",
+  "list": "swarm",
+  "format": "pagesans",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "23-page-allies-clean.png",
+  "list": "allies",
+  "format": "page",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "24-slide-wardens-mixed-screenshot.png",
+  "list": "wardens-mixed",
+  "format": "slide",
+  "condition": "screenshot",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "25-cards-swarm-screenshot.png",
+  "list": "swarm",
+  "format": "cards",
+  "condition": "screenshot",
+  "strictness": "exact",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "26-table-wardens-small-screenshot.png",
+  "list": "wardens-small",
+  "format": "table",
+  "condition": "screenshot",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "27-phone-allies-screenshot.png",
+  "list": "allies",
+  "format": "phone",
+  "condition": "screenshot",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "28-cards-wardens-mixed-video.jpg",
+  "list": "wardens-mixed",
+  "format": "cards",
+  "condition": "video",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "29-cards-allies-video.jpg",
+  "list": "allies",
+  "format": "cards",
+  "condition": "video",
+  "strictness": "most",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "30-cards1-swarm-video.jpg",
+  "list": "swarm",
+  "format": "cards1",
+  "condition": "video",
+  "strictness": "exact",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "31-cardslight-wardens-small-video.jpg",
+  "list": "wardens-small",
+  "format": "cardslight",
+  "condition": "video",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "32-page-wardens-mixed-photo.jpg",
+  "list": "wardens-mixed",
+  "format": "page",
+  "condition": "photo",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "33-page-swarm-photo.jpg",
+  "list": "swarm",
+  "format": "page",
+  "condition": "photo",
+  "strictness": "exact",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "34-pagemono-allies-photo.jpg",
+  "list": "allies",
+  "format": "pagemono",
+  "condition": "photo",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "35-pagesans-swarm-big-photo.jpg",
+  "list": "swarm-big",
+  "format": "pagesans",
+  "condition": "photo",
+  "strictness": "most",
+  "expect": [
+   "20 x Thornlings",
+   "1 x Spine Drake",
+   "1 x Spine Drake",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "36-page-split-photo.jpg",
+  "list": "split",
+  "format": "page",
+  "condition": "photo",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "5 x Warden Squad",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "asksFaction": true
+ },
+ {
+  "file": "37-page-wardens-small-warm.jpg",
+  "list": "wardens-small",
+  "format": "page",
+  "condition": "warm",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "38-pagesans-wardens-mixed-bright.jpg",
+  "list": "wardens-mixed",
+  "format": "pagesans",
+  "condition": "bright",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "39-page-swarm-glare.jpg",
+  "list": "swarm",
+  "format": "page",
+  "condition": "glare",
+  "strictness": "most",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "40-pagemono-wardens-mixed-glare.jpg",
+  "list": "wardens-mixed",
+  "format": "pagemono",
+  "condition": "glare",
+  "strictness": "most",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "41-page-allies-angled.jpg",
+  "list": "allies",
+  "format": "page",
+  "condition": "angled",
+  "strictness": "most",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "42-pagesans-swarm-angled.jpg",
+  "list": "swarm",
+  "format": "pagesans",
+  "condition": "angled",
+  "strictness": "most",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "43-page-wardens-mixed-motion.jpg",
+  "list": "wardens-mixed",
+  "format": "page",
+  "condition": "motion",
+  "strictness": "most",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "44-page-swarm-big-dim.jpg",
+  "list": "swarm-big",
+  "format": "page",
+  "condition": "dim",
+  "strictness": "most",
+  "expect": [
+   "20 x Thornlings",
+   "1 x Spine Drake",
+   "1 x Spine Drake",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "45-page-wardens-mixed-dim.jpg",
+  "list": "wardens-mixed",
+  "format": "page",
+  "condition": "dim",
+  "strictness": "most",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "46-pagemono-wardens-small-dim.jpg",
+  "list": "wardens-small",
+  "format": "pagemono",
+  "condition": "dim",
+  "strictness": "most",
+  "expect": [
+   "1 x Warden Captain",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "47-cards-wardens-mixed-screenphoto.jpg",
+  "list": "wardens-mixed",
+  "format": "cards",
+  "condition": "screenphoto",
+  "strictness": "most",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "48-slide-swarm-screenphoto.jpg",
+  "list": "swarm",
+  "format": "slide",
+  "condition": "screenphoto",
+  "strictness": "most",
+  "expect": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings",
+   "1 x Spine Drake"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "49-slide-allies-lowres.jpg",
+  "list": "allies",
+  "format": "slide",
+  "condition": "lowres",
+  "strictness": "most",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "50-table-swarm-big-lowres.jpg",
+  "list": "swarm-big",
+  "format": "table",
+  "condition": "lowres",
+  "strictness": "most",
+  "expect": [
+   "20 x Thornlings",
+   "1 x Spine Drake",
+   "1 x Spine Drake",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:verdant-swarm",
+  "detachment": "det:verdant-swarm:thorn-tide"
+ }
+]

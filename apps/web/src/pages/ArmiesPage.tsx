@@ -13,6 +13,7 @@ import { download } from "../lib/download";
 import { Dialog, Empty, Field, Icon, Popover, useConfirm } from "../components/ui";
 import { ProportionBar } from "../components/kit";
 import { PageHeader, useContextNewAction } from "../components/shell";
+import { PictureImport } from "../components/roster/PictureImport";
 import { t, tn, type I18nKey } from "../i18n";
 
 export const battleSizeKey = (s: BattleSize): I18nKey => `battleSize.${s}` as I18nKey;
@@ -77,6 +78,8 @@ export function ArmiesPage() {
   const [fileName, setFileName] = useState<string | undefined>(undefined);
   /** A BattleScribe/New Recruit file is a zip rather than text, so the bytes are kept until the import runs. */
   const [bytes, setBytes] = useState<Uint8Array | undefined>(undefined);
+  /** Pictures of a list, which go to the reader rather than to the text importer. */
+  const [pictures, setPictures] = useState<File[] | undefined>(undefined);
   const [over, setOver] = useState(false);
   const [imported, setImported] = useState<{ id: string; name: string; warnings: string[] } | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -169,6 +172,7 @@ export function ArmiesPage() {
     setImported(undefined);
     setFileName(undefined);
     setBytes(undefined);
+    setPictures(undefined);
     setOver(false);
   };
 
@@ -289,6 +293,11 @@ export function ArmiesPage() {
    */
   const readFile = async (file: File | undefined) => {
     if (!file) return;
+    if (file.type.startsWith("image/")) {
+      setPictures([file]);
+      setFileName(file.name);
+      return;
+    }
     try {
       const buffer = new Uint8Array(await file.arrayBuffer());
       setFileName(file.name);
@@ -303,11 +312,46 @@ export function ArmiesPage() {
       notify(t("armies.fileReadFailed", { name: file.name }), "error");
     }
   };
+  /** Several pictures at once are one list across more than one shot, so they are read together. */
+  const takeFiles = (files: FileList | null | undefined) => {
+    const all = [...(files ?? [])];
+    const images = all.filter((f) => f.type.startsWith("image/"));
+    if (images.length > 1) {
+      setPictures(images);
+      setFileName(t("armies.picturesLoaded", { n: images.length }));
+      return;
+    }
+    void readFile(all[0]);
+  };
+
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     setOver(false);
-    void readFile(e.dataTransfer.files[0]);
+    takeFiles(e.dataTransfer.files);
   };
+
+  /*
+   * A screenshot taken from a video goes to the clipboard and never becomes a file, so pasting one
+   * into the dialog has to work.
+   *
+   * The listener is on the document rather than on the drop zone. A paste event is delivered to
+   * whatever holds the focus, and the drop zone is a div that never does, so a reader who opened the
+   * dialog and pressed paste would have had nothing happen at all unless they had first clicked into
+   * the text field. Only a paste carrying a picture is taken; pasting a list as text still goes to
+   * the field below, which is where a reader expects it.
+   */
+  useEffect(() => {
+    if (dialog !== "import" || pictures) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const images = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+      if (!images.length) return;
+      e.preventDefault();
+      setPictures(images);
+      setFileName(images.length > 1 ? t("armies.picturesLoaded", { n: images.length }) : (images[0]?.name ?? ""));
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [dialog, pictures]);
 
   // The context column's "+ New army" affordance opens this page's dialog.
   useContextNewAction("armies", () => {
@@ -396,7 +440,25 @@ export function ArmiesPage() {
       </Dialog>
 
       <Dialog open={dialog === "import" && !!snapshot} onClose={closeDialog} title={t("armies.importTitle")} wide>
-        {imported ? (
+        {pictures && snapshot ? (
+          <PictureImport
+            snapshot={snapshot}
+            pictures={pictures}
+            onCancel={() => {
+              setPictures(undefined);
+              setFileName(undefined);
+            }}
+            onSave={(drafted) =>
+              void run(async () => {
+                const r = Roster.parse({ ...drafted, id: newId("roster"), snapshotId: snapshot.id, gameSystemId: snapshot.gameSystemId });
+                await saveRosterWithVersion(r);
+                notify(t("armies.imported", { name: r.name }), "success");
+                closeDialog();
+                navigate("armies", false, r.id);
+              })
+            }
+          />
+        ) : imported ? (
           <div className="stack">
             <p style={{ margin: 0 }}>
               <strong>{t("armies.importWarningsTitle", { name: imported.name, n: imported.warnings.length })}</strong>
@@ -451,7 +513,8 @@ export function ArmiesPage() {
               <button type="button" className="link-btn" onClick={() => fileInput.current?.click()}>
                 {t("armies.chooseFile")}
               </button>
-              <input ref={fileInput} type="file" accept=".txt,.rosz,.ros,.xml,.json,text/plain,application/json,application/zip" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(e) => void readFile(e.target.files?.[0])} />
+              <input ref={fileInput} type="file" accept=".txt,.rosz,.ros,.xml,.json,.png,.jpg,.jpeg,.webp,text/plain,application/json,application/zip,image/png,image/jpeg,image/webp" className="sr-only" tabIndex={-1} aria-hidden="true" multiple
+              onChange={(e) => takeFiles(e.target.files)} />
               {fileName ? <div className="small ok-text">{t("armies.fileLoaded", { name: fileName })}</div> : null}
             </div>
             <Field label={t("armies.importText")}>

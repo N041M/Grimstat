@@ -225,6 +225,13 @@ export default defineConfig({
         // fonts and every screen reflows. The pattern also picks up the icons and the manifest,
         // because public/ is copied into the build output this globs.
         globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest,woff2,json}"],
+        /*
+         * The recogniser's own files, which this pattern would otherwise sweep into the precache.
+         * They are around 28 MB and only a reader who imports a picture ever needs them, so they are
+         * fetched the first time one does and cached from then on. Precaching them would make every
+         * first visit pay for a feature most visits never reach.
+         */
+        globIgnores: ["**/ocr/**"],
         navigateFallback: "index.html",
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },

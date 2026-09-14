@@ -1,0 +1,391 @@
+[
+ {
+  "file": "01-none-prose-clean.png",
+  "kind": "none",
+  "label": "prose",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "02-none-menu-clean.png",
+  "kind": "none",
+  "label": "menu",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "03-none-receipt-clean.png",
+  "kind": "none",
+  "label": "receipt",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "04-none-pairings-clean.png",
+  "kind": "none",
+  "label": "pairings",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "05-none-code-clean.png",
+  "kind": "none",
+  "label": "code",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "06-none-shopping-clean.png",
+  "kind": "none",
+  "label": "shopping",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "07-none-chat-clean.png",
+  "kind": "none",
+  "label": "chat",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "08-none-schedule-clean.png",
+  "kind": "none",
+  "label": "schedule",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "09-none-blank-clean.png",
+  "kind": "none",
+  "label": "blank",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "10-none-noise-clean.png",
+  "kind": "none",
+  "label": "noise",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "11-none-menu-photo.jpg",
+  "kind": "none",
+  "label": "menu",
+  "condition": "photo",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "12-none-receipt-dim.jpg",
+  "kind": "none",
+  "label": "receipt",
+  "condition": "dim",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "13-nonsense-othergame-clean.png",
+  "kind": "nonsense",
+  "label": "othergame",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "14-nonsense-othergame-photo.jpg",
+  "kind": "nonsense",
+  "label": "othergame",
+  "condition": "photo",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "15-nonsense-nearmiss-clean.png",
+  "kind": "nonsense",
+  "label": "nearmiss",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "16-nonsense-nearmiss-photo.jpg",
+  "kind": "nonsense",
+  "label": "nearmiss",
+  "condition": "photo",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "17-nonsense-absurdcounts-clean.png",
+  "kind": "nonsense",
+  "label": "absurdcounts",
+  "condition": "clean",
+  "allowed": [
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "atLeast": 0
+ },
+ {
+  "file": "18-nonsense-absurdpoints-clean.png",
+  "kind": "nonsense",
+  "label": "absurdpoints",
+  "condition": "clean",
+  "allowed": [
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Warden Captain"
+  ],
+  "atLeast": 0
+ },
+ {
+  "file": "19-nonsense-wargearonly-clean.png",
+  "kind": "nonsense",
+  "label": "wargearonly",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "20-nonsense-factiononly-clean.png",
+  "kind": "nonsense",
+  "label": "factiononly",
+  "condition": "clean",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "21-nonsense-repeated-clean.png",
+  "kind": "nonsense",
+  "label": "repeated",
+  "condition": "clean",
+  "allowed": [
+   "5 x Warden Squad"
+  ],
+  "atLeast": 0
+ },
+ {
+  "file": "22-nonsense-prosewithnames-clean.png",
+  "kind": "nonsense",
+  "label": "prosewithnames",
+  "condition": "clean",
+  "allowed": [
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer",
+   "1 x Spine Drake",
+   "10 x Thornlings",
+   "20 x Thornlings"
+  ],
+  "atLeast": 0
+ },
+ {
+  "file": "23-nonsense-noise-lowres.jpg",
+  "kind": "nonsense",
+  "label": "noise",
+  "condition": "lowres",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "24-nonsense-menu-screenphoto.jpg",
+  "kind": "nonsense",
+  "label": "menu",
+  "condition": "screenphoto",
+  "allowed": [],
+  "atLeast": 0
+ },
+ {
+  "file": "25-partial-wardens-mixed-cropped.png",
+  "kind": "partial",
+  "label": "cropped",
+  "condition": "clean",
+  "allowed": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad"
+  ],
+  "never": [
+   "5 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "atLeast": 2
+ },
+ {
+  "file": "26-partial-wardens-mixed-thumb.jpg",
+  "kind": "partial",
+  "label": "thumb",
+  "condition": "photo",
+  "allowed": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad"
+  ],
+  "never": [
+   "1 x Ashen Crusher"
+  ],
+  "atLeast": 3
+ },
+ {
+  "file": "27-partial-swarm-shadow.jpg",
+  "kind": "partial",
+  "label": "shadow",
+  "condition": "photo",
+  "allowed": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings"
+  ],
+  "never": [
+   "1 x Spine Drake"
+  ],
+  "atLeast": 2
+ },
+ {
+  "file": "28-partial-allies-tear.png",
+  "kind": "partial",
+  "label": "tear",
+  "condition": "clean",
+  "allowed": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad"
+  ],
+  "never": [
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "atLeast": 2
+ },
+ {
+  "file": "29-partial-swarm-big-crease.jpg",
+  "kind": "partial",
+  "label": "crease",
+  "condition": "photo",
+  "allowed": [
+   "20 x Thornlings",
+   "1 x Spine Drake",
+   "1 x Spine Drake"
+  ],
+  "never": [
+   "1 x Swarm Seer"
+  ],
+  "atLeast": 2
+ },
+ {
+  "file": "30-partial-wardens-mixed-scrolled.png",
+  "kind": "partial",
+  "label": "scrolled",
+  "condition": "clean",
+  "allowed": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad"
+  ],
+  "never": [
+   "1 x Ashen Crusher"
+  ],
+  "atLeast": 3
+ },
+ {
+  "file": "31-partial-allies-blown.jpg",
+  "kind": "partial",
+  "label": "blown",
+  "condition": "bright",
+  "allowed": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "never": [
+   "1 x Swarm Seer"
+  ],
+  "atLeast": 3
+ },
+ {
+  "file": "32-partial-swarm-watermark.png",
+  "kind": "partial",
+  "label": "watermark",
+  "condition": "clean",
+  "allowed": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings"
+  ],
+  "never": [
+   "1 x Spine Drake"
+  ],
+  "atLeast": 2
+ },
+ {
+  "file": "33-partial-wardens-small-cropped.jpg",
+  "kind": "partial",
+  "label": "cropped",
+  "condition": "photo",
+  "allowed": [
+   "1 x Warden Captain",
+   "5 x Warden Squad"
+  ],
+  "never": [
+   "1 x Ashen Crusher"
+  ],
+  "atLeast": 1
+ },
+ {
+  "file": "34-partial-allies-tear.png",
+  "kind": "partial",
+  "label": "tear",
+  "condition": "clean",
+  "allowed": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher"
+  ],
+  "never": [
+   "1 x Swarm Seer"
+  ],
+  "atLeast": 3
+ },
+ {
+  "file": "35-unreadable-wardens-mixed-shadow.jpg",
+  "kind": "unreadable",
+  "label": "shadow",
+  "condition": "dim",
+  "allowed": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad"
+  ],
+  "atLeast": 0
+ },
+ {
+  "file": "36-unreadable-swarm-thumb.jpg",
+  "kind": "unreadable",
+  "label": "thumb",
+  "condition": "dim",
+  "allowed": [
+   "1 x Swarm Seer",
+   "10 x Thornlings",
+   "10 x Thornlings"
+  ],
+  "atLeast": 0
+ }
+]
