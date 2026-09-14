@@ -98,6 +98,32 @@ export function codexGroups(datasheets: readonly Datasheet[], factionId: string,
   return PICKER_GROUP_ORDER.map((group) => ({ group, sheets: rows.filter((d) => pickerGroupOf(d) === group) })).filter((g) => g.sheets.length > 0);
 }
 
+/** A group as far as it has been drawn, beside the number of sheets it holds in all. */
+export interface ShownGroup extends CodexGroup {
+  total: number;
+}
+
+/** How many sheets a codex list draws before the reader scrolls, and how many more each time. */
+export const CODEX_PAGE = 80;
+
+/**
+ * The first `limit` sheets of the groups, in group order, each group told how many it holds in all.
+ *
+ * With no faction chosen a list covers the whole snapshot, and drawing seventeen hundred of
+ * anything takes long enough to see. The groups are cut to what the reader has scrolled to; the
+ * totals beside the headings stay the real ones, so the list still says how much is there.
+ */
+export function shownGroups(groups: readonly CodexGroup[], limit: number): ShownGroup[] {
+  const out: ShownGroup[] = [];
+  let left = Math.max(0, limit);
+  for (const g of groups) {
+    if (left <= 0) break;
+    out.push({ group: g.group, sheets: g.sheets.slice(0, left), total: g.sheets.length });
+    left -= g.sheets.length;
+  }
+  return out;
+}
+
 /**
  * Datasheets for the compare view's "add" box, best match first: a name that starts with the
  * query outranks one that merely contains it, and the sheets already in the set are left out.

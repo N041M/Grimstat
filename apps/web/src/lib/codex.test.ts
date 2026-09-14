@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
 import type { Datasheet } from "@grimstat/schema";
-import { abilityGroups, ALL_FACTIONS, bestIndices, characteristicCell, characteristicRow, characteristicText, codexFactions, codexGroups, COMPARE_CAP, differs, effectiveFaction, ledBy, maxPoints, minPoints, parseCompareSet, pointsLines, representativeProfile, searchDatasheets, sheetsById, toggleCompare, unitFigures, unitWounds, wargearPrices, weaponGroups } from "./codex";
+import { abilityGroups, ALL_FACTIONS, bestIndices, characteristicCell, characteristicRow, characteristicText, codexFactions, codexGroups, COMPARE_CAP, differs, effectiveFaction, ledBy, maxPoints, minPoints, parseCompareSet, pointsLines, representativeProfile, searchDatasheets, sheetsById, shownGroups, toggleCompare, unitFigures, unitWounds, wargearPrices, weaponGroups } from "./codex";
 
 const snapshot = loadSyntheticSnapshot();
 const sheet = (id: string): Datasheet => snapshot.data.datasheets.find((d) => d.id === id)!;
@@ -55,6 +55,23 @@ describe("browsing the snapshot", () => {
     expect(effectiveFaction("faction:gone", factions, squad)).toBe("faction:ashen-wardens");
     expect(effectiveFaction("", factions, undefined)).toBe(ALL_FACTIONS);
     expect(effectiveFaction("", [], undefined)).toBe(ALL_FACTIONS);
+  });
+
+  it("draws a batch of the groups at a time, each still saying how many it holds", () => {
+    const groups = codexGroups(snapshot.data.datasheets, ALL_FACTIONS, "");
+    expect(groups.map((g) => [g.group, g.sheets.length])).toEqual([
+      ["character", 2],
+      ["battleline", 2],
+      ["other", 2],
+    ]);
+    // Three sheets in is halfway through the second group: the third group is not drawn at all.
+    expect(shownGroups(groups, 3).map((g) => [g.group, g.sheets.map((d) => d.name), g.total])).toEqual([
+      ["character", ["Swarm Seer", "Warden Captain"], 2],
+      ["battleline", ["Thornlings"], 2],
+    ]);
+    expect(shownGroups(groups, 0)).toEqual([]);
+    expect(shownGroups(groups, 99).flatMap((g) => g.sheets)).toHaveLength(6);
+    expect(shownGroups([], 10)).toEqual([]);
   });
 
   it("resolves compare ids in order and drops the ones the snapshot lacks", () => {

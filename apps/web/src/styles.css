@@ -7530,6 +7530,10 @@ button.battle-scope-btn:hover {
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
 }
+/* Where the list stops; scrolling to it draws the next batch. A line tall, so it has a box to see. */
+.codex-more {
+  height: 1px;
+}
 .codex-faction {
   flex: none;
 }

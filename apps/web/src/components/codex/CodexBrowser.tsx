@@ -1,11 +1,12 @@
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import type { Snapshot } from "@grimstat/schema";
 import { UnitArt } from "../UnitArt";
 import { ContextEmpty, ContextList, ContextRow } from "../shell";
-import { minPoints, sizeBounds, type CodexFaction, type CodexGroup } from "../../lib/codex";
+import { CODEX_PAGE, minPoints, shownGroups, sizeBounds, type CodexFaction, type CodexGroup } from "../../lib/codex";
 import { fmtInt } from "../../lib/format";
 import { hrefFor } from "../../router";
 import { CodexTools, ColumnAction, GROUP_KEY, NoMatch, sizeText } from "./shared";
+import { useGrowingList } from "../../hooks/useGrowingList";
 import { t } from "../../i18n";
 
 interface Props {
@@ -29,6 +30,9 @@ interface Props {
  * points at the smallest size and its role and size beneath. A diamond marks a sheet in compare.
  */
 export function CodexBrowser({ snapshot, factions, factionId, onFaction, query, onQuery, groups, selectedId, compare, onOpenCompare, onPick }: Props) {
+  const total = groups.reduce((n, g) => n + g.sheets.length, 0);
+  const { limit, moreRef } = useGrowingList(CODEX_PAGE, groups, total);
+  const shown = useMemo(() => shownGroups(groups, limit), [groups, limit]);
   return (
     <div className="codex-ctx">
       <CodexTools factions={factions} factionId={factionId} onFaction={onFaction} query={query} onQuery={onQuery} className="codex-ctx-tools" />
@@ -37,7 +41,7 @@ export function CodexBrowser({ snapshot, factions, factionId, onFaction, query, 
           <NoMatch query={query} factions={factions} factionId={factionId} onFaction={onFaction} />
         </ContextEmpty>
       ) : null}
-      {groups.map((g) => (
+      {shown.map((g) => (
         <Fragment key={g.group}>
           <div className="codex-group-label">{t(GROUP_KEY[g.group])}</div>
           <ContextList>
@@ -68,6 +72,7 @@ export function CodexBrowser({ snapshot, factions, factionId, onFaction, query, 
           </ContextList>
         </Fragment>
       ))}
+      <div className="codex-more" ref={moreRef} aria-hidden="true" />
       <ColumnAction label={t("ctxcol.openCompare", { n: compare.length })} onClick={onOpenCompare} />
     </div>
   );

@@ -1,4 +1,4 @@
-import type { Ability, Archetype, AttachedCharacter, CoverageReport, Datasheet, EffectRecord, ManualToggle, PriceTier, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
+import type { Ability, Archetype, AttachedCharacter, CoverageReport, Datasheet, EffectRecord, ManualToggle, PriceRule, PriceTier, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
 import { createContext } from "@grimstat/resolver";
 import { abilityEffects, applyFnpToModels } from "./patterns";
 import { CH } from "./channels";
@@ -16,9 +16,31 @@ function abilitiesOf(ds: Datasheet, snapshot: Snapshot): Ability[] {
   return ds.abilityIds.map((id) => byId.get(id)).filter((a): a is Ability => !!a);
 }
 
+/**
+ * The first-copy price rule of each datasheet the snapshot prices.
+ *
+ * Pricing one sheet used to walk every rule in the snapshot. A screen that prices a whole faction
+ * — the codex list, the compare grid, the add-unit panel — did that once per sheet, so a full
+ * snapshot cost about three million comparisons to draw one page. The answer depends only on the
+ * snapshot, so it is built once and kept on it, the way the adapters keep their name indexes.
+ */
+const FIRST_COPY_RULES = new WeakMap<Snapshot, ReadonlyMap<string, PriceRule>>();
+function firstCopyRules(snapshot: Snapshot): ReadonlyMap<string, PriceRule> {
+  const cached = FIRST_COPY_RULES.get(snapshot);
+  if (cached) return cached;
+  const map = new Map<string, PriceRule>();
+  // First rule wins, as `find` on the unindexed list did, so a sheet with several matching rules
+  // is priced from the same one as before.
+  for (const r of snapshot.data.priceRules) {
+    if (r.copyRange.min > 1 || (r.copyRange.max !== undefined && r.copyRange.max < 1)) continue;
+    if (!map.has(r.datasheetId)) map.set(r.datasheetId, r);
+  }
+  FIRST_COPY_RULES.set(snapshot, map);
+  return map;
+}
+
 export function pointsFor(ds: Datasheet, snapshot: Snapshot, modelCount: number): number | undefined {
-  const rules = snapshot.data.priceRules.filter((r) => r.datasheetId === ds.id && r.copyRange.min <= 1 && (r.copyRange.max === undefined || r.copyRange.max >= 1));
-  const rule = rules[0];
+  const rule = firstCopyRules(snapshot).get(ds.id);
   if (!rule) return ds.fallbackPoints;
   // The largest tier the unit is big enough for. Tiers arrive in whatever order the source listed
   // them, so the search has to start empty; seeding it with the first tier lets a large tier listed

@@ -1,11 +1,13 @@
+import { useMemo } from "react";
 import type { Datasheet, Snapshot } from "@grimstat/schema";
 import { UnitArt } from "../UnitArt";
 import { Empty } from "../ui";
-import { COMPARE_CAP, representativeProfile, sizeBounds, unitFigures, type CodexFaction, type CodexGroup } from "../../lib/codex";
+import { CODEX_PAGE, COMPARE_CAP, representativeProfile, shownGroups, sizeBounds, unitFigures, type CodexFaction, type CodexGroup } from "../../lib/codex";
 import { hrefFor } from "../../router";
 import { CodexTools, GROUP_KEY, NoMatch, pointsText, sizeText } from "./shared";
 import { t } from "../../i18n";
 import { useOwnedModels } from "../../hooks/useOwnedModels";
+import { useGrowingList } from "../../hooks/useGrowingList";
 
 function SheetCard({ ds, snapshot, owned, inCompare, full, onToggle, onPick }: { ds: Datasheet; snapshot: Snapshot; owned: number; inCompare: boolean; full: boolean; onToggle: () => void; onPick: () => void }) {
   const rep = representativeProfile(ds);
@@ -80,6 +82,8 @@ export function CodexLanding({ snapshot, factions, factionId, onFaction, query, 
   const full = compare.length >= COMPARE_CAP;
   // What the shelf holds, so a unit already owned says so while it is being browsed.
   const owned = useOwnedModels();
+  const { limit, moreRef } = useGrowingList(CODEX_PAGE, groups, total);
+  const shown = useMemo(() => shownGroups(groups, limit), [groups, limit]);
   return (
     <div className="codex-landing">
       <p className="codex-lede">{t("codex.landing.lede")}</p>
@@ -92,10 +96,10 @@ export function CodexLanding({ snapshot, factions, factionId, onFaction, query, 
           <NoMatch query={query} factions={factions} factionId={factionId} onFaction={onFaction} />
         </Empty>
       ) : null}
-      {groups.map((g) => (
+      {shown.map((g) => (
         <section key={g.group} className="codex-group">
           <h2 className="codex-group-title">
-            {t(GROUP_KEY[g.group])} <span>{g.sheets.length}</span>
+            {t(GROUP_KEY[g.group])} <span>{g.total}</span>
           </h2>
           <div className="codex-cards">
             {g.sheets.map((d) => (
@@ -104,6 +108,7 @@ export function CodexLanding({ snapshot, factions, factionId, onFaction, query, 
           </div>
         </section>
       ))}
+      <div className="codex-more" ref={moreRef} aria-hidden="true" />
     </div>
   );
 }
