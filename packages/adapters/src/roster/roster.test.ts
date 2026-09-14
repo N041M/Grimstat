@@ -512,6 +512,17 @@ describe("a bare count line that names a weapon", () => {
   });
 });
 
+describe("a model line padded with spaces", () => {
+  // The pattern the `1 Custodian Guard with guardian spear` line is read with grows a lazy name group
+  // against `\s+with\s+`, and the meta worker runs the importer over every stored list.
+  it("is read in bounded time", () => {
+    const text = ["Ashen Wardens", "Ember Vanguard", "Warden Squad (180 points)", `• 1${" ".repeat(2000)}Warden`].join("\n");
+    const started = performance.now();
+    importRosterText(text, snapshot);
+    expect(performance.now() - started).toBeLessThan(50);
+  });
+});
+
 describe("the snapshot's name index", () => {
   const text = ["Ashen Wardens - Mine (1000 points)", "Ashen Wardens", "Ember Vanguard", "Incursion (1000 points)", "", "Warden Captain (95 points)", "", "Warden Squad (180 points)", "• 1x Warden Sergeant", "• 4x Warden"].join("\n");
 

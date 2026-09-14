@@ -588,6 +588,31 @@ export function parseWargearItems(text: string): WargearItem[] {
   return out;
 }
 
+/** The count of `1 Custodian Guard with guardian spear`, which is written without the `x` that `COUNT_ITEM` needs. */
+const MODEL_COUNT = /^(\d+)\s+/;
+
+/**
+ * `Custodian Guard with guardian spear` cut at the first "with" standing on its own: the model in front of
+ * it and the wargear behind it.
+ *
+ * Read as a scan for the same reason `parseDetSpec` is. The pattern `(.+?)\s+with\s+` has the name grow a
+ * character at a time and the whitespace either side of the word grow and shrink against every position it
+ * reaches, which on a line carrying two thousand spaces takes six seconds. A scan works because the word
+ * itself is fixed: each "with" of the line is found once, and the characters either side say whether it
+ * stands on its own.
+ */
+function firstWith(text: string): { label: string; wargear: string } | undefined {
+  const lower = text.toLowerCase();
+  for (let at = lower.indexOf("with"); at >= 0; at = lower.indexOf("with", at + 4)) {
+    const after = at + 4;
+    if (at === 0 || !WS.test(text[at - 1]!) || after >= text.length || !WS.test(text[after]!)) continue;
+    const label = text.slice(0, at).trim();
+    const wargear = text.slice(after).trim();
+    if (label && wargear) return { label, wargear };
+  }
+  return undefined;
+}
+
 /** Flat wargear list, one entry per copy; loses the `N with` counts, so parsers want `parseWargearItems`. */
 export function parseWargearList(text: string): string[] {
   return parseWargearItems(text).flatMap((i) => Array.from({ length: i.copies ?? 1 }, () => i.name));
@@ -1006,8 +1031,9 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     }
     // "1 Custodian Guard with guardian spear" — a model and its loadout on one line, without the `x`.
     // Only a name that is a model of the unit takes this branch; everything else is wargear as before.
-    m = /^(\d+)\s+(.+?)\s+with\s+(.+)$/i.exec(line);
-    if (m && addModelLine(st.cur, m[2]!.trim(), Number(m[1]), parseWargearItems(m[3]!))) continue;
+    const counted = MODEL_COUNT.exec(line);
+    const cut = counted && firstWith(line.slice(counted[0]!.length));
+    if (cut && addModelLine(st.cur, cut.label, Number(counted![1]), parseWargearItems(cut.wargear))) continue;
     if (isBullet) {
       // "• Bolt pistol" style single wargear line
       addWargear(st.sub ?? st.cur, line, 0);
