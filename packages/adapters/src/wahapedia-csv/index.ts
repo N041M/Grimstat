@@ -156,9 +156,23 @@ function parseCompositionRange(desc: string): { min?: number; max?: number } {
   return { min, max };
 }
 
+/**
+ * How many models a points-table row covers. Most rows say "5 models", but some export rows name the
+ * models instead, either one kind ("10 Gretchin") or a unit made of several ("1 Spanner and 4 Burna
+ * Boyz", "1 Sword Brother, 5 Initiates and 4 Neophytes"). A named row prices the whole unit, so the
+ * counts in it are added up. A row that does not start with a number is not a size at all.
+ */
 function parseModelsCount(desc: string): number | null {
-  const m = /^(\d+)\s+models?\b/i.exec(desc.trim());
-  return m ? Number(m[1]) : null;
+  const text = desc.trim();
+  const m = /^(\d+)\s+models?\b/i.exec(text);
+  if (m) return Number(m[1]);
+  let total = 0;
+  for (const part of text.split(/\s*,\s*|\s+and\s+/i)) {
+    const p = /^(\d+)\s+\S/.exec(part.trim());
+    if (!p) return null;
+    total += Number(p[1]);
+  }
+  return total > 0 ? total : null;
 }
 
 /**
@@ -584,8 +598,11 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
       }
       const points = parseInt0(cost.replace(/[^0-9]/g, ""));
       if (points === null) continue;
-      if (wargearMode || /^per\s+/i.test(desc)) {
-        const item = desc.replace(/^per\s+/i, "");
+      // An extra bought on top of the unit's own size. One export marks it on the cost ("+55"), the
+      // other on the description ("+ 1 Invader ATV"); both name the item rather than a unit size.
+      const addon = cost.trim().startsWith("+") || desc.startsWith("+");
+      if (wargearMode || addon || /^per\s+/i.test(desc)) {
+        const item = desc.replace(/^per\s+/i, "").replace(/^\+\s*(?:\d+\s+)?/, "");
         const key = `${ds.id}|${item}`;
         if (!seenWargear.has(key)) {
           seenWargear.add(key);
@@ -598,7 +615,10 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
         warnings.push(`Datasheets_models_cost: ${ds.name}: unparsable cost row "${desc}"`);
         continue;
       }
-      if (!tiers.some((t) => t.models === models)) tiers.push({ models, points }); // the export repeats rows for some datasheets
+      // The export repeats rows for some datasheets, and lists two builds of one size for others (six
+      // models as six of one kind, or as three each of two). The first row of a size is the one kept,
+      // which is also the one the resolver would have priced the unit from.
+      if (!tiers.some((t) => t.models === models)) tiers.push({ models, points });
     }
     flush();
   }

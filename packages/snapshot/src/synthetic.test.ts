@@ -47,7 +47,13 @@ describe("synthetic snapshot fixture", () => {
     expect(det.ruleAbilityIds).toHaveLength(1);
 
     expect(d.priceRules.filter((r) => r.datasheetId === "ds:ashen-wardens:warden-squad").map((r) => r.copyRange)).toEqual([{ min: 1, max: 2 }, { min: 3 }]);
-    expect(d.wargearPrices).toEqual([{ datasheetId: "ds:ashen-wardens:ashen-crusher", item: "Fusion beamer", points: 10 }]);
+    // The Warden Squad pair comes from points rows that name an extra rather than a unit size
+    // ("Warden Champion" at "+15", "+ 1 Ash Sentry" at 20), the way the upstream export writes them.
+    expect(d.wargearPrices).toEqual([
+      { datasheetId: "ds:ashen-wardens:ashen-crusher", item: "Fusion beamer", points: 10 },
+      { datasheetId: "ds:ashen-wardens:warden-squad", item: "Ash Sentry", points: 20 },
+      { datasheetId: "ds:ashen-wardens:warden-squad", item: "Warden Champion", points: 15 },
+    ]);
     expect(d.stratagems.map((s) => s.cpCost)).toContain(2);
   });
 

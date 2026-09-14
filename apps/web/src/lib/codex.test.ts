@@ -213,7 +213,8 @@ describe("one sheet", () => {
 
   it("carries the priced wargear", () => {
     expect(wargearPrices(crusher, snapshot)).toEqual([{ item: "Fusion beamer", points: 10 }]);
-    expect(wargearPrices(squad, snapshot)).toEqual([]);
+    expect(wargearPrices(squad, snapshot)).toEqual([{ item: "Ash Sentry", points: 20 }, { item: "Warden Champion", points: 15 }]);
+    expect(wargearPrices(thornlings, snapshot)).toEqual([]);
   });
 
   it("splits weapons by kind in datasheet order", () => {

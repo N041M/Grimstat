@@ -5,6 +5,14 @@ import { readFixtureDir } from "../test-utils";
 const out = parse(readFixtureDir("wahapedia", /\.csv$/), { fetchedAt: "2026-01-01T00:00:00.000Z" });
 const ds = (name: string) => out.datasheets!.find((d) => d.name === name)!;
 
+/** One faction with one datasheet (000000911), priced by the given rows of Datasheets_models_cost. */
+const costTable = (rows: string): Record<string, string> => ({
+  "Factions.csv": "id|name|link|\nAW|Ashen Wardens|https://example.invalid/factions/ashen-wardens|\n",
+  "Datasheets.csv": "id|name|faction_id|source_id|legend|role|loadout|transport|virtual|is_support|leader_head|leader_footer|damaged_w|damaged_description|link|\n000000911|Cinder Watch|AW|000000001||Other Datasheets|||false|false|||||\n",
+  "Datasheets_models_cost.csv": `datasheet_id|line|description|cost|\n${rows}`,
+});
+const tiersFor = (rows: string): unknown => parse(costTable(rows)).priceRules!.map((r) => r.tiers);
+
 describe("wahapedia-csv adapter (synthetic fixture)", () => {
   it("uses the last update as the source ref and skips virtual datasheets", () => {
     expect(out.sourceRef.ref).toBe("2026-01-01 00:00:00");
@@ -86,9 +94,36 @@ describe("wahapedia-csv adapter (synthetic fixture)", () => {
       [{ min: 1, max: 2 }, [{ models: 5, points: 90 }, { models: 10, points: 180 }]],
       [{ min: 3 }, [{ models: 5, points: 100 }, { models: 10, points: 200 }]],
     ]);
-    expect(out.wargearPrices).toEqual([{ datasheetId: "ds:ashen-wardens:ashen-crusher", item: "Fusion beamer", points: 10 }]);
+    expect(out.wargearPrices).toEqual([
+      { datasheetId: "ds:ashen-wardens:warden-squad", item: "Warden Champion", points: 15 },
+      { datasheetId: "ds:ashen-wardens:warden-squad", item: "Ash Sentry", points: 20 },
+      { datasheetId: "ds:ashen-wardens:ashen-crusher", item: "Fusion beamer", points: 10 },
+    ]);
     expect(ds("Warden Captain").fallbackPoints).toBe(85);
     expect(ds("Swarm Seer").fallbackPoints).toBe(70);
+    expect(out.warnings.some((w) => w.includes("unparsable cost row"))).toBe(false);
+  });
+
+  it("counts the models a points row names instead of saying \"5 models\"", () => {
+    // Every shape the upstream export writes a named row in, with invented names in place of the real
+    // ones: one kind of model on its own, two or three kinds joined by "and", and the same joined by
+    // commas alone. A named row prices the whole unit, so the counts in it add up to the size priced.
+    expect(out.priceRules!.find((r) => r.datasheetId === "ds:verdant-swarm:thornlings")!.tiers).toEqual([{ models: 10, points: 60 }, { models: 20, points: 120 }]);
+    expect(tiersFor("000000911|1|3 Cinder Wardens|85|\n000000911|2|6 Cinder Wardens|170|\n")).toEqual([[{ models: 3, points: 85 }, { models: 6, points: 170 }]]);
+    expect(tiersFor("000000911|1|1 Cinder Marshal and 4 Cinder Wardens|60|\n000000911|2|2 Cinder Marshals and 8 Cinder Wardens|120|\n")).toEqual([[{ models: 5, points: 60 }, { models: 10, points: 120 }]]);
+    expect(tiersFor("000000911|1|1 Cinder Marshal, 5 Cinder Wardens and 4 Ash Hounds|150|\n")).toEqual([[{ models: 10, points: 150 }]]);
+    expect(tiersFor("000000911|1|3 Cinder Wardens, 3 Ash Hounds|110|\n")).toEqual([[{ models: 6, points: 110 }]]);
+    expect(tiersFor("000000911|1|1 Cinder Marshal, 4 Ash Hounds, 5 Cinder Wardens |150|\n")).toEqual([[{ models: 10, points: 150 }]]);
+  });
+
+  it("prices a named extra as wargear whether the export marks it on the cost or the description", () => {
+    const priced = (row: string): unknown => {
+      const r = parse(costTable(`000000911|1|5 models|60|\n${row}`));
+      return { tiers: r.priceRules!.map((p) => p.tiers), wargear: r.wargearPrices!.map((w) => [w.item, w.points]), warned: r.warnings.some((w) => w.includes("unparsable cost row")) };
+    };
+    const expected = { tiers: [[{ models: 5, points: 60 }]], wargear: [["Ember Walker", 55]], warned: false };
+    expect(priced("000000911|2|Ember Walker|+55|\n")).toEqual(expected);
+    expect(priced("000000911|2|+ <!-- -->1 Ember Walker|55|\n")).toEqual(expected);
   });
 
   it("decomposes stratagems into when/target/effect/restrictions with turn and phases", () => {
