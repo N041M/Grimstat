@@ -24,7 +24,7 @@ import {
 } from "../types";
 import { parsePipeCsv } from "../util/pipe-csv";
 import { stripHtml } from "../util/html";
-import { parseWeaponKeywords } from "../util/weapon-keywords";
+import { parseWeaponKeywords } from "@grimstat/effects";
 import { parseCopyRangeLabel, type CopyRange } from "../util/interval";
 import { parseCoreAbility } from "../util/core-abilities";
 import { parseAP, parseDice, parseInches, parseInt0, parseInvSave, parseTargetNumber, parseWeaponRange } from "../util/values";

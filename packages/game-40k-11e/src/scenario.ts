@@ -1,11 +1,11 @@
-import { ModifierSet, collectModifiers, type EvalContext, type KeywordContext, type KeywordHandler, type KeywordOptions, type KeywordRegistry } from "@grimstat/effects";
+import { ModifierSet, collectModifiers, parseWeaponKeywords, type EvalContext, type KeywordContext, type KeywordHandler, type KeywordOptions, type KeywordRegistry } from "@grimstat/effects";
 import { run, percentiles, delta, mean, type EngineInput, type TargetGroup, type WeaponParams, type GroupParams } from "@grimstat/engine";
 import type { Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, SimResult, Snapshot } from "@grimstat/schema";
 import { CH, POLICY } from "./channels";
 import { create11eKeywordRegistry } from "./keywords";
 import { gameSystem, RULES, RULES_10E, type RulesParams } from "./manifest";
 import { attacksPMF, classifyHit, classifyWound, damagePMF, hitGate, pUnsaved, sustainedPMF, woundGate, woundTarget } from "./attack";
-import { activeToggleEffects, coverageFor, listToggles, resolveScenarioUnit, upper } from "./resolve";
+import { abilityNamesOf, activeToggleEffects, coverageFor, listToggles, resolveScenarioUnit, upper } from "./resolve";
 
 /** The live 11e keyword registry. Other plugins may extend it via `registerKeyword` without editing this package. */
 export const keywordRegistry = create11eKeywordRegistry(RULES);
@@ -171,6 +171,7 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
   };
 
   const weapons: WeaponParams[] = [];
+  const attackerAbilityNames = abilityNamesOf(attacker, snapshot);
   const phaseKind = ctx.phase === "fight" ? "melee" : "ranged";
   for (const w of attacker.weapons) {
     if (!w.enabled || w.count <= 0) continue;
@@ -181,8 +182,17 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
     mods.addAll(collectModifiers(unitEffects.filter((e) => (e.when.side ?? "attacker") === "attacker"), "attacker", ec));
     mods.addAll(collectModifiers(unitEffects.filter((e) => e.when.side === "defender"), "defender", ec));
     const kctx: KeywordContext = { ...ec, mods, targetModelCount: defenderModelCount, warnings };
-    const unknown = registry.apply(w.keywords, kctx);
-    for (const u of unknown) warnings.push(`${w.name}: keyword "${u}" is not modelled.`);
+    // A keyword an ability hands to the weapon ("its melee weapons have the [LANCE] ability") goes
+    // through the same registry as one printed on the profile, so the two agree by construction.
+    // Granted keywords go first, which leaves a printed value the one that stands where a keyword
+    // arrives twice and the rules do not stack it.
+    const granted = mods.list(CH.grantKeyword).flatMap((m) => parseWeaponKeywords(String(m.value)));
+    const unknown = registry.apply([...granted, ...w.keywords], kctx);
+    for (const u of unknown) {
+      // A keyword slot naming a rule the sheet writes out itself is that ability, not a missing one.
+      if (attackerAbilityNames.has(u.toUpperCase())) continue;
+      warnings.push(`${w.name}: keyword "${u}" is not modelled.`);
+    }
 
     // --- hit ---
     const autoHit = mods.flag(CH.autoHit);
@@ -196,19 +206,24 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
     if (indirectPenalty) mods.add({ channel: CH.hitRoll, op: "add", value: -1, source: "Indirect Fire" });
     const cover = mods.flag(CH.stealth) || indirectPenalty;
     const inCover = (ctx.inCover || cover) && w.kind === "ranged" && !ignoresCover;
-    let skillPenalty = 0;
-    if (inCover && rules.coverAsSkillPenalty) skillPenalty += 1;
+    // PSYCHIC ignores penalties by rule. "You can ignore any or all modifiers" is the player's
+    // choice rather than a rule, and a player drops the ones that hurt and keeps the ones that
+    // help, so the arithmetic is the same on whichever channel the ability names.
+    const keepBuffsOnly = (channel: string): number => {
+      const pos = mods.list(channel).filter((m) => m.op === "add" && Number(m.value) > 0).reduce((s, m) => s + Number(m.value), 0);
+      return Math.min(rules.hitRollCap, pos);
+    };
+    const dropHitPenalties = psychic || mods.flag(CH.ignoreHitMods);
+    const dropSkillPenalties = psychic || mods.flag(CH.ignoreSkillMods);
     const skillAdds = mods.list(CH.skill).filter((m) => m.op === "add").map((m) => Number(m.value));
-    for (const v of skillAdds) skillPenalty += v;
-    let hitRollMod = 0;
-    if (psychic) {
-      // ignore penalties, keep buffs
+    let skillPenalty = 0;
+    if (dropSkillPenalties) {
       skillPenalty = Math.min(0, skillAdds.filter((v) => v < 0).reduce((s, v) => s + v, 0));
-      const pos = mods.list(CH.hitRoll).filter((m) => m.op === "add" && Number(m.value) > 0).reduce((s, m) => s + Number(m.value), 0);
-      hitRollMod = Math.min(rules.hitRollCap, pos);
     } else {
-      hitRollMod = mods.num(CH.hitRoll, 0, POLICY[CH.hitRoll]);
+      if (inCover && rules.coverAsSkillPenalty) skillPenalty += 1;
+      for (const v of skillAdds) skillPenalty += v;
     }
+    const hitRollMod = dropHitPenalties ? keepBuffsOnly(CH.hitRoll) : mods.num(CH.hitRoll, 0, POLICY[CH.hitRoll]);
     // Snap Shooting is a rule about shooting, so it leaves melee weapons alone. Without the kind
     // test the Snap shot control cut a fight-phase result to the quarter of it that rolls a 6.
     const snap = w.kind === "ranged" && (ctx.snapShooting || (indirectUnseen && rules.indirectNotVisibleSnap));

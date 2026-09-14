@@ -29,6 +29,10 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - **Blast** counts all models in the defender (including attached characters).
 - **Fight phase**: only melee weapons; **shooting phase**: only ranged weapons. Pistols/Close-Quarters are not special-cased.
 - **Damaged profiles, Deadly Demise, healing, "ignore first failed save"**: not modelled.
+- **A rule that applies only against one unit the player picks during the battle** ("select one enemy
+  unit; until the end of the turn…") is applied to the scenario's defender. A scenario is one attacker
+  against one defender, so the app assumes the defender is the unit that was picked. Switch the
+  ability off to see the attacker's output against a unit it did not pick.
 
 ## Transports and embarked units
 - A passenger records `embarkedIn`, naming the transport roster unit it starts the battle inside.
@@ -113,9 +117,47 @@ two sources never had one. So the check reads the prose, and reports its own cov
   counts, so ratio limits cannot be expressed there.
 
 ## Coverage tiers
-- Tier 1: weapon keywords in `keywords.ts` and unit core abilities in `patterns.ts#coreAbilityEffects`.
+- Tier 1: weapon keywords in `keywords.ts`, unit core abilities in `patterns.ts#coreAbilityEffects`, and
+  abilities the text reader finds to have no effect on the attack sequence.
 - Tier 2: `patterns.ts` regexes over ability text (generic phrasings only) and any explicit `effects` on an ability (override packs).
 - Tier 3: text only → listed as unmodelled; use the generic toggles to approximate.
+
+Against the 11th-edition Wahapedia export the reader places about 80% of the ability rows a datasheet
+carries, counting each row once per sheet that has it.
+
+## How ability text is read (`patterns.ts`)
+- **A granted keyword goes through the keyword registry.** "Its melee weapons have the [LANCE] ability"
+  becomes a `grant-keyword` effect carrying the printed spelling, and `scenario.ts` parses it with the
+  same parser the adapters use and applies it with the same handler. An ability that gives a weapon a
+  keyword and a datasheet that prints it therefore come out identical, values and all
+  ("[ANTI-INFANTRY 5+]"). A granted keyword is applied before the printed ones, so where a weapon
+  gets the same keyword twice and the rules do not stack it, the printed value stands.
+- **Conditions come from the sentence the keyword is in**, not from the whole ability, so a second
+  sentence about something else does not narrow the first. Where the sentence says the enemy's weapons
+  gain the keyword, the effect is recorded on the defending side and lands on the weapon shooting at it.
+- **A menu is read as its options or not at all.** An ability that says to select one of several
+  effects becomes one switch per printed option, all of them off, because the datasheet allows exactly
+  one. Only two shapes of option are read: a bulleted line that is nothing but keywords, and one that
+  opens with a name and a colon. An ability whose options are written any other way stays Tier 3;
+  read flat it would hand the unit every option at once.
+- **An ability the datasheet spends is modelled but starts off.** "Once per battle", "once per phase"
+  and "the first time" put the effects on a switch the player turns on for the round they are used in,
+  so the unit's ordinary output is what the app shows by default.
+- **"Ignore any or all modifiers" keeps the buffs.** The player drops the modifiers that hurt, which is
+  the same arithmetic PSYCHIC gets by rule. The Hit roll and the BS/WS stat are separate channels, so an
+  ability that names only the Hit roll leaves cover standing, since cover is a stat penalty in this edition.
+- **An ability about something the attack sequence does not contain is recorded as such.** Movement,
+  deployment, transports, Battle-shock, Objective Control, CP and army construction change nothing the
+  engine computes, so they are counted as modelled with no effects rather than listed for a player to
+  find a toggle for. The test is conservative: any mention of the attack sequence, of healing or of a
+  model being destroyed disqualifies the ability, and every sentence has to be about one of those
+  outside subjects.
+- **A weapon keyword naming a rule the sheet writes out itself** — a datasheet prints "[DEAD CHOPPY]"
+  in the keyword slot and the rule in an ability of that name — is counted on that ability's row. It
+  is neither reported as an unknown keyword nor counted twice.
+- **Not read**: a change to the Wounds characteristic (the allocation DP takes wounds from the model
+  profile, which an effect record cannot reach), a re-roll of the Damage roll, and rules whose subject
+  is a specific named weapon on the sheet rather than a kind of weapon.
 
 ## Turn optimiser (`optimiser.ts`)
 - **Plan evaluation is exact** (exact backend): attackers assigned to the same target are resolved in order with the defender's state distribution chained from one to the next, so overkill and "the target is already dead" are accounted for. Targets are independent of each other, so the total models-slain distribution is the convolution of per-target distributions.

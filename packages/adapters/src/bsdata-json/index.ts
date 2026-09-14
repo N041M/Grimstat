@@ -16,7 +16,7 @@ import {
   weaponProfileId,
 } from "../util/ids";
 import { parseAP, parseDice, parseInches, parseInt0, parseTargetNumber, parseWeaponRange } from "../util/values";
-import { parseWeaponKeywords } from "../util/weapon-keywords";
+import { parseWeaponKeywords } from "@grimstat/effects";
 import { parseCoreAbility } from "../util/core-abilities";
 
 export const BSDATA_REPO = "BSData/wh40k-11e";

@@ -200,6 +200,9 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
   let fnp: number | undefined;
   for (const a of abilitiesOf(ds, snapshot)) {
     const ae = abilityEffects(a);
+    // An ability that is spent once a battle, or that is one of several options, does not apply
+    // until the player says so. Its toggle carries the effects instead.
+    if (ae.defaultOn === false) continue;
     effects.push(...ae.effects);
     if (ae.fnp) fnp = Math.min(fnp ?? 7, ae.fnp);
   }
@@ -219,6 +222,7 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
     let cfnp: number | undefined;
     for (const a of abilitiesOf(cds, snapshot)) {
       const ae = abilityEffects(a);
+      if (ae.defaultOn === false) continue;
       effects.push(...ae.effects.map((e) => ({ ...e, source: `${cds.name}: ${e.source ?? ""}`.trim() })));
       if (ae.fnp) cfnp = Math.min(cfnp ?? 7, ae.fnp);
     }
@@ -318,12 +322,31 @@ export function resolveScenarioUnit(unit: ScenarioUnit, snapshot: Snapshot | und
   return unitFromDatasheet(ds, snapshot, { attachedDatasheetIds: unit.ref.attachedDatasheetIds });
 }
 
+/**
+ * Names of the abilities a unit's datasheets carry, upper-cased.
+ *
+ * A datasheet prints its own rules in the weapon's keyword slot as well — "[DEAD CHOPPY]",
+ * "[C'TAN POWER]" — and the rule itself is written out in an ability of that name on the same
+ * sheet. Neither the registry nor a player should read those as core keywords.
+ */
+export function abilityNamesOf(unit: ScenarioUnit, snapshot?: Snapshot): Map<string, Ability> {
+  const out = new Map<string, Ability>();
+  if (!unit.ref || !snapshot) return out;
+  for (const id of [unit.ref.datasheetId, ...unit.ref.attachedDatasheetIds]) {
+    const ds = snapshot.data.datasheets.find((d) => d.id === id);
+    if (!ds) continue;
+    for (const a of abilitiesOf(ds, snapshot)) out.set(a.name.toUpperCase(), a);
+  }
+  return out;
+}
+
 /** Coverage: abilities (via snapshot when referenced) and weapon keywords. */
 export function coverageFor(unit: ScenarioUnit, snapshot?: Snapshot): CoverageReport {
   let tier1 = 0;
   let tier2 = 0;
   let tier3 = 0;
   const unmodelled: string[] = [];
+  const own = abilityNamesOf(unit, snapshot);
   if (unit.ref && snapshot) {
     const ids = [unit.ref.datasheetId, ...unit.ref.attachedDatasheetIds];
     for (const id of ids) {
@@ -345,6 +368,9 @@ export function coverageFor(unit: ScenarioUnit, snapshot?: Snapshot): CoverageRe
   for (const w of unit.weapons) {
     for (const k of w.keywords) {
       if (registry.has(k.name)) tier1++;
+      // The sheet's own rule, counted once on the ability row it is written on rather than a second
+      // time here under a name no registry will ever hold.
+      else if (own.has(k.name.toUpperCase())) continue;
       else {
         tier3++;
         unmodelled.push(`${w.name}: ${k.raw ?? k.name}`);
@@ -473,12 +499,17 @@ export function abilityToggles(unit: ScenarioUnit, side: "attacker" | "defender"
       if (!ds) continue;
       for (const a of abilitiesOf(ds, snapshot)) {
         const ae = abilityEffects(a);
-        const relevant = ae.effects.filter((e) => (e.when.side ?? "attacker") === side);
-        if (!relevant.length) continue;
-        const tid = `ability:${side}:${a.id}`;
-        if (seen.has(tid)) continue;
-        seen.add(tid);
-        out.push({ id: tid, label: a.name, description: a.text.slice(0, 300), side, effects: relevant, defaultOn: true, provenance: provenanceOf(a.scope) });
+        const provenance = provenanceOf(a.scope);
+        const add = (tid: string, label: string, effects: EffectRecord[], defaultOn: boolean): void => {
+          const relevant = effects.filter((e) => (e.when.side ?? "attacker") === side);
+          if (!relevant.length || seen.has(tid)) return;
+          seen.add(tid);
+          out.push({ id: tid, label, description: a.text.slice(0, 300), side, effects: relevant, defaultOn, provenance });
+        };
+        add(`ability:${side}:${a.id}`, a.name, ae.effects, ae.defaultOn !== false);
+        // A menu ability puts each printed option on its own switch, and starts with none of them
+        // taken, since the datasheet lets the player have exactly one.
+        for (const [i, o] of (ae.options ?? []).entries()) add(`ability:${side}:${a.id}#${i}`, `${a.name}: ${o.label}`, o.effects, false);
       }
     }
   } else {
@@ -511,7 +542,7 @@ export function activeToggleEffects(scenario: Scenario, toggles: ManualToggle[])
     if (!enabled) continue;
     const sided = t.effects.map((e) => ({ ...e, when: { ...e.when, side: e.when.side ?? t.side } }));
     effects.push(...sided);
-    if (!t.id.startsWith("ability:")) manual.push(...sided);
+    if (!t.id.startsWith("ability:") || !t.defaultOn) manual.push(...sided);
     if (t.id === "defender-indirect") flags.push("target-not-visible");
   }
   return { effects, manual, flags };

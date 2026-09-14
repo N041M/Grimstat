@@ -25,6 +25,19 @@ describe("ModifierSet", () => {
     expect(m.num("hit-roll", 0, { capAdd: 1 })).toBe(1);
     expect(m.rawAdd("hit-roll")).toBe(2);
   });
+  it("an outright set stands below a channel's floor, a modifier does not", () => {
+    // "Change the Damage characteristic of that attack to 0" against a floor that says modifiers
+    // cannot reduce Damage below 1.
+    const set = new ModifierSet();
+    set.add({ channel: "damage", op: "set", value: 0 });
+    expect(set.num("damage", 3, { min: 1 })).toBe(0);
+    const reduced = new ModifierSet();
+    reduced.add({ channel: "damage", op: "add", value: -3 });
+    expect(reduced.num("damage", 1, { min: 1 })).toBe(1);
+    // A modifier on top of the set meets the floor again.
+    set.add({ channel: "damage", op: "add", value: -1 });
+    expect(set.num("damage", 3, { min: 1 })).toBe(1);
+  });
   it("mul rounds up, cap and min apply", () => {
     const m = new ModifierSet();
     m.add({ channel: "damage", op: "mul", value: 0.5 });

@@ -55,18 +55,29 @@ export class ModifierSet {
   num(channel: string, base: number, policy: ChannelPolicy = {}): number {
     let v = base;
     const roundUp = policy.roundUp ?? true;
-    for (const m of this.mods) if (m.channel === channel && m.op === "set" && typeof m.value === "number") v = m.value;
+    let set: number | undefined;
+    for (const m of this.mods) if (m.channel === channel && m.op === "set" && typeof m.value === "number") set = m.value;
+    if (set !== undefined) v = set;
+    let scaled = false;
     for (const m of this.mods) {
       if (m.channel === channel && m.op === "mul" && typeof m.value === "number") {
         v = v * m.value;
         v = roundUp ? Math.ceil(v - 1e-9) : Math.floor(v + 1e-9);
+        scaled = true;
       }
     }
     let add = this.rawAdd(channel);
     if (policy.capAdd !== undefined) add = Math.max(-policy.capAdd, Math.min(policy.capAdd, add));
     v += add;
     for (const m of this.mods) if (m.channel === channel && m.op === "cap" && typeof m.value === "number") v = Math.min(v, m.value);
-    if (policy.min !== undefined) v = Math.max(policy.min, v);
+    if (policy.min !== undefined) {
+      // A channel's floor says how far modifiers may take a value down: Damage cannot be *reduced*
+      // below 1. A rule that sets the value outright is the printed exception to that floor
+      // ("change the Damage characteristic of that attack to 0"), so it stands on its own, and
+      // anything stacked on top of it is a modifier again and meets the floor as usual.
+      const floor = set !== undefined && !scaled && add === 0 ? Math.min(policy.min, set) : policy.min;
+      v = Math.max(floor, v);
+    }
     if (policy.max !== undefined) v = Math.min(policy.max, v);
     return v;
   }

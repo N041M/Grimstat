@@ -282,6 +282,8 @@ describe("miracle dice toggles", () => {
   });
 });
 
+const ability = (name: string, text: string) => abilityEffects({ id: "a", name, scope: "datasheet", text, isLegends: false });
+
 describe("pattern library", () => {
   it("derives tier-2 effects from generic phrasings", () => {
     const a = abilityEffects({ id: "x", name: "Test", scope: "datasheet", text: "Each time this unit makes a ranged attack, re-roll a hit roll of 1.", isLegends: false });
@@ -313,6 +315,102 @@ describe("pattern library", () => {
       const a = abilityEffects({ id: "r", name: "Sure", scope: "datasheet", text, isLegends: false });
       expect(a.effects.filter((e) => e.op === "reroll").map((e) => e.value)).toEqual(["failed"]);
     }
+    // A named single die is the Command Re-roll's treatment, not a policy over every die.
+    const one = ability("Called Shots", "Each time this model is selected to shoot, you can re-roll one Hit roll and you can re-roll one Wound roll.");
+    expect(one.effects.filter((e) => e.op === "reroll").map((e) => e.value)).toEqual(["one-die", "one-die"]);
+  });
+
+  it("reads a keyword an ability grants the weapon", () => {
+    const a = ability("Grav-talon", "The bearer's melee weapons have the [LANCE] ability.");
+    expect(a.effects).toEqual([{ when: { stage: "hit", side: "attacker" }, op: "set", target: "grant-keyword", value: "LANCE", source: "Grav-talon", if: { weaponKind: "melee" } }]);
+    // Several at once, with the condition the sentence carries.
+    const b = ability("Purity of Execution", "Each time a model in this unit makes a ranged attack that targets a PSYKER unit, that attack has the [PRECISION] and [DEVASTATING WOUNDS] abilities.");
+    expect(b.effects.map((e) => e.value)).toEqual(["PRECISION", "DEVASTATING WOUNDS"]);
+    expect(b.effects[0]!.if).toEqual({ weaponKind: "ranged", targetKeyword: "PSYKER" });
+    // A keyword the enemy's weapons gain is carried by the unit being attacked.
+    const c = ability("Treacherous Illusion", "Melee weapons equipped by enemy models have the [HAZARDOUS] ability while targeting this model's unit.");
+    expect(c.effects[0]!.when.side).toBe("defender");
+  });
+
+  it("reads each characteristic a single clause improves", () => {
+    const a = ability("Sunderer", "Each time this model makes an attack, improve the Strength and Damage characteristics of that attack by 1.");
+    expect(a.effects.map((e) => [e.target, e.value])).toEqual([["strength", 1], ["damage", 1]]);
+    // BS and WS are stat modifiers on the uncapped skill channel, where up is worse.
+    const b = ability("Mindlock", "Improve the Ballistic Skill characteristic of ranged weapons equipped by models in this unit by 1.");
+    expect(b.effects).toEqual([{ when: { stage: "hit", side: "attacker" }, op: "add", target: "skill", value: -1, source: "Mindlock", if: { weaponKind: "ranged" } }]);
+  });
+
+  it("reads damage reduction once, however it is printed", () => {
+    for (const text of ["Each time an attack is allocated to this model, subtract 1 from the Damage characteristic of that attack.", "Reduce the Damage characteristic of that attack by 1."]) {
+      const a = ability("Resilient", text);
+      expect(a.effects.filter((e) => e.target === "damage")).toHaveLength(1);
+      expect(a.effects[0]).toMatchObject({ op: "add", target: "damage", value: -1 });
+    }
+  });
+
+  it("reads a critical threshold written either way round", () => {
+    const a = ability("Mandiblasters", "Each time a model in this unit makes a melee attack, if it made a Charge move this turn, an unmodified Hit roll of 5+ scores a Critical Hit.");
+    expect(a.effects[0]).toMatchObject({ op: "cap", target: "crit-hit", value: 5, if: { weaponKind: "melee", charged: true } });
+    const b = ability("Crits", "Critical hits on a 5+.");
+    expect(b.effects[0]).toMatchObject({ op: "cap", target: "crit-hit", value: 5 });
+  });
+
+  it("separates ignoring Hit-roll modifiers from ignoring BS and WS ones", () => {
+    const roll = ability("Searchlight", "Each time the bearer's unit makes a ranged attack, you can ignore any or all modifiers to the Hit roll.");
+    expect(roll.effects.map((e) => e.target)).toEqual(["ignore-hit-mods"]);
+    const both = ability("Talons", "Each time this model makes an attack with a ranged weapon, you can ignore any or all modifiers to the Hit roll and any or all modifiers to the Ballistic Skill characteristic of that weapon.");
+    expect(both.effects.map((e) => e.target)).toEqual(["ignore-hit-mods", "ignore-skill-mods"]);
+  });
+
+  it("splits a menu into options and leaves one it cannot read unmodelled", () => {
+    const pact = ability("Dark Pact", "Select one of the following abilities for that unit's weapons to gain until the end of the phase: - [LETHAL HITS] - [SUSTAINED HITS 1]");
+    expect(pact.tier).toBe("tier2");
+    expect(pact.effects).toEqual([]);
+    expect(pact.options?.map((o) => o.label)).toEqual(["LETHAL HITS", "SUSTAINED HITS 1"]);
+    // Read flat, a menu would hand the unit every option at once — the one answer it rules out.
+    const prose = ability("Vows", "At the start of the first battle round, select one of the following Vows to be active. Abhor the Witch Each time a model in this unit makes an attack, add 1 to the Wound roll.");
+    expect(prose.tier).toBe("tier3");
+    expect(prose.effects).toEqual([]);
+  });
+
+  it("models an ability the datasheet spends, and leaves it off until it is spent", () => {
+    const a = ability("No Foe Shall Stand", "Once per battle, at the start of your Shooting phase, this unit can use this ability. If it does, until the end of the phase, ranged weapons equipped by models in this unit have the [LETHAL HITS] ability.");
+    expect(a.tier).toBe("tier2");
+    expect(a.defaultOn).toBe(false);
+    expect(a.effects.map((e) => e.value)).toEqual(["LETHAL HITS"]);
+  });
+
+  it("tells an ability with nothing to model apart from one that is not modelled", () => {
+    const outside = ability("One Shot", "The bearer can only shoot with this weapon once per battle.");
+    expect(outside.tier).toBe("tier1");
+    expect(outside.effects).toEqual([]);
+    expect(outside.notes).toEqual(["no effect on the attack sequence"]);
+    // Healing is inside the sequence and is not modelled, so it keeps saying so.
+    const healing = ability("Self Repair", "At the start of your Command phase, this model regains 1 lost wound.");
+    expect(healing.tier).toBe("tier3");
+  });
+});
+
+describe("granted keywords in a resolved attack", () => {
+  const grant = (value: string) => ({ when: { stage: "hit" as const, side: "attacker" as const }, op: "set" as const, target: "grant-keyword", value, source: "Dark Pact" });
+
+  it("a granted keyword is resolved by the registry that reads a printed one", () => {
+    const plain = runScenario(scenario(unit([], [gun({ count: 10 })]), marines()));
+    const twin = runScenario(scenario(unit([], [gun({ count: 10 })], [], [grant("Twin-linked")]), marines()));
+    const printed = runScenario(scenario(unit([], [gun({ count: 10, keywords: [{ name: "TWIN-LINKED" }] })]), marines()));
+    close(twin.expectedDamage, printed.expectedDamage);
+    expect(twin.expectedDamage).toBeGreaterThan(plain.expectedDamage);
+  });
+
+  it("a granted keyword keeps the value it is printed with", () => {
+    const anti = runScenario(scenario(unit([], [gun({ count: 10, D: "2" })], [], [grant("Anti-infantry 4+")]), marines()));
+    const printed = runScenario(scenario(unit([], [gun({ count: 10, D: "2", keywords: [{ name: "ANTI", keyword: "INFANTRY", value: 4 }] })]), marines()));
+    close(anti.expectedDamage, printed.expectedDamage);
+  });
+
+  it("a keyword nothing knows is still reported, granted or printed", () => {
+    const r = runScenario(scenario(unit([], [gun()], [], [grant("Wobbly 3")]), marines()));
+    expect(r.warnings.join(" ")).toContain("Wobbly 3");
   });
 });
 

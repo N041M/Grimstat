@@ -126,7 +126,7 @@ export function sensitivity(scenario: Scenario, opts: { snapshot?: Snapshot; var
 }
 
 /** Human labels for effect-record targets (for override editors). */
-export const CHANNEL_INFO: Array<{ channel: string; label: string; kind: "number" | "flag" | "reroll" | "threshold" }> = [
+export const CHANNEL_INFO: Array<{ channel: string; label: string; kind: "number" | "flag" | "reroll" | "threshold" | "keyword" }> = [
   { channel: CH.attacks, label: "Attacks (+/−)", kind: "number" },
   { channel: CH.skill, label: "BS/WS penalty (+1 = one worse, uncapped)", kind: "number" },
   { channel: CH.hitRoll, label: "Hit roll modifier (capped ±1)", kind: "number" },
@@ -154,4 +154,7 @@ export const CHANNEL_INFO: Array<{ channel: string; label: string; kind: "number
   { channel: CH.indirect, label: "Indirect Fire", kind: "flag" },
   { channel: CH.hazardous, label: "Hazardous", kind: "flag" },
   { channel: CH.stealth, label: "Benefit of cover", kind: "flag" },
+  { channel: CH.ignoreHitMods, label: "Ignore Hit roll modifiers", kind: "flag" },
+  { channel: CH.ignoreSkillMods, label: "Ignore BS/WS modifiers", kind: "flag" },
+  { channel: CH.grantKeyword, label: "Give the weapon a keyword (set, e.g. Lethal Hits)", kind: "keyword" },
 ];

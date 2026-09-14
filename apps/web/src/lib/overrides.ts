@@ -150,13 +150,14 @@ export function suggestedValueKind(op: EffectOp, target: string): ValueKind {
   const info = CHANNEL_INFO.find((c) => c.channel === target);
   if (info?.kind === "flag") return "boolean";
   if (info?.kind === "reroll") return "reroll";
+  if (info?.kind === "keyword") return "string";
   return "number";
 }
 
 /** Stages that make sense for a channel, used to pre-select the stage when the target changes. */
 export function suggestedStage(target: string): Stage | undefined {
   if (/^(attacks)$/.test(target)) return "attacks";
-  if (/^(skill|hit-roll|crit-hit|reroll-hit|auto-hit|lethal|sustained|precision|ignores-cover|stealth|no-crit-hits|indirect|psychic)$/.test(target)) return "hit";
+  if (/^(skill|hit-roll|crit-hit|reroll-hit|auto-hit|lethal|sustained|precision|ignores-cover|stealth|indirect|psychic|ignore-hit-mods|ignore-skill-mods|grant-keyword)$/.test(target)) return "hit";
   if (/^(strength|toughness|wound-roll|crit-wound|reroll-wound|devastating)$/.test(target)) return "wound";
   if (/^(ap|save-roll|save|invuln|reroll-save)$/.test(target)) return "save";
   if (/^(damage)$/.test(target)) return "damage";

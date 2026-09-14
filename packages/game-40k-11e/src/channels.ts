@@ -34,7 +34,16 @@ export const CH = {
   indirect: "indirect",
   hazardous: "hazardous",
   stealth: "stealth",
-  noCritHits: "no-crit-hits",
+  /**
+   * A weapon keyword an ability hands to the weapon ("this unit's melee weapons have the [LANCE]
+   * ability"). The value is the keyword as it is printed, and the registry reads it at resolution
+   * time, so an ability that grants a keyword and a datasheet that prints it come out the same.
+   */
+  grantKeyword: "grant-keyword",
+  /** Drop the modifiers that hurt on the Hit-roll channel ("ignore any or all modifiers to the Hit roll"). */
+  ignoreHitMods: "ignore-hit-mods",
+  /** The same for the BS/WS stat channel, which is where cover and other stat penalties land. */
+  ignoreSkillMods: "ignore-skill-mods",
 } as const;
 
 export const POLICY: Record<string, ChannelPolicy> = {

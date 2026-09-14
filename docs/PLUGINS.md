@@ -18,6 +18,8 @@ A keyword can be printed with a condition ("Lethal Hits: non-MONSTER/VEHICLE"); 
 
 Channels and their caps live in `channels.ts` (`hit-roll` is capped ±1, `skill` is the uncapped BS/WS stat channel, and so on). Keywords with no effect on the maths go in `registerInert(...)` so they do not show up as unmodelled.
 
+One channel is not a modifier: `grant-keyword` carries a weapon keyword as it is printed, and the scenario runner parses the value and hands it to the registry alongside the weapon's own keywords. An ability that gives a weapon a keyword therefore needs no handler of its own, and a new keyword registered here is reachable from ability text on the day it is added.
+
 ## 2. A new unit ability (Tier-2, no code)
 
 Ability rows carry `effects: EffectRecord[]`. Add them in an override pack (YAML merge patch keyed by ability id) and re-import, and nothing else changes.

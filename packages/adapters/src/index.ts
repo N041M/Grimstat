@@ -12,7 +12,7 @@ export type { SourceId, SourceDef, FetchLike, FetchSourceOptions, FetchedSource 
 export { parsePipeCsv } from "./util/pipe-csv";
 export type { PipeCsvResult, PipeCsvOptions } from "./util/pipe-csv";
 export { stripHtml, decodeEntities } from "./util/html";
-export { parseWeaponKeywords } from "./util/weapon-keywords";
+export { parseWeaponKeywords } from "@grimstat/effects";
 export { parseInterval, formatInterval, parseCopyRangeLabel } from "./util/interval";
 export type { CopyRange } from "./util/interval";
 export { parseCoreAbility, parseCoreValue, CORE_ABILITY_KEYWORDS } from "./util/core-abilities";

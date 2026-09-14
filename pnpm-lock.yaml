@@ -150,6 +150,9 @@ importers:
       '@grimstat/board':
         specifier: workspace:*
         version: link:../board
+      '@grimstat/effects':
+        specifier: workspace:*
+        version: link:../effects
       '@grimstat/resolver':
         specifier: workspace:*
         version: link:../resolver
