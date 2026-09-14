@@ -101,19 +101,13 @@ function abilitiesCell(ds: Datasheet, snapshot: Snapshot): { text: string; node:
         {list.map((a) => (
           <div key={a.id} className="cmp-abil">
             <span className="cmp-abil-name">{a.name}</span>
-            {a.text ? (
-              <span className="cmp-abil-text" title={a.text}>
-                {a.text}
-              </span>
-            ) : null}
+            {a.text ? <span className="cmp-abil-text">{a.text}</span> : null}
           </div>
         ))}
         {ds.damagedProfile ? (
           <div className="cmp-abil">
             <span className="cmp-abil-name">{t("codex.damaged", { threshold: ds.damagedProfile.threshold })}</span>
-            <span className="cmp-abil-text" title={ds.damagedProfile.description}>
-              {ds.damagedProfile.description}
-            </span>
+            <span className="cmp-abil-text">{ds.damagedProfile.description}</span>
           </div>
         ) : null}
       </>
