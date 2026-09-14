@@ -209,7 +209,7 @@ export function numOrNull(v: string): number | null {
 
 // ---------- icons (16px line icons, currentColor) ----------
 
-export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse" | "target" | "cube" | "plan" | "camera";
+export type IconName = "export" | "history" | "more" | "copy" | "trash" | "calc" | "plus" | "close" | "chevron" | "check" | "search" | "back" | "file" | "warn" | "expand" | "collapse" | "target" | "cube" | "plan" | "camera" | "filter";
 
 const PATHS: Record<IconName, ReactNode> = {
   export: (
@@ -324,6 +324,8 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2" />
     </>
   ),
+  /* A funnel: a wide list narrowed to a few. */
+  filter: <path d="M2.5 3.5h11l-4.2 5v4.2l-2.6 1.3V8.5z" />,
 };
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {

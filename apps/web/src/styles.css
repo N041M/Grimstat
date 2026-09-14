@@ -7530,6 +7530,95 @@ button.battle-scope-btn:hover {
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
 }
+.codex-filter-wrap {
+  flex: none;
+}
+/* In the column the tools are stacked and about 230px wide, so the panel takes the column's width
+   and opens down its left edge rather than hanging off the side of the screen. */
+.codex-ctx-tools .codex-filter-wrap {
+  align-self: stretch;
+}
+.codex-ctx-tools .codex-filter-btn {
+  width: 100%;
+  justify-content: center;
+}
+@media (min-width: 900px) {
+  .codex-ctx-tools .popover {
+    left: 0;
+    right: auto;
+    min-width: 0;
+    width: 100%;
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+  }
+  .codex-ctx-tools .codex-filter-panel {
+    width: 100%;
+  }
+}
+.codex-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.codex-filter-btn.on {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+:root[data-theme="dark"] .codex-filter-btn.on {
+  color: var(--accent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .codex-filter-btn.on {
+    color: var(--accent);
+  }
+}
+.codex-filter-count {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font: 500 10px/16px var(--mono);
+  text-align: center;
+}
+.codex-filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(84vw, 288px);
+}
+.codex-filter-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.codex-filter-num input {
+  width: 100%;
+}
+.codex-filter-kw {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.codex-filter-chips {
+  gap: 4px;
+}
+.codex-filter-chips .chip {
+  cursor: pointer;
+  border-color: var(--line);
+}
+.codex-filter-chips .chip:hover {
+  border-color: var(--ink);
+}
+.codex-filter-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
 /* Where the list stops; scrolling to it draws the next batch. A line tall, so it has a box to see. */
 .codex-more {
   height: 1px;
@@ -8213,6 +8302,24 @@ button.battle-scope-btn:hover {
   }
   .codex-landing-tools .codex-tools {
     flex-direction: column;
+  }
+  /* Stacked, the tools are full width, so the button is too. */
+  .codex-landing-tools .codex-filter-wrap {
+    align-self: stretch;
+  }
+  .codex-landing-tools .codex-filter-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  /* The rule above lays a popover across the screen at this width, but `align-end` is the more
+     specific of the two and pins the panel to the right edge. Said again here, past it. */
+  .codex-filter-wrap .popover.align-end {
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+  }
+  .codex-filter-panel {
+    width: 100%;
   }
 }
 

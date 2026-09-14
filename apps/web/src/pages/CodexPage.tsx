@@ -4,7 +4,7 @@ import { useApp } from "../state/AppContext";
 import { gameApi } from "../plugin";
 import { hrefFor, navigate } from "../router";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
-import { ALL_FACTIONS, CODEX_COMPARE_KEY, CODEX_DIFF_KEY, CODEX_FACTION_KEY, codexFactions, codexGroups, COMPARE_CAP, effectiveFaction, parseCompareSet, parseFaction, parseFlag, sheetsById, sizeBounds, toggleCompare, type CodexView } from "../lib/codex";
+import { ALL_FACTIONS, CODEX_COMPARE_KEY, CODEX_DIFF_KEY, CODEX_FACTION_KEY, CODEX_FILTERS_KEY, codexFactions, codexGroups, codexKeywords, COMPARE_CAP, effectiveFaction, NO_FILTERS, parseCompareSet, parseFaction, parseFilters, parseFlag, sheetsById, sizeBounds, toggleCompare, type CodexFilters, type CodexView } from "../lib/codex";
 import { ContextSlot, PageHeader } from "../components/shell";
 import { Empty, Icon, Popover, useTabInView, useEdgeFade } from "../components/ui";
 import { CodexBrowser } from "../components/codex/CodexBrowser";
@@ -28,6 +28,7 @@ export function CodexPage({ id }: { id: string | undefined }) {
   const [storedFaction, setStoredFaction, factionLoaded] = usePersistedSetting<string>(CODEX_FACTION_KEY, "", parseFaction);
   const [compare, setCompare] = usePersistedSetting<string[]>(CODEX_COMPARE_KEY, [], parseCompareSet);
   const [diffOnly, setDiffOnly] = usePersistedSetting<boolean>(CODEX_DIFF_KEY, false, parseFlag);
+  const [filters, setFilters] = usePersistedSetting<CodexFilters>(CODEX_FILTERS_KEY, NO_FILTERS, parseFilters);
   const [view, setView] = useState<CodexView>("sheets");
   const [query, setQuery] = useState("");
   const [calcMenu, setCalcMenu] = useState(false);
@@ -36,7 +37,8 @@ export function CodexPage({ id }: { id: string | undefined }) {
   const factions = useMemo(() => (snapshot ? codexFactions(snapshot) : []), [snapshot]);
   const selected = useMemo(() => (id ? datasheets.find((d) => d.id === id) : undefined), [datasheets, id]);
   const factionId = effectiveFaction(storedFaction, factions, selected);
-  const groups = useMemo(() => codexGroups(datasheets, factionId, query), [datasheets, factionId, query]);
+  const groups = useMemo(() => codexGroups(snapshot, factionId, query, filters), [snapshot, factionId, query, filters]);
+  const keywords = useMemo(() => codexKeywords(datasheets, factionId), [datasheets, factionId]);
   const compared = useMemo(() => (snapshot ? sheetsById(snapshot, compare) : []), [snapshot, compare]);
 
   // A sheet opened from elsewhere (a link, the compare grid) pulls the column onto its faction —
@@ -151,7 +153,7 @@ export function CodexPage({ id }: { id: string | undefined }) {
   } else if (selected) {
     body = <DatasheetCard ds={selected} snapshot={snapshot} />;
   } else {
-    body = <CodexLanding snapshot={snapshot} factions={factions} factionId={factionId} onFaction={setStoredFaction} query={query} onQuery={setQuery} groups={groups} compare={compare} onToggleCompare={toggle} onPick={showSheets} />;
+    body = <CodexLanding snapshot={snapshot} factions={factions} factionId={factionId} onFaction={setStoredFaction} query={query} onQuery={setQuery} filters={filters} onFilters={setFilters} keywords={keywords} groups={groups} compare={compare} onToggleCompare={toggle} onPick={showSheets} />;
   }
 
   const tabbar = useRef<HTMLDivElement>(null);
@@ -162,7 +164,7 @@ export function CodexPage({ id }: { id: string | undefined }) {
     <>
       {snapshot ? (
         <ContextSlot>
-          <CodexBrowser snapshot={snapshot} factions={factions} factionId={factionId} onFaction={setStoredFaction} query={query} onQuery={setQuery} groups={groups} selectedId={selected?.id} compare={compare} onOpenCompare={showCompare} onPick={showSheets} />
+          <CodexBrowser snapshot={snapshot} factions={factions} factionId={factionId} onFaction={setStoredFaction} query={query} onQuery={setQuery} filters={filters} onFilters={setFilters} keywords={keywords} groups={groups} selectedId={selected?.id} compare={compare} onOpenCompare={showCompare} onPick={showSheets} />
         </ContextSlot>
       ) : null}
       <PageHeader className="tabbed" title={title} subtitle={subtitle} actions={actions}>

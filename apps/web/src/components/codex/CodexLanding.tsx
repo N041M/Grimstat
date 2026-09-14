@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { Datasheet, Snapshot } from "@grimstat/schema";
 import { UnitArt } from "../UnitArt";
 import { Empty } from "../ui";
-import { CODEX_PAGE, COMPARE_CAP, representativeProfile, shownGroups, sizeBounds, unitFigures, type CodexFaction, type CodexGroup } from "../../lib/codex";
+import { CODEX_PAGE, COMPARE_CAP, representativeProfile, shownGroups, sizeBounds, unitFigures, type CodexFaction, type CodexFilters, type CodexGroup, type CodexKeyword } from "../../lib/codex";
 import { hrefFor } from "../../router";
 import { CodexTools, GROUP_KEY, NoMatch, pointsText, sizeText } from "./shared";
 import { t, tn } from "../../i18n";
@@ -66,6 +66,10 @@ interface Props {
   onFaction: (id: string) => void;
   query: string;
   onQuery: (q: string) => void;
+  filters: CodexFilters;
+  onFilters: (f: CodexFilters) => void;
+  /** Every keyword the faction filter admits, for the keyword picker. */
+  keywords: CodexKeyword[];
   groups: CodexGroup[];
   compare: string[];
   onToggleCompare: (id: string) => void;
@@ -77,7 +81,7 @@ interface Props {
  * faction's datasheets as cards, each with the numbers that tell units apart and a compare mark.
  * On a phone, where the column lives in a sheet, this is the browser.
  */
-export function CodexLanding({ snapshot, factions, factionId, onFaction, query, onQuery, groups, compare, onToggleCompare, onPick }: Props) {
+export function CodexLanding({ snapshot, factions, factionId, onFaction, query, onQuery, filters, onFilters, keywords, groups, compare, onToggleCompare, onPick }: Props) {
   const total = groups.reduce((s, g) => s + g.sheets.length, 0);
   const full = compare.length >= COMPARE_CAP;
   // What the shelf holds, so a unit already owned says so while it is being browsed.
@@ -88,12 +92,12 @@ export function CodexLanding({ snapshot, factions, factionId, onFaction, query, 
     <div className="codex-landing">
       <p className="codex-lede">{t("codex.landing.lede")}</p>
       <div className="codex-landing-tools" data-tour="codex-filter">
-        <CodexTools factions={factions} factionId={factionId} onFaction={onFaction} query={query} onQuery={onQuery} />
+        <CodexTools factions={factions} factionId={factionId} onFaction={onFaction} query={query} onQuery={onQuery} filters={filters} onFilters={onFilters} keywords={keywords} />
         <span className="t-meta codex-landing-count">{tn(total, "codex.landing.count.one", "codex.landing.count.many")}</span>
       </div>
       {groups.length === 0 ? (
         <Empty>
-          <NoMatch query={query} factions={factions} factionId={factionId} onFaction={onFaction} />
+          <NoMatch query={query} factions={factions} factionId={factionId} onFaction={onFaction} filters={filters} onFilters={onFilters} />
         </Empty>
       ) : null}
       {shown.map((g) => (

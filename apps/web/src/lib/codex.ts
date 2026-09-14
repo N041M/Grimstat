@@ -1,6 +1,6 @@
 import type { Ability, AbilityScope, Datasheet, ModelProfile, Snapshot, WeaponProfile } from "@grimstat/schema";
 import { baseWeaponName, pointsFor } from "@grimstat/game-40k-11e";
-import { compositionBounds, groupsFromDatasheet, PICKER_GROUP_ORDER, pickerGroupOf, type ModelBounds, type PickerGroup } from "./roster";
+import { compositionBounds, groupsFromDatasheet, isBattlelineSheet, isCharacterSheet, isTransportSheet, PICKER_GROUP_ORDER, pickerGroupOf, type ModelBounds, type PickerGroup } from "./roster";
 
 /**
  * The Codex screen's model: how the active snapshot's datasheets are browsed, how one is laid out
@@ -15,6 +15,7 @@ import { compositionBounds, groupsFromDatasheet, PICKER_GROUP_ORDER, pickerGroup
 export const CODEX_COMPARE_KEY = "codex.compare";
 export const CODEX_FACTION_KEY = "codex.faction";
 export const CODEX_DIFF_KEY = "codex.diffOnly";
+export const CODEX_FILTERS_KEY = "codex.filters";
 
 /** How many datasheets stand side by side before the compare view refuses another. */
 export const COMPARE_CAP = 6;
@@ -83,18 +84,150 @@ export interface CodexGroup {
   sheets: Datasheet[];
 }
 
+/* ---- filtering ------------------------------------------------------------------------------- */
+
+/**
+ * What a datasheet is, ignoring whether it is Legends.
+ *
+ * `pickerGroupOf` answers Legends first, because that is how the list is laid out, and a filter
+ * that borrowed it would drop a Legends character from a search for characters. Whether a sheet is
+ * Legends is its own question, and its own switch.
+ */
+export type SheetType = "character" | "battleline" | "transport" | "fortification" | "other";
+export const SHEET_TYPES: readonly SheetType[] = ["character", "battleline", "transport", "fortification", "other"];
+
+const isFortification = (ds: Datasheet): boolean => /fortification/i.test(ds.role ?? "") || ds.keywords.includes("FORTIFICATION");
+
+export function sheetType(ds: Datasheet): SheetType {
+  if (isCharacterSheet(ds)) return "character";
+  if (isBattlelineSheet(ds)) return "battleline";
+  if (isTransportSheet(ds)) return "transport";
+  if (isFortification(ds)) return "fortification";
+  return "other";
+}
+
+/** Every filter the codex offers beyond the faction and the search box. */
+export interface CodexFilters {
+  /** What the unit is, or every kind. */
+  type: SheetType | "any";
+  /** Legends datasheets listed. A third of a full snapshot is Legends. */
+  legends: boolean;
+  /** Keywords the sheet must carry, all of them. */
+  keywords: string[];
+  /** Points at the smallest legal size. */
+  minPoints?: number;
+  maxPoints?: number;
+  /** The representative model's characteristics, at least this much. */
+  minM?: number;
+  minT?: number;
+  minW?: number;
+  minOC?: number;
+  /** A save of this value or better, so 3 admits 3+ and 2+. */
+  maxSv?: number;
+  /** Only sheets whose representative model has an invulnerable save. */
+  invuln: boolean;
+}
+
+export const NO_FILTERS: CodexFilters = { type: "any", legends: true, keywords: [], invuln: false };
+
+/** How many filters are on, for the button that opens them. */
+export function filterCount(f: CodexFilters): number {
+  let n = f.keywords.length;
+  if (f.type !== "any") n++;
+  if (!f.legends) n++;
+  if (f.invuln) n++;
+  for (const v of [f.minPoints, f.maxPoints, f.minM, f.minT, f.minW, f.minOC, f.maxSv]) if (v !== undefined) n++;
+  return n;
+}
+
+export const anyFilter = (f: CodexFilters): boolean => filterCount(f) > 0;
+
+function parseNumber(raw: unknown): number | undefined {
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : undefined;
+}
+
+/** A remembered filter set, read back only as far as it still makes sense. */
+export function parseFilters(raw: unknown): CodexFilters | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const type = SHEET_TYPES.find((t) => t === r.type) ?? "any";
+  const keywords = Array.isArray(r.keywords) ? [...new Set(r.keywords.filter((k): k is string => typeof k === "string"))] : [];
+  return {
+    type,
+    legends: r.legends !== false,
+    keywords,
+    invuln: r.invuln === true,
+    minPoints: parseNumber(r.minPoints),
+    maxPoints: parseNumber(r.maxPoints),
+    minM: parseNumber(r.minM),
+    minT: parseNumber(r.minT),
+    minW: parseNumber(r.minW),
+    minOC: parseNumber(r.minOC),
+    maxSv: parseNumber(r.maxSv),
+  };
+}
+
+/** Whether one datasheet passes the filters. Points need the snapshot; the rest are on the sheet. */
+export function passesFilters(ds: Datasheet, snapshot: Snapshot | undefined, f: CodexFilters): boolean {
+  if (!f.legends && ds.isLegends) return false;
+  if (f.type !== "any" && sheetType(ds) !== f.type) return false;
+  for (const k of f.keywords) if (!ds.keywords.includes(k) && !ds.factionKeywords.includes(k)) return false;
+  if (f.minPoints !== undefined || f.maxPoints !== undefined) {
+    const pts = snapshot ? minPoints(ds, snapshot) : undefined;
+    if (pts === undefined) return false;
+    if (f.minPoints !== undefined && pts < f.minPoints) return false;
+    if (f.maxPoints !== undefined && pts > f.maxPoints) return false;
+  }
+  const rep = representativeProfile(ds);
+  // A sheet with no model profile cannot answer a question about one, so it is not an answer to it.
+  const atLeast = (v: number | null | undefined, floor: number | undefined): boolean => floor === undefined || (typeof v === "number" && v >= floor);
+  if (!atLeast(rep?.M, f.minM)) return false;
+  if (!atLeast(rep?.T, f.minT)) return false;
+  if (!atLeast(rep?.W, f.minW)) return false;
+  if (!atLeast(rep?.OC, f.minOC)) return false;
+  if (f.maxSv !== undefined && !(typeof rep?.Sv === "number" && rep.Sv <= f.maxSv)) return false;
+  if (f.invuln && !rep?.InvSv) return false;
+  return true;
+}
+
+/** A keyword the picker offers, and how many of the sheets in view carry it. */
+export interface CodexKeyword {
+  name: string;
+  count: number;
+}
+
+/**
+ * The keywords carried by the sheets a faction filter admits, by name, with their counts.
+ *
+ * By name because that is the order to read a long list in, and counted because a half-typed
+ * keyword has to settle on one: "psy" means PSYKER, which a hundred and forty sheets carry, not
+ * PSYCHOMANCER, which one does and which happens to come first in the alphabet.
+ */
+export function codexKeywords(datasheets: readonly Datasheet[], factionId: string): CodexKeyword[] {
+  const every = !factionId || factionId === ALL_FACTIONS;
+  const counts = new Map<string, number>();
+  for (const d of datasheets) {
+    if (!every && d.factionId !== factionId) continue;
+    for (const k of new Set([...d.keywords, ...d.factionKeywords])) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function matches(d: Datasheet, q: string): boolean {
   return d.name.toLowerCase().includes(q) || (d.role ?? "").toLowerCase().includes(q) || d.keywords.some((k) => k.toLowerCase().includes(q));
 }
 
 /**
  * The datasheets of one faction — or of every faction for `ALL_FACTIONS` — that match the query on
- * name, role or keyword, grouped the way the army builder's picker groups them.
+ * name, role or keyword and pass the filters, grouped the way the army builder's picker groups them.
  */
-export function codexGroups(datasheets: readonly Datasheet[], factionId: string, query: string): CodexGroup[] {
+export function codexGroups(snapshot: Snapshot | undefined, factionId: string, query: string, filters: CodexFilters = NO_FILTERS): CodexGroup[] {
+  if (!snapshot) return [];
   const q = query.trim().toLowerCase();
   const every = !factionId || factionId === ALL_FACTIONS;
-  const rows = datasheets.filter((d) => (every || d.factionId === factionId) && (!q || matches(d, q))).sort((a, b) => a.name.localeCompare(b.name));
+  const rows = snapshot.data.datasheets
+    .filter((d) => (every || d.factionId === factionId) && (!q || matches(d, q)) && passesFilters(d, snapshot, filters))
+    .sort((a, b) => a.name.localeCompare(b.name));
   return PICKER_GROUP_ORDER.map((group) => ({ group, sheets: rows.filter((d) => pickerGroupOf(d) === group) })).filter((g) => g.sheets.length > 0);
 }
 
