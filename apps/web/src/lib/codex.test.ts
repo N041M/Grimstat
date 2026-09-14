@@ -48,12 +48,12 @@ describe("browsing the snapshot", () => {
     expect(searchDatasheets(snapshot.data.datasheets, "e", [], 2)).toHaveLength(2);
   });
 
-  it("settles on a faction: the remembered one, else the open sheet's, else the first", () => {
+  it("settles on a faction: the remembered one, else the open sheet's, else every faction", () => {
     const factions = codexFactions(snapshot);
     expect(effectiveFaction(ALL_FACTIONS, factions, squad)).toBe(ALL_FACTIONS);
     expect(effectiveFaction("faction:verdant-swarm", factions, squad)).toBe("faction:verdant-swarm");
     expect(effectiveFaction("faction:gone", factions, squad)).toBe("faction:ashen-wardens");
-    expect(effectiveFaction("", factions, undefined)).toBe("faction:ashen-wardens");
+    expect(effectiveFaction("", factions, undefined)).toBe(ALL_FACTIONS);
     expect(effectiveFaction("", [], undefined)).toBe(ALL_FACTIONS);
   });
 

@@ -66,12 +66,16 @@ export function codexFactions(snapshot: Snapshot): CodexFaction[] {
 
 /**
  * The faction the browser shows: the remembered one while the snapshot still has it, otherwise the
- * open sheet's faction, otherwise the first faction the snapshot lists. `ALL_FACTIONS` is kept.
+ * open sheet's faction, otherwise every faction. `ALL_FACTIONS` is kept.
+ *
+ * Nothing remembered means the reader has not chosen a faction, so a search covers all of them.
+ * Settling on the first faction by name instead hid every other army behind a filter the reader
+ * never set.
  */
 export function effectiveFaction(stored: string, factions: readonly CodexFaction[], selected: Datasheet | undefined): string {
   if (stored === ALL_FACTIONS) return ALL_FACTIONS;
   if (stored && factions.some((f) => f.id === stored)) return stored;
-  return selected?.factionId ?? factions[0]?.id ?? ALL_FACTIONS;
+  return selected?.factionId ?? ALL_FACTIONS;
 }
 
 export interface CodexGroup {

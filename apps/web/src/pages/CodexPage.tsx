@@ -40,12 +40,14 @@ export function CodexPage({ id }: { id: string | undefined }) {
   const compared = useMemo(() => (snapshot ? sheetsById(snapshot, compare) : []), [snapshot, compare]);
 
   // A sheet opened from elsewhere (a link, the compare grid) pulls the column onto its faction —
-  // once per sheet, so changing the filter while reading it is left alone.
+  // once per sheet, so changing the filter while reading it is left alone. A reader who has chosen
+  // no faction keeps that: the column follows the open sheet while it is open, and the filter is
+  // back to every faction on the way out, rather than being left on whatever was read last.
   const followed = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!factionLoaded || !selected || followed.current === selected.id) return;
     followed.current = selected.id;
-    if (storedFaction !== ALL_FACTIONS && storedFaction !== selected.factionId) setStoredFaction(selected.factionId);
+    if (storedFaction && storedFaction !== ALL_FACTIONS && storedFaction !== selected.factionId) setStoredFaction(selected.factionId);
   }, [factionLoaded, selected, storedFaction, setStoredFaction]);
 
   // A link to a sheet lands on the sheet, whichever tab was open; and a newly opened sheet or a

@@ -7,6 +7,7 @@ import { useApp } from "../../state/AppContext";
 import { hrefFor } from "../../router";
 import { UNIT_SETS, attackerArchetypes, makeEntry, rosterHostEntries, totalPoints, type UnitEntry, type UnitSetDescriptor } from "../../lib/unitSet";
 import { loadUnitSet, readStoredSet, unitSetLabel } from "../../hooks/useUnitSet";
+import { ALL_FACTIONS } from "../../lib/codex";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { fmtInt } from "../../lib/format";
 import { Field, Popover, Tabs, useConfirm } from "../ui";
@@ -352,21 +353,21 @@ function ArchetypeSource({ filter, single, onAdd }: { filter: "attackers" | "all
 }
 
 function DatasheetSource({ snapshot, onAdd }: { snapshot: Snapshot | undefined; onAdd: (e: UnitEntry[]) => void }) {
-  const [factionId, setFactionId] = useState("");
+  // Every faction until the reader picks one, so a search reaches the whole snapshot.
+  const [factionId, setFactionId] = useState(ALL_FACTIONS);
   const [search, setSearch] = useState("");
   const factions = useMemo(() => {
     if (!snapshot) return [];
     if (snapshot.data.factions.length) return [...snapshot.data.factions].sort((a, b) => a.name.localeCompare(b.name));
     return [...new Set(snapshot.data.datasheets.map((d) => d.factionId))].map((id) => ({ id, name: id }));
   }, [snapshot]);
-  useEffect(() => {
-    if (!factionId && factions.length) setFactionId(factions[0]!.id);
-  }, [factions, factionId]);
+  const everyFaction = factionId === ALL_FACTIONS;
+  const factionNames = useMemo(() => new Map(factions.map((f) => [f.id, f.name] as const)), [factions]);
   const sheets = useMemo(() => {
     if (!snapshot) return [];
     const q = search.trim().toLowerCase();
-    return snapshot.data.datasheets.filter((d) => (!factionId || d.factionId === factionId) && (!q || d.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
-  }, [snapshot, factionId, search]);
+    return snapshot.data.datasheets.filter((d) => (!factionId || everyFaction || d.factionId === factionId) && (!q || d.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+  }, [snapshot, factionId, everyFaction, search]);
 
   if (!snapshot)
     return (
@@ -380,6 +381,7 @@ function DatasheetSource({ snapshot, onAdd }: { snapshot: Snapshot | undefined; 
       <div className="field-row">
         <Field label={t("picker.faction")}>
           <select value={factionId} onChange={(e) => setFactionId(e.target.value)}>
+            <option value={ALL_FACTIONS}>{t("codex.allFactions")}</option>
             {factions.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.name}
@@ -396,7 +398,7 @@ function DatasheetSource({ snapshot, onAdd }: { snapshot: Snapshot | undefined; 
           sheets.map((d) => (
             <button key={d.id} type="button" role="option" aria-selected={false} onClick={() => pick(d)}>
               <span>{d.name}</span>
-              <span className="muted small">{d.role ?? ""}</span>
+              <span className="muted small">{[everyFaction ? (factionNames.get(d.factionId) ?? d.factionId) : "", d.role ?? ""].filter(Boolean).join(" · ")}</span>
             </button>
           ))
         ) : (

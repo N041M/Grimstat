@@ -53,7 +53,8 @@ function defaultCount(ds: Datasheet): number {
 export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
   const { notify } = useApp();
   const [tab, setTab] = useState<Tab>(() => deriveTab(unit));
-  const [factionId, setFactionId] = useState<string>("");
+  // Every faction until the reader picks one, so a search reaches the whole snapshot.
+  const [factionId, setFactionId] = useState<string>(ALL_FACTIONS);
   const [search, setSearch] = useState("");
   const [count, setCount] = useState<number>(() => modelCount(unit) || 1);
   const [attached, setAttached] = useState<string[]>(() => unit.ref?.attachedDatasheetIds ?? []);
@@ -81,10 +82,6 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
     const ids = [...new Set(snapshot.data.datasheets.map((d) => d.factionId))];
     return ids.map((id) => ({ id, name: id }));
   }, [snapshot]);
-
-  useEffect(() => {
-    if (!factionId && factions.length) setFactionId(factions[0]!.id);
-  }, [factions, factionId]);
 
   const everyFaction = factionId === ALL_FACTIONS;
   const factionNames = useMemo(() => new Map(factions.map((f) => [f.id, f.name] as const)), [factions]);
