@@ -4902,6 +4902,79 @@ a.btn:hover {
   }
 }
 
+/* ---------- Calculator: the headline panel on a phone ----------
+   The panel is one column at phone width. The figure comes first, then the two controls that
+   change it, then the four readings, each of them across the full width of the panel.
+
+   Above this width those controls stand in a column beside the figure. That column is about half a
+   phone wide. It held the phase chips and the range menu at their smallest, it broke the sentence
+   that explains a missing figure into four or five words a line, and it had to start 30px down to
+   clear the hide control in the corner. The four readings were laid across one wrapping row, which
+   came out three on the first line and one on the second.
+
+   The breakpoint is 759px, the width App.tsx calls a phone, so the tablet layout above it is
+   unchanged. A phone held sideways is wider than 759px and keeps that layout, which suits the
+   375px of height it has. */
+@media (max-width: 759px) {
+  .hero {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    height: auto;
+    gap: 16px;
+  }
+  /* The situation and the readings become children of the hero; see SummaryTiles.tsx. */
+  .hero-side {
+    display: contents;
+  }
+  /* Each control takes a line of its own, with its name in a 78px column down the left, so the two
+     controls start and end on the same edges. 78px is the room "Range band" needs at this size, and
+     it is the width the dock uses for its own labels. */
+  .situation {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 0;
+  }
+  .situation-field,
+  .situation .dock-field {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .situation-label,
+  .situation .dock-field-label {
+    flex: none;
+    width: 78px;
+  }
+  /* The two chips share the line, half the width each, at the touch height the compact rules
+     already give them. */
+  .situation-chips {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .situation-chips .pill-chip {
+    flex: 1 1 0;
+    justify-content: center;
+    text-align: center;
+    padding-inline: 8px;
+  }
+  .situation-range .dock-field,
+  .situation-range .selectbox {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  /* Two columns of equal width, so the four readings sit two by two. The labels are too long for
+     four of them across a phone, and one wrapping row left the fourth alone on a line. */
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
+  }
+}
+
 
 /* ---------- Armies: editor shell ----------
    Main column plus the 288px dock; the inspector / export / history panel overlays the dock so the
