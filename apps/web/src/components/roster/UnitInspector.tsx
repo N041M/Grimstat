@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import type { UnitCost } from "@grimstat/resolver";
-import { groupBounds, hasWargear, isCharacterSheet, modelCountOf, toggleWargear, unitDisplayName, weaponBaseNames, type ModelGroup } from "../../lib/roster";
+import { groupBounds, hasWargear, isCharacterSheet, modelCountOf, toggleWargear, unitDisplayName, wargearChoices, type ModelGroup } from "../../lib/roster";
 import { canEmbark, loadsByTransport, transportCandidates } from "../../lib/transport";
 import { fmtInt } from "../../lib/format";
 import { DiagnosticItem } from "./DiagnosticItem";
@@ -151,7 +151,7 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
   const items = useMemo<WargearItem[]>(() => {
     if (!ds) return [];
     const prices = snapshot.data.wargearPrices.filter((w) => w.datasheetId === ds.id);
-    const out: WargearItem[] = weaponBaseNames(ds).map((name) => ({ name, price: prices.find((p) => p.item.toLowerCase() === name.toLowerCase())?.points }));
+    const out: WargearItem[] = wargearChoices(ds).map((name) => ({ name, price: prices.find((p) => p.item.toLowerCase() === name.toLowerCase())?.points }));
     for (const p of prices) if (!out.some((i) => i.name.toLowerCase() === p.item.toLowerCase())) out.push({ name: p.item, price: p.points });
     return out;
   }, [ds, snapshot]);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Datasheet, ScenarioUnit } from "@grimstat/schema";
 import { loadSyntheticSnapshot } from "@grimstat/snapshot";
-import { checkLoadout, readWargearOptions, UNLIMITED } from "./loadout";
+import { checkLoadout, readWargearOptions, wargearItems, UNLIMITED } from "./loadout";
 import { unitFromDatasheet } from "./resolve";
 
 const snapshot = loadSyntheticSnapshot();
@@ -110,6 +110,30 @@ describe("reading wargear option prose", () => {
     const r = readWargearOptions(sheet({ options: ["Up to 2 Wardens can each have their flux carbine replaced with 1 void hammer."] }));
     expect(r.options).toEqual([]);
     expect(r.unread).toHaveLength(1);
+  });
+});
+
+describe("the wargear a datasheet offers that is not a weapon", () => {
+  it("names what an option line grants and the datasheet has no weapon for", () => {
+    expect(wargearItems(sheet({ options: ["Any number of Wardens can each be equipped with 1 ember banner."] }))).toEqual(["Ember banner"]);
+  });
+
+  it("names both halves of an option that grants two things", () => {
+    expect(wargearItems(sheet({ options: ["1 Warden can be equipped with 1 ember banner and 1 warden's horn."] }))).toEqual(["Ember banner", "Warden's horn"]);
+  });
+
+  it("offers nothing for a line that only moves weapons about", () => {
+    expect(wargearItems(squad)).toEqual([]);
+  });
+
+  it("leaves a weapon alone, whichever way the line writes it", () => {
+    const ds = sheet({ options: ["Any number of Wardens can each have their flux carbine replaced with 1 shock maul."] });
+    expect(wargearItems(ds)).toEqual([]);
+  });
+
+  it("reads nothing out of a line whose allowance it does not understand", () => {
+    // A footnote qualifies the lines above it. Read as a grant, its prose would arrive as item names.
+    expect(wargearItems(sheet({ options: ["* You cannot select the same option twice, and no model can have an ember banner and a warden's horn."] }))).toEqual([]);
   });
 });
 

@@ -241,6 +241,60 @@ export function readWargearOptions(ds: Datasheet): WargearReading {
   return { options, unread, fixed, complete: unread.length === 0 };
 }
 
+/** A printed item name with its decorations off: the allowance, the count, a bracketed aside, a footnote mark. */
+function itemName(candidate: string): string {
+  return tidy(splitCount(tidy(candidate).replace(/^up to\s+/i, "")).name.replace(/\([^)]*\)/g, " "))
+    .replace(/[*\u2020]+$/, "")
+    .replace(/[.;,]+$/, "")
+    .trim();
+}
+
+/** The most words a printed wargear name runs to; past that the candidate is a sentence about the options. */
+const NAME_WORDS = 6;
+
+/**
+ * What separates one named thing from the next inside a candidate. A bullet often carries a whole
+ * swap — "1 daemonic icon can be equipped with 1 instrument of chaos" names two — so the words that
+ * join the halves of a sentence count as separators here, not only the commas.
+ */
+const ITEM_SPLIT = /\s*,\s*|\s+and\s+|\s+or\s+|\s+with\s+|\bcan\b/i;
+
+/** The words a fragment of the sentence opens with; a name never does. */
+const NOT_A_NAME = /^(?:be|have|has|take|takes|select|replace|replaces|replaced|equip|equipped|this|that|its|their|the|model|unit|any|all|each|one|up)\b/i;
+
+/**
+ * The wargear a datasheet's options name that is none of its weapons: a vexilla, a storm shield, a
+ * gun drone, an icon. Nothing any of them does reaches the attack sequence, so the app carries one
+ * on a model and computes nothing from it. A list that names one is naming something the datasheet
+ * grants, though, and someone building the unit in the app should be able to pick it from the sheet
+ * rather than type it in.
+ *
+ * Only a line whose allowance is understood is read. The lines that are not are footnotes and
+ * conditions rather than grants, and their prose would arrive here as item names. A candidate the
+ * datasheet knows whole is left alone before it is split, so a weapon with an "and" in its name is
+ * not cut into two items that are not weapons at all.
+ */
+export function wargearItems(ds: Datasheet): string[] {
+  const bases = [...new Set(ds.weapons.map((w) => key(baseWeaponName(w.name))).filter(Boolean))];
+  const out = new Map<string, string>();
+  for (const line of ds.wargearOptions) {
+    if (!allowance(line)) continue;
+    for (const candidate of grantCandidates(line)) {
+      const whole = itemName(candidate);
+      if (!whole || matchWeapon(whole, bases)) continue;
+      for (const part of whole.split(ITEM_SPLIT)) {
+        const item = itemName(part ?? "");
+        if (!item || NOT_A_NAME.test(item) || item.split(" ").length > NAME_WORDS) continue;
+        if (matchWeapon(item, bases)) continue;
+        // The prose writes an item mid-sentence, so it arrives lower-cased where a weapon profile's
+        // own name arrives as printed. Both end up in one list of things to pick from.
+        out.set(key(item), item.charAt(0).toUpperCase() + item.slice(1));
+      }
+    }
+  }
+  return [...out.values()];
+}
+
 /**
  * Weapons the datasheet hands a roster unit's models that the list left out.
  *

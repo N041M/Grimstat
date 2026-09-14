@@ -47,6 +47,30 @@ export function isWeaponOf(ds: Datasheet, key: string): boolean {
 
 const tokenKey = (s: string): string => [...new Set(tokens(s))].sort().join(" ");
 
+const SHEET_WARGEAR = new WeakMap<Datasheet, string>();
+
+/**
+ * True when the datasheet accounts for `name`: one of its weapon profiles, or something its printed
+ * loadout or its wargear options name.
+ *
+ * A Vexilla, an Icon of Excess, a Shield Drone or a Storm Shield is wargear a datasheet hands out and
+ * this app does not model, since nothing it does reaches the attack sequence. That is not the same as
+ * a name the datasheet has never heard of, which is what an importer wants to report: a line it read
+ * wrongly. The printed text is the only place these items exist — no source ships an option tree — so
+ * the text is what is asked.
+ */
+export function isWargearOf(ds: Datasheet, name: string): boolean {
+  const key = normaliseName(name);
+  if (!key) return false;
+  if (isWeaponOf(ds, key)) return true;
+  let text = SHEET_WARGEAR.get(ds);
+  if (text === undefined) {
+    text = ` ${singularKey([ds.loadout ?? "", ...ds.wargearOptions].join(" "))} `;
+    SHEET_WARGEAR.set(ds, text);
+  }
+  return text.includes(` ${singularKey(key)} `);
+}
+
 /**
  * A name as a key that ignores how the dialects pluralise it, so that "Squighog Boyz" and "Squighog Boy"
  * are one model. Words of three letters or fewer are left alone, because they are joiners.

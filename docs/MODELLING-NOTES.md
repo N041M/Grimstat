@@ -129,6 +129,28 @@ two sources never had one. So the check reads the prose, and reports its own cov
 - The roster editor does not run this yet: a roster records wargear as names per model group with no
   counts, so ratio limits cannot be expressed there.
 
+### Wargear that is not a weapon
+A vexilla, a storm shield, an icon of excess, a gun drone: the datasheet grants it in the same option
+prose as a weapon, but it has no profile, so nothing it does reaches the attack sequence and the engine
+computes nothing from it. The model carries it and that is all.
+
+- **An importer does not report it as a name it has never heard of.** `isWargearOf` asks the datasheet's
+  own printed text — its loadout line and its option lines — rather than only its weapon profiles. Across
+  the 55 lists in `data/corpus` that is 248 warnings that were saying nothing a reader could act on. What
+  is left warned about is what the datasheet really does not mention.
+- **The unit inspector offers the ones that can be named.** `wargearItems` reads the option lines whose
+  allowance the loadout parser understands and returns what they grant that is not a weapon, so a player
+  picks a vexilla from the sheet rather than typing it into the free-text box. 198 of the 1711 datasheets
+  in the 11th-edition export have at least one; 126 distinct items in all.
+- **The two readings are deliberately different.** The importer's is a question about one name and answers
+  it from the whole text, so it forgives an item the option parser cannot reach ("this unit can have 1
+  Plasmacyte" names no grant the parser knows). The inspector's has to produce a list a person reads, so it
+  takes only what it is sure of.
+- **A line whose only grant is one of these is still filed unread**, which is what withholds the strict
+  "nothing grants this weapon" check on that datasheet. Reading those lines would let the check run on more
+  sheets, and would want checking against real rosters first, since it turns a withheld check into errors
+  a player sees.
+
 ## Coverage tiers
 - Tier 1: weapon keywords in `keywords.ts`, unit core abilities in `patterns.ts#coreAbilityEffects`, and
   abilities the text reader finds to have no effect on the attack sequence.

@@ -3,7 +3,7 @@
   "createdAt": "2026-01-01T00:00:00.000Z",
   "updatedAt": "2026-01-01T00:00:00.000Z",
   "revision": 0,
-  "id": "snap_20260101_e3b939d8",
+  "id": "snap_20260101_a6ce6bac",
   "gameSystemId": "wh40k-11e",
   "label": "synthetic fixture",
   "sources": [
@@ -29,7 +29,7 @@
       "notes": "Powered by Wahapedia (https://wahapedia.ru); text (c) Games Workshop"
     }
   ],
-  "checksum": "e3b939d85c3edcc317cfcaf1d76061ffdee3489e27f44a15927870f824cd9873",
+  "checksum": "a6ce6bac12fcaa0c8ab547e9263c8f9effb8686c24ed031b2043c9aea32c476b",
   "conflicts": [
     {
       "entity": "datasheet",
@@ -456,7 +456,9 @@
           }
         ],
         "loadout": "Every model is equipped with: ember carbine; skirmisher blade.",
-        "wargearOptions": [],
+        "wargearOptions": [
+          "1 Ember Skirmisher can be equipped with 1 ember banner."
+        ],
         "sourceId": "pub:wahapedia:000000001",
         "fallbackPoints": 70
       },

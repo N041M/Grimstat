@@ -7,6 +7,7 @@ import {
   RosterImportContext,
   SIZE_BY_LABEL,
   defaultGroups,
+  isWargearOf,
   isWeaponOf,
   mergeGroup,
   profileGroups,
@@ -1035,8 +1036,15 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     const cut = counted && firstWith(line.slice(counted[0]!.length));
     if (cut && addModelLine(st.cur, cut.label, Number(counted![1]), parseWargearItems(cut.wargear))) continue;
     if (isBullet) {
-      // "• Bolt pistol" style single wargear line
-      addWargear(st.sub ?? st.cur, line, 0);
+      // "• Bolt pistol", or a line holding several items: "• Guardian Drone, Gun Drone". Exactly one
+      // weapon name in the game data has a comma in it, so a line the datasheet knows whole is left as
+      // the list wrote it and only an unknown one is split.
+      const target = st.sub ?? st.cur;
+      if (isWeaponOf(target.u.ds, normaliseName(line))) addWargear(target, line, 0);
+      else {
+        const g = wargearTarget(target);
+        for (const item of parseWargearItems(line)) g.items.push(item);
+      }
       continue;
     }
     warnings.push(`${st.cur.u.name}: ignored line "${line}"`);
@@ -1091,6 +1099,6 @@ function finishUnit(t: TextUnit, warnings: string[]): void {
     for (const sub of zipModelGroups(profiles, wargearGroups(count, readWargear(ds, g.items)))) mergeGroup(out, sub);
   }
   t.u.groups = out;
-  const unknown = [...new Set(out.flatMap((g) => g.wargear))].filter((w) => !isWeaponOf(ds, normaliseName(w)));
+  const unknown = [...new Set(out.flatMap((g) => g.wargear))].filter((w) => !isWargearOf(ds, w));
   for (const w of unknown) warnings.push(`${t.u.name}: unknown wargear "${w}".`);
 }

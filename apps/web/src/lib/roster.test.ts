@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
-import { canAddCopy, compositionBounds, duplicateUnit, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, factionLineage, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
+import { canAddCopy, compositionBounds, duplicateUnit, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, factionLineage, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearChoices, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
 import { decodeRosterPermalink, encodeRosterPermalink, rosterPermalinkUrl, rosterTokenFromHash } from "./rosterPermalink";
 
 const NOW = "2026-09-09T10:00:00.000Z";
@@ -171,6 +171,13 @@ describe("loadout-based wargear prefill", () => {
     const ds = sheet({ ...squad, id: "z", loadout: "Equipped with: PLASMA GUN and a shock maul." });
     expect(loadoutWargear(ds)).toEqual(["Plasma gun", "Shock maul"]);
     expect(weaponBaseNames(squad)).toEqual(["Flux carbine", "Plasma gun", "Shock maul", "Power fist"]);
+  });
+
+  it("offers the datasheet's own wargear after its weapons, and only what the weapons leave out", () => {
+    // A vexilla, an icon, a drone: named by an option line, on no weapon list, and pickable all the same.
+    const withBanner = sheet({ ...squad, id: "ds-banner", wargearOptions: ["1 Warden can be equipped with 1 ember banner."] });
+    expect(wargearChoices(withBanner)).toEqual([...weaponBaseNames(squad), "Ember banner"]);
+    expect(wargearChoices(squad)).toEqual(weaponBaseNames(squad));
   });
 
   it("returns nothing without loadout text", () => {

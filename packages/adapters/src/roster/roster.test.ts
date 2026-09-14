@@ -465,10 +465,11 @@ describe("the models a list names", () => {
   });
 
   it("does not count the models a wargear line stood the unit up with", () => {
-    // The banner is on no weapon list, so it is read as wargear before any model line has been seen.
-    const { roster: r, warnings } = importLines("Ember Skirmishers (140 points)", "• 1x Ember banner", "• 1x Skirmisher Prime", "• 9x Ember Skirmisher");
+    // The trophy is on no weapon list and in no option line, so it is read as wargear before any model
+    // line has been seen, and the group it stands the unit up in is the one the model lines replace.
+    const { roster: r, warnings } = importLines("Ember Skirmishers (140 points)", "• 1x Ember trophy", "• 1x Skirmisher Prime", "• 9x Ember Skirmisher");
     expect(size(r.units[0]!)).toBe(10);
-    expect(warnings).toEqual([`Ember Skirmishers: unknown wargear "Ember banner".`]);
+    expect(warnings).toEqual([`Ember Skirmishers: unknown wargear "Ember trophy".`]);
   });
 
   it("gives a model with a datasheet of its own a unit of its own", () => {
@@ -486,6 +487,25 @@ describe("the models a list names", () => {
     expect(r.units[1]!.isWarlord).toBe(false);
     expect(shape(r.units[0]!)).toEqual([["ashen-crusher", 1, "Vortex cannon"]]);
     expect(shape(r.units[1]!)).toEqual([["crusher-pilot", 1, "Pilot’s sidearm+Cutting bar"]]);
+  });
+
+  it("keeps the wargear a datasheet grants without reporting it as a name it does not know", () => {
+    // An ember banner is on no weapon list, and the datasheet's options name it. The unit carries it and
+    // the app computes nothing from it, which is not the same as a line that was read wrongly.
+    const { roster: r, warnings } = importLines("Ember Skirmishers (140 points)", "• 5x Ember Skirmisher", "◦ 5x Ember carbine", "◦ 1x Ember banner");
+    expect(warnings).toEqual([]);
+    expect(r.units[0]!.models.flatMap((g) => g.wargear)).toContain("Ember banner");
+  });
+
+  it("still reports a name that is nowhere on the datasheet", () => {
+    const { warnings } = importLines("Ember Skirmishers (140 points)", "• 5x Ember Skirmisher", "◦ 1x Ember bannner");
+    expect(warnings).toEqual([`Ember Skirmishers: unknown wargear "Ember bannner".`]);
+  });
+
+  it("splits a wargear line that holds several items", () => {
+    const { roster: r, warnings } = importLines("Ember Skirmishers (140 points)", "• 5x Ember Skirmisher", "◦ Ember banner, Ember carbine");
+    expect(warnings).toEqual([]);
+    expect(r.units[0]!.models.flatMap((g) => g.wargear).sort()).toEqual(["Ember banner", "Ember carbine"]);
   });
 
   it("keeps a model name the snapshot does not know with the unit it was written under", () => {
@@ -515,11 +535,16 @@ describe("a bare count line that names a weapon", () => {
 describe("a model line padded with spaces", () => {
   // The pattern the `1 Custodian Guard with guardian spear` line is read with grows a lazy name group
   // against `\s+with\s+`, and the meta worker runs the importer over every stored list.
+  //
+  // The budget is looser than the ones above it because this reads a whole list rather than one line:
+  // about seven milliseconds on its own, and a little over fifty when the whole suite runs at once. The
+  // pattern this guards against took 4.3 seconds at this width and 34 at twice it, so a quarter of a
+  // second still tells the two apart.
   it("is read in bounded time", () => {
     const text = ["Ashen Wardens", "Ember Vanguard", "Warden Squad (180 points)", `• 1${" ".repeat(2000)}Warden`].join("\n");
     const started = performance.now();
     importRosterText(text, snapshot);
-    expect(performance.now() - started).toBeLessThan(50);
+    expect(performance.now() - started).toBeLessThan(250);
   });
 });
 

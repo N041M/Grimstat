@@ -1,5 +1,5 @@
 import { Roster, type BattleSize, type Datasheet, type RosterUnit, type Snapshot } from "@grimstat/schema";
-import { BATTLE_SIZES, baseWeaponName, parseLoadout } from "@grimstat/game-40k-11e";
+import { BATTLE_SIZES, baseWeaponName, parseLoadout, wargearItems } from "@grimstat/game-40k-11e";
 import { compositionBranches, rosterSummary } from "@grimstat/resolver";
 import { newId, nowIso } from "./ids";
 
@@ -199,6 +199,17 @@ export function loadoutWargearFor(ds: Datasheet, profileName: string): string[] 
   const parsed = parseLoadout(ds);
   const wanted = new Set([...parsed.all, ...(parsed.byProfile[profileName.toLowerCase()] ?? [])]);
   return weaponBaseNames(ds).filter((b) => wanted.has(b.toLowerCase()));
+}
+
+/**
+ * Everything a datasheet's models can be given, in the order the unit inspector offers it: its weapons
+ * first, then the wargear its options name that is not a weapon — a vexilla, a storm shield, a drone.
+ * The app computes nothing from that second kind, and the unit carries it the same way either way.
+ */
+export function wargearChoices(ds: Datasheet): string[] {
+  const weapons = weaponBaseNames(ds);
+  const known = new Set(weapons.map((w) => w.toLowerCase()));
+  return [...weapons, ...wargearItems(ds).filter((i) => !known.has(i.toLowerCase()))];
 }
 
 /** Distinct weapon base names of a datasheet (multi-profile weapons collapse to one entry). */
