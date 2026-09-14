@@ -84,6 +84,12 @@ wargear and the unit arrived at the size of its minimum composition. A ten-model
   `packages/resolver/src/composition.ts`, which the Wahapedia adapter, the army builder, the importers
   and the loadout check all go through. A row of the points table names its models in the same shape
   and is split by the same reader, though a points row is a size only when every part of it is a count.
+- **The model names a line gives are read separately from the counts**, in `compositionNames` in
+  `packages/adapters/src/roster/import-common.ts`, and deliberately so. It keeps a part that carries no
+  count, because a list can write a model the composition names without a number in front of it, and it
+  keeps what is in brackets, because a line matches a composition name on its words and a list that
+  writes only "Garran Branatar" has to reach "1 Kill Team Terminator (Garran Branatar)". The reader that
+  counts models drops both, which is right for a count and wrong for a name.
 
 ## Play companion (the in-game tracker)
 - **Attached characters are folded into their host** everywhere the app resolves a roster unit, so a
