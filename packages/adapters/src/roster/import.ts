@@ -593,6 +593,69 @@ export function parseWargearList(text: string): string[] {
   return parseWargearItems(text).flatMap((i) => Array.from({ length: i.copies ?? 1 }, () => i.name));
 }
 
+/** A count written without the `x` that would separate it from the item: "2 Shieldbreaker missile launchers". */
+const BARE_COUNT = /^(\d+)\s+(.+)$/;
+/** The "and" a list writes between the last two entries of a wargear list. */
+const AND_JOIN = /\s+and\s+/i;
+/** The plural `s` a count puts on a weapon name, with three letters in front of it so short names keep theirs. */
+const SINGULAR = /(\w{3,})s$/;
+
+/** One weapon of a wargear entry: the name as the entry writes it, and how many copies the entry asks for. */
+interface ReadWeapon {
+  name: string;
+  copies: number;
+}
+
+/**
+ * One wargear entry read as a weapon of the datasheet. A count in front of the name counts copies, and it puts
+ * the name in the plural, so a counted entry is looked up in the singular as well: "2 Twin meltaguns" is the
+ * Twin meltagun twice.
+ */
+function readWeapon(ds: Datasheet, text: string): ReadWeapon | undefined {
+  const name = text.trim();
+  if (!name) return undefined;
+  if (isWeaponOf(ds, normaliseName(name))) return { name, copies: 1 };
+  const m = BARE_COUNT.exec(name);
+  if (!m) return undefined;
+  const copies = Math.max(1, Math.min(MAX_COPIES, Number(m[1])));
+  const counted = m[2]!.trim();
+  for (const cand of [counted, counted.replace(SINGULAR, "$1")]) {
+    if (isWeaponOf(ds, normaliseName(cand))) return { name: cand, copies };
+  }
+  return undefined;
+}
+
+/**
+ * The weapons one wargear entry names, or undefined when it should stay as the list wrote it. Lists join the
+ * last two entries of a wargear list with "and", but 73 weapon and weapon-group names in the game data have an
+ * "and" of their own ("Cult claws and knife", "Slaughter and Carnage"), so an entry is cut at "and" only when
+ * the whole of it is not a weapon of the datasheet and each piece is.
+ */
+function readWargearEntry(ds: Datasheet, text: string): ReadWeapon[] | undefined {
+  if (isWeaponOf(ds, normaliseName(text))) return undefined;
+  const out: ReadWeapon[] = [];
+  for (const part of text.split(AND_JOIN)) {
+    const w = readWeapon(ds, part);
+    if (!w) return undefined;
+    out.push(w);
+  }
+  return out;
+}
+
+/**
+ * Re-reads the wargear of one model group against the datasheet. `parseWargearItems` has no datasheet to ask,
+ * so it leaves an entry that joins two weapons with "and" and an entry that counts its weapon without an "x"
+ * whole; here the datasheet can say what the list meant. Entries it cannot account for are kept as written and
+ * reported by `finishUnit`.
+ */
+function readWargear(ds: Datasheet, items: WargearItem[]): WargearItem[] {
+  return items.flatMap((item) => {
+    const read = readWargearEntry(ds, item.name);
+    if (!read) return [item];
+    return read.map((w) => ({ ...item, name: w.name, copies: Math.min(MAX_COPIES, (item.copies ?? 1) * w.copies) }));
+  });
+}
+
 /** Points as written with thousands separators: "1,000 points". */
 function points(s: string | undefined): number {
   return Number((s ?? "").replace(/,/g, ""));
@@ -999,7 +1062,7 @@ function finishUnit(t: TextUnit, warnings: string[]): void {
   for (const g of groups) {
     const count = Math.max(1, g.count);
     const profiles = g.modelProfileId ? [{ modelProfileId: g.modelProfileId, count, wargear: [] }] : profileGroups(ds, count);
-    for (const sub of zipModelGroups(profiles, wargearGroups(count, g.items))) mergeGroup(out, sub);
+    for (const sub of zipModelGroups(profiles, wargearGroups(count, readWargear(ds, g.items)))) mergeGroup(out, sub);
   }
   t.u.groups = out;
   const unknown = [...new Set(out.flatMap((g) => g.wargear))].filter((w) => !isWeaponOf(ds, normaliseName(w)));

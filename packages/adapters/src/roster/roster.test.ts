@@ -233,6 +233,41 @@ describe("text import edge cases", () => {
     expect(warnings).toEqual([`Warden Captain: unknown wargear "Fluxx pistol".`]);
   });
 
+  it("splits a wargear entry that joins two weapons with `and`", () => {
+    const rest = importLines("Ashen Wardens", "Ember Vanguard", "1x Ashen Crusher (180 points): Fusion beamer and Twin hail gun");
+    const bullet = importLines("Ashen Wardens", "Ember Vanguard", "Ashen Crusher (180 points)", "• 1x Fusion beamer and Twin hail gun");
+    for (const { roster: r, warnings } of [rest, bullet]) {
+      expect(warnings).toEqual([]);
+      expect(r.units[0]!.models[0]!.wargear).toEqual(["Fusion beamer", "Twin hail gun"]);
+    }
+  });
+
+  // 73 weapon and weapon-group names in the real game data have an "and" of their own ("Cult claws and knife"),
+  // and some sit on a datasheet that carries each half as a weapon too, so the whole entry is tried before it is cut.
+  it("keeps a wargear entry whose own name has an `and` in it", () => {
+    const data = structuredClone(snapshot.data);
+    const thornlings = data.datasheets.find((d) => d.name === "Thornlings")!;
+    thornlings.weapons.push({ ...structuredClone(thornlings.weapons[1]!), id: "wp:verdant-swarm:thornlings:spine-flick-and-barbed-claws", name: "Spine flick and barbed claws" });
+    const { roster: r, warnings } = importRosterText("Verdant Swarm\n1x Thornlings (60 points): Spine flick and barbed claws", { ...snapshot, data });
+    expect(warnings).toEqual([]);
+    expect(r.units[0]!.models[0]!.wargear).toEqual(["Spine flick and barbed claws"]);
+  });
+
+  it("leaves an entry as written when only part of it is a weapon of the datasheet", () => {
+    const { roster: r, warnings } = importLines("Ashen Wardens", "Ember Vanguard", "1x Ashen Crusher (180 points): Fusion beamer and Fluxx cannon");
+    expect(r.units[0]!.models[0]!.wargear).toEqual(["Fusion beamer and Fluxx cannon"]);
+    expect(warnings).toEqual([`Ashen Crusher: unknown wargear "Fusion beamer and Fluxx cannon".`]);
+  });
+
+  it("reads a count written in front of a weapon without an `x`, in the plural or the singular", () => {
+    const plural = importLines("Ashen Wardens", "Ember Vanguard", "1x Ashen Crusher (180 points): Vortex cannon, 2 Twin hail guns");
+    const singular = importLines("Ashen Wardens", "Ember Vanguard", "1x Ashen Crusher (180 points): Vortex cannon, 2 Twin hail gun");
+    for (const { roster: r, warnings } of [plural, singular]) {
+      expect(warnings).toEqual([]);
+      expect(r.units[0]!.models[0]!.wargear).toEqual(["Vortex cannon", "Twin hail gun", "Twin hail gun"]);
+    }
+  });
+
   it("accepts a detachment named after the first unit, with or without its DP count", () => {
     const { roster: r, warnings } = importLines("Ashen Wardens", "1x Warden Captain (80 pts): Flux pistol", "Detachment: Ember Vanguard");
     expect(warnings).toEqual([]);
