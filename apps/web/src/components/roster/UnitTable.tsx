@@ -336,7 +336,7 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
 
   const tools = (
     <div className="ut-tools">
-      <label className="ut-filter">
+      <label className="search-wrap ut-filter">
         <Icon name="search" />
         <span className="sr-only">{t("roster.units.filter")}</span>
         <input type="search" value={query} placeholder={t("roster.units.filterPlaceholder")} onChange={(e) => setQuery(e.target.value)} />

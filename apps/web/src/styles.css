@@ -5146,6 +5146,25 @@ a.btn:hover {
   padding: 14px 22px;
   border-bottom: 1px solid var(--line);
 }
+/* The filter and the select actions above the table. The row had no rules of its own, so the label
+   laid its icon out beside the input rather than in it, and the buttons sat on the text baseline. */
+.ut-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 22px;
+}
+.ut-filter {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 320px;
+}
+.ut-tools-count {
+  margin-left: auto;
+  font: 400 12px/1 var(--mono);
+  color: var(--muted);
+}
 .ut-row {
   align-items: center;
 }
