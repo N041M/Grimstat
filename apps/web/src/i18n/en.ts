@@ -2328,6 +2328,7 @@ export const en = {
   "codex.filter.on.one": "1 filter on",
   "codex.filter.on.many": "{n} filters on",
   "codex.filter.clear": "Clear",
+  "codex.filter.done": "Done",
   "codex.noMatchFiltered": "Nothing matches these filters.",
   "codex.landing.count.one": "{n} datasheet",
   "codex.landing.count.many": "{n} datasheets",

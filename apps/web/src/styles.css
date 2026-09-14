@@ -7588,6 +7588,7 @@ button.battle-scope-btn:hover {
   text-align: center;
 }
 .codex-filter-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -7607,11 +7608,29 @@ button.battle-scope-btn:hover {
 .codex-filter-sec > input {
   width: 100%;
 }
+/* The unit type sits under the close button, so it takes a little more room off the head row. */
+.codex-filter-sec > select {
+  margin-top: 5px;
+}
 .codex-filter-sec-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+  /* Room for the close button, which stands over the right of this row in the first band. */
+  padding-right: 22px;
+}
+/* The panel's own corner, reaching into the popover's padding so it sits where a corner is, and
+   out of the flow so a button the height of a thumb costs the panel no height at all. */
+.codex-filter-x {
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  z-index: 2;
+  color: var(--muted);
+}
+.codex-filter-x:hover {
+  color: var(--ink);
 }
 .codex-filter-note {
   font: 400 10px/1 var(--mono);
@@ -7697,6 +7716,14 @@ button.battle-scope-btn:hover {
   gap: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--line);
+}
+.codex-filter-acts {
+  display: inline-flex;
+  gap: 6px;
+}
+/* Drawn only where the panel is a dialog, which is phone widths; see the rule further down. */
+.codex-filter-veil {
+  display: none;
 }
 /* Where the list stops; scrolling to it draws the next batch. A line tall, so it has a box to see. */
 .codex-more {
@@ -8390,28 +8417,43 @@ button.battle-scope-btn:hover {
     width: 100%;
     justify-content: center;
   }
-  /* The rule above lays a popover across the screen at this width, but `align-end` is the more
-     specific of the two and pins the panel to the right edge. Said again here, past it.
-
-     Sat on the bottom of the screen rather than hanging off the button: the panel is taller than
-     the room under a button near the top, so its foot — the count and Clear — fell off the end of
-     the screen. It is also where a thumb is. Taller than the screen, it scrolls inside itself, and
-     keeps that scroll to itself. */
+  /* On a phone the panel is a dialog rather than something hanging off its button: the page behind
+     it is held still and it is answered with Done, so it stands in the middle of the screen. The
+     rule above lays every popover across the screen at this width and `align-end` pins them right;
+     both are said again here, past them. */
   .codex-filter-wrap .popover.align-end {
-    left: 0.75rem;
-    right: 0.75rem;
-    top: auto;
-    bottom: 0.75rem;
-    width: auto;
-    max-height: calc(100vh - 5rem);
-    max-height: calc(100dvh - 5rem);
+    /* Centred by even margins rather than a transform, which would have become the containing
+       block for the fixed backdrop below and shrunk it to the panel's own box. */
+    inset: 0;
+    margin: auto;
+    width: calc(100vw - 1.5rem);
+    max-width: 22rem;
+    height: max-content;
+    max-height: calc(100vh - 3rem);
+    max-height: calc(100dvh - 3rem);
     overflow-y: auto;
     overscroll-behavior: contain;
+  }
+  /* Taller than the screen, the panel scrolls; Done stays at the foot of it either way. */
+  .codex-filter-wrap .codex-filter-foot {
+    position: sticky;
+    bottom: -0.6rem;
+    margin-bottom: -0.6rem;
+    padding-bottom: 0.6rem;
+    background: var(--panel);
   }
   /* The page behind it: the scroll lives on the region, so the body alone is not enough. */
   body.codex-filters-open,
   body.codex-filters-open .main-region {
     overflow: hidden;
+  }
+  /* What the panel stands in front of, so the middle of the screen reads as the middle of it. */
+  .codex-filter-veil {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    background: rgba(0, 0, 0, 0.5);
   }
   .codex-filter-panel {
     width: 100%;

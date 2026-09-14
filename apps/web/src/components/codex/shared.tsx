@@ -226,14 +226,23 @@ export function CodexFilterMenu({ filters, onFilters, keywords }: { filters: Cod
       align="end"
       className="codex-filter-wrap"
       trigger={
-        <button type="button" className={`codex-filter-btn ${n ? "on" : ""}`.trim()} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-          <Icon name="filter" />
-          {t("codex.filter.button")}
-          {n ? <span className="codex-filter-count">{n}</span> : null}
-        </button>
+        <>
+          <button type="button" className={`codex-filter-btn ${n ? "on" : ""}`.trim()} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            <Icon name="filter" />
+            {t("codex.filter.button")}
+            {n ? <span className="codex-filter-count">{n}</span> : null}
+          </button>
+          {/* What the panel stands in front of on a phone, dimmed. It takes the tap itself rather
+              than letting it through, which would have opened whichever datasheet was under it. */}
+          {open ? <div className="codex-filter-veil" aria-hidden="true" onClick={() => setOpen(false)} /> : null}
+        </>
       }
     >
       <div className="codex-filter-panel">
+        {/* In the panel's own corner rather than in the first band, which it does not belong to. */}
+        <button type="button" className="ghost sm icon-btn codex-filter-x" aria-label={t("common.close")} onClick={() => setOpen(false)}>
+          <Icon name="close" />
+        </button>
         <FilterSection label={t("codex.filter.sec.unit")}>
           <select value={filters.type} aria-label={t("codex.filter.type")} onChange={(e) => set({ type: e.target.value as SheetType | "any" })}>
             <option value="any">{t("codex.filter.anyType")}</option>
@@ -271,9 +280,15 @@ export function CodexFilterMenu({ filters, onFilters, keywords }: { filters: Cod
 
         <div className="codex-filter-foot">
           <span className="t-meta">{n ? tn(n, "codex.filter.on.one", "codex.filter.on.many") : t("codex.filter.none")}</span>
-          <button type="button" className="sm" disabled={!n} onClick={() => onFilters(NO_FILTERS)}>
-            {t("codex.filter.clear")}
-          </button>
+          <span className="codex-filter-acts">
+            <button type="button" className="sm" disabled={!n} onClick={() => onFilters(NO_FILTERS)}>
+              {t("codex.filter.clear")}
+            </button>
+            {/* The list follows every change, so this shuts the panel rather than applying anything. */}
+            <button type="button" className="sm primary" onClick={() => setOpen(false)}>
+              {t("codex.filter.done")}
+            </button>
+          </span>
         </div>
       </div>
     </Popover>
