@@ -14,7 +14,7 @@ const drake = sheet("ds:verdant-swarm:spine-drake");
 describe("browsing the snapshot", () => {
   it("lists only factions that have datasheets, by name, with their counts", () => {
     expect(codexFactions(snapshot)).toEqual([
-      { id: "faction:ashen-wardens", name: "Ashen Wardens", count: 3 },
+      { id: "faction:ashen-wardens", name: "Ashen Wardens", count: 5 },
       { id: "faction:verdant-swarm", name: "Verdant Swarm", count: 3 },
     ]);
   });
@@ -27,22 +27,22 @@ describe("browsing the snapshot", () => {
   it("groups one faction's sheets the way the army builder's picker does", () => {
     const groups = codexGroups(snapshot, "faction:ashen-wardens", "");
     expect(groups.map((g) => [g.group, g.sheets.map((d) => d.name)])).toEqual([
-      ["character", ["Warden Captain"]],
-      ["battleline", ["Warden Squad"]],
+      ["character", ["Crusher Pilot", "Warden Captain"]],
+      ["battleline", ["Ember Skirmishers", "Warden Squad"]],
       ["other", ["Ashen Crusher"]],
     ]);
   });
 
   it("searches every faction on name, role and keyword when no faction is chosen", () => {
     const all = codexGroups(snapshot, ALL_FACTIONS, "");
-    expect(all.flatMap((g) => g.sheets).length).toBe(6);
+    expect(all.flatMap((g) => g.sheets).length).toBe(8);
     expect(codexGroups(snapshot, "", "monster").flatMap((g) => g.sheets.map((d) => d.name))).toEqual(["Spine Drake"]);
-    expect(codexGroups(snapshot, "", "  CHARACTERS ").flatMap((g) => g.sheets.map((d) => d.name))).toEqual(["Swarm Seer", "Warden Captain"]);
+    expect(codexGroups(snapshot, "", "  CHARACTERS ").flatMap((g) => g.sheets.map((d) => d.name))).toEqual(["Crusher Pilot", "Swarm Seer", "Warden Captain"]);
   });
 
   it("ranks an add-box search by how the name matches and leaves out what is already compared", () => {
     // Starts-with first, then contains; the captain has no "s" in its name and only matches on its role.
-    expect(searchDatasheets(snapshot.data.datasheets, "s", []).map((d) => d.name)).toEqual(["Spine Drake", "Swarm Seer", "Ashen Crusher", "Thornlings", "Warden Squad", "Warden Captain"]);
+    expect(searchDatasheets(snapshot.data.datasheets, "s", []).map((d) => d.name)).toEqual(["Spine Drake", "Swarm Seer", "Ashen Crusher", "Crusher Pilot", "Ember Skirmishers", "Thornlings", "Warden Squad", "Warden Captain"]);
     expect(searchDatasheets(snapshot.data.datasheets, "warden", [squad.id]).map((d) => d.name)).toEqual(["Warden Captain"]);
     expect(searchDatasheets(snapshot.data.datasheets, "   ", [])).toEqual([]);
     expect(searchDatasheets(snapshot.data.datasheets, "e", [], 2)).toHaveLength(2);
@@ -60,17 +60,16 @@ describe("browsing the snapshot", () => {
   it("draws a batch of the groups at a time, each still saying how many it holds", () => {
     const groups = codexGroups(snapshot, ALL_FACTIONS, "");
     expect(groups.map((g) => [g.group, g.sheets.length])).toEqual([
-      ["character", 2],
-      ["battleline", 2],
+      ["character", 3],
+      ["battleline", 3],
       ["other", 2],
     ]);
     // Three sheets in is halfway through the second group: the third group is not drawn at all.
     expect(shownGroups(groups, 3).map((g) => [g.group, g.sheets.map((d) => d.name), g.total])).toEqual([
-      ["character", ["Swarm Seer", "Warden Captain"], 2],
-      ["battleline", ["Thornlings"], 2],
+      ["character", ["Crusher Pilot", "Swarm Seer", "Warden Captain"], 3],
     ]);
     expect(shownGroups(groups, 0)).toEqual([]);
-    expect(shownGroups(groups, 99).flatMap((g) => g.sheets)).toHaveLength(6);
+    expect(shownGroups(groups, 99).flatMap((g) => g.sheets)).toHaveLength(8);
     expect(shownGroups([], 10)).toEqual([]);
   });
 
@@ -97,10 +96,10 @@ describe("the filters", () => {
   });
 
   it("filters on what the unit is", () => {
-    expect(names({ type: "character" })).toEqual(["Swarm Seer", "Warden Captain"]);
-    expect(names({ type: "battleline" })).toEqual(["Thornlings", "Warden Squad"]);
+    expect(names({ type: "character" })).toEqual(["Crusher Pilot", "Swarm Seer", "Warden Captain"]);
+    expect(names({ type: "battleline" })).toEqual(["Ember Skirmishers", "Thornlings", "Warden Squad"]);
     expect(names({ type: "other" })).toEqual(["Ashen Crusher", "Spine Drake"]);
-    expect(names({ type: "any" })).toHaveLength(6);
+    expect(names({ type: "any" })).toHaveLength(8);
   });
 
   it("leaves Legends out when asked, and only then", () => {
@@ -111,18 +110,19 @@ describe("the filters", () => {
         .sort();
     expect(shown(true)).toContain("Ashen Crusher");
     expect(shown(false)).not.toContain("Ashen Crusher");
-    expect(shown(false)).toHaveLength(5);
+    expect(shown(false)).toHaveLength(7);
   });
 
   it("wants every chosen keyword, on the sheet or on its faction", () => {
-    expect(names({ keywords: ["INFANTRY"] })).toEqual(["Swarm Seer", "Thornlings", "Warden Captain", "Warden Squad"]);
+    expect(names({ keywords: ["INFANTRY"] })).toEqual(["Crusher Pilot", "Ember Skirmishers", "Swarm Seer", "Thornlings", "Warden Captain", "Warden Squad"]);
     expect(names({ keywords: ["INFANTRY", "PSYKER"] })).toEqual(["Swarm Seer"]);
     expect(names({ keywords: ["INFANTRY", "MONSTER"] })).toEqual([]);
-    expect(names({ keywords: ["ASHEN WARDENS"] })).toEqual(["Ashen Crusher", "Warden Captain", "Warden Squad"]);
+    expect(names({ keywords: ["ASHEN WARDENS"] })).toEqual(["Ashen Crusher", "Crusher Pilot", "Ember Skirmishers", "Warden Captain", "Warden Squad"]);
   });
 
   it("filters on points at the smallest legal size", () => {
-    expect(names({ maxPoints: 80 })).toEqual(["Swarm Seer", "Thornlings", "Warden Captain"]);
+    // the Crusher Pilot costs nothing and has no points line of its own, so a points filter passes it by
+    expect(names({ maxPoints: 80 })).toEqual(["Ember Skirmishers", "Swarm Seer", "Thornlings", "Warden Captain"]);
     expect(names({ minPoints: 150 })).toEqual(["Ashen Crusher", "Spine Drake"]);
     expect(names({ minPoints: 80, maxPoints: 90 })).toEqual(["Warden Captain", "Warden Squad"]);
   });
@@ -160,8 +160,8 @@ describe("the filters", () => {
     expect(names).toContain("PSYKER");
     expect(names).toContain("ASHEN WARDENS");
     expect([...names]).toEqual([...names].sort((a, b) => a.localeCompare(b)));
-    expect(all.find((k) => k.name === "INFANTRY")?.count).toBe(4);
-    expect(all.find((k) => k.name === "ASHEN WARDENS")?.count).toBe(3);
+    expect(all.find((k) => k.name === "INFANTRY")?.count).toBe(6);
+    expect(all.find((k) => k.name === "ASHEN WARDENS")?.count).toBe(5);
     expect(codexKeywords(snapshot.data.datasheets, "faction:verdant-swarm").map((k) => k.name)).not.toContain("WALKER");
   });
 

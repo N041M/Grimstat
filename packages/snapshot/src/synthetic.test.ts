@@ -15,7 +15,7 @@ describe("synthetic snapshot fixture", () => {
   it("covers the shapes the engine and builder need", () => {
     const d = snap.data;
     expect(d.factions).toHaveLength(2);
-    expect(d.datasheets).toHaveLength(6);
+    expect(d.datasheets).toHaveLength(8);
     const byName = new Map(d.datasheets.map((x) => [x.name, x]));
     expect(byName.get("Warden Captain")!.leaderTo).toEqual(["ds:ashen-wardens:warden-squad"]);
     expect(byName.get("Warden Squad")!.models.map((m) => m.name)).toEqual(["Warden Sergeant", "Warden"]);
@@ -25,6 +25,11 @@ describe("synthetic snapshot fixture", () => {
     ]);
     expect(byName.get("Ashen Crusher")!.keywords).toContain("VEHICLE");
     expect(byName.get("Thornlings")!.composition[0]).toMatchObject({ min: 10, max: 20 });
+    // an 11th-edition squad: one profile for the whole unit, and the models named by the composition
+    expect(byName.get("Ember Skirmishers")!.models.map((m) => m.name)).toEqual(["Ember Skirmishers"]);
+    expect(byName.get("Ember Skirmishers")!.composition.map((c) => c.description)).toEqual(["1 Skirmisher Prime", "4-9 Ember Skirmishers"]);
+    // a model with a datasheet of its own that a list writes inside the Ashen Crusher's entry, and costs nothing
+    expect(d.priceRules.some((r) => r.datasheetId === "ds:ashen-wardens:crusher-pilot")).toBe(false);
 
     const kw = new Set(d.datasheets.flatMap((x) => x.weapons.flatMap((w) => w.keywords.map((k) => k.name))));
     for (const k of ["SUSTAINED HITS", "LETHAL HITS", "DEVASTATING WOUNDS", "ANTI", "BLAST", "TORRENT", "MELTA", "RAPID FIRE", "TWIN-LINKED", "HAZARDOUS", "PRECISION", "HEAVY"]) expect(kw).toContain(k);

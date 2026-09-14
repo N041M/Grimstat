@@ -20,6 +20,13 @@ units:
           - { models: 1, points: 150 }
     wargear:
       - { item: Fusion beamer, points: 10 }
+  - name: Ember Skirmishers
+    pricing:
+      - range: "[1,)"
+        label: Your Unit Costs
+        costs:
+          - { models: 5, points: 70 }
+          - { models: 10, points: 140 }
   - name: Warden Captain
     pricing:
       - range: "[1,)"

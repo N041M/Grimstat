@@ -3,7 +3,7 @@
   "createdAt": "2026-01-01T00:00:00.000Z",
   "updatedAt": "2026-01-01T00:00:00.000Z",
   "revision": 0,
-  "id": "snap_20260101_72d31b67",
+  "id": "snap_20260101_060fb928",
   "gameSystemId": "wh40k-11e",
   "label": "synthetic fixture",
   "sources": [
@@ -29,7 +29,7 @@
       "notes": "Powered by Wahapedia (https://wahapedia.ru); text (c) Games Workshop"
     }
   ],
-  "checksum": "72d31b67f8707f8c80d00843d6c1de77033bb03ca3104ee03bddadd2779c7b73",
+  "checksum": "060fb928313d4d87722f22a730e1e370a904485fdddeb6bd06399813d5054bd8",
   "conflicts": [
     {
       "entity": "datasheet",
@@ -294,6 +294,171 @@
         },
         "sourceId": "pub:wahapedia:000000001",
         "fallbackPoints": 150
+      },
+      {
+        "id": "ds:ashen-wardens:crusher-pilot",
+        "gameSystemId": "wh40k-11e",
+        "factionId": "faction:ashen-wardens",
+        "name": "Crusher Pilot",
+        "role": "Characters",
+        "isLegends": false,
+        "isCharacter": true,
+        "isEpicHero": true,
+        "isBattleline": false,
+        "isSupport": false,
+        "keywords": [
+          "INFANTRY",
+          "CHARACTER",
+          "EPIC HERO",
+          "CRUSHER PILOT"
+        ],
+        "factionKeywords": [
+          "ASHEN WARDENS"
+        ],
+        "models": [
+          {
+            "id": "mp:ashen-wardens:crusher-pilot:crusher-pilot",
+            "name": "Crusher Pilot",
+            "M": 6,
+            "T": 3,
+            "Sv": 5,
+            "InvSv": null,
+            "W": 2,
+            "Ld": 7,
+            "OC": 1,
+            "baseSize": "25mm"
+          }
+        ],
+        "weapons": [
+          {
+            "id": "wp:ashen-wardens:crusher-pilot:pilots-sidearm",
+            "name": "Pilot’s sidearm",
+            "kind": "ranged",
+            "range": 12,
+            "A": 1,
+            "skill": 3,
+            "S": 4,
+            "AP": 1,
+            "D": 1,
+            "keywords": [
+              {
+                "name": "PISTOL",
+                "raw": "Pistol"
+              }
+            ]
+          },
+          {
+            "id": "wp:ashen-wardens:crusher-pilot:cutting-bar",
+            "name": "Cutting bar",
+            "kind": "melee",
+            "range": null,
+            "A": 2,
+            "skill": 3,
+            "S": 4,
+            "AP": 0,
+            "D": 1,
+            "keywords": []
+          }
+        ],
+        "abilityIds": [],
+        "stratagemIds": [],
+        "leaderTo": [],
+        "supportTo": [],
+        "composition": [
+          {
+            "description": "1 Crusher Pilot – EPIC HERO",
+            "min": 1,
+            "max": 1
+          }
+        ],
+        "loadout": "This model is equipped with: pilot’s sidearm; cutting bar.",
+        "wargearOptions": [],
+        "sourceId": "pub:wahapedia:000000001"
+      },
+      {
+        "id": "ds:ashen-wardens:ember-skirmishers",
+        "gameSystemId": "wh40k-11e",
+        "factionId": "faction:ashen-wardens",
+        "name": "Ember Skirmishers",
+        "role": "Battleline",
+        "isLegends": false,
+        "isCharacter": false,
+        "isEpicHero": false,
+        "isBattleline": true,
+        "isSupport": false,
+        "keywords": [
+          "INFANTRY",
+          "BATTLELINE",
+          "EMBER SKIRMISHERS"
+        ],
+        "factionKeywords": [
+          "ASHEN WARDENS"
+        ],
+        "models": [
+          {
+            "id": "mp:ashen-wardens:ember-skirmishers:ember-skirmishers",
+            "name": "Ember Skirmishers",
+            "M": 6,
+            "T": 4,
+            "Sv": 4,
+            "InvSv": null,
+            "W": 2,
+            "Ld": 6,
+            "OC": 2,
+            "baseSize": "32mm"
+          }
+        ],
+        "weapons": [
+          {
+            "id": "wp:ashen-wardens:ember-skirmishers:ember-carbine",
+            "name": "Ember carbine",
+            "kind": "ranged",
+            "range": 18,
+            "A": 2,
+            "skill": 3,
+            "S": 4,
+            "AP": 0,
+            "D": 1,
+            "keywords": [
+              {
+                "name": "ASSAULT",
+                "raw": "Assault"
+              }
+            ]
+          },
+          {
+            "id": "wp:ashen-wardens:ember-skirmishers:skirmisher-blade",
+            "name": "Skirmisher blade",
+            "kind": "melee",
+            "range": null,
+            "A": 3,
+            "skill": 3,
+            "S": 4,
+            "AP": 1,
+            "D": 1,
+            "keywords": []
+          }
+        ],
+        "abilityIds": [],
+        "stratagemIds": [],
+        "leaderTo": [],
+        "supportTo": [],
+        "composition": [
+          {
+            "description": "1 Skirmisher Prime",
+            "min": 1,
+            "max": 1
+          },
+          {
+            "description": "4-9 Ember Skirmishers",
+            "min": 4,
+            "max": 9
+          }
+        ],
+        "loadout": "Every model is equipped with: ember carbine; skirmisher blade.",
+        "wargearOptions": [],
+        "sourceId": "pub:wahapedia:000000001",
+        "fallbackPoints": 70
       },
       {
         "id": "ds:ashen-wardens:warden-captain",
@@ -1094,6 +1259,23 @@
           {
             "models": 1,
             "points": 150
+          }
+        ]
+      },
+      {
+        "datasheetId": "ds:ashen-wardens:ember-skirmishers",
+        "copyRange": {
+          "min": 1
+        },
+        "label": "Your Unit Costs",
+        "tiers": [
+          {
+            "models": 5,
+            "points": 70
+          },
+          {
+            "models": 10,
+            "points": 140
           }
         ]
       },

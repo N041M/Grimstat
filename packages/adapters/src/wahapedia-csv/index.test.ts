@@ -8,7 +8,7 @@ const ds = (name: string) => out.datasheets!.find((d) => d.name === name)!;
 describe("wahapedia-csv adapter (synthetic fixture)", () => {
   it("uses the last update as the source ref and skips virtual datasheets", () => {
     expect(out.sourceRef.ref).toBe("2026-01-01 00:00:00");
-    expect(out.datasheets).toHaveLength(6);
+    expect(out.datasheets).toHaveLength(8);
     expect(out.warnings.some((w) => w.includes("virtual"))).toBe(true);
   });
 

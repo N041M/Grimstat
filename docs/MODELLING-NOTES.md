@@ -48,6 +48,32 @@ Every item here is a candidate for a plugin-level option or a future exact treat
   that is gone, which the rules would otherwise report as an error nobody made. Undo puts them back
   aboard. A duplicated unit does not inherit the original's transport.
 
+## Units a list writes as several models
+
+An 11th-edition datasheet carries one model profile for the whole unit, named after the unit. The models
+are named only in the unit composition, so a list that writes "1x Intercessor Sergeant" and "9x Intercessor"
+names nothing the profiles know. The importers therefore match a model line against the composition as well
+as the profiles, and put every such model on the single profile. Until they did, those lines were read as
+wargear and the unit arrived at the size of its minimum composition. A ten-model squad imported as five.
+
+- A wargear line written before any model line stands the unit up at its minimum size, because a list
+  that gives only wargear gives no size. When model lines follow, they describe those same models, so the
+  invented group keeps only the models they leave unaccounted for.
+- A model can be written inside another unit's entry and have a datasheet of its own: Canis Rex's entry
+  carries Sir Hekhtur, who is a separate Wahapedia datasheet with his own profile and weapons. The
+  importers give that model a roster unit of its own. A roster unit names one datasheet and every profile
+  lookup goes through it, so a group pointing at another datasheet's profile would lose its name, its
+  characteristics and its weapons everywhere the app resolves the unit. Such a model costs nothing, so
+  the list total is the same either way. Only an exact name in the unit's own faction is treated this
+  way. Any other unknown model name stays with the unit it was written under, and is reported.
+- **The army builder does not add the second datasheet for you.** Adding Canis Rex adds only Canis Rex,
+  and Sir Hekhtur has to be added beside it. Nothing in the snapshot says the two belong together.
+  Wahapedia links them only in the ability text, so the app cannot know which pairs to offer.
+- **A composition line that names two kinds of model counts only the first number.** "1 Runtherd and 10
+  Gretchin" is read as a minimum of one model, which is what the builder starts a new unit at and what an
+  importer falls back to when a list gives no size. Fourteen datasheets in the 11th-edition export are
+  written this way.
+
 ## Play companion (the in-game tracker)
 - **Attached characters are folded into their host** everywhere the app resolves a roster unit, so a
   led squad is one row, one wound bar and one target — which is how the rules treat it. Who is

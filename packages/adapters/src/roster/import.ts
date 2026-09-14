@@ -1,4 +1,4 @@
-import type { Roster, RosterDetachment, Snapshot } from "@grimstat/schema";
+import type { Datasheet, Roster, RosterDetachment, Snapshot } from "@grimstat/schema";
 import type { AttachRole } from "./import-common";
 import { normaliseName } from "@grimstat/snapshot";
 import {
@@ -117,6 +117,8 @@ interface RawGroup {
   modelProfileId?: string;
   count: number;
   items: WargearItem[];
+  /** No line named these models: the group stands in for the unit under a wargear line (see `wargearTarget`). */
+  implied?: boolean;
 }
 
 interface TextUnit {
@@ -606,7 +608,14 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
   let forceDisposition: string | undefined;
   let warlordRef: string | undefined;
   const units: TextUnit[] = [];
-  const st: { cur: TextUnit | null } = { cur: null };
+  /**
+   * The unit the lines being read belong to, and the companion model most recently opened under it.
+   * A companion is a model with a datasheet of its own written inside another unit's entry, as Sir
+   * Hekhtur is written inside Canis Rex. The wargear lines under such a model are its own, so they go
+   * to `sub`. `cur` stays the unit that owns the entry, and keeps the warlord mark, the enhancement
+   * and the attachment.
+   */
+  const st: { cur: TextUnit | null; sub: TextUnit | null } = { cur: null, sub: null };
 
   /**
    * The official app names no host unit. Attachment is structural: the units under one
@@ -690,7 +699,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     // A wargear line says what the unit carries and gives no unit size. With no count on the header the unit
     // keeps the size it would have had without the line, which is the datasheet's minimum composition.
     const size = t.headerCount ?? defaultGroups(t.u.ds).reduce((s, g) => s + g.count, 0);
-    const g: RawGroup = { count: Math.max(1, size), items: [] };
+    const g: RawGroup = { count: Math.max(1, size), items: [], implied: true };
     t.groups.push(g);
     return g;
   };
@@ -707,11 +716,43 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     g.items.push({ name: itemName, n: count >= g.count ? 0 : count, copies: Math.min(MAX_COPIES, asked) });
   };
 
+  /**
+   * A line that names a model: one of the unit's own, or a model carrying a datasheet of its own.
+   * Returns false when the line names neither, so that the caller reads it as wargear as before.
+   */
+  const addModelLine = (t: TextUnit, label: string, count: number, items: WargearItem[]): boolean => {
+    // "4x Custodian Warden (Guardian Spear)": the brackets hold the loadout, which the dialects that
+    // write it this way also list on the lines underneath, so the name in front of them is all that is read
+    const bare = label.replace(/\s*\([^()]*\)\s*$/, "").trim();
+    const prof = ctx.modelFor(t.u.ds, label) ?? (bare === label ? undefined : ctx.modelFor(t.u.ds, bare));
+    if (prof) {
+      t.groups.push({ modelProfileId: prof.id, count, items });
+      st.sub = null;
+      return true;
+    }
+    const companion = ctx.companionDatasheet(t.u.ds, bare);
+    if (!companion) return false;
+    startCompanion(companion, count, items);
+    return true;
+  };
+
+  /**
+   * A model line that names a datasheet of its own becomes a unit of its own, and the wargear lines
+   * written under it follow it there. Canis Rex's entry is written this way: the Knight and Sir Hekhtur
+   * are two models with two datasheets under one heading.
+   */
+  const startCompanion = (ds: Datasheet, count: number, items: WargearItem[]) => {
+    const t: TextUnit = { u: ctx.newUnit(ds), groups: [{ count: Math.max(1, count), items }] };
+    units.push(t);
+    st.sub = t;
+  };
+
   const startUnit = (ref: string | undefined, count: number | undefined, label: string, rest: string | undefined) => {
     const ds = ctx.matchDatasheet(label);
     if (!ds) {
       warnings.push(`Unknown unit "${label}" — skipped.`);
       st.cur = null;
+      st.sub = null;
       return;
     }
     const t: TextUnit = { u: ctx.newUnit(ds), groups: [] };
@@ -719,6 +760,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     if (count) t.headerCount = count;
     units.push(t);
     st.cur = t;
+    st.sub = null;
     if (!rest) return;
     // NR "Unit [80pts]: 2x Model (a, b), 1x Other (c) — Warlord; Enhancement: X", or inline wargear
     const [groupsPart = "", ...flagParts] = rest.split(/\s+[—–]\s+/);
@@ -727,8 +769,14 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     const asGroups = chunks.length > 0 && specs.every((spec, i) => spec && (chunks[i]!.includes("(") || ctx.profileFor(ds, spec.name)));
     if (asGroups) {
       for (const spec of specs) {
-        const prof = ctx.profileFor(ds, spec!.name);
-        const g: RawGroup = { count: Number(spec!.count), items: spec!.body ? parseWargearItems(spec!.body) : [] };
+        const items = spec!.body ? parseWargearItems(spec!.body) : [];
+        const prof = ctx.modelFor(ds, spec!.name);
+        const companion = prof ? undefined : ctx.companionDatasheet(ds, spec!.name);
+        if (companion) {
+          startCompanion(companion, Number(spec!.count), items);
+          continue;
+        }
+        const g: RawGroup = { count: Number(spec!.count), items };
         if (prof) g.modelProfileId = prof.id;
         t.groups.push(g);
       }
@@ -821,6 +869,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       // "Attached Unit 1" opens a block; the bare "Attached Units" heading only introduces them.
       if (/\d/.test(line)) block = { riders: [] };
       st.cur = null;
+      st.sub = null;
       continue;
     }
     // A bare force disposition on the line after its detachment, as the app lays it out. It is recognised
@@ -832,6 +881,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     if (!isBullet && SECTION_NAMES.has(normaliseName(line))) {
       closeAttachBlock();
       st.cur = null;
+      st.sub = null;
       continue;
     }
     // A bare detachment name, wherever it appears: GW-app exports put it under the faction, others
@@ -878,22 +928,26 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       const body = m[2]!.trim();
       const colon = body.indexOf(":");
       if (colon > 0) {
-        const prof = ctx.profileFor(st.cur.u.ds, body.slice(0, colon).trim());
-        const g: RawGroup = { count, items: parseWargearItems(body.slice(colon + 1)) };
-        if (prof) g.modelProfileId = prof.id;
-        st.cur.groups.push(g);
+        const label = body.slice(0, colon).trim();
+        const items = parseWargearItems(body.slice(colon + 1));
+        if (addModelLine(st.cur, label, count, items)) continue;
+        st.cur.groups.push({ count, items });
+        st.sub = null;
         continue;
       }
       // A weapon first. `profileFor` matches by prefix, so "10x Hormagaunt talons" would otherwise
       // read as ten more Hormagaunts — a second model group, the weapon gone, and no warning.
-      const prof = isWeaponOf(st.cur.u.ds, normaliseName(body)) ? undefined : ctx.profileFor(st.cur.u.ds, body);
-      if (prof) st.cur.groups.push({ modelProfileId: prof.id, count, items: [] });
-      else addWargear(st.cur, body, count);
+      if (!isWeaponOf(st.cur.u.ds, normaliseName(body)) && addModelLine(st.cur, body, count, [])) continue;
+      addWargear(st.sub ?? st.cur, body, count);
       continue;
     }
+    // "1 Custodian Guard with guardian spear" — a model and its loadout on one line, without the `x`.
+    // Only a name that is a model of the unit takes this branch; everything else is wargear as before.
+    m = /^(\d+)\s+(.+?)\s+with\s+(.+)$/i.exec(line);
+    if (m && addModelLine(st.cur, m[2]!.trim(), Number(m[1]), parseWargearItems(m[3]!))) continue;
     if (isBullet) {
       // "• Bolt pistol" style single wargear line
-      addWargear(st.cur, line, 0);
+      addWargear(st.sub ?? st.cur, line, 0);
       continue;
     }
     warnings.push(`${st.cur.u.name}: ignored line "${line}"`);
@@ -927,6 +981,18 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
  */
 function finishUnit(t: TextUnit, warnings: string[]): void {
   const ds = t.u.ds;
+  // A wargear line ahead of every model line stands the whole unit up as one group (see `wargearTarget`).
+  // Model lines after it describe those same models, and counting both would give the unit twice its
+  // size. The invented group therefore keeps only the models the named groups leave unaccounted for,
+  // and its items go to the first group a line did name.
+  const named = t.groups.filter((g) => !g.implied);
+  const invented = t.groups.filter((g) => g.implied);
+  if (named.length && invented.length) {
+    const size = (gs: RawGroup[]) => gs.reduce((s, g) => s + g.count, 0);
+    const spare = size(invented) - size(named);
+    for (const g of invented) named[0]!.items.push(...g.items);
+    t.groups = spare > 0 ? [...named, { count: spare, items: [] }] : named;
+  }
   // no groups and no unit size: leave it to `defaultGroups` in the context's build step
   const groups: RawGroup[] = t.groups.length ? t.groups : t.headerCount ? [{ count: t.headerCount, items: [] }] : [];
   const out: PendingUnit["groups"] = [];

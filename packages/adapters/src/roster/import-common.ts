@@ -46,6 +46,59 @@ export function isWeaponOf(ds: Datasheet, key: string): boolean {
 
 const tokenKey = (s: string): string => [...new Set(tokens(s))].sort().join(" ");
 
+/**
+ * A name as a key that ignores how the dialects pluralise it, so that "Squighog Boyz" and "Squighog Boy"
+ * are one model. Words of three letters or fewer are left alone, because they are joiners.
+ */
+function singularKey(s: string): string {
+  return normaliseName(s)
+    .split(" ")
+    .map((w) => (w.length > 3 ? w.replace(/(?:ch|sh|s|x|z)es$/, (m) => m.slice(0, -2)).replace(/[sz]$/, "") : w))
+    .join(" ");
+}
+
+interface CompositionName {
+  key: string;
+  words: ReadonlySet<string>;
+}
+const COMPOSITION_NAMES = new WeakMap<Datasheet, CompositionName[]>();
+
+/**
+ * The models a datasheet's unit composition names, as keys: "1 Runtherd and 10 Gretchin" names two, and
+ * "1 Canis Rex - EPIC HERO" names one with a keyword after it. Read once per datasheet and kept, because
+ * every model line of every list is matched against them.
+ */
+function compositionNames(ds: Datasheet): CompositionName[] {
+  const cached = COMPOSITION_NAMES.get(ds);
+  if (cached) return cached;
+  const out: CompositionName[] = [];
+  for (const c of ds.composition) {
+    for (const part of c.description.split(/,|\sand\s|\sor\s/i)) {
+      const name = part
+        .replace(/^\s*\d+(?:\s*[-\u2013]\s*\d+)?\s+/, "")
+        .split(/\s+[-\u2013\u2014]\s+/)[0]!
+        .replace(/\bmodels?\s*$/i, "")
+        .trim();
+      if (!name || !/[a-z]/i.test(name) || /^(or|and|one of the following)\b/i.test(name)) continue;
+      const key = singularKey(name);
+      if (key) out.push({ key, words: new Set(key.split(" ")) });
+    }
+  }
+  COMPOSITION_NAMES.set(ds, out);
+  return out;
+}
+
+/** True when the unit composition names `label` as one of the unit's own models. */
+function namesUnitModel(ds: Datasheet, want: string): boolean {
+  const words = want.split(" ");
+  return compositionNames(ds).some((n) => {
+    if (n.key === want) return true;
+    // "Devastator" where the composition writes "4-9 Devastator Marines": a line names the model with
+    // fewer words than the composition does, never with more
+    return words.length < n.words.size && words.every((w) => n.words.has(w));
+  });
+}
+
 /** A snapshot's name lookups, built once and shared by every import against that snapshot. */
 export interface NameIndex {
   readonly factionByKey: ReadonlyMap<string, Faction>;
@@ -186,6 +239,42 @@ export class RosterImportContext {
     if (scored[0]) return scored[0].m;
     const want = tokens(label).sort().join(" ");
     return ds.models.find((m) => tokens(m.name).sort().join(" ") === want);
+  }
+
+  /**
+   * The model a list line names: one of the datasheet's profiles, or a model its unit composition names.
+   * An 11th-edition datasheet carries a single profile for the whole unit, "Intercessor Squad", while the
+   * lists write out the models the composition names, "1x Intercessor Sergeant" and "9x Intercessor".
+   * Without the composition those lines read as wargear and the unit keeps its minimum size.
+   */
+  modelFor(ds: Datasheet, label: string): ModelProfile | undefined {
+    const direct = this.profileFor(ds, label);
+    if (direct) return direct;
+    const want = singularKey(label);
+    if (!want) return undefined;
+    // a profile under the other number: lists write "3x Squighog Boy" for the "Squighog Boyz" profile,
+    // and the plural the profile is written with is not always an s
+    const plural = ds.models.find((m) => singularKey(m.name) === want);
+    if (plural) return plural;
+    // The composition is only read on a datasheet with one profile. Where there are several it does not
+    // say which line is which profile — Dark Reapers write the Exarch first and the profiles the other
+    // way round — and `profileFor` has already tried every profile by name.
+    const only = ds.models.length === 1 ? ds.models[0] : undefined;
+    if (!only || isWeaponOf(ds, normaliseName(label))) return undefined;
+    return namesUnitModel(ds, want) ? only : undefined;
+  }
+
+  /**
+   * The datasheet a model line names when the model is none of this datasheet's own. A list entry can
+   * carry a model that has a datasheet of its own — Canis Rex's entry carries Sir Hekhtur — and that
+   * model is a unit of its own once the list is read. Only an exact name in the same faction counts, so
+   * a model name the snapshot does not know stays with the unit it was written under.
+   */
+  companionDatasheet(ds: Datasheet, label: string): Datasheet | undefined {
+    const key = normaliseName(cleanLabel(label));
+    if (!key || key === normaliseName(ds.name) || isWeaponOf(ds, key)) return undefined;
+    if (this.modelFor(ds, label)) return undefined;
+    return (this.index.dsByKey.get(key) ?? []).find((d) => d.id !== ds.id && d.factionId === ds.factionId);
   }
 
   /** Enhancement by name; prefers one that belongs to a detachment already in the roster. */

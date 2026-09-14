@@ -6,3 +6,5 @@
 000000105|Spine Drake|VS|000000001|Apex predator of the grove.|Monsters|<b>This model is equipped with:</b> spine volley; acid lance; rending talons.||false|false|||1-5|While this model has 1-5 wounds remaining, subtract 1 from its hit rolls.|https://example.invalid/vs/spine-drake|
 000000106|Swarm Seer|VS|000000001|The grove thinks through it.|Characters|<b>This model is equipped with:</b> mind bolt; seer’s claws.||false|false|||||https://example.invalid/vs/swarm-seer|
 000000107|Example Wargear|VS|000000001|||||true|false||||||
+000000108|Ember Skirmishers|AW|000000001|They fight where the line bends.|Battleline|<b>Every model is equipped with:</b> ember carbine; skirmisher blade.||false|false|||||https://example.invalid/aw/ember-skirmishers|
+000000109|Crusher Pilot|AW|000000001|The hand on the levers, once the levers are gone.|Characters|<b>This model is equipped with:</b> pilot’s sidearm; cutting bar.||false|false|||||https://example.invalid/aw/crusher-pilot|

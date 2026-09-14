@@ -389,6 +389,70 @@ describe("the GW app's attached-unit blocks", () => {
   });
 });
 
+/**
+ * A list writes a unit's models out one line at a time, and the name on the line is often not the name of
+ * a profile: an 11th-edition datasheet carries one profile for the whole unit and names its models only in
+ * the unit composition, and a model that has a datasheet of its own can be written inside another unit's
+ * entry. Both used to be read as wargear, which left the unit at its minimum size.
+ */
+describe("the models a list names", () => {
+  const importLines = (...lines: string[]) => importRosterText(["Ashen Wardens", "Ember Vanguard", "", ...lines].join("\n"), snapshot);
+  const shape = (u: RosterUnit) => u.models.map((g) => [g.modelProfileId.split(":").pop(), g.count, g.wargear.join("+")]);
+  const size = (u: RosterUnit) => u.models.reduce((n, g) => n + g.count, 0);
+
+  it("counts the models the unit composition names, on the one profile the datasheet has", () => {
+    const { roster: r, warnings } = importLines("Ember Skirmishers (140 points)", "• 1x Skirmisher Prime", "◦ 1x Skirmisher blade", "• 9x Ember Skirmisher", "◦ 9x Ember carbine");
+    expect(warnings).toEqual([]);
+    expect(shape(r.units[0]!)).toEqual([
+      ["ember-skirmishers", 1, "Skirmisher blade"],
+      ["ember-skirmishers", 9, "Ember carbine"],
+    ]);
+  });
+
+  it("reads a model written with its loadout on one line, with or without brackets", () => {
+    const withGear = importLines("Ember Skirmishers (140 points)", "• 1 Skirmisher Prime with Skirmisher blade", "• 9 Ember Skirmishers with Ember carbine");
+    expect(withGear.warnings).toEqual([]);
+    expect(shape(withGear.roster.units[0]!)).toEqual([
+      ["ember-skirmishers", 1, "Skirmisher blade"],
+      ["ember-skirmishers", 9, "Ember carbine"],
+    ]);
+    // the brackets hold the loadout the lines underneath list again, so only the name is read
+    const bracketed = importLines("Ember Skirmishers (140 points)", "• 10x Ember Skirmisher (Ember carbine)", "• 10x Ember carbine");
+    expect(bracketed.warnings).toEqual([]);
+    expect(shape(bracketed.roster.units[0]!)).toEqual([["ember-skirmishers", 10, "Ember carbine"]]);
+  });
+
+  it("does not count the models a wargear line stood the unit up with", () => {
+    // The banner is on no weapon list, so it is read as wargear before any model line has been seen.
+    const { roster: r, warnings } = importLines("Ember Skirmishers (140 points)", "• 1x Ember banner", "• 1x Skirmisher Prime", "• 9x Ember Skirmisher");
+    expect(size(r.units[0]!)).toBe(10);
+    expect(warnings).toEqual([`Ember Skirmishers: unknown wargear "Ember banner".`]);
+  });
+
+  it("gives a model with a datasheet of its own a unit of its own", () => {
+    const { roster: r, warnings } = importLines("1x Ashen Crusher (150 pts)", "• 1x Ashen Crusher: Vortex cannon, Crusher fists", "• 1x Crusher Pilot: Pilot’s sidearm, Cutting bar");
+    expect(warnings).toEqual([]);
+    expect(r.units.map((u) => u.datasheetId)).toEqual(["ds:ashen-wardens:ashen-crusher", "ds:ashen-wardens:crusher-pilot"]);
+    expect(shape(r.units[0]!)).toEqual([["ashen-crusher", 1, "Vortex cannon+Crusher fists"]]);
+    expect(shape(r.units[1]!)).toEqual([["crusher-pilot", 1, "Pilot’s sidearm+Cutting bar"]]);
+  });
+
+  it("keeps the wargear written under that model with it, and the warlord mark on the unit", () => {
+    const { roster: r, warnings } = importLines("Ashen Crusher (150 points)", "• Warlord", "• 1x Ashen Crusher", "◦ 1x Vortex cannon", "• 1x Crusher Pilot", "◦ 1x Pilot’s sidearm", "◦ 1x Cutting bar");
+    expect(warnings).toEqual([]);
+    expect(r.units[0]!.isWarlord).toBe(true);
+    expect(r.units[1]!.isWarlord).toBe(false);
+    expect(shape(r.units[0]!)).toEqual([["ashen-crusher", 1, "Vortex cannon"]]);
+    expect(shape(r.units[1]!)).toEqual([["crusher-pilot", 1, "Pilot’s sidearm+Cutting bar"]]);
+  });
+
+  it("keeps a model name the snapshot does not know with the unit it was written under", () => {
+    const { roster: r, warnings } = importLines("Ashen Crusher (150 points)", "• 1x Ashen Crusher", "• 1x Crusher Gunner");
+    expect(r.units.map((u) => u.datasheetId)).toEqual(["ds:ashen-wardens:ashen-crusher"]);
+    expect(warnings).toEqual([`Ashen Crusher: unknown wargear "Crusher Gunner".`]);
+  });
+});
+
 describe("a bare count line that names a weapon", () => {
   it("is wargear even when the weapon's name begins with a model profile's", () => {
     // "10x Hormagaunt" then "10x Hormagaunt talons": the second line is the squad's weapon, not ten

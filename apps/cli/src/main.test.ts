@@ -56,8 +56,8 @@ describe("diff --limit", () => {
     const [a, b] = pricePair(workDir());
     const { code, out } = await run(["diff", a, b, "--limit", "2"]);
     expect(code).toBe(0);
-    expect(out).toContain("points changed 6");
-    expect(out).toContain("... and 4 more");
+    expect(out).toContain("points changed 7");
+    expect(out).toContain("... and 5 more");
     expect(out.split("\n").filter((l) => / -> \d+ \(/.test(l))).toHaveLength(2);
   });
 
@@ -66,7 +66,7 @@ describe("diff --limit", () => {
     const { code, out } = await run(["diff", a, b]);
     expect(code).toBe(0);
     expect(out).not.toContain("more");
-    expect(out.split("\n").filter((l) => / -> \d+ \(/.test(l))).toHaveLength(6);
+    expect(out.split("\n").filter((l) => / -> \d+ \(/.test(l))).toHaveLength(7);
   });
 
   it("refuses a limit that is not a positive whole number", async () => {

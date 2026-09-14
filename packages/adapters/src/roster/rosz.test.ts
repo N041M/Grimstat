@@ -144,6 +144,39 @@ describe("oversized rosz archives", () => {
   });
 });
 
+describe("the models a .ros names", () => {
+  const xml = (inner: string) => `<roster name="Named"><forces><force name="Ember Vanguard" catalogueName="Ashen Wardens"><selections>${inner}</selections></force></forces></roster>`;
+
+  it("puts the models a unit composition names on the one profile the datasheet has", () => {
+    const { roster, warnings } = importRosterXml(
+      xml(`<selection name="Ember Skirmishers" type="unit"><selections>` +
+        `<selection name="Skirmisher Prime" type="model" number="1"><selections><selection name="Skirmisher blade" number="1" type="upgrade"/></selections></selection>` +
+        `<selection name="Ember Skirmishers" type="model" number="9"><selections><selection name="Ember carbine" number="9" type="upgrade"/></selections></selection>` +
+        `</selections></selection>`),
+      snapshot,
+    );
+    expect(warnings).toEqual([]);
+    expect(shape(roster.units[0]!)).toEqual([
+      ["ember-skirmishers", 1, "Skirmisher blade"],
+      ["ember-skirmishers", 9, "Ember carbine"],
+    ]);
+  });
+
+  it("imports a model with a datasheet of its own as a unit of its own", () => {
+    const { roster, warnings } = importRosterXml(
+      xml(`<selection name="Ashen Crusher" type="unit"><selections>` +
+        `<selection name="Ashen Crusher" type="model" number="1"><selections><selection name="Vortex cannon" number="1" type="upgrade"/></selections></selection>` +
+        `<selection name="Crusher Pilot" type="model" number="1"><selections><selection name="Cutting bar" number="1" type="upgrade"/></selections></selection>` +
+        `</selections></selection>`),
+      snapshot,
+    );
+    expect(warnings).toEqual([]);
+    expect(roster.units.map((u) => u.datasheetId)).toEqual(["ds:ashen-wardens:ashen-crusher", "ds:ashen-wardens:crusher-pilot"]);
+    expect(shape(roster.units[0]!)).toEqual([["ashen-crusher", 1, "Vortex cannon"]]);
+    expect(shape(roster.units[1]!)).toEqual([["crusher-pilot", 1, "Cutting bar"]]);
+  });
+});
+
 describe("weapon multiplicities in a .ros", () => {
   const xml = (inner: string) => `<roster name="Multi"><forces><force name="Ember Vanguard" catalogueName="Ashen Wardens"><selections>${inner}</selections></force></forces></roster>`;
 

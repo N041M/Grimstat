@@ -204,7 +204,15 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
       const key = normaliseName(name);
       if (hasCategory(c, "warlord")) u.warlord = true;
       if (selType(c) === "model") {
-        const g: RawGroup = { label: name, profile: ctx.profileFor(ds, name), count: num(c.number, 1), items: [] };
+        const profile = ctx.modelFor(ds, name);
+        // a model with a datasheet of its own inside another unit's entry — Canis Rex carries Sir Hekhtur —
+        // is a unit of its own, so it is imported as one, with the upgrades written under it
+        const companion = profile ? undefined : ctx.companionDatasheet(ds, name);
+        if (companion) {
+          importUnit(c, ctx, bySelectionId, links);
+          continue;
+        }
+        const g: RawGroup = { label: name, profile, count: num(c.number, 1), items: [] };
         groups.push(g);
         walk(c, g);
         continue;
@@ -245,7 +253,7 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
   walk(s, null);
 
   if (!groups.length) {
-    if (selType(s) === "model") groups.push({ label, profile: ctx.profileFor(ds, label) ?? ds.models[0], count: num(s.number, 1), items: unitItems.splice(0) });
+    if (selType(s) === "model") groups.push({ label, profile: ctx.modelFor(ds, label) ?? ds.models[0], count: num(s.number, 1), items: unitItems.splice(0) });
     else for (const g of defaultGroups(ds)) groups.push({ label: "", profile: ds.models.find((m) => m.id === g.modelProfileId), count: g.count, items: [] });
   }
   // unit-level upgrades: every model when the number covers the unit, otherwise the first group
