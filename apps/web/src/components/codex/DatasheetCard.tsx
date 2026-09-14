@@ -2,11 +2,11 @@ import { Fragment } from "react";
 import type { Datasheet, Snapshot, WeaponProfile } from "@grimstat/schema";
 import { UnitArt } from "../UnitArt";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead } from "../kit";
-import { abilityGroups, characteristic, characteristicText, CHARACTERISTICS, ledBy, pointsLines, sizeBounds, supportedBy, unitFigures, wargearPrices, weaponGroups, type AbilityBucket, type CharacteristicKey, type WeaponGroup } from "../../lib/codex";
+import { abilityGroups, characteristic, characteristicText, CHARACTERISTICS, ledBy, pointsLines, sizeBounds, supportedBy, unitFigures, wargearPrices, weaponGroups, type AbilityBucket, type WeaponGroup } from "../../lib/codex";
 import { ap, dice, fmtInt, skill } from "../../lib/format";
 import { keywordsToText } from "../../lib/keywordParser";
 import { hrefFor } from "../../router";
-import { factionName, pointsText, SheetFlags, sizeText } from "./shared";
+import { factionName, pointsText, SheetFlags, sizeText, STAT_COL, STAT_TITLE } from "./shared";
 import { t, tn, type I18nKey } from "../../i18n";
 
 /* ---------- column templates ---------- */
@@ -16,8 +16,6 @@ const PROFILE_COLUMNS = "minmax(160px, 2fr) repeat(7, minmax(48px, 0.6fr))";
 /** Weapon | range | A | skill | S | AP | D | keywords. */
 const WEAPON_COLUMNS = "minmax(180px, 2fr) 62px 52px 52px 44px 50px 58px minmax(180px, 2.4fr)";
 
-export const STAT_COL: Record<CharacteristicKey, I18nKey> = { M: "codex.col.M", T: "codex.col.T", Sv: "codex.col.Sv", InvSv: "codex.col.InvSv", W: "codex.col.W", Ld: "codex.col.Ld", OC: "codex.col.OC" };
-export const STAT_TITLE: Record<CharacteristicKey, I18nKey> = { M: "codex.stat.M", T: "codex.stat.T", Sv: "codex.stat.Sv", InvSv: "codex.stat.InvSv", W: "codex.stat.W", Ld: "codex.stat.Ld", OC: "codex.stat.OC" };
 const BUCKET_KEY: Record<AbilityBucket, I18nKey> = { core: "codex.abil.core", faction: "codex.abil.faction", datasheet: "codex.abil.datasheet", wargear: "codex.abil.wargear", other: "codex.abil.other" };
 
 /* ---------- parts ---------- */

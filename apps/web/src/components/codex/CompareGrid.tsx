@@ -6,8 +6,7 @@ import { abilityGroups, bestIndices, characteristicRow, CHARACTERISTICS, COMPARE
 import { fmt } from "../../lib/format";
 import { keywordsToText } from "../../lib/keywordParser";
 import { hrefFor } from "../../router";
-import { factionName, pointsText, sizeText, weaponLine } from "./shared";
-import { STAT_TITLE } from "./DatasheetCard";
+import { factionName, pointsText, sizeText, STAT_TITLE, weaponLine } from "./shared";
 import { t, tn } from "../../i18n";
 
 /* ---------- the rows ---------- */

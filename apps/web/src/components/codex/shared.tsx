@@ -1,12 +1,16 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import type { Datasheet, Snapshot, WeaponProfile } from "@grimstat/schema";
 import type { ModelBounds, PickerGroup } from "../../lib/roster";
-import { ALL_FACTIONS, filterCount, NO_FILTERS, SHEET_TYPES, type CodexFaction, type CodexFilters, type CodexKeyword, type SheetType } from "../../lib/codex";
+import { ALL_FACTIONS, filterCount, NO_FILTERS, SHEET_TYPES, type CharacteristicKey, type CodexFaction, type CodexFilters, type CodexKeyword, type SheetType } from "../../lib/codex";
 import { ap, dice, fmtInt, skill } from "../../lib/format";
-import { Badge, Field, Icon, Popover, Switch, numOrNull } from "../ui";
+import { Badge, Icon, Popover, Switch, numOrNull } from "../ui";
 import { t, tn, type I18nKey } from "../../i18n";
 
 /** What the Codex screen's parts say in common: sizes, points, a weapon on one line, the flags. */
+
+/** The characteristics under their column letter, and under their name in full. */
+export const STAT_COL: Record<CharacteristicKey, I18nKey> = { M: "codex.col.M", T: "codex.col.T", Sv: "codex.col.Sv", InvSv: "codex.col.InvSv", W: "codex.col.W", Ld: "codex.col.Ld", OC: "codex.col.OC" };
+export const STAT_TITLE: Record<CharacteristicKey, I18nKey> = { M: "codex.stat.M", T: "codex.stat.T", Sv: "codex.stat.Sv", InvSv: "codex.stat.InvSv", W: "codex.stat.W", Ld: "codex.stat.Ld", OC: "codex.stat.OC" };
 
 export const GROUP_KEY: Record<PickerGroup, I18nKey> = {
   character: "roster.section.character",
@@ -69,12 +73,54 @@ const TYPE_KEY: Record<SheetType, I18nKey> = {
   other: "roster.section.other",
 };
 
-/** A number field that is empty when the filter is off, so "no minimum" and "0" stay different. */
-function NumberFilter({ label, value, onChange, min, max, placeholder }: { label: string; value: number | undefined; onChange: (v: number | undefined) => void; min: number; max: number; placeholder: string }) {
+/** One small numeric threshold, under the abbreviation the datasheet cards use for it. */
+function StatFilter({ stat, value, onChange, max }: { stat: "M" | "T" | "W" | "OC"; value: number | undefined; onChange: (v: number | undefined) => void; max: number }) {
   return (
-    <Field label={label} className="codex-filter-num">
-      <input type="number" inputMode="numeric" min={min} max={max} step={1} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(numOrNull(e.target.value) ?? undefined)} />
-    </Field>
+    <label className="codex-filter-stat">
+      <span className="codex-filter-stat-key">{t(STAT_COL[stat])}</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        max={max}
+        step={1}
+        value={value ?? ""}
+        aria-label={t("codex.filter.statAtLeast", { stat: t(STAT_TITLE[stat]) })}
+        onChange={(e) => onChange(numOrNull(e.target.value) ?? undefined)}
+      />
+    </label>
+  );
+}
+
+/** Saves run the other way, so they are picked as they are written: 3+ admits 3+ and 2+. */
+const SAVES = [2, 3, 4, 5, 6] as const;
+
+function SaveFilter({ value, onChange }: { value: number | undefined; onChange: (v: number | undefined) => void }) {
+  return (
+    <label className="codex-filter-stat">
+      <span className="codex-filter-stat-key">{t(STAT_COL.Sv)}</span>
+      <select value={value ?? ""} aria-label={t("codex.filter.svOrBetter")} onChange={(e) => onChange(numOrNull(e.target.value) ?? undefined)}>
+        <option value="">{t("codex.filter.any")}</option>
+        {SAVES.map((n) => (
+          <option key={n} value={n}>
+            {t("codex.filter.save", { n })}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** A labelled band of the panel: the eyebrow, a note on the right, and the controls under both. */
+function FilterSection({ label, note, children }: { label: string; note?: string; children: ReactNode }) {
+  return (
+    <section className="codex-filter-sec">
+      <div className="codex-filter-sec-head">
+        <span className="t-eyebrow">{label}</span>
+        {note ? <span className="codex-filter-note">{note}</span> : null}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -97,25 +143,24 @@ function KeywordFilter({ known, chosen, onChange }: { known: CodexKeyword[]; cho
     setDraft("");
   };
   return (
-    <div className="codex-filter-kw">
-      <Field label={t("codex.filter.keywords")}>
-        <input
-          type="text"
-          list={listId}
-          value={draft}
-          placeholder={t("codex.filter.keywordsPlaceholder")}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            // A pick from the browser's own list arrives as a whole keyword, so it is taken as one.
-            if (known.some((k) => k.name.toLowerCase() === e.target.value.trim().toLowerCase())) add(e.target.value);
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter") return;
-            e.preventDefault();
-            add(draft, true);
-          }}
-        />
-      </Field>
+    <>
+      <input
+        type="text"
+        list={listId}
+        value={draft}
+        placeholder={t("codex.filter.keywordsPlaceholder")}
+        aria-label={t("codex.filter.keywords")}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          // A pick from the browser's own list arrives as a whole keyword, so it is taken as one.
+          if (known.some((k) => k.name.toLowerCase() === e.target.value.trim().toLowerCase())) add(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          add(draft, true);
+        }}
+      />
       <datalist id={listId}>
         {known.map((k) => (
           <option key={k.name} value={k.name}>
@@ -127,24 +172,52 @@ function KeywordFilter({ known, chosen, onChange }: { known: CodexKeyword[]; cho
         <span className="chips codex-filter-chips">
           {chosen.map((k) => (
             <button key={k} type="button" className="chip" title={t("codex.filter.keywordOff", { name: k })} onClick={() => onChange(chosen.filter((x) => x !== k))}>
-              {k} ×
+              {k}
+              <span aria-hidden="true">×</span>
             </button>
           ))}
         </span>
       ) : null}
-    </div>
+    </>
   );
+}
+
+/**
+ * Holds the page still behind an open filter panel.
+ *
+ * On a phone the panel is most of the screen, and the list carried on scrolling under it, so a
+ * flick meant to reach the bottom of the panel moved the datasheets instead. Counted rather than
+ * set and unset, because on a wide screen the column's panel and the grid's can both be open, and
+ * closing one must not let the page go while the other still stands over it. The class does
+ * nothing above phone widths, where the panel is a small thing anchored to its button.
+ */
+let locks = 0;
+function useHeldPage(on: boolean): void {
+  useEffect(() => {
+    if (!on) return;
+    locks += 1;
+    document.body.classList.add("codex-filters-open");
+    return () => {
+      locks -= 1;
+      if (locks <= 0) document.body.classList.remove("codex-filters-open");
+    };
+  }, [on]);
 }
 
 /**
  * Everything the codex filters on beyond the faction and the search box, behind one button that
  * says how many are on. A popover rather than a row of controls, because the same tools are drawn
  * in the context column, which is about two hundred pixels wide.
+ *
+ * Banded the way a datasheet is read — what the unit is, what it carries, what it costs, what its
+ * profile says — and the profile band is the card's own stat line with a box under each letter, so
+ * the same five abbreviations mean the same five things in both places.
  */
 export function CodexFilterMenu({ filters, onFilters, keywords }: { filters: CodexFilters; onFilters: (f: CodexFilters) => void; keywords: CodexKeyword[] }) {
   const [open, setOpen] = useState(false);
   const n = filterCount(filters);
   const set = (part: Partial<CodexFilters>) => onFilters({ ...filters, ...part });
+  useHeldPage(open);
   return (
     <Popover
       open={open}
@@ -161,8 +234,8 @@ export function CodexFilterMenu({ filters, onFilters, keywords }: { filters: Cod
       }
     >
       <div className="codex-filter-panel">
-        <Field label={t("codex.filter.type")}>
-          <select value={filters.type} onChange={(e) => set({ type: e.target.value as SheetType | "any" })}>
+        <FilterSection label={t("codex.filter.sec.unit")}>
+          <select value={filters.type} aria-label={t("codex.filter.type")} onChange={(e) => set({ type: e.target.value as SheetType | "any" })}>
             <option value="any">{t("codex.filter.anyType")}</option>
             {SHEET_TYPES.map((k) => (
               <option key={k} value={k}>
@@ -170,23 +243,32 @@ export function CodexFilterMenu({ filters, onFilters, keywords }: { filters: Cod
               </option>
             ))}
           </select>
-        </Field>
-        <KeywordFilter known={keywords} chosen={filters.keywords} onChange={(keywords) => set({ keywords })} />
-        <div className="codex-filter-pair">
-          <NumberFilter label={t("codex.filter.pointsFrom")} value={filters.minPoints} onChange={(minPoints) => set({ minPoints })} min={0} max={9999} placeholder={t("codex.filter.any")} />
-          <NumberFilter label={t("codex.filter.pointsTo")} value={filters.maxPoints} onChange={(maxPoints) => set({ maxPoints })} min={0} max={9999} placeholder={t("codex.filter.any")} />
-        </div>
-        <div className="codex-filter-pair">
-          <NumberFilter label={t("codex.filter.minT")} value={filters.minT} onChange={(minT) => set({ minT })} min={1} max={20} placeholder={t("codex.filter.any")} />
-          <NumberFilter label={t("codex.filter.minW")} value={filters.minW} onChange={(minW) => set({ minW })} min={1} max={99} placeholder={t("codex.filter.any")} />
-        </div>
-        <div className="codex-filter-pair">
-          <NumberFilter label={t("codex.filter.maxSv")} value={filters.maxSv} onChange={(maxSv) => set({ maxSv })} min={2} max={7} placeholder={t("codex.filter.any")} />
-          <NumberFilter label={t("codex.filter.minM")} value={filters.minM} onChange={(minM) => set({ minM })} min={1} max={30} placeholder={t("codex.filter.any")} />
-        </div>
-        <NumberFilter label={t("codex.filter.minOC")} value={filters.minOC} onChange={(minOC) => set({ minOC })} min={0} max={99} placeholder={t("codex.filter.any")} />
-        <Switch checked={filters.invuln} onChange={(invuln) => set({ invuln })} label={t("codex.filter.invuln")} />
-        <Switch checked={!filters.legends} onChange={(hide) => set({ legends: !hide })} label={t("codex.filter.hideLegends")} />
+          <Switch checked={!filters.legends} onChange={(hide) => set({ legends: !hide })} label={t("codex.filter.hideLegends")} />
+        </FilterSection>
+
+        <FilterSection label={t("codex.filter.sec.keywords")} note={filters.keywords.length ? t("codex.filter.keywordsNote") : undefined}>
+          <KeywordFilter known={keywords} chosen={filters.keywords} onChange={(keywords) => set({ keywords })} />
+        </FilterSection>
+
+        <FilterSection label={t("codex.filter.sec.points")} note={t("codex.filter.pointsNote")}>
+          <div className="codex-filter-range">
+            <input type="number" inputMode="numeric" min={0} max={9999} step={5} value={filters.minPoints ?? ""} aria-label={t("codex.filter.pointsFrom")} onChange={(e) => set({ minPoints: numOrNull(e.target.value) ?? undefined })} />
+            <span aria-hidden="true">–</span>
+            <input type="number" inputMode="numeric" min={0} max={9999} step={5} value={filters.maxPoints ?? ""} aria-label={t("codex.filter.pointsTo")} onChange={(e) => set({ maxPoints: numOrNull(e.target.value) ?? undefined })} />
+          </div>
+        </FilterSection>
+
+        <FilterSection label={t("codex.filter.sec.profile")} note={t("codex.filter.profileNote")}>
+          <div className="codex-filter-stats">
+            <StatFilter stat="M" value={filters.minM} onChange={(minM) => set({ minM })} max={30} />
+            <StatFilter stat="T" value={filters.minT} onChange={(minT) => set({ minT })} max={20} />
+            <SaveFilter value={filters.maxSv} onChange={(maxSv) => set({ maxSv })} />
+            <StatFilter stat="W" value={filters.minW} onChange={(minW) => set({ minW })} max={99} />
+            <StatFilter stat="OC" value={filters.minOC} onChange={(minOC) => set({ minOC })} max={99} />
+          </div>
+          <Switch checked={filters.invuln} onChange={(invuln) => set({ invuln })} label={t("codex.filter.invuln")} />
+        </FilterSection>
+
         <div className="codex-filter-foot">
           <span className="t-meta">{n ? tn(n, "codex.filter.on.one", "codex.filter.on.many") : t("codex.filter.none")}</span>
           <button type="button" className="sm" disabled={!n} onClick={() => onFilters(NO_FILTERS)}>

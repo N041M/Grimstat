@@ -7542,7 +7542,12 @@ button.battle-scope-btn:hover {
   width: 100%;
   justify-content: center;
 }
+/* The column's panel is about 230px wide, so its stat boxes hold about three characters. */
 @media (min-width: 900px) {
+  .codex-ctx-tools .codex-filter-stat input,
+  .codex-ctx-tools .codex-filter-stat select {
+    font-size: 13px;
+  }
   .codex-ctx-tools .popover {
     left: 0;
     right: auto;
@@ -7585,39 +7590,113 @@ button.battle-scope-btn:hover {
 .codex-filter-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: min(84vw, 288px);
+  gap: 2px;
+  width: min(84vw, 276px);
 }
-.codex-filter-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.codex-filter-num input {
-  width: 100%;
-}
-.codex-filter-kw {
+/* One band per question the filter asks, ruled off from the next. */
+.codex-filter-sec {
   display: flex;
   flex-direction: column;
+  gap: 7px;
+  padding: 10px 0;
+}
+.codex-filter-sec + .codex-filter-sec {
+  border-top: 1px solid var(--line-soft);
+}
+.codex-filter-sec > select,
+.codex-filter-sec > input {
+  width: 100%;
+}
+.codex-filter-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.codex-filter-note {
+  font: 400 10px/1 var(--mono);
+  color: var(--faint);
+}
+.codex-filter-range {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
   gap: 6px;
+}
+.codex-filter-range input {
+  width: 100%;
+  text-align: center;
+}
+.codex-filter-range > span {
+  color: var(--faint);
+}
+/* The card's own stat line, with a box under each letter. */
+.codex-filter-stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+.codex-filter-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-width: 0;
+}
+.codex-filter-stat-key {
+  font: 600 10px/1 var(--mono);
+  text-align: center;
+  color: var(--muted);
+}
+.codex-filter-stat input,
+.codex-filter-stat select {
+  width: 100%;
+  min-width: 0;
+  padding-left: 4px;
+  padding-right: 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* The save is picked from a list and the others are typed, but they are the same five boxes of one
+   stat line, so the select gives up its chevron rather than the width it would cost the row. */
+.codex-filter-stat select {
+  appearance: none;
+  background-image: none;
+  text-align-last: center;
+}
+/* The number spinners do not fit a box this narrow and the arrows are not worth the width. */
+.codex-filter-stat input::-webkit-outer-spin-button,
+.codex-filter-stat input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+.codex-filter-stat input[type="number"] {
+  appearance: textfield;
 }
 .codex-filter-chips {
   gap: 4px;
 }
 .codex-filter-chips .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   cursor: pointer;
   border-color: var(--line);
 }
 .codex-filter-chips .chip:hover {
   border-color: var(--ink);
+  color: var(--ink);
+}
+.codex-filter-chips .chip span {
+  color: var(--faint);
 }
 .codex-filter-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line-soft);
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
 /* Where the list stops; scrolling to it draws the next batch. A line tall, so it has a box to see. */
 .codex-more {
@@ -8312,11 +8391,27 @@ button.battle-scope-btn:hover {
     justify-content: center;
   }
   /* The rule above lays a popover across the screen at this width, but `align-end` is the more
-     specific of the two and pins the panel to the right edge. Said again here, past it. */
+     specific of the two and pins the panel to the right edge. Said again here, past it.
+
+     Sat on the bottom of the screen rather than hanging off the button: the panel is taller than
+     the room under a button near the top, so its foot — the count and Clear — fell off the end of
+     the screen. It is also where a thumb is. Taller than the screen, it scrolls inside itself, and
+     keeps that scroll to itself. */
   .codex-filter-wrap .popover.align-end {
     left: 0.75rem;
     right: 0.75rem;
+    top: auto;
+    bottom: 0.75rem;
     width: auto;
+    max-height: calc(100vh - 5rem);
+    max-height: calc(100dvh - 5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* The page behind it: the scroll lives on the region, so the body alone is not enough. */
+  body.codex-filters-open,
+  body.codex-filters-open .main-region {
+    overflow: hidden;
   }
   .codex-filter-panel {
     width: 100%;
