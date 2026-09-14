@@ -3962,6 +3962,51 @@ a.btn:hover {
   display: flex;
   flex-direction: column;
 }
+/* ---- the phase and range band, inside the headline panel above its heading ----
+   One slim line along the top of the panel whose figure they change, held to the right so the
+   figure below keeps the left edge to itself. Each label sits beside its control rather than over
+   it, which is what keeps the line to one control's height. It wraps rather than scrolls, so both
+   are reachable at any width. No rule under it: the controls and the figure are one panel, and a
+   line across the middle read as two. */
+.situation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  /* Spread, so the line ends where the tiles under it end and starts where they start. */
+  justify-content: space-between;
+  gap: 6px 20px;
+  flex: none;
+}
+.situation-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.situation-label,
+.situation .dock-field-label {
+  font: 500 10px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--faint);
+  text-wrap: nowrap;
+}
+.situation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* The one menu in the line. In the dock its label sat in a fixed 78px column, which would leave a
+   gap here that the line has no use for. */
+.situation .dock-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.situation-range .selectbox {
+  min-width: 104px;
+}
+
 .calc-link {
   display: flex;
   align-items: center;
@@ -3988,6 +4033,18 @@ a.btn:hover {
 }
 
 /* hero header: eyebrow + 56px figure, four secondary metrics right-aligned */
+/* The right of the panel: the controls over the tiles, both stretched to the wider of the two so
+   they line up on the left as well as the right.
+   It shrinks before the figure does. Held at its natural width it took the whole panel on a narrow
+   screen and squeezed the figure beside it to nothing. */
+.hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
 .hero {
   display: flex;
   /* `safe` is what keeps a wrapped tile row from being cut off: when the tiles need two rows and
@@ -3995,12 +4052,17 @@ a.btn:hover {
      upwards past it, which put the first row's labels out of view. */
   align-items: safe flex-end;
   justify-content: space-between;
+  /* When the figure and the block of controls beside it cannot both fit, the block drops under it
+     rather than the two of them being squeezed into each other. */
+  flex-wrap: wrap;
   gap: 16px;
   height: 100%;
-  padding: 18px 22px 16px;
+  padding: 12px 22px 14px;
 }
+/* Never narrower than the figure it holds. At `0` a squeezed panel let the tiles beside it take
+   the room and the figure ran out under them. */
 .hero-lead {
-  min-width: 0;
+  min-width: min-content;
 }
 .hero-eyebrow {
   font: 500 10px/1 var(--mono);
@@ -4015,9 +4077,13 @@ a.btn:hover {
   align-items: baseline;
   gap: 8px;
   margin-top: 2px;
+  /* A reason too long for the room beside the figure drops under it rather than running off the
+     side of the panel. */
+  flex-wrap: wrap;
 }
+/* The one figure the screen is for, so it is the largest thing on it. */
 .hero-value {
-  font: 600 56px/1 var(--mono);
+  font: 600 68px/1 var(--mono);
   letter-spacing: -0.03em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
@@ -4027,18 +4093,24 @@ a.btn:hover {
   color: var(--faint);
   white-space: nowrap;
 }
-/* Why there is no figure above, on its own line so it can be a sentence. */
-.hero-idle {
-  margin-top: 6px;
+/* Why there is no figure, in the space beside it. It is a sentence rather than a reading, so it is
+   set in the text face and may wrap; see the note in SummaryTiles.tsx for why it shares this line. */
+.hero-ci.hero-why {
   font: 400 12px/1.45 var(--font);
   color: var(--muted);
+  white-space: normal;
+  /* It takes the room left beside the figure and no more. Sized by its text instead, it grew the
+     block on the left until the four tiles on the right were squeezed into two rows, which cost
+     the panel more height than the sentence ever saved it. */
+  flex: 1 1 12ch;
+  min-width: 12ch;
   max-width: 46ch;
 }
 .hero-stats {
   display: flex;
   gap: 18px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: space-between;
 }
 .hero-stat {
   flex: none;
@@ -4776,12 +4848,42 @@ a.btn:hover {
     flex: none;
     max-height: none;
   }
+  /*
+   * On a phone the controls stand beside the figure and end level with it, and the tiles take the
+   * width under both. Each label goes over its control rather than beside it, which is the only
+   * way "Shooting" and "Fight" fit next to each other in the room the figure leaves.
+   */
   .hero {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: end;
+    gap: 14px 16px;
+  }
+  .hero-side {
+    display: contents;
+  }
+  .hero-lead {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .situation {
+    grid-column: 2;
+    grid-row: 1;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: flex-end;
+    gap: 8px;
+    /* Starts below the hide control in the panel's corner, which it otherwise ran into. */
+    margin-top: 30px;
+  }
+  .situation-field,
+  .situation .dock-field {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
   }
   .hero-stats {
+    grid-column: 1 / -1;
+    grid-row: 2;
     justify-content: flex-start;
     gap: 18px;
   }

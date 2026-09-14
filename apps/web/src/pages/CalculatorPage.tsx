@@ -156,7 +156,7 @@ export function CalculatorPage() {
     notify(t("calc.exported", { name }), "success");
   };
 
-  const inputs = useMemo(() => ({ scenario, result: sim.result, snapshot, running: sim.running, error: sim.error, pinned, idle: sim.idle }), [scenario, sim.result, snapshot, sim.running, sim.error, pinned, sim.idle]);
+  const inputs = useMemo(() => ({ scenario, result: sim.result, snapshot, running: sim.running, error: sim.error, pinned, idle: sim.idle, onContext }), [scenario, sim.result, snapshot, sim.running, sim.error, pinned, sim.idle]); // eslint-disable-line react-hooks/exhaustive-deps
   // The same panel, in the column beside the results or in the stack under the chart. It is built
   // once either way, so switching width moves it rather than mounting a second one.
   const stacked = useMediaQuery(NARROW_QUERY);

@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import type { PluginHost, WidgetDef } from "@grimstat/plugin-host";
-import type { Scenario, SimResult, Snapshot } from "@grimstat/schema";
+import type { Scenario, SimResult, Snapshot, ScenarioContext } from "@grimstat/schema";
 import type { DurabilityEntry, EfficiencyRow, MatrixResult } from "@grimstat/game-40k-11e";
 import type { MatrixMetric } from "../lib/heatmap";
 import type { TurnPlanResult } from "../lib/turn";
@@ -29,6 +29,12 @@ export interface WidgetProps {
   pinned?: Headline | undefined;
   /** Why there is no result to show, when that is the reason rather than a run still in flight. */
   idle?: IdleReason | undefined;
+  /**
+   * Change the situation the scenario is solved for. Only the calculator provides it, and only the
+   * summary panel reads it: the panel carries the phase and the rest of the situation above its own
+   * heading, so the controls sit with the figure they change.
+   */
+  onContext?: (patch: Partial<ScenarioContext>) => void;
 }
 
 export type WidgetComponent = ComponentType<WidgetProps>;

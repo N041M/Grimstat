@@ -26,14 +26,6 @@ const FLAG_GROUPS: Array<{ side: I18nKey; flags: Flag[] }> = [
 /** Short, dock-width labels for the select boxes; the full wording stays in the control's `title`. */
 function fields(context: ScenarioContext) {
   return {
-    rangeBand: [
-      { value: "full" as const, label: t("dock.range.full") },
-      { value: "half" as const, label: t("dock.range.half") },
-    ],
-    phase: [
-      { value: "shooting" as const, label: t("ctx.phase.shooting") },
-      { value: "fight" as const, label: t("ctx.phase.fight") },
-    ],
     allocationPolicy: [
       { value: "protect-character" as const, label: t("dock.alloc.protect") },
       { value: "in-order" as const, label: t("dock.alloc.inOrder") },
@@ -85,20 +77,8 @@ export function ContextDock({ scenario, snapshot, sim, onContext, onToggles }: {
 
   return (
     <Dock label={t("dock.title")} meta={statusLine(sim)}>
-      <DockSection className="dock-fields">
-        {/* The phase decides which half of a unit's weapons are read at all, so it leads the dock as
-            a pair of chips rather than sharing a row with the range band as a menu. */}
-        <div className="dock-phase" role="group" aria-label={t("ctx.phase")}>
-          <span className="dock-field-label">{t("dock.phase")}</span>
-          <div className="dock-phase-opts">
-            {opts.phase.map((o) => (
-              <PillChip key={o.value} label={o.label} title={t("ctx.phase")} on={ctx.phase === o.value} onChange={() => onContext({ phase: o.value })} />
-            ))}
-          </div>
-        </div>
-        <SelectBox label={t("dock.rangeBand")} title={t("ctx.rangeBand")} value={ctx.rangeBand} options={opts.rangeBand} onChange={(rangeBand) => onContext({ rangeBand })} />
-      </DockSection>
-
+      {/* What each side was doing. The phase and the range band this pair qualifies sit above the
+          headline figure instead; see SituationBar. */}
       <DockSection className="dock-chip-groups">
         {FLAG_GROUPS.map((g) => (
           <div className="dock-chip-group" key={g.side}>
