@@ -778,5 +778,38 @@
   ],
   "faction": "faction:verdant-swarm",
   "detachment": "det:verdant-swarm:thorn-tide"
+ },
+ {
+  "file": "51-cards3-wardens-mixed-clean.png",
+  "list": "wardens-mixed",
+  "format": "cards3",
+  "condition": "clean",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "5 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Ashen Crusher"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
+ },
+ {
+  "file": "52-cards3-allies-screenshot.png",
+  "list": "allies",
+  "format": "cards3",
+  "condition": "screenshot",
+  "strictness": "exact",
+  "expect": [
+   "1 x Warden Captain",
+   "10 x Warden Squad",
+   "10 x Warden Squad",
+   "1 x Ashen Crusher",
+   "1 x Swarm Seer"
+  ],
+  "faction": "faction:ashen-wardens",
+  "detachment": "det:ashen-wardens:ember-vanguard"
  }
 ]

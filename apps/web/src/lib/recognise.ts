@@ -215,14 +215,18 @@ interface ReadWordResult {
  */
 export function wordsFromResult(data: { blocks?: readonly ReadBlock[] | null }): ReadWord[] {
   const out: ReadWord[] = [];
+  // The block a word was found in travels with it. A list drawn in columns puts a unit from each of
+  // them at the same height, and only the blocks say they are not one line.
+  let group = 0;
   for (const block of data.blocks ?? []) {
+    group++;
     for (const paragraph of block.paragraphs ?? []) {
       for (const line of paragraph.lines ?? []) {
         for (const word of line.words ?? []) {
           const text = word.text?.trim();
           const { bbox, confidence } = word;
           if (!text || !bbox) continue;
-          out.push({ text, confidence: (confidence ?? 0) / 100, box: { x: bbox.x0, y: bbox.y0, w: bbox.x1 - bbox.x0, h: bbox.y1 - bbox.y0 } });
+          out.push({ text, confidence: (confidence ?? 0) / 100, box: { x: bbox.x0, y: bbox.y0, w: bbox.x1 - bbox.x0, h: bbox.y1 - bbox.y0 }, group });
         }
       }
     }

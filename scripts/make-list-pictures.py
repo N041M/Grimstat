@@ -337,6 +337,15 @@ def render_cards(spec, rng, columns=2, dark=True):
         y = 120
         for title, cost, lines in cards:
             y = card(510, y, title, cost, lines)
+    elif columns == 3:
+        # Three columns, every one starting level, which is how a tournament broadcast draws a full
+        # army. The first card of each column shares a line with the first card of the others, so a
+        # reader that groups words by height alone puts three units and three costs on one line.
+        per = (len(cards) + 2) // 3
+        for index, left in enumerate((500, 950, 1400)):
+            y = 130
+            for title, cost, lines in cards[index * per : (index + 1) * per]:
+                y = card(left, y, title, cost, lines, w=400)
     else:
         half = (len(cards) + 1) // 2
         y = 130
@@ -379,6 +388,7 @@ RENDERERS = {
     "chat": lambda spec, rng, lines=None: render_chat(spec, rng, lines=lines),
     "cards": lambda spec, rng, lines=None: render_cards(spec, rng),
     "cards1": lambda spec, rng, lines=None: render_cards(spec, rng, columns=1),
+    "cards3": lambda spec, rng, lines=None: render_cards(spec, rng, columns=3),
     "cardslight": lambda spec, rng, lines=None: render_cards(spec, rng, dark=False),
     "table": lambda spec, rng, lines=None: render_table(spec, rng),
     "pagemono": lambda spec, rng, lines=None: render_page(spec, rng, face=mono(24), size=24, lines=lines),
@@ -592,6 +602,11 @@ CORPUS = [
     # The smallest readable versions.
     ("slide", "allies", "lowres", "most"),
     ("table", "swarm-big", "lowres", "most"),
+    # A broadcast overlay in three columns, drawn level, which is what a tournament stream puts on
+    # screen for a full army. Added after a real one came back with units that were on the same line
+    # as each other and nowhere near each other on the screen.
+    ("cards3", "wardens-mixed", "clean", "exact"),
+    ("cards3", "allies", "screenshot", "exact"),
 ]
 
 

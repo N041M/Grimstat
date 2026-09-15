@@ -65,6 +65,11 @@ export interface ReadWord {
   readonly text: string;
   readonly confidence: number;
   readonly box: Box;
+  /**
+   * Which block of the picture the recogniser found this word in, when it says. Words from different
+   * blocks are never one line, whatever their heights.
+   */
+  readonly group?: number;
 }
 
 /** The middle of a box, across and down. */
@@ -132,16 +137,41 @@ export function fromWords(words: readonly ReadWord[]): Token[] {
   const slope = slopeOf(words);
   const level = (w: ReadWord): number => centreY(w) - centreX(w) * slope;
 
-  const byHeight = [...words].sort((a, b) => level(a) - level(b) || a.box.x - b.box.x);
-  const lines: ReadWord[][] = [];
-  let bottom = -Infinity;
-  for (const w of byHeight) {
-    if (level(w) > bottom || !lines.length) {
-      lines.push([]);
-      bottom = level(w) + height * 0.6;
-    }
-    lines[lines.length - 1]!.push(w);
+  /*
+   * Lines are found inside a block and never across two of them.
+   *
+   * A broadcast overlay draws a full army in three columns of cards, level with each other, so three
+   * units and three costs sit at the same height and a line taken across the whole picture reads
+   * them as one unit with a very large number after it. The recogniser already found the columns —
+   * the cards are separate blocks — and this keeps what it found. A picture it read as one block
+   * lands in one group and is grouped exactly as it was before.
+   */
+  const groups = new Map<number, ReadWord[]>();
+  for (const w of words) {
+    const key = w.group ?? 0;
+    const group = groups.get(key);
+    if (group) group.push(w);
+    else groups.set(key, [w]);
   }
+
+  const lines: ReadWord[][] = [];
+  for (const group of groups.values()) {
+    let bottom = -Infinity;
+    let line: ReadWord[] | undefined;
+    for (const w of [...group].sort((a, b) => level(a) - level(b) || a.box.x - b.box.x)) {
+      if (!line || level(w) > bottom) {
+        line = [];
+        lines.push(line);
+        bottom = level(w) + height * 0.6;
+      }
+      line.push(w);
+    }
+  }
+  // Down the picture, so two columns come back interleaved rather than one after the other, which is
+  // the order the lines were in before blocks were kept and what the reader downstream expects.
+  const topOf = (line: readonly ReadWord[]): number => Math.min(...line.map(level));
+  const leftOf = (line: readonly ReadWord[]): number => Math.min(...line.map((w) => w.box.x));
+  lines.sort((a, b) => topOf(a) - topOf(b) || leftOf(a) - leftOf(b));
 
   const out: Token[] = [];
   for (let line = 0; line < lines.length; line++) {
