@@ -150,11 +150,17 @@ function bundleSizePlugin(): Plugin {
  * its own stylesheet. `connect-src` allows other sites because the addresses are the user's to
  * type: the corpus relay and the Wahapedia mirror are both fields on the Data page.
  *
+ * `wasm-unsafe-eval` is there for the recogniser that reads an army list out of a picture: compiling
+ * WebAssembly counts as generating script, and without it the browser refuses the module. It allows
+ * WebAssembly and nothing else — `unsafe-eval`, which would also let the page run a string as code,
+ * is not here. The policy is only added to the built page, so a picture read fine in development and
+ * failed on the deployed site.
+ *
  * `frame-ancestors` is left out because a meta tag cannot carry it.
  */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' {hashes}",
+  "script-src 'self' 'wasm-unsafe-eval' {hashes}",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",
