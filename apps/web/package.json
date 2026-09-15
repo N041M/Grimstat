@@ -13,6 +13,7 @@
   "dependencies": {
     "@grimstat/adapters": "workspace:*",
     "@grimstat/board": "workspace:*",
+    "@grimstat/effects": "workspace:*",
     "@grimstat/engine": "workspace:*",
     "@grimstat/entitlements": "workspace:*",
     "@grimstat/game-40k-11e": "workspace:*",

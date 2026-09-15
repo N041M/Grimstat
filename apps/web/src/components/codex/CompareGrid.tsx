@@ -5,6 +5,8 @@ import { Empty, Icon } from "../ui";
 import { abilityGroups, bestIndices, characteristicRow, CHARACTERISTICS, COMPARE_CAP, differs, ledBy, searchDatasheets, unitFigures, weaponGroups } from "../../lib/codex";
 import { fmt } from "../../lib/format";
 import { keywordsToText } from "../../lib/keywordParser";
+import { KeywordRefs, RuleRef } from "../RuleRef";
+import { abilityText } from "../../lib/glossary";
 import { hrefFor } from "../../router";
 import { factionName, pointsText, sizeText, STAT_TITLE, weaponLine } from "./shared";
 import { t, tn } from "../../i18n";
@@ -42,7 +44,7 @@ const textRow = (id: string, label: string, texts: string[], opts: { mono?: bool
 
 const nodeRow = (id: string, label: string, cells: Array<{ text: string; node: ReactNode }>): Row => ({ id, label, cells, best: [], differs: differs(cells.map((c) => c.text)) });
 
-function weaponsCell(ds: Datasheet, kind: "ranged" | "melee"): { text: string; node: ReactNode } {
+function weaponsCell(ds: Datasheet, kind: "ranged" | "melee", snapshot: Snapshot): { text: string; node: ReactNode } {
   const groups = weaponGroups(ds, kind);
   if (!groups.length) return { text: "", node: <span className="t-meta">{t("codex.cmp.none")}</span> };
   const text = groups.map((g) => g.profiles.map((p) => `${p.profile.name} ${weaponLine(p.profile)} ${keywordsToText(p.profile.keywords)}`).join("|")).join("|");
@@ -61,7 +63,11 @@ function weaponsCell(ds: Datasheet, kind: "ranged" | "melee"): { text: string; n
                     {p.label ? <em>{p.label} · </em> : null}
                     {weaponLine(p.profile)}
                   </span>
-                  {kw ? <span className="cmp-weapon-kw">{kw}</span> : null}
+                  {kw ? (
+                    <span className="cmp-weapon-kw">
+                      <KeywordRefs keywords={p.profile.keywords} snapshot={snapshot} />
+                    </span>
+                  ) : null}
                 </Fragment>
               );
             })}
@@ -72,16 +78,15 @@ function weaponsCell(ds: Datasheet, kind: "ranged" | "melee"): { text: string; n
   };
 }
 
-function chipsCell(names: string[], titles?: Array<string | undefined>): { text: string; node: ReactNode } {
+/** A row of keyword chips; where `rules` carries the text behind a chip, that chip opens it. */
+function chipsCell(names: string[], rules?: Array<string | undefined>): { text: string; node: ReactNode } {
   if (!names.length) return { text: "", node: <span className="t-meta">{t("codex.cmp.none")}</span> };
   return {
     text: names.join("|"),
     node: (
       <span className="cmp-chips chips">
         {names.map((n, i) => (
-          <span key={n} className="chip" title={titles?.[i]}>
-            {n}
-          </span>
+          <RuleRef key={n} className="chip" term={n} name={n} text={rules?.[i] ?? ""} />
         ))}
       </span>
     ),
@@ -184,7 +189,7 @@ function buildSections(sheets: Datasheet[], snapshot: Snapshot): Section[] {
     {
       id: "weapons",
       label: t("codex.cmp.sec.weapons"),
-      rows: [nodeRow("ranged", t("codex.cmp.row.ranged"), sheets.map((d) => weaponsCell(d, "ranged"))), nodeRow("melee", t("codex.cmp.row.melee"), sheets.map((d) => weaponsCell(d, "melee")))],
+      rows: [nodeRow("ranged", t("codex.cmp.row.ranged"), sheets.map((d) => weaponsCell(d, "ranged", snapshot))), nodeRow("melee", t("codex.cmp.row.melee"), sheets.map((d) => weaponsCell(d, "melee", snapshot)))],
     },
     {
       id: "abilities",
@@ -197,7 +202,7 @@ function buildSections(sheets: Datasheet[], snapshot: Snapshot): Section[] {
             const list = namesOf(i, "core");
             return chipsCell(
               list.map((a) => a.name),
-              list.map((a) => a.text || undefined),
+              list.map((a) => abilityText(snapshot, a)),
             );
           }),
         ),
@@ -208,7 +213,7 @@ function buildSections(sheets: Datasheet[], snapshot: Snapshot): Section[] {
             const list = namesOf(i, "faction");
             return chipsCell(
               list.map((a) => a.name),
-              list.map((a) => a.text || undefined),
+              list.map((a) => abilityText(snapshot, a)),
             );
           }),
         ),

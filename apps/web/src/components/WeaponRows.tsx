@@ -1,11 +1,13 @@
 import type { ScenarioWeapon } from "@grimstat/schema";
 import { ap, dice, skill } from "../lib/format";
-import { keywordsToText } from "../lib/keywordParser";
+import { KeywordRefs } from "./RuleRef";
+import { useApp } from "../state/AppContext";
 import { num } from "./ui";
 import { t } from "../i18n";
 
 /** Enable checkbox + count per weapon for units that came from data or an archetype. */
 export function WeaponRows({ weapons, onChange }: { weapons: ScenarioWeapon[]; onChange: (w: ScenarioWeapon[]) => void }) {
+  const { snapshot } = useApp();
   if (!weapons.length) return <p className="muted small">{t("unit.noWeapons")}</p>;
   const update = (i: number, patch: Partial<ScenarioWeapon>) => onChange(weapons.map((w, j) => (j === i ? { ...w, ...patch } : w)));
   return (
@@ -33,7 +35,9 @@ export function WeaponRows({ weapons, onChange }: { weapons: ScenarioWeapon[]; o
               <td className="mono small">
                 {w.kind === "melee" ? t("weapon.melee") : `${w.range ?? "–"}"`} · A{dice(w.A)} {skill(w.skill)} S{w.S} AP{ap(w.AP)} D{dice(w.D)}
               </td>
-              <td className="small">{keywordsToText(w.keywords)}</td>
+              <td className="small">
+                <KeywordRefs keywords={w.keywords} snapshot={snapshot} empty="" />
+              </td>
             </tr>
           ))}
         </tbody>

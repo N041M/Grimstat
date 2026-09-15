@@ -76,6 +76,23 @@ describe("buildSnapshot", () => {
     expect(b.checksum).toBe(a.checksum);
   });
 
+  it("sorts the glossary, and leaves the checksum of a snapshot without one alone", async () => {
+    const glossary = [
+      { id: "gl:torrent", name: "Torrent", key: "TORRENT", text: "b" },
+      { id: "gl:blast", name: "Blast", key: "BLAST", text: "a" },
+    ];
+    expect(normaliseData({ ...base.data, glossary }).glossary!.map((g) => g.id)).toEqual(["gl:blast", "gl:torrent"]);
+    // An empty glossary is not written, so a snapshot built before any source supplied one keeps its
+    // checksum rather than being reported as changed.
+    const empty = await buildSnapshot({ data: { ...base.data, glossary: [] }, now: SOME_DAY });
+    const absent = await buildSnapshot({ data: { ...base.data, glossary: undefined }, now: SOME_DAY });
+    expect(empty.checksum).toBe(absent.checksum);
+    expect(empty.data.glossary).toBeUndefined();
+    const full = await buildSnapshot({ data: { ...base.data, glossary }, now: SOME_DAY });
+    expect(full.checksum).not.toBe(absent.checksum);
+    expect((await verifySnapshot(full)).ok).toBe(true);
+  });
+
   it("breaks ties between price rules of one datasheet on copy range and label", () => {
     const priceRules = [
       { datasheetId: "ds:ashen-wardens:ashen-crusher", copyRange: { min: 1 }, label: "B", tiers: [{ models: 1, points: 20 }] },

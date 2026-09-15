@@ -1,4 +1,4 @@
-import type { Ability, Datasheet, Detachment, Enhancement, Faction, GameSystem, ModelProfile, PriceRule, Publication, SourceRef, WargearPrice, WeaponProfile } from "@grimstat/schema";
+import type { Ability, Datasheet, Detachment, Enhancement, Faction, GameSystem, GlossaryEntry, ModelProfile, PriceRule, Publication, SourceRef, WargearPrice, WeaponProfile } from "@grimstat/schema";
 import { DEFAULT_GAME_SYSTEM_ID, asFileMap, fetchedAtOrNow, type Adapter, type AdapterInput, type AdapterOutput, type DatasheetStub, type ParseOptions } from "../types";
 import {
   coreAbilityId,
@@ -16,7 +16,7 @@ import {
   weaponProfileId,
 } from "../util/ids";
 import { parseAP, parseDice, parseInches, parseInt0, parseTargetNumber, parseWeaponRange } from "../util/values";
-import { parseWeaponKeywords } from "@grimstat/effects";
+import { glossaryKey, parseWeaponKeywords } from "@grimstat/effects";
 import { parseCoreAbility } from "../util/core-abilities";
 
 export const BSDATA_REPO = "BSData/wh40k-11e";
@@ -42,6 +42,7 @@ export interface BsRule {
   name: string;
   description?: string;
   hidden?: boolean;
+  publicationId?: string;
 }
 export interface BsCost {
   name?: string;
@@ -336,6 +337,8 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
   const priceRules: PriceRule[] = [];
   const wargearPrices: WargearPrice[] = [];
   const publications: Publication[] = [];
+  /** Keyword rules from the game system, one per keyword; see the game-system block below. */
+  const glossaryByKey = new Map<string, GlossaryEntry>();
   const dsIds = new Set<string>();
   const detIds = new Set<string>();
   const enhIds = new Set<string>();
@@ -374,6 +377,21 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
     for (const p of gsDoc.root.publications ?? []) {
       const pub: Publication = { id: `pub:bsdata:${p.id}`, name: p.name };
       publications.push(pub);
+    }
+    // The game system holds the rules a datasheet names but does not print, which are the weapon
+    // keywords and the core abilities. It lists each one several times, once per value it is printed
+    // with ("Feel No Pain", "Feel No Pain 5+", "Feel No Pain 6+"). They all carry the same text, so the
+    // shortest name wins.
+    for (const r of gsDoc.root.sharedRules ?? []) {
+      const name = (r.name ?? "").trim();
+      const text = plainRuleText(r.description);
+      if (!name || !text) continue;
+      const key = glossaryKey(name);
+      const seen = glossaryByKey.get(key);
+      if (seen && seen.name.length <= name.length) continue;
+      const entry: GlossaryEntry = { id: `gl:${slugify(key)}`, name, key, text };
+      if (r.publicationId) entry.sourceId = `pub:bsdata:${r.publicationId}`;
+      glossaryByKey.set(key, entry);
     }
   } else warnings.push("no game system file (root key \"gameSystem\") in input; cost types resolved by name only");
 
@@ -980,7 +998,23 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
   const stubs: DatasheetStub[] = datasheets;
   const out: AdapterOutput = { sourceRef, warnings, factions, datasheets: stubs, abilities, detachments, enhancements, priceRules, wargearPrices, publications, staging };
   if (gameSystem) out.gameSystem = gameSystem;
+  if (glossaryByKey.size) out.glossary = [...glossaryByKey.values()];
   return out;
+}
+
+/**
+ * BSData writes rules text with its own emphasis marks: `**bold**`, `*italic*` and `^^highlight^^`.
+ * They carry no meaning the app shows, so they come off and the result is read as plain prose.
+ */
+function plainRuleText(description: string | undefined): string {
+  return (description ?? "")
+    .replace(/\^\^/g, "")
+    .replace(/\*+/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function describeRange(mm: { min?: number; max?: number }, name: string): string {

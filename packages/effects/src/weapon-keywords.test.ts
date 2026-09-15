@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseWeaponKeywords } from "./weapon-keywords";
+import { glossaryKey, parseWeaponKeywords } from "./weapon-keywords";
 
 const one = (t: string) => parseWeaponKeywords(t)[0]!;
 
@@ -48,5 +48,30 @@ describe("parseWeaponKeywords", () => {
     expect(parseWeaponKeywords("")).toEqual([]);
     expect(parseWeaponKeywords("-")).toEqual([]);
     expect(parseWeaponKeywords(null)).toEqual([]);
+  });
+});
+
+describe("glossaryKey", () => {
+  it.each([
+    ["Sustained Hits", "SUSTAINED HITS"],
+    ["Sustained Hits 1", "SUSTAINED HITS"],
+    ["Anti", "ANTI"],
+    ["Anti-vehicle 4+", "ANTI"],
+    ["Twin-linked", "TWIN-LINKED"],
+    ["Feel No Pain 5+", "FEEL NO PAIN"],
+    ["Feel No Pain 6+*", "FEEL NO PAIN"],
+    ['Scouts 6"', "SCOUTS"],
+    ["Deadly Demise D6+2", "DEADLY DEMISE"],
+    ["Damaged", "DAMAGED"],
+    ["Super-Heavy Walker", "SUPER-HEAVY WALKER"],
+    ["Firing Deck 2 (Szarekh model only)", "FIRING DECK"],
+  ])("keys %s as %s", (name, key) => {
+    expect(glossaryKey(name)).toBe(key);
+  });
+
+  it("gives a printed keyword the key its own parse already carries", () => {
+    for (const text of ["Rapid Fire 2", "Melta 2", "Lethal Hits", "Ignores Cover", "Close-quarters"]) {
+      expect(glossaryKey(text)).toBe(one(text).name);
+    }
   });
 });

@@ -39,6 +39,11 @@ describe("synthetic snapshot fixture", () => {
     const kw = new Set(d.datasheets.flatMap((x) => x.weapons.flatMap((w) => w.keywords.map((k) => k.name))));
     for (const k of ["SUSTAINED HITS", "LETHAL HITS", "DEVASTATING WOUNDS", "ANTI", "BLAST", "TORRENT", "MELTA", "RAPID FIRE", "TWIN-LINKED", "HAZARDOUS", "PRECISION", "HEAVY"]) expect(kw).toContain(k);
 
+    // Every keyword a weapon prints has a rule behind it, which is what the codex opens on a hover.
+    const rules = new Set((d.glossary ?? []).map((g) => g.key));
+    for (const k of kw) expect(rules).toContain(k);
+    expect(rules).toContain("DEEP STRIKE");
+
     const fnp = d.abilities.find((a) => a.coreKeyword === "FEEL NO PAIN")!;
     expect(fnp.coreValue).toBe(5);
     expect(byName.get("Thornlings")!.abilityIds).toContain(fnp.id);

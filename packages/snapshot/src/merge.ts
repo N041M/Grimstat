@@ -1,4 +1,4 @@
-import type { Ability, Conflict, Datasheet, Detachment, Enhancement, Faction, GameSystem, ModelProfile, PriceRule, Publication, SnapshotData, SourceRef, Stratagem, WargearPrice, WeaponProfile } from "@grimstat/schema";
+import type { Ability, Conflict, Datasheet, Detachment, Enhancement, Faction, GameSystem, GlossaryEntry, ModelProfile, PriceRule, Publication, SnapshotData, SourceRef, Stratagem, WargearPrice, WeaponProfile } from "@grimstat/schema";
 import { canonicalJson } from "./checksum";
 import { factionKey, normaliseName, slugToNameKey } from "./normalise";
 
@@ -604,6 +604,18 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
       }
     }
   }
+  // ---- glossary -------------------------------------------------------------------------------
+  // One entry per keyword, taken from whichever source ranks highest for rules text and has one.
+  const glossary: GlossaryEntry[] = [];
+  const seenRule = new Set<string>();
+  for (const part of sortMembers(ordered.map((p) => ({ adapter: adapterOf(p), item: p })), T).map((m) => m.item)) {
+    for (const g of part.glossary ?? []) {
+      if (seenRule.has(g.key)) continue;
+      seenRule.add(g.key);
+      glossary.push(copy(g));
+    }
+  }
+
   const declared = sortMembers(ordered.map((p) => ({ adapter: adapterOf(p), item: p })), T).map((m) => m.item.gameSystem).find((g): g is GameSystem => !!g);
   const gameSystem: GameSystem = copy(policy.gameSystem ?? declared ?? { id: datasheets[0]?.gameSystemId ?? "wh40k-11e", name: "Warhammer 40,000", edition: "11", costTypes: [] });
 
@@ -614,7 +626,7 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
   }
 
   return {
-    data: { gameSystem, factions, publications, datasheets, abilities, detachments, enhancements, stratagems, priceRules, wargearPrices },
+    data: { gameSystem, factions, publications, datasheets, abilities, detachments, enhancements, stratagems, priceRules, wargearPrices, ...(glossary.length ? { glossary } : {}) },
     conflicts,
     warnings,
     unmatched,

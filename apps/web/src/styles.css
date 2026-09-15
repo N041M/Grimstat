@@ -7908,8 +7908,18 @@ button.battle-scope-btn:hover {
 .codex-card:hover {
   border-color: var(--ink);
 }
-.codex-card.in-compare {
-  box-shadow: inset 3px 0 0 var(--accent);
+/* The mark for a card in the compare set. An inset shadow followed the card's rounded corners and
+   curved the bar at both ends; this keeps the inner edge of the bar straight and rounds only the
+   outer one, where it meets the card's own corner. */
+.codex-card.in-compare::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--accent);
 }
 .codex-card-link {
   display: flex;
@@ -11403,4 +11413,210 @@ body.battle-focused .battle-stage {
   .pic-shots {
     max-height: 36vh;
   }
+}
+
+/* ---- keyword rules ---- */
+/* A keyword the imported data explains. It is a button so that a keyboard and a touch screen can
+   reach it, and it drops everything else a button looks like: the only mark it adds to the page is a
+   dotted underline, drawn under the text rather than as a bottom border so that it stays with the
+   word in table cells of every line height. */
+.rule-ref {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.rule-ref:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Where the keyword is printed as a chip or a badge, that box stays exactly as it was. */
+.rule-ref.chip {
+  padding: 0.1rem 0.45rem;
+  background: var(--rail);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  text-underline-offset: 2px;
+}
+.rule-ref.badge {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--dash);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-underline-offset: 2px;
+}
+.rule-ref.badge.accent {
+  color: var(--accent-hover);
+  border-color: var(--accent);
+}
+.rule-ref.badge.brass {
+  color: var(--mid);
+  border-color: var(--mid);
+}
+/* The roster's keyword pill holds a name and a count side by side, so it stays a flex box. */
+.rule-ref.stat-kw {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  text-decoration: none;
+}
+.rule-ref.stat-kw .stat-kw-name {
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.rule-card {
+  position: fixed;
+  z-index: 60;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-overlay);
+  box-shadow: 0 10px 28px var(--shadow);
+  animation: gs-fade 90ms ease-out;
+}
+.rule-card-name {
+  margin: 0 0 6px;
+  font: 600 12px/1.3 var(--font);
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.rule-card-text {
+  font: 400 12px/1.5 var(--font);
+  color: var(--ink-2);
+}
+.rule-card-text p {
+  margin: 0 0 6px;
+}
+.rule-card-text ul {
+  margin: 0 0 6px;
+  padding-left: 1.1em;
+}
+.rule-card-text li {
+  margin-bottom: 3px;
+}
+.rule-card-text > :last-child,
+.rule-card-text > :last-child > :last-child {
+  margin-bottom: 0;
+}
+/* A line about this army's use of the keyword, under the rule itself. */
+.rule-card-note {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  font: 400 11px/1.45 var(--font);
+  color: var(--muted);
+}
+.rule-card-name + .rule-card-note {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* ---- the datasheet inside the unit inspector ---- */
+/* The codex prints a datasheet across a page. Here it has one narrow column, so each weapon profile
+   folds into a name, a line of characteristics and its keywords. */
+.uds {
+  font-size: 0.75rem;
+}
+.uds-h {
+  margin: 0.6rem 0 0.25rem;
+  font: 600 0.68rem/1.3 var(--font);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.uds-profile {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+}
+.uds-profile th {
+  padding: 0 0.25rem 0.2rem;
+  font-weight: 400;
+  color: var(--faint);
+  text-align: left;
+}
+.uds-profile th.num,
+.uds-profile td.num {
+  text-align: right;
+}
+.uds-profile td {
+  padding: 0.18rem 0.25rem;
+  border-top: 1px solid var(--line-soft);
+  color: var(--ink-2);
+}
+.uds-profile td.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.uds-weapons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.uds-weapons > li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.uds-weapon-name {
+  color: var(--ink);
+}
+.uds-weapon-line {
+  font: 400 0.7rem/1.4 var(--mono);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.uds-weapon-kw {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.uds-abil {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.uds-abil-name {
+  color: var(--ink);
+}
+.uds-abil-text {
+  margin: 0.1rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.uds-link {
+  margin: 0.6rem 0 0;
+  font-size: 0.7rem;
 }

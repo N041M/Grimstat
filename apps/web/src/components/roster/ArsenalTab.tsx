@@ -9,6 +9,8 @@ import { fmt, fmtInt } from "../../lib/format";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead, PillChip, ProportionBar } from "../kit";
 import { Empty } from "../ui";
+import { RuleRef } from "../RuleRef";
+import { ruleForPrinted } from "../../lib/glossary";
 import { t, tn, type I18nKey } from "../../i18n";
 
 /* ---------- column templates ---------- */
@@ -317,14 +319,25 @@ export function ArsenalTab({ roster, snapshot }: Props) {
             ) : (
               <div className="stat-kw-groups">
                 <ul className="stat-kw-list">
-                  {view.conditional.map((k) => (
-                    <li key={k.name}>
-                      <span className="stat-kw" title={t("roster.arsenal.conditionalTitle", { name: k.name, n: attacksLabel(k.attacks), weapons: k.weapons.join(", ") })}>
-                        <span className="stat-kw-name">{k.name}</span>
-                        <span className="stat-kw-count">{attacksLabel(k.attacks)}</span>
-                      </span>
-                    </li>
-                  ))}
+                  {view.conditional.map((k) => {
+                    const rule = ruleForPrinted(snapshot, k.name);
+                    return (
+                      <li key={k.name}>
+                        <RuleRef
+                          className="stat-kw"
+                          term={
+                            <>
+                              <span className="stat-kw-name">{k.name}</span>
+                              <span className="stat-kw-count">{attacksLabel(k.attacks)}</span>
+                            </>
+                          }
+                          name={rule?.name ?? k.name}
+                          text={rule?.text ?? ""}
+                          note={t("roster.arsenal.conditionalTitle", { name: k.name, n: attacksLabel(k.attacks), weapons: k.weapons.join(", ") })}
+                        />
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}

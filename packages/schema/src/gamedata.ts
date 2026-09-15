@@ -97,6 +97,22 @@ export const Ability = z.object({
 });
 export type Ability = z.infer<typeof Ability>;
 
+/**
+ * A rule the game system prints once and datasheets then refer to by name: a weapon keyword such as
+ * Sustained Hits, or a core ability such as Deep Strike. The text comes from an imported source, so a
+ * snapshot built without one carries no glossary.
+ */
+export const GlossaryEntry = z.object({
+  id: Id,
+  /** Printed name, e.g. "Sustained Hits". */
+  name: z.string(),
+  /** Upper-case name without its value, which is what a printed keyword is matched on: "SUSTAINED HITS", "ANTI". */
+  key: z.string(),
+  text: z.string(),
+  sourceId: Id.optional(),
+});
+export type GlossaryEntry = z.infer<typeof GlossaryEntry>;
+
 export const UnitComposition = z.object({
   /** Free-text line, e.g. "1 Sergeant and 4 Marines". */
   description: z.string(),

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Id, RecordMeta } from "./common";
-import { Ability, Datasheet, Detachment, Enhancement, Faction, GameSystem, Publication, Stratagem } from "./gamedata";
+import { Ability, Datasheet, Detachment, Enhancement, Faction, GameSystem, GlossaryEntry, Publication, Stratagem } from "./gamedata";
 import { PriceRule, WargearPrice } from "./pricing";
 
 /** Where a piece of the snapshot came from. Pin exact refs (git SHA, MFM version, Wahapedia last_update). */
@@ -45,6 +45,11 @@ export const SnapshotData = z.object({
   stratagems: z.array(Stratagem).default([]),
   priceRules: z.array(PriceRule).default([]),
   wargearPrices: z.array(WargearPrice).default([]),
+  /**
+   * Rules text for the keywords datasheets print. Left out when no source supplied one, so that a snapshot
+   * built before this existed keeps the checksum it was written with.
+   */
+  glossary: z.array(GlossaryEntry).optional(),
 });
 export type SnapshotData = z.infer<typeof SnapshotData>;
 

@@ -3,7 +3,7 @@
   "createdAt": "2026-01-01T00:00:00.000Z",
   "updatedAt": "2026-01-01T00:00:00.000Z",
   "revision": 0,
-  "id": "snap_20260101_a6ce6bac",
+  "id": "snap_20260101_1a2aa18d",
   "gameSystemId": "wh40k-11e",
   "label": "synthetic fixture",
   "sources": [
@@ -29,7 +29,7 @@
       "notes": "Powered by Wahapedia (https://wahapedia.ru); text (c) Games Workshop"
     }
   ],
-  "checksum": "a6ce6bac12fcaa0c8ab547e9263c8f9effb8686c24ed031b2043c9aea32c476b",
+  "checksum": "1a2aa18d7477b556d15d52cc26e0bb04e8eb779753c8c00959cdf682cd237b86",
   "conflicts": [
     {
       "entity": "datasheet",
@@ -1521,6 +1521,162 @@
         "datasheetId": "ds:ashen-wardens:warden-squad",
         "item": "Warden Champion",
         "points": 15
+      }
+    ],
+    "glossary": [
+      {
+        "id": "gl:anti",
+        "name": "Anti",
+        "key": "ANTI",
+        "text": "Synthetic rules text: this ability always takes the form Anti-X Y+. A wound roll of Y+ against a unit with the X keyword is a critical wound.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:assault",
+        "name": "Assault",
+        "key": "ASSAULT",
+        "text": "Synthetic rules text: this weapon can be fired by a unit that advanced.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:blast",
+        "name": "Blast",
+        "key": "BLAST",
+        "text": "Synthetic rules text: gather one more attack die for every five models in the target unit.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:deadly-demise",
+        "name": "Deadly Demise",
+        "key": "DEADLY DEMISE",
+        "text": "Synthetic rules text: explode on a 6 when destroyed."
+      },
+      {
+        "id": "gl:deep-strike",
+        "name": "Deep Strike",
+        "key": "DEEP STRIKE",
+        "text": "Synthetic rules text: arrive from reserves more than 9\" from enemy models."
+      },
+      {
+        "id": "gl:devastating-wounds",
+        "name": "Devastating Wounds",
+        "key": "DEVASTATING WOUNDS",
+        "text": "Synthetic rules text: a critical wound inflicts its damage and no save of any kind is taken against it.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:feel-no-pain",
+        "name": "Feel No Pain 5+",
+        "key": "FEEL NO PAIN",
+        "text": "Synthetic rules text: ignore a lost wound on a 5+."
+      },
+      {
+        "id": "gl:hazardous",
+        "name": "Hazardous",
+        "key": "HAZARDOUS",
+        "text": "Synthetic rules text: roll a die for each model that shot with this weapon; on a 1 that model is wounded.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:heavy",
+        "name": "Heavy",
+        "key": "HEAVY",
+        "text": "Synthetic rules text: add 1 to the hit roll if the unit did not move this turn.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:ignores-cover",
+        "name": "Ignores Cover",
+        "key": "IGNORES COVER",
+        "text": "Synthetic rules text: the target cannot have the benefit of cover against this attack.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:leader",
+        "name": "Leader",
+        "key": "LEADER",
+        "text": "Synthetic rules text: attach this model to one unit it can lead."
+      },
+      {
+        "id": "gl:lethal-hits",
+        "name": "Lethal Hits",
+        "key": "LETHAL HITS",
+        "text": "Synthetic rules text: a critical hit wounds the target automatically.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:lone-operative",
+        "name": "Lone Operative",
+        "key": "LONE OPERATIVE",
+        "text": "Synthetic rules text: only targetable within 12\"."
+      },
+      {
+        "id": "gl:melta",
+        "name": "Melta",
+        "key": "MELTA",
+        "text": "Synthetic rules text: this ability always takes the form Melta X. Add X to the damage within half range.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:pistol",
+        "name": "Pistol",
+        "key": "PISTOL",
+        "text": "Synthetic rules text: this weapon can be fired by a unit in engagement range, and only at the unit it is engaged with.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:precision",
+        "name": "Precision",
+        "key": "PRECISION",
+        "text": "Synthetic rules text: an attack that wounds can be allocated to a character in the target unit.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:psychic",
+        "name": "Psychic",
+        "key": "PSYCHIC",
+        "text": "Synthetic rules text: this attack is a psychic attack, and rules that answer psychic attacks apply to it.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:rapid-fire",
+        "name": "Rapid Fire",
+        "key": "RAPID FIRE",
+        "text": "Synthetic rules text: this ability always takes the form Rapid Fire X. Gather X more attack dice within half range.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:stealth",
+        "name": "Stealth",
+        "key": "STEALTH",
+        "text": "Synthetic rules text: -1 to hit for ranged attacks that target this unit."
+      },
+      {
+        "id": "gl:support",
+        "name": "Support",
+        "key": "SUPPORT",
+        "text": "Synthetic rules text: attach this model to a unit that already has a Leader."
+      },
+      {
+        "id": "gl:sustained-hits",
+        "name": "Sustained Hits",
+        "key": "SUSTAINED HITS",
+        "text": "Synthetic rules text: this ability always takes the form Sustained Hits X. A critical hit scores X more hits.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:torrent",
+        "name": "Torrent",
+        "key": "TORRENT",
+        "text": "Synthetic rules text: this weapon hits its target automatically.",
+        "sourceId": "pub:bsdata:pub-synthetic"
+      },
+      {
+        "id": "gl:twin-linked",
+        "name": "Twin-linked",
+        "key": "TWIN-LINKED",
+        "text": "Synthetic rules text: re-roll a failed wound roll.",
+        "sourceId": "pub:bsdata:pub-synthetic"
       }
     ]
   }

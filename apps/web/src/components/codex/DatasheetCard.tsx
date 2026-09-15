@@ -4,7 +4,8 @@ import { UnitArt } from "../UnitArt";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable, PanelHead } from "../kit";
 import { abilityGroups, characteristic, characteristicText, CHARACTERISTICS, ledBy, pointsLines, sizeBounds, supportedBy, unitFigures, wargearPrices, weaponGroups, type AbilityBucket, type WeaponGroup } from "../../lib/codex";
 import { ap, dice, fmtInt, skill } from "../../lib/format";
-import { keywordsToText } from "../../lib/keywordParser";
+import { KeywordChips, KeywordRefs, RuleRef } from "../RuleRef";
+import { abilityText } from "../../lib/glossary";
 import { hrefFor } from "../../router";
 import { factionName, pointsText, SheetFlags, sizeText, STAT_COL, STAT_TITLE } from "./shared";
 import { t, tn, type I18nKey } from "../../i18n";
@@ -66,7 +67,7 @@ function reach(w: WeaponProfile): string {
   return w.kind === "melee" ? t("codex.melee") : `${w.range ?? "–"}"`;
 }
 
-function WeaponTable({ kind, groups }: { kind: WeaponProfile["kind"]; groups: WeaponGroup[] }) {
+function WeaponTable({ kind, groups, snapshot }: { kind: WeaponProfile["kind"]; groups: WeaponGroup[]; snapshot: Snapshot }) {
   if (!groups.length) return <p className="stat-note">{t(kind === "ranged" ? "codex.noRanged" : "codex.noMelee")}</p>;
   return (
     <div className="codex-table">
@@ -116,7 +117,7 @@ function WeaponTable({ kind, groups }: { kind: WeaponProfile["kind"]; groups: We
                     {dice(p.profile.D)}
                   </GridCell>
                   <GridCell tone="muted" className="codex-wrap">
-                    {keywordsToText(p.profile.keywords) || "–"}
+                    <KeywordRefs keywords={p.profile.keywords} snapshot={snapshot} />
                   </GridCell>
                 </GridRow>
               ))}
@@ -139,9 +140,7 @@ function Abilities({ ds, snapshot }: { ds: Datasheet; snapshot: Snapshot }) {
           <span className="t-eyebrow">{t(BUCKET_KEY[g.bucket])}</span>
           <span className="chips">
             {g.abilities.map((a) => (
-              <span key={a.id} className="chip" title={a.text || undefined}>
-                {a.name}
-              </span>
+              <RuleRef key={a.id} className="chip" term={a.name} name={a.name} text={abilityText(snapshot, a)} />
             ))}
           </span>
         </p>
@@ -289,36 +288,16 @@ function Aside({ ds, snapshot }: { ds: Datasheet; snapshot: Snapshot }) {
   );
 }
 
-function Keywords({ ds }: { ds: Datasheet }) {
+function Keywords({ ds, snapshot }: { ds: Datasheet; snapshot: Snapshot }) {
   return (
     <div className="codex-keywords">
       <div>
         <h3 className="codex-h3">{t("codex.sec.keywords")}</h3>
-        <div className="chips">
-          {ds.keywords.length ? (
-            ds.keywords.map((k) => (
-              <span key={k} className="chip">
-                {k}
-              </span>
-            ))
-          ) : (
-            <span className="t-meta">–</span>
-          )}
-        </div>
+        <div className="chips">{ds.keywords.length ? <KeywordChips names={ds.keywords} snapshot={snapshot} /> : <span className="t-meta">–</span>}</div>
       </div>
       <div>
         <h3 className="codex-h3">{t("codex.sec.factionKeywords")}</h3>
-        <div className="chips">
-          {ds.factionKeywords.length ? (
-            ds.factionKeywords.map((k) => (
-              <span key={k} className="chip">
-                {k}
-              </span>
-            ))
-          ) : (
-            <span className="t-meta">–</span>
-          )}
-        </div>
+        <div className="chips">{ds.factionKeywords.length ? <KeywordChips names={ds.factionKeywords} snapshot={snapshot} /> : <span className="t-meta">–</span>}</div>
       </div>
     </div>
   );
@@ -342,7 +321,7 @@ export function DatasheetCard({ ds, snapshot }: { ds: Datasheet; snapshot: Snaps
             {ds.role ? ` · ${ds.role}` : ""}
           </div>
           <h2>{ds.name}</h2>
-          <SheetFlags ds={ds} />
+          <SheetFlags ds={ds} snapshot={snapshot} />
         </div>
         <div className="codex-band-points">
           <span className="t-metric">{pointsText(fig.minPoints, fig.maxPoints)}</span>
@@ -356,10 +335,10 @@ export function DatasheetCard({ ds, snapshot }: { ds: Datasheet; snapshot: Snaps
         <ProfileTable ds={ds} />
       </Section>
       <Section title={t("codex.sec.ranged")}>
-        <WeaponTable kind="ranged" groups={weaponGroups(ds, "ranged")} />
+        <WeaponTable kind="ranged" groups={weaponGroups(ds, "ranged")} snapshot={snapshot} />
       </Section>
       <Section title={t("codex.sec.melee")}>
-        <WeaponTable kind="melee" groups={weaponGroups(ds, "melee")} />
+        <WeaponTable kind="melee" groups={weaponGroups(ds, "melee")} snapshot={snapshot} />
       </Section>
 
       <div className="codex-columns">
@@ -371,7 +350,7 @@ export function DatasheetCard({ ds, snapshot }: { ds: Datasheet; snapshot: Snaps
         </section>
       </div>
 
-      <Keywords ds={ds} />
+      <Keywords ds={ds} snapshot={snapshot} />
     </article>
   );
 }

@@ -246,6 +246,118 @@
         "name": "Stealth",
         "hidden": false,
         "description": "Synthetic rules text: -1 to hit for ranged attacks that target this unit."
+      },
+      {
+        "id": "rule-anti",
+        "name": "Anti",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: this ability always takes the form Anti-X Y+. A wound roll of Y+ against a unit with the X keyword is a critical wound."
+      },
+      {
+        "id": "rule-assault",
+        "name": "Assault",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: this weapon can be fired by a unit that advanced."
+      },
+      {
+        "id": "rule-blast",
+        "name": "Blast",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: gather one more attack die for every five models in the target unit."
+      },
+      {
+        "id": "rule-devastating-wounds",
+        "name": "Devastating Wounds",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: a critical wound inflicts its damage and no save of any kind is taken against it."
+      },
+      {
+        "id": "rule-hazardous",
+        "name": "Hazardous",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: roll a die for each model that shot with this weapon; on a 1 that model is wounded."
+      },
+      {
+        "id": "rule-heavy",
+        "name": "Heavy",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: add 1 to the hit roll if the unit did not move this turn."
+      },
+      {
+        "id": "rule-ignores-cover",
+        "name": "Ignores Cover",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: the target cannot have the benefit of cover against this attack."
+      },
+      {
+        "id": "rule-lethal-hits",
+        "name": "Lethal Hits",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: a critical hit wounds the target automatically."
+      },
+      {
+        "id": "rule-melta",
+        "name": "Melta",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: this ability always takes the form Melta X. Add X to the damage within half range."
+      },
+      {
+        "id": "rule-pistol",
+        "name": "Pistol",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: this weapon can be fired by a unit in engagement range, and only at the unit it is engaged with."
+      },
+      {
+        "id": "rule-precision",
+        "name": "Precision",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: an attack that wounds can be allocated to a character in the target unit."
+      },
+      {
+        "id": "rule-psychic",
+        "name": "Psychic",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: this attack is a psychic attack, and rules that answer psychic attacks apply to it."
+      },
+      {
+        "id": "rule-rapid-fire",
+        "name": "Rapid Fire",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: this ability always takes the form Rapid Fire X. Gather X more attack dice within half range."
+      },
+      {
+        "id": "rule-sustained-hits",
+        "name": "Sustained Hits",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: this ability always takes the form Sustained Hits X. A critical hit scores X more hits."
+      },
+      {
+        "id": "rule-torrent",
+        "name": "Torrent",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: this weapon hits its target automatically."
+      },
+      {
+        "id": "rule-twin-linked",
+        "name": "Twin-linked",
+        "hidden": false,
+        "publicationId": "pub-synthetic",
+        "description": "Synthetic rules text: re-roll a failed wound roll."
       }
     ],
     "sharedSelectionEntries": [

@@ -68,6 +68,9 @@ importers:
       '@grimstat/board':
         specifier: workspace:*
         version: link:../../packages/board
+      '@grimstat/effects':
+        specifier: workspace:*
+        version: link:../../packages/effects
       '@grimstat/engine':
         specifier: workspace:*
         version: link:../../packages/engine

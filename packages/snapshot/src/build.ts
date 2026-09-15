@@ -34,7 +34,10 @@ const OPEN_ENDED = Number.MAX_SAFE_INTEGER;
  */
 export function normaliseData(data: SnapshotData): SnapshotData {
   const parsed = SnapshotData.parse(data);
-  return {
+  // An empty glossary is dropped rather than written as an empty array, so that a snapshot built
+  // before any source supplied one keeps the checksum it was written with.
+  const glossary = parsed.glossary?.length ? [...parsed.glossary].sort(byId) : undefined;
+  const out: SnapshotData = {
     ...parsed,
     factions: [...parsed.factions].sort(byId),
     publications: [...parsed.publications].sort(byId),
@@ -46,6 +49,9 @@ export function normaliseData(data: SnapshotData): SnapshotData {
     priceRules: [...parsed.priceRules].sort((a, b) => cmp(a.datasheetId, b.datasheetId) || a.copyRange.min - b.copyRange.min || (a.copyRange.max ?? OPEN_ENDED) - (b.copyRange.max ?? OPEN_ENDED) || cmp(a.label ?? "", b.label ?? "")),
     wargearPrices: [...parsed.wargearPrices].sort((a, b) => cmp(a.datasheetId, b.datasheetId) || cmp(a.item, b.item) || a.points - b.points),
   };
+  if (glossary) out.glossary = glossary;
+  else delete out.glossary;
+  return out;
 }
 
 function yyyymmdd(d: Date): string {

@@ -5,6 +5,7 @@ import { groupBounds, hasWargear, isCharacterSheet, modelCountOf, toggleWargear,
 import { canEmbark, loadsByTransport, transportCandidates } from "../../lib/transport";
 import { fmtInt } from "../../lib/format";
 import { DiagnosticItem } from "./DiagnosticItem";
+import { UnitDatasheet } from "./UnitDatasheet";
 import { Field, Icon, Switch } from "../ui";
 import { t, tn } from "../../i18n";
 import { useOwnedModels } from "../../hooks/useOwnedModels";
@@ -239,6 +240,15 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
       </div>
 
       <div className="insp-body">
+        {/* The datasheet the unit was built from, so a list can be read without leaving the page it
+            is being written on. Everything under it edits this unit; this part only reports. */}
+        {ds ? (
+          <section className="insp-section">
+            <h4 className="inspector-h">{t("roster.inspector.datasheet")}</h4>
+            <UnitDatasheet ds={ds} snapshot={snapshot} />
+          </section>
+        ) : null}
+
         <section className="insp-section">
           <h4 className="inspector-h">{t("roster.inspector.modelsWargear")}</h4>
           {unit.models.map((g, i) => (

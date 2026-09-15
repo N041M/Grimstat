@@ -80,3 +80,15 @@ function parseOne(token: string, raw: string): WeaponKeyword {
   if (condition) kw.keyword = condition;
   return kw;
 }
+
+/**
+ * The key a printed keyword and its glossary entry are matched on: the name with its value and any
+ * qualifier taken off, upper-cased. "Sustained Hits 1" and "Sustained Hits" both give "SUSTAINED HITS";
+ * "Anti-vehicle 4+" gives "ANTI"; "Feel No Pain 5+*" gives "FEEL NO PAIN". This is the same name
+ * `parseWeaponKeywords` puts on a keyword, so a weapon profile can be looked up without re-parsing.
+ */
+export function glossaryKey(name: string): string {
+  const cleaned = name.replace(/\*+\s*$/, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const kw = parseWeaponKeywords(cleaned)[0];
+  return kw ? kw.name : normaliseName(cleaned);
+}

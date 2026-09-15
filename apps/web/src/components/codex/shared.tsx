@@ -4,6 +4,8 @@ import type { ModelBounds, PickerGroup } from "../../lib/roster";
 import { ALL_FACTIONS, filterCount, NO_FILTERS, SHEET_TYPES, type CharacteristicKey, type CodexFaction, type CodexFilters, type CodexKeyword, type SheetType } from "../../lib/codex";
 import { ap, dice, fmtInt, skill } from "../../lib/format";
 import { Badge, Icon, Popover, Switch, numOrNull } from "../ui";
+import { RuleRef } from "../RuleRef";
+import { ruleFor } from "../../lib/glossary";
 import { t, tn, type I18nKey } from "../../i18n";
 
 /** What the Codex screen's parts say in common: sizes, points, a weapon on one line, the flags. */
@@ -44,23 +46,35 @@ export function weaponLine(w: WeaponProfile): string {
   return `${reach} · A${dice(w.A)} ${skill(w.skill)} S${w.S} AP${ap(w.AP)} D${dice(w.D)}`;
 }
 
-/** The badges a sheet wears under its name. */
-export function SheetFlags({ ds }: { ds: Datasheet }) {
-  const flags: Array<{ key: string; label: string; tone?: "accent" | "brass" }> = [];
-  if (ds.isEpicHero) flags.push({ key: "epic", label: t("codex.flag.epicHero"), tone: "accent" });
-  else if (ds.isCharacter) flags.push({ key: "char", label: t("codex.flag.character") });
-  if (ds.isBattleline) flags.push({ key: "bl", label: t("codex.flag.battleline") });
-  if (ds.isSupport) flags.push({ key: "sup", label: t("codex.flag.support") });
-  if (ds.transportCapacity) flags.push({ key: "tr", label: t("codex.flag.transport", { cap: ds.transportCapacity }) });
-  if (ds.isLegends) flags.push({ key: "leg", label: t("codex.flag.legends"), tone: "brass" });
+/**
+ * The badges a sheet wears under its name, each opening what it means.
+ *
+ * Support is a core ability, so its flag opens the rule the game system printed for it. The rest name
+ * no rule any source carries, and this app does not write Games Workshop's rules for them. What it can
+ * say is what it does with the flag itself, which is what the army checks act on.
+ */
+export function SheetFlags({ ds, snapshot }: { ds: Datasheet; snapshot: Snapshot }) {
+  const flags: Array<{ key: string; label: string; tone?: "accent" | "brass"; text?: string }> = [];
+  if (ds.isEpicHero) flags.push({ key: "epic", label: t("codex.flag.epicHero"), tone: "accent", text: t("codex.flagText.epicHero") });
+  else if (ds.isCharacter) flags.push({ key: "char", label: t("codex.flag.character"), text: t("codex.flagText.character") });
+  if (ds.isBattleline) flags.push({ key: "bl", label: t("codex.flag.battleline"), text: t("codex.flagText.battleline") });
+  if (ds.isSupport) flags.push({ key: "sup", label: t("codex.flag.support"), text: ruleFor(snapshot, "SUPPORT")?.text });
+  // The flag says only that the model carries a unit. How much it carries is a paragraph of prose in
+  // the data, up to 854 characters in a real snapshot, so it opens on the flag instead of sitting in it.
+  if (ds.transportCapacity) flags.push({ key: "tr", label: t("codex.flag.transport"), text: ds.transportCapacity });
+  if (ds.isLegends) flags.push({ key: "leg", label: t("codex.flag.legends"), tone: "brass", text: t("codex.flagText.legends") });
   if (!flags.length) return null;
   return (
     <div className="codex-band-flags">
-      {flags.map((f) => (
-        <Badge key={f.key} tone={f.tone}>
-          {f.label}
-        </Badge>
-      ))}
+      {flags.map((f) =>
+        f.text ? (
+          <RuleRef key={f.key} className={`badge ${f.tone ?? ""}`.trim()} term={f.label} name={f.label} text={f.text} />
+        ) : (
+          <Badge key={f.key} tone={f.tone}>
+            {f.label}
+          </Badge>
+        ),
+      )}
     </div>
   );
 }

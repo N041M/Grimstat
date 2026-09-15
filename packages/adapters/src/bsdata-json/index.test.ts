@@ -224,3 +224,34 @@ describe("a catalogue the size of the shipped snapshot", () => {
     expect(last.abilityIds).not.toContain("ab:core:feel-no-pain");
   });
 });
+
+describe("the glossary of keyword rules", () => {
+  it("reads the game system's shared rules, keyed by the keyword a datasheet prints", () => {
+    const byKey = new Map(out.glossary!.map((g) => [g.key, g]));
+    expect(byKey.get("SUSTAINED HITS")).toMatchObject({ id: "gl:sustained-hits", name: "Sustained Hits", sourceId: "pub:bsdata:pub-synthetic" });
+    expect(byKey.get("ANTI")!.name).toBe("Anti");
+    expect(byKey.get("TWIN-LINKED")!.text).toContain("re-roll a failed wound roll");
+    // Core abilities are named the same way, so the same lookup reaches them.
+    expect(byKey.get("DEEP STRIKE")!.text).toContain("more than 9");
+    expect(byKey.get("FEEL NO PAIN")).toBeDefined();
+  });
+
+  it("takes the emphasis marks off, drops a rule with no text, and keeps one entry per keyword", () => {
+    const gameSystem = {
+      name: "Test System",
+      id: "gs-test",
+      revision: 1,
+      costTypes: [{ id: "ct-pts", name: "pts" }],
+      sharedRules: [
+        { id: "r-1", name: "Sustained Hits 2", description: "The long name arrives first." },
+        { id: "r-2", name: "Sustained Hits", description: "A **critical hit** scores ^^X^^ more hits." },
+        { id: "r-3", name: "Melta", description: "   " },
+        { id: "r-4", name: "Heavy", description: "Add 1 to the hit roll:\n\n\n- when the unit did not move." },
+      ],
+    };
+    const glossary = parse({ "gs.json": JSON.stringify({ gameSystem }) }).glossary!;
+    expect(glossary.map((g) => g.key)).toEqual(["SUSTAINED HITS", "HEAVY"]);
+    expect(glossary[0]).toMatchObject({ name: "Sustained Hits", text: "A critical hit scores X more hits." });
+    expect(glossary[1]!.text).toBe("Add 1 to the hit roll:\n\n- when the unit did not move.");
+  });
+});

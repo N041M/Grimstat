@@ -1,10 +1,12 @@
 import type { ScenarioUnit } from "@grimstat/schema";
 import { defineWidget, type WidgetProps } from "./registry";
 import { ap, dice, fmtInt, skill } from "../lib/format";
-import { keywordsToText } from "../lib/keywordParser";
+import { KeywordChips, KeywordRefs } from "../components/RuleRef";
+import { useApp } from "../state/AppContext";
 import { t } from "../i18n";
 
 function UnitCard({ unit, title }: { unit: ScenarioUnit; title: string }) {
+  const { snapshot } = useApp();
   return (
     <div className="stack">
       <div className="row between">
@@ -16,11 +18,7 @@ function UnitCard({ unit, title }: { unit: ScenarioUnit; title: string }) {
       </div>
       {unit.keywords.length ? (
         <div className="chips" aria-label={t("unit.keywords")}>
-          {unit.keywords.map((k) => (
-            <span key={k} className="chip">
-              {k}
-            </span>
-          ))}
+          <KeywordChips names={unit.keywords} snapshot={snapshot} />
         </div>
       ) : null}
       {unit.models.length ? (
@@ -85,7 +83,9 @@ function UnitCard({ unit, title }: { unit: ScenarioUnit; title: string }) {
                   <td className="num">{w.S}</td>
                   <td className="num">{ap(w.AP)}</td>
                   <td className="num">{dice(w.D)}</td>
-                  <td className="small">{keywordsToText(w.keywords)}</td>
+                  <td className="small">
+                    <KeywordRefs keywords={w.keywords} snapshot={snapshot} empty="" />
+                  </td>
                 </tr>
               ))}
             </tbody>

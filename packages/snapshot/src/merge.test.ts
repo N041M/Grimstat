@@ -314,3 +314,29 @@ describe("a chapter that pays different points from its parent", () => {
     expect(merged.unmatched.some((u) => u.entity === "datasheet" && u.id === "ds:blood-angels:jump")).toBe(true);
   });
 });
+
+describe("mergeSources: glossary", () => {
+  const sustained = { id: "gl:sustained-hits", name: "Sustained Hits", key: "SUSTAINED HITS", text: "from bsdata" };
+  const blast = { id: "gl:blast", name: "Blast", key: "BLAST", text: "from bsdata" };
+
+  it("unions the keyword rules and takes a shared keyword from the source that ranks highest for text", () => {
+    const merged = mergeSources([
+      part("bsdata-json", { glossary: [sustained, blast] }),
+      part("wahapedia-csv", { glossary: [{ ...sustained, text: "from wahapedia" }] }),
+    ]);
+    expect(merged.data.glossary!.map((g) => g.key).sort()).toEqual(["BLAST", "SUSTAINED HITS"]);
+    expect(merged.data.glossary!.find((g) => g.key === "SUSTAINED HITS")!.text).toBe("from wahapedia");
+  });
+
+  it("leaves the glossary out when no source carries one", () => {
+    const merged = mergeSources([part("mfm-yaml", {}), part("wahapedia-csv", {})]);
+    expect(merged.data.glossary).toBeUndefined();
+  });
+
+  it("copies the entries rather than sharing them with the part they came from", () => {
+    const part1 = part("bsdata-json", { glossary: [{ ...blast }] });
+    const merged = mergeSources([part1]);
+    merged.data.glossary![0]!.text = "edited";
+    expect(part1.glossary![0]!.text).toBe("from bsdata");
+  });
+});
