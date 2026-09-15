@@ -6239,6 +6239,33 @@ button.val-row:hover {
   font: 400 11px/1.5 var(--mono);
   color: var(--faint);
 }
+/*
+ * What the stored snapshot is missing, said for as long as it is the active one. The run's own
+ * progress scrolls away with the run; this does not, because the reader may only find out that the
+ * snapshot has no stratagems in it days later, on a screen that cannot fix it.
+ */
+.src-missing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font: 400 12px/1.5 var(--font);
+  color: var(--ink);
+}
+.src-missing p {
+  margin: 0;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.src-missing p.mono {
+  flex-basis: 100%;
+  font: 400 11px/1.5 var(--mono);
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
 .src-error {
   border: 1px solid var(--accent);
   border-radius: var(--radius);
@@ -6257,6 +6284,7 @@ button.val-row:hover {
 }
 .src-error-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin-top: 8px;
@@ -7853,9 +7881,6 @@ button.battle-scope-btn:hover {
 .codex-landing-tools .codex-search {
   flex: 1;
   min-width: 160px;
-}
-.codex-landing-count {
-  white-space: nowrap;
 }
 .codex-group-title {
   margin: 22px 0 8px;
@@ -10546,6 +10571,17 @@ body.play-focused .shell.compact {
        The basis is wider than the longest label so no button is squeezed under its own text, which
        is what leaves a phone stacking them one to a line. */
     flex: 1 1 200px;
+  }
+  /*
+   * The Data page has four actions, one more than a narrow line holds. Fetching everything is what
+   * most visits are here to press, so it takes a line of its own at the full width and the three
+   * that load or import a file share the lines above it.
+   *
+   * Only this header: elsewhere a primary is a toggle among other tools (the Codex's "Diff only"),
+   * and it would jump to the full width as it was turned on.
+   */
+  .shell.compact .data-header .page-header-actions > button.primary {
+    flex: 1 0 100%;
   }
   .shell.compact .tabbar-tab {
     min-height: 44px;

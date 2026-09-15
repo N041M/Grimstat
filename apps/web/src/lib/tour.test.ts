@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ROUTES } from "../router";
-import { CARD_GAP, VIEWPORT_MARGIN, clampStep, isLastStep, placeCard, screenAt, shouldAutoOpen, stepAt, TOUR_SCREEN_COUNT, TOUR_STEPS, type Rect } from "./tour";
+import { CARD_GAP, VIEWPORT_MARGIN, clampStep, isLastStep, placeCard, screenAt, shouldAutoOpen, stepAt, TOUR_SCREEN_COUNT, TOUR_STEPS, type Rect , visibleRect} from "./tour";
 
 const VIEWPORT = { width: 1440, height: 900 };
 const CARD = { width: 340, height: 200 };
@@ -157,6 +157,27 @@ describe("shouldAutoOpen", () => {
     expect(shouldAutoOpen(false, false)).toBe(true);
     expect(shouldAutoOpen("yes", false)).toBe(true);
     expect(shouldAutoOpen(1, false)).toBe(true);
+  });
+});
+
+describe("visibleRect", () => {
+  const viewport = { width: 1000, height: 800 };
+
+  it("gives a control that is fully on screen back as it is", () => {
+    expect(visibleRect({ left: 10, top: 20, width: 100, height: 40 }, viewport)).toEqual({ left: 10, top: 20, width: 100, height: 40 });
+  });
+
+  it("clips a strip wider than the window, so the ring stays on screen", () => {
+    // The Codex's views on a tablet: a tab strip that scrolls along its line, ringed past the edge.
+    expect(visibleRect({ left: -40, top: 100, width: 1200, height: 36 }, viewport)).toEqual({ left: 0, top: 100, width: 1000, height: 36 });
+    expect(visibleRect({ left: 0, top: 0, width: 1200, height: 36 }, viewport, 4)).toEqual({ left: 4, top: 4, width: 992, height: 32 });
+  });
+
+  it("says nothing for a control that is off screen or has no size", () => {
+    expect(visibleRect({ left: 1200, top: 20, width: 100, height: 40 }, viewport)).toBeUndefined();
+    expect(visibleRect({ left: 10, top: -60, width: 100, height: 40 }, viewport)).toBeUndefined();
+    expect(visibleRect({ left: 10, top: 20, width: 0, height: 40 }, viewport)).toBeUndefined();
+    expect(visibleRect(undefined, viewport)).toBeUndefined();
   });
 });
 

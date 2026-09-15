@@ -2,13 +2,24 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { db, getSetting, setSetting } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { navigate } from "../../router";
-import { isLastStep, placeCard, screenAt, shouldAutoOpen, stepAt, TOUR_SCREEN_COUNT, TOUR_SEEN_KEY, TOUR_SETTLE_MS, type CardPlacement, type Rect } from "../../lib/tour";
+import { isLastStep, placeCard, screenAt, shouldAutoOpen, stepAt, TOUR_SCREEN_COUNT, TOUR_SEEN_KEY, TOUR_SETTLE_MS, visibleRect, type CardPlacement, type Rect } from "../../lib/tour";
 import { trapTab } from "../ui";
 import { t } from "../../i18n";
 
-/** The rail item a step points at. There is none on a phone, where navigation lives in a drawer. */
-function railItem(route: string | undefined): HTMLElement | null {
-  return route ? document.querySelector<HTMLElement>(`.rail [data-route="${route}"]`) : null;
+/**
+ * What a step points at when it is not pointing at a control: the rail item that opens its screen.
+ *
+ * A phone has no rail — navigation lives in a drawer that is closed — so the step points at the
+ * title of the screen it has just opened instead. Ten cards in a row ringing the one button that
+ * opens the drawer would say nothing; the title says which screen the card is about, which is what
+ * the rail letter says on a wider window.
+ */
+function screenItem(route: string | undefined): HTMLElement | null {
+  if (!route) return null;
+  // Both are asked for by route, so a screen that has not been drawn yet answers with nothing and
+  // the step keeps measuring. Matching whatever title happened to be on screen pointed the card at
+  // the screen before it, which is the one the reader has just left.
+  return document.querySelector<HTMLElement>(`.rail [data-route="${route}"]`) ?? document.querySelector<HTMLElement>(`.main-region[data-route="${route}"] .page-header-title h1`);
 }
 
 /** The control a step is about, once the screen holding it is on. */
@@ -16,13 +27,15 @@ function focusItem(name: string | undefined): HTMLElement | null {
   return name ? document.querySelector<HTMLElement>(`[data-tour="${name}"]`) : null;
 }
 
-function rectOf(el: HTMLElement | null): Rect | undefined {
-  const r = el?.getBoundingClientRect();
-  return r && r.width > 0 && r.height > 0 ? { left: r.left, top: r.top, width: r.width, height: r.height } : undefined;
-}
-
 /** How far the hole in the dimmed page is opened out around the control it is showing. */
 const SPOT_PAD = 4;
+
+/** Where an element is, clipped to the window so the highlight cannot run off the edge of it. */
+function rectOf(el: HTMLElement | null): Rect | undefined {
+  const r = el?.getBoundingClientRect();
+  if (!r) return undefined;
+  return visibleRect({ left: r.left, top: r.top, width: r.width, height: r.height }, { width: window.innerWidth, height: window.innerHeight }, SPOT_PAD);
+}
 
 /**
  * The blocking layer for a card that lets the reader work the control it points at: four panes
@@ -130,16 +143,18 @@ export function Tour() {
     if (route) navigate(route, true);
   }, [tourOpen, step]);
 
-  const measure = useCallback(() => {
+  /** Places the card, and says whether the step ended up pointing at what it is about. */
+  const measure = useCallback((): boolean => {
     const card = cardRef.current;
-    if (!card) return;
+    if (!card) return false;
     const current = stepAt(step);
     const control = rectOf(focusItem(current.focus));
-    const anchor = control ?? rectOf(railItem(current.route));
+    const anchor = control ?? rectOf(screenItem(current.route));
     const box = card.getBoundingClientRect();
     setSpot(anchor);
     setOnControl(control !== undefined);
     setPos(placeCard(anchor, { width: window.innerWidth, height: window.innerHeight }, { width: box.width, height: box.height }));
+    return current.focus ? control !== undefined : anchor !== undefined;
   }, [step]);
 
   useLayoutEffect(() => {
@@ -150,15 +165,19 @@ export function Tour() {
     // at sits at the top of its screen, where it is already in view.
     measure();
     // The screen has not been drawn yet on this pass, and the rail is as wide as whatever it is
-    // showing, so the position is taken again once the browser has drawn it. A card that both opens
-    // a screen and points at a control keeps measuring until the control is in the document, and
-    // gives up after a moment so a screen that never shows it settles on the rail item.
-    const name = stepAt(step).focus;
+    // showing, so the position is taken again once the browser has drawn it. The step keeps
+    // measuring until it has what it is pointing at on screen, and gives up after a moment so a
+    // screen that never shows it settles on whatever it could find.
+    //
+    // It waits on the thing itself rather than on the element being in the document. A screen whose
+    // title is the anchor has nothing to measure until that screen has been drawn, which is a frame
+    // or more after the step opened it, and a control that is in the document but scrolled out of
+    // sight is not something to point at either.
     const deadline = performance.now() + TOUR_SETTLE_MS;
     let frame = 0;
     const again = () => {
-      measure();
-      if (name && !focusItem(name) && performance.now() < deadline) frame = requestAnimationFrame(again);
+      const settled = measure();
+      if (!settled && performance.now() < deadline) frame = requestAnimationFrame(again);
     };
     frame = requestAnimationFrame(again);
     window.addEventListener("resize", measure);

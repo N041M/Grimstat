@@ -12,6 +12,7 @@ import { CodexLanding } from "../components/codex/CodexLanding";
 import { DatasheetCard } from "../components/codex/DatasheetCard";
 import { CompareGrid } from "../components/codex/CompareGrid";
 import { factionName, sizeText } from "../components/codex/shared";
+import { fmtInt } from "../lib/format";
 import { t } from "../i18n";
 
 const NONE: Datasheet[] = [];
@@ -86,8 +87,11 @@ export function CodexPage({ id }: { id: string | undefined }) {
   const missing = Boolean(id && snapshot && !selected);
 
   // header: what it is titled, what it says beneath, what it can do — by view
-  let title = t("codex.title");
-  let subtitle = t("page.sub.codex", { n: datasheets.length });
+  let title: React.ReactNode = t("codex.title");
+  // The count the tools row used to carry. It belongs here, where the page already says how much is
+  // in the snapshot, and it leaves the faction, the search and the filters a row of their own.
+  const shown = groups.reduce((n, g) => n + g.sheets.length, 0);
+  let subtitle = shown === datasheets.length ? t("page.sub.codex", { n: fmtInt(datasheets.length) }) : t("page.sub.codexShown", { shown: fmtInt(shown), n: fmtInt(datasheets.length) });
   let actions: React.ReactNode = null;
   if (view === "compare") {
     title = t("codex.tab.compare");
@@ -103,7 +107,15 @@ export function CodexPage({ id }: { id: string | undefined }) {
       </>
     );
   } else if (selected && snapshot) {
-    title = selected.name;
+    // An open sheet is a place of its own, so it carries the way out of it, the way an army does.
+    title = (
+      <div className="roster-title-row">
+        <a href={hrefFor("codex")} className="roster-back" aria-label={t("codex.backToList")} title={t("codex.backToList")}>
+          <Icon name="back" />
+        </a>
+        <h1>{selected.name}</h1>
+      </div>
+    );
     subtitle = t("page.sub.codexSheet", { faction: factionName(snapshot, selected.factionId), role: selected.role ?? "—", size: sizeText(sizeBounds(selected)) });
     actions = (
       <>

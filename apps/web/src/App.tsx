@@ -153,7 +153,9 @@ export function App() {
     <div className={["shell", compact ? "compact" : "", phone ? "phone" : "", tablet ? "tablet" : ""].filter(Boolean).join(" ")}>
       {phone ? null : <IconRail route={route} theme={theme} offline={!online} stacked={tablet} />}
       {compact ? null : <ContextColumn route={route} param={param} />}
-      <main className="main-region">
+      {/* The screen on show, named so the tour can point at the one its card is about: on a phone
+          there is no rail to light, and the page's own title stands in for it. */}
+      <main className="main-region" data-route={route}>
         {compact ? (
           <div className="ctx-bar">
             {phone ? (

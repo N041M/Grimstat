@@ -70,8 +70,8 @@ const request = (sources: BrowserSourceId[], base?: SourceRef[]): ImportRequest 
 async function run(req: ImportRequest) {
   const events: ImportEvent[] = [];
   asked = [];
-  const { snapshot } = await api.run(req, (e) => void events.push(e));
-  return { snapshot, events, downloaded: (events.find((e) => e.type === "planned") as { sources: BrowserSourceId[] }).sources };
+  const { snapshot, summary } = await api.run(req, (e) => void events.push(e));
+  return { snapshot, summary, events, downloaded: (events.find((e) => e.type === "planned") as { sources: BrowserSourceId[] }).sources };
 }
 
 /** The fields each source has authority over, as the merged snapshot holds them. */
@@ -182,6 +182,29 @@ describe("updating one source", () => {
   });
 });
 
+describe("Fix data: rebuilding from the files already here", () => {
+  const rebuild = (base: SourceRef[]): ImportRequest => ({ gameSystemId: "wh40k-11e", sources: [], label: "rebuilt", base });
+
+  it("downloads nothing and produces what the sources produced before", async () => {
+    // What the button is for: the files have not moved, only the reading of them. A snapshot built
+    // before a correction lands gets it without fetching tens of megabytes again.
+    const first = await run(request(ALL));
+    const again = await run(rebuild(first.snapshot.sources));
+    expect(again.downloaded).toEqual([]);
+    expect(asked).toEqual([]);
+    expect(again.snapshot.checksum).toBe(first.snapshot.checksum);
+    expect(again.snapshot.data.stratagems.length).toBe(first.snapshot.data.stratagems.length);
+  });
+
+  it("downloads a source whose files are not here rather than leaving it out", async () => {
+    const first = await run(request(ALL));
+    kept.delete("wh40k-11e|mfm-yaml");
+    const again = await run(rebuild(first.snapshot.sources));
+    expect(again.downloaded).toEqual(["mfm-yaml"]);
+    expect(again.snapshot.checksum).toBe(first.snapshot.checksum);
+  });
+});
+
 describe("when the files are not here to read back", () => {
   it("downloads every source of the snapshot", async () => {
     const first = await run(request(ALL));
@@ -199,10 +222,24 @@ describe("when the files are not here to read back", () => {
     await expect(run(request(["mfm-yaml"], first.snapshot.sources))).rejects.toThrow(/could not be fetched/);
   });
 
-  it("still builds a first import when the mirror will not answer", async () => {
+  it("still builds a first import when the mirror will not answer, and says on the snapshot that it did not", async () => {
+    // The other two sources are worth having, so the run goes on. What it cost is written onto the
+    // snapshot: the Stratagems tab is opened days later, by which time the run that built it is
+    // long out of sight, and it has to be able to say why it is empty.
     upstream["wahapedia-csv"] = {};
-    const { snapshot } = await run(request(ALL));
+    const { snapshot, summary, events } = await run(request(ALL));
     expect(snapshot.sources.map((s) => s.adapter)).toEqual(["mfm-yaml", "bsdata-json"]);
+    expect(snapshot.data.stratagems).toEqual([]);
+    expect(snapshot.missingSources).toEqual([{ adapter: "wahapedia-csv", url: MIRROR, reason: expect.stringContaining("HTTP 404") }]);
+    expect(summary.missingSources).toEqual(snapshot.missingSources);
+    expect(events.some((e) => e.type === "failed" && e.source === "wahapedia-csv")).toBe(true);
+  });
+
+  it("says nothing about missing sources when every source answered", async () => {
+    const { snapshot, summary } = await run(request(ALL));
+    expect(snapshot.data.stratagems.length).toBeGreaterThan(0);
+    expect(snapshot.missingSources).toBeUndefined();
+    expect(summary.missingSources).toEqual([]);
   });
 
   it("downloads the one source whose files came from a different download", async () => {

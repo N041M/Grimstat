@@ -57,6 +57,24 @@ export async function latestRefFor(id: BrowserSourceId, opts: { fetch: FetchText
 }
 
 /**
+ * Does the mirror answer at all?
+ *
+ * One 39-byte request, asked before a run commits to a download measured in tens of megabytes. The
+ * address is typed by hand and points at somebody's dataset repository, so it can be a repository
+ * that was never created, a branch that was renamed, or a copy that has not been published yet. All
+ * of those return 404 for every table, and the run behind them ends with a snapshot that has no
+ * stratagems in it.
+ */
+export async function mirrorAnswers(base: string, fetchImpl: FetchText): Promise<{ ok: true; ref?: string } | { ok: false; message: string }> {
+  try {
+    const ref = await latestRefFor("wahapedia-csv", { fetch: fetchImpl, mirror: base });
+    return { ok: true, ...(ref ? { ref } : {}) };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
  * Compare a stored ref with what upstream reports. The MFM comparison is on the version alone, so a
  * points file rebuilt under the same version reads as current.
  */

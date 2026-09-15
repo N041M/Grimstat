@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { wahapediaUrlFor } from "@grimstat/adapters";
-import { IDLE_PROGRESS, WAHAPEDIA_DEV_PROXY, WAHAPEDIA_EDITIONS, catalogueFilter, catalogueTerms, classifyError, fetchedLabel, hasMirror, importRequestFor, isRunning, isSameFetch, refreshRequestFor, reduceProgress, sourcesToFetch, wahapediaMirrorBase, type BrowserSourceId, type HeldFetch, type ImportProgress, type ImportRequest, type ImportSummary, type SourceCounts } from "./importProgress";
+import { IDLE_PROGRESS, WAHAPEDIA_DEV_PROXY, WAHAPEDIA_EDITIONS, catalogueFilter, catalogueTerms, classifyError, fetchedLabel, hasMirror, importRequestFor, isRunning, isSameFetch, rebuildRequestFor, refreshRequestFor, reduceProgress, rulesTextState, sourcesToFetch, wahapediaMirrorBase, withoutRulesText, type BrowserSourceId, type HeldFetch, type ImportProgress, type ImportRequest, type ImportSummary, type SourceCounts } from "./importProgress";
 
 const COUNTS: SourceCounts = { factions: 1, datasheets: 2, abilities: 3, detachments: 4, enhancements: 5, stratagems: 6, priceRules: 7, wargearPrices: 8 };
-const SUMMARY: ImportSummary = { snapshotId: "snap_20260910_abcdef01", label: "Fetched 2026-09-10", checksum: "abcdef01", counts: COUNTS, conflicts: 0, sources: [{ adapter: "mfm-yaml", ref: "mfm-v1" }], elapsedMs: 1234 };
+const SUMMARY: ImportSummary = { snapshotId: "snap_20260910_abcdef01", label: "Fetched 2026-09-10", checksum: "abcdef01", counts: COUNTS, conflicts: 0, sources: [{ adapter: "mfm-yaml", ref: "mfm-v1" }], missingSources: [], elapsedMs: 1234 };
 const NOW = new Date("2026-09-10T12:34:56Z");
 
 describe("catalogue filter", () => {
@@ -24,6 +24,66 @@ describe("catalogue filter", () => {
 
 const MIRROR = "https://raw.githubusercontent.com/someone/mirror/main/";
 const all = (over: Partial<Record<"mfm-yaml" | "bsdata-json" | "wahapedia-csv", boolean>> = {}) => ({ "mfm-yaml": true, "bsdata-json": true, "wahapedia-csv": true, ...over });
+
+describe("what a snapshot holds of the rules text", () => {
+  const failed = { adapter: "wahapedia-csv", url: "https://mirror.test/wh40k-11e/", reason: "GET https://mirror.test/wh40k-11e/Factions.csv -> HTTP 404" };
+
+  it("reads it from the snapshot, so the answer outlives the run that built it", () => {
+    expect(rulesTextState({ sources: [{ adapter: "mfm-yaml" }, { adapter: "wahapedia-csv" }] })).toEqual({ state: "present" });
+    expect(rulesTextState({ sources: [{ adapter: "mfm-yaml" }] })).toEqual({ state: "absent" });
+    expect(rulesTextState({ sources: [{ adapter: "mfm-yaml" }], missingSources: [failed] })).toEqual({ state: "failed", url: failed.url, reason: failed.reason });
+  });
+
+  it("tells a mirror that was never asked for apart from one that did not answer", () => {
+    // The two need different advice. Telling somebody to set up a mirror they have already set up
+    // is what sent the last one looking in the wrong place.
+    expect(rulesTextState({ sources: [] }).state).toBe("absent");
+    expect(rulesTextState({ sources: [], missingSources: [failed] }).state).toBe("failed");
+  });
+
+  it("answers for a snapshot stored before any of this was recorded", () => {
+    expect(rulesTextState(undefined).state).toBe("absent");
+    expect(rulesTextState({}).state).toBe("absent");
+  });
+});
+
+describe("Fix data: rebuilding what is already here", () => {
+  const base = [
+    { adapter: "mfm-yaml", fetchedAt: "2026-09-14T00:00:00.000Z", url: "https://mfm.test/", ref: "mfm-v1.4" },
+    { adapter: "bsdata-json", fetchedAt: "2026-09-14T00:00:00.000Z", url: "https://bs.test/", ref: "sha" },
+  ];
+
+  it("asks for no source, so the files on this machine are what it reads", () => {
+    const req = rebuildRequestFor(base, NOW);
+    expect(req.sources).toEqual([]);
+    expect(req.base).toBe(base);
+    expect(req.label).toBe("Rebuilt 2026-09-10");
+    expect(req.wahapediaMirror).toBeUndefined();
+  });
+
+  it("downloads nothing while every source of the snapshot has its files here", () => {
+    const held = (id: BrowserSourceId): HeldFetch | undefined => {
+      const src = base.find((b) => b.adapter === id);
+      return src ? { url: src.url, ref: src.ref, fetchedAt: src.fetchedAt } : undefined;
+    };
+    expect(sourcesToFetch(rebuildRequestFor(base, NOW), held)).toEqual([]);
+    // One whose files are not here is downloaded, rather than dropped out of the rebuild.
+    expect(sourcesToFetch(rebuildRequestFor(base, NOW), (id) => (id === "bsdata-json" ? undefined : held(id)))).toEqual(["bsdata-json"]);
+  });
+});
+
+describe("the run offered after a mirror will not answer", () => {
+  it("drops the rules text export and the address it failed at, and keeps the rest", () => {
+    const req = importRequestFor({ sources: all(), factionFilter: "Necrons" }, NOW, MIRROR);
+    const without = withoutRulesText(req);
+    expect(without.sources).toEqual(["mfm-yaml", "bsdata-json"]);
+    expect(without.wahapediaMirror).toBeUndefined();
+    expect(without.catalogueFilter).toBe("Necrons");
+    expect(without.label).toBe(req.label);
+    // The request it was made from is untouched, so a retry still asks for everything.
+    expect(req.sources).toContain("wahapedia-csv");
+  });
+});
 
 describe("selection → worker request", () => {
   it("keeps the canonical source order, forwards the filter only with BSData and labels by date", () => {

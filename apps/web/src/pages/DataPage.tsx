@@ -320,13 +320,18 @@ export function DataPage() {
   return (
     <>
       <PageHeader
+        className="data-header"
         title={t("data.title")}
-        subtitle={t("page.sub.data")}
         actions={
           <>
             <button type="button" disabled={busy || fetchingAll} onClick={() => void loadSample()}>
               {t("data.loadSample")}
             </button>
+            {rawSnapshot ? (
+              <button type="button" disabled={busy || fetchingAll} title={t("data.fix.hint")} onClick={() => void sources.current?.fix()}>
+                {t("data.fix")}
+              </button>
+            ) : null}
             <button type="button" disabled={busy || fetchingAll} onClick={() => snapInput.current?.click()}>
               {t("data.importSnapshot")}
             </button>

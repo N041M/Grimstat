@@ -20,15 +20,47 @@ export function slugify(name: string): string {
 export const FACTION_ALIASES: Record<string, string> = {
   "agents-of-the-imperium": "imperial-agents",
   craftworlds: "aeldari",
+  asuryani: "aeldari",
+  harlequins: "aeldari",
+  ynnari: "aeldari",
+  "heretic-astartes": "chaos-space-marines",
+  "legiones-daemonica": "chaos-daemons",
   "titanicus-traitoris": "chaos-titan-legions",
   "adeptus-titanicus": "titan-legions",
   titans: "titan-legions",
   "adeptus-astartes": "space-marines",
 };
 
+/**
+ * Chapters the points source lists as armies of their own. Every other chapter's units are Space
+ * Marines units.
+ */
+const CHAPTER_ARMIES = new Set(["black-templars", "blood-angels", "dark-angels", "deathwatch", "space-wolves"]);
+const CHAPTER_PREFIX = "adeptus-astartes-";
+
+/**
+ * One faction slug for a faction, whatever a source calls it.
+ *
+ * Sources name the same army differently and rename it as editions land. The structure source
+ * publishes a catalogue per chapter ("Adeptus Astartes - Ultramarines") and names several armies by
+ * their in-game keyword ("Asuryani", "Heretic Astartes"), where the points source uses the codex
+ * name. Without this, one army arrives as two factions and every unit in it appears twice.
+ *
+ * The chapter prefix is read as a rule rather than listed, so a chapter added upstream tomorrow
+ * lands on Space Marines instead of becoming a faction of its own.
+ */
+export function canonicalFactionSlug(slug: string): string {
+  const direct = FACTION_ALIASES[slug];
+  if (direct) return direct;
+  if (slug.startsWith(CHAPTER_PREFIX)) {
+    const chapter = slug.slice(CHAPTER_PREFIX.length);
+    return CHAPTER_ARMIES.has(chapter) ? chapter : "space-marines";
+  }
+  return slug;
+}
+
 export function factionSlug(name: string): string {
-  const s = slugify(name);
-  return FACTION_ALIASES[s] ?? s;
+  return canonicalFactionSlug(slugify(name));
 }
 
 export const factionId = (name: string): string => `faction:${factionSlug(name)}`;

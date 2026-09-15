@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { Roster, Snapshot } from "@grimstat/schema";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { anyStratagemNamesAUnit, cpRange, filterStratagems, groupStratagems, stratagemParts, stratagemPhases, stratagemsForRoster, type RosterStratagem, type StratagemGroup } from "../../lib/stratagems";
+import { rulesTextState } from "../../lib/importProgress";
 import { hrefFor } from "../../router";
 import { Empty } from "../ui";
 import { PanelHead, PillChip } from "../kit";
@@ -73,8 +74,10 @@ function Card({ item }: { item: RosterStratagem }) {
  * printable reference pack uses, so the tab and the print-out never disagree: the detachments the
  * list took, the faction's own, and the core ones.
  *
- * Most snapshots hold none of this. Only the Wahapedia export carries stratagem text, and a browser
- * cannot fetch it, so the empty state says where the data comes from rather than looking broken.
+ * Only the rules text export carries stratagems, so a snapshot built without it has none. The empty
+ * state reads the snapshot to tell the two cases apart: the export was never asked for, or it was
+ * asked for and did not answer. Telling somebody to set up a mirror they have already set up is the
+ * one thing this screen must not do.
  */
 export function StratagemsTab({ roster, snapshot }: Props) {
   const [query, setQuery] = useState("");
@@ -100,10 +103,11 @@ export function StratagemsTab({ roster, snapshot }: Props) {
 
   if (all.length === 0) {
     const hasAny = (snapshot.data.stratagems ?? []).length > 0;
+    const rules = rulesTextState(snapshot);
     return (
       <div className="army-strats">
         <Empty>
-          <p>{t(hasAny ? "roster.strat.noneForList" : "roster.strat.noneInData")}</p>
+          <p>{hasAny ? t("roster.strat.noneForList") : t(rules.state === "failed" ? "roster.strat.noneAfterFailure" : "roster.strat.noneInData")}</p>
           {hasAny ? null : (
             <p>
               <a href={hrefFor("data")}>{t("roster.strat.dataLink")}</a>

@@ -34,6 +34,21 @@ describe("buildSnapshot", () => {
     expect((await verifySnapshot({ ...snap, checksum: "0".repeat(64) })).ok).toBe(false);
   });
 
+  it("records the sources that did not answer, and leaves the checksum alone", async () => {
+    // The checksum covers the data, so a snapshot that is missing a source has the same checksum as
+    // one built from the same files without anybody asking for that source. What it is missing is
+    // recorded beside the data, where a screen can read it back days later.
+    const missing = [{ adapter: "wahapedia-csv", url: "https://example.test/wh40k-11e/", reason: "GET https://example.test/wh40k-11e/Factions.csv -> HTTP 404" }];
+    const snap = await buildSnapshot({ data: base.data, missingSources: missing });
+    expect(snap.missingSources).toEqual(missing);
+    expect(snap.checksum).toBe(base.checksum);
+  });
+
+  it("says nothing about missing sources when the run got everything", async () => {
+    expect((await buildSnapshot({ data: base.data })).missingSources).toBeUndefined();
+    expect((await buildSnapshot({ data: base.data, missingSources: [] })).missingSources).toBeUndefined();
+  });
+
   it("sorts collections deterministically", () => {
     const n = normaliseData({ ...base.data, factions: [...base.data.factions].reverse() });
     expect(n.factions.map((f) => f.id)).toEqual([...base.data.factions.map((f) => f.id)].sort());

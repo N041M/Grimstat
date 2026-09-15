@@ -89,12 +89,17 @@ The Data page's **Fetch from community sources** button reads MFM and BSData str
 which sends CORS headers. Wahapedia does not, and it is the only source carrying stratagems,
 enhancements and rules text, so a snapshot built in the browser has none of them until a **mirror**
 is pointed at. A mirror is a copy of Wahapedia's own CSV export in a dataset repository, which
-`raw.githubusercontent.com` then serves to the browser like the other two. `.github/workflows/wahapedia.yml`
-keeps one up to date once a week. To run it, create an empty public repository for the dataset, set
-the repository variable `WAHAPEDIA_REPO` to `owner/name` and the secret `WAHAPEDIA_TOKEN` to a token
-with contents read/write on it. Without the variable the job does not run and nothing is published.
-Paste the dataset's raw URL into **Wahapedia mirror URL** on the Data page and the one button then
-builds a complete snapshot. The dataset is Wahapedia's export as it stands and carries their
+`raw.githubusercontent.com` then serves to the browser like the other two. The one this app reads is
+[N041M/grimstat-wahapedia](https://github.com/N041M/grimstat-wahapedia), which holds a workflow that
+runs `pnpm cli mirror` from here and pushes the result to itself once a week.
+
+To point the app at a dataset of your own, put its raw URL in **Wahapedia mirror URL** on the Data
+page. A mirror that does not answer is reported before anything is downloaded, and a snapshot built
+without the rules text says so on the Data page for as long as it is the active one. To publish a
+dataset from this repository instead, `.github/workflows/wahapedia.yml` does the same job from this
+side: create an empty public repository, set the repository variable `WAHAPEDIA_REPO` to `owner/name`
+and the secret `WAHAPEDIA_TOKEN` to a token with contents read/write on it. Without the variable that
+job does not run. The dataset is Wahapedia's export as it stands and carries their
 attribution, which the mirror's README and the app both state. The same build runs locally:
 
 ```bash

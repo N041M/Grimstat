@@ -16,6 +16,25 @@ describe("ids", () => {
     expect(factionId("Necrons")).toBe("faction:necrons");
     expect(datasheetId("Xenos Faction", "Some Unit")).toBe("ds:xenos-faction:some-unit");
   });
+  it("gives a chapter catalogue the army the points source lists it under", () => {
+    // The structure source publishes one catalogue per chapter. Without this every Space Marine unit
+    // arrives twice: once under the chapter and once under the codex the other sources name.
+    expect(factionSlug("Adeptus Astartes - Space Marines")).toBe("space-marines");
+    expect(factionSlug("Adeptus Astartes - Blood Angels")).toBe("blood-angels");
+    expect(factionSlug("Adeptus Astartes - Deathwatch")).toBe("deathwatch");
+    // A chapter without an army of its own is Space Marines, including one added upstream tomorrow.
+    expect(factionSlug("Adeptus Astartes - Ultramarines")).toBe("space-marines");
+    expect(factionSlug("Adeptus Astartes - Crimson Fists")).toBe("space-marines");
+  });
+
+  it("gives an army named by its keyword the codex name", () => {
+    expect(factionSlug("Asuryani")).toBe("aeldari");
+    expect(factionSlug("Harlequins")).toBe("aeldari");
+    expect(factionSlug("Ynnari")).toBe("aeldari");
+    expect(factionSlug("Heretic Astartes")).toBe("chaos-space-marines");
+    expect(factionSlug("Legiones Daemonica")).toBe("chaos-daemons");
+  });
+
   it("makes ids unique", () => {
     const used = new Set<string>();
     expect(uniqueId("a", used)).toBe("a");

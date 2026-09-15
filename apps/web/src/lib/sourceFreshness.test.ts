@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { freshnessOf, knownAfterFetch, latestRefFor, type FetchText } from "./sourceFreshness";
+import { freshnessOf, knownAfterFetch, latestRefFor, mirrorAnswers, type FetchText } from "./sourceFreshness";
 
 const serve = (body: Record<string, string>): FetchText => async (url: string) => {
   const key = Object.keys(body).find((k) => url.endsWith(k));
@@ -26,6 +26,27 @@ describe("latestRefFor", () => {
 
   it("says nothing when no mirror is set", async () => {
     expect(await latestRefFor("wahapedia-csv", { fetch: serve({}) })).toBeUndefined();
+  });
+});
+
+describe("mirrorAnswers", () => {
+  it("says yes, and what the mirror is serving", async () => {
+    const answer = await mirrorAnswers("https://example.test/wh40k-11e/", serve({ "Last_update.csv": "last_update|\n2026-09-11 01:31:12|\n" }));
+    expect(answer).toEqual({ ok: true, ref: "2026-09-11 01:31:12" });
+  });
+
+  it("says no, and names the address, for a repository that is not there", async () => {
+    // The whole point of asking: an address that answers nothing costs one request here and a
+    // snapshot with no stratagems in it if the run goes ahead.
+    const answer = await mirrorAnswers("https://raw.githubusercontent.com/someone/nothing/main/wh40k-11e/", serve({}));
+    expect(answer.ok).toBe(false);
+    if (answer.ok) return;
+    expect(answer.message).toContain("HTTP 404");
+    expect(answer.message).toContain("someone/nothing");
+  });
+
+  it("takes a mirror that answers without naming a version", async () => {
+    expect(await mirrorAnswers("https://example.test/wh40k-11e/", serve({ "Last_update.csv": "last_update|\n|\n" }))).toEqual({ ok: true });
   });
 });
 

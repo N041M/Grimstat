@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import * as Comlink from "comlink";
-import type { Snapshot } from "@grimstat/schema";
+import type { MissingSource, Snapshot } from "@grimstat/schema";
 import { SOURCES, fetchSource, type AdapterOutput, type FetchLike, type ParseOptions } from "@grimstat/adapters";
 import { buildSnapshot, mergeSources, pruneFactionsWithoutDatasheets } from "@grimstat/snapshot";
 import { putSourceFiles, readSourceFiles, type SourceFilesRecord } from "../db";
@@ -180,12 +180,18 @@ export const api: ImportWorkerApi = {
       // without it writes a snapshot missing everything that source carried, over a snapshot that
       // had it. The run stops instead and the stored snapshot is left alone.
       const asked = new Set(request.sources);
+      const missingSources: MissingSource[] = [];
       const settled = await Promise.all(
         downloading.map(async (id) => {
           try {
             return await fetchAndParse(id, request, fetchedAt, ctl.signal, emit);
           } catch (e) {
-            if (id === MIRRORED_SOURCE && asked.has(id) && !ctl.signal.aborted) return undefined;
+            if (id === MIRRORED_SOURCE && asked.has(id) && !ctl.signal.aborted) {
+              // Written onto the snapshot, so a screen opened days later can still say why it has no
+              // stratagems and where the address that failed was.
+              missingSources.push({ adapter: id, reason: e instanceof Error ? e.message : String(e), ...(request.wahapediaMirror ? { url: request.wahapediaMirror } : {}) });
+              return undefined;
+            }
             const reason = !asked.has(id) && !ctl.signal.aborted ? missingSourceError() : e;
             ctl.abort(); // stop the other source's downloads too
             throw reason;
@@ -209,7 +215,7 @@ export const api: ImportWorkerApi = {
       emit({ type: "merged", conflicts: merge.conflicts.length, warnings: merge.warnings.length, unmatched: merge.unmatched.length });
       emit({ type: "building" });
       const sources = parts.map((p) => p.out.sourceRef);
-      const snapshot = await buildSnapshot({ data: merge.data, sources, conflicts: merge.conflicts, label: request.label });
+      const snapshot = await buildSnapshot({ data: merge.data, sources, conflicts: merge.conflicts, label: request.label, missingSources });
       await keepFiles(request.gameSystemId, fetchedParts);
       const summary: ImportSummary = {
         snapshotId: snapshot.id,
@@ -218,6 +224,7 @@ export const api: ImportWorkerApi = {
         counts: countsOf(snapshot.data),
         conflicts: snapshot.conflicts.length,
         sources: snapshot.sources.map((s) => ({ adapter: s.adapter, ...(s.ref ? { ref: s.ref } : {}), ...(s.url ? { url: s.url } : {}) })),
+        missingSources,
         elapsedMs: performance.now() - t0,
       };
       return { snapshot, summary };

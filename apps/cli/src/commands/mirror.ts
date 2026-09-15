@@ -145,8 +145,8 @@ repeated in every copy of this dataset.
 
 ## How it is refreshed
 
-Weekly, by \`.github/workflows/wahapedia.yml\` in [Grimstat](https://github.com/N041M/Grimstat),
-which runs \`pnpm cli mirror\` and pushes the result here. Nothing else is committed to this
-repository by hand.
+Weekly, by a workflow that runs \`pnpm cli mirror\` from
+[Grimstat](https://github.com/N041M/Grimstat) and pushes the result here. The workflow can sit in
+either repository; nothing in this one is written by hand.
 `;
 }

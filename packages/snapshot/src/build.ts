@@ -1,4 +1,4 @@
-import { Snapshot, SnapshotData, type Conflict, type SourceRef } from "@grimstat/schema";
+import { Snapshot, SnapshotData, type Conflict, type MissingSource, type SourceRef } from "@grimstat/schema";
 import { canonicalJson, sha256Hex } from "./checksum";
 
 export interface BuildSnapshotInput {
@@ -6,6 +6,8 @@ export interface BuildSnapshotInput {
   sources?: SourceRef[];
   label?: string;
   conflicts?: Conflict[];
+  /** Sources the run asked for and did not get, so the snapshot can say what it is missing. */
+  missingSources?: MissingSource[];
   /** Timestamp used for createdAt/updatedAt and the id's date part (default: now). */
   now?: Date | string;
   ownerId?: string;
@@ -73,6 +75,9 @@ export async function buildSnapshot(input: BuildSnapshotInput): Promise<Snapshot
     revision: 0,
   };
   if (snapshot.label === undefined) delete (snapshot as { label?: string }).label;
+  // Only when there is something to record, so a run that got everything it asked for writes the
+  // same snapshot it always did.
+  if (input.missingSources?.length) (snapshot as { missingSources?: MissingSource[] }).missingSources = input.missingSources;
   return Snapshot.parse(snapshot);
 }
 

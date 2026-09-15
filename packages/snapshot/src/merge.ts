@@ -222,7 +222,14 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
   const factions: Faction[] = [];
   for (const c of factionClusters.clusters) {
     const members = c.members as unknown as Member<Record<string, unknown>>[];
-    const name = pick("faction", c.id, "name", members, T, (i) => i["name"] as string, { silent: true }) ?? c.id;
+    // A source that calls an army by its catalogue or keyword name ("Adeptus Astartes - Blood
+    // Angels", "Asuryani") reaches this faction through an alias, and the name it came with is not
+    // the army's. A member whose own name lands on this faction without one is preferred, so the
+    // codex name is what the screens show.
+    const ownName = sortMembers(c.members, T)
+      .map((m) => m.item.name)
+      .find((n) => `faction:${normaliseName(n).replace(/\s+/g, "-")}` === c.id);
+    const name = ownName ?? pick("faction", c.id, "name", members, T, (i) => i["name"] as string, { silent: true }) ?? c.id;
     const parent = c.members.map((m) => m.item.parentFactionId).find((p) => p);
     const gameSystemId = (c.members[0]?.item.gameSystemId as string) ?? policy.gameSystem?.id ?? "wh40k-11e";
     const keywords = [...new Set(c.members.flatMap((m) => m.item.keywords ?? []))];

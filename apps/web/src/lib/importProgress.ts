@@ -1,5 +1,5 @@
 import type { SourceId } from "@grimstat/adapters";
-import type { SourceRef } from "@grimstat/schema";
+import type { MissingSource, SourceRef } from "@grimstat/schema";
 
 /**
  * Pure model behind the Data page's "Fetch from community sources" panel: which sources a browser can
@@ -56,6 +56,22 @@ export function wahapediaMirrorBase(url: string, gameSystemId: string): string {
 
 /** Whether a mirror has been configured. A blank setting leaves Wahapedia out of the run. */
 export const hasMirror = (url: string | undefined): boolean => !!url && url.trim().length > 0;
+
+/**
+ * What a snapshot holds of the rules text export, which is the only source of stratagems,
+ * enhancement text and detachment rules.
+ *
+ * Read from the snapshot rather than from the panel that fetched it, so a screen opened days later
+ * gives the same answer as the run did: present, never asked for, or asked for and not answered.
+ */
+export type RulesTextState = { state: "present" } | { state: "absent" } | { state: "failed"; reason: string; url?: string };
+
+export function rulesTextState(snapshot: { sources?: readonly { adapter: string }[]; missingSources?: readonly MissingSource[] } | undefined): RulesTextState {
+  const failed = snapshot?.missingSources?.find((m) => m.adapter === MIRRORED_SOURCE);
+  if (failed) return { state: "failed", reason: failed.reason, ...(failed.url ? { url: failed.url } : {}) };
+  if (snapshot?.sources?.some((s) => s.adapter === MIRRORED_SOURCE)) return { state: "present" };
+  return { state: "absent" };
+}
 
 export interface ImportSelection {
   sources: Record<BrowserSourceId, boolean>;
@@ -175,6 +191,27 @@ export function refreshRequestFor(id: BrowserSourceId, sel: ImportSelection, bas
   return req;
 }
 
+/**
+ * Rebuild the snapshot in hand from the files already on this machine.
+ *
+ * No source is asked for, so nothing is downloaded unless one of the snapshot's sources has no files
+ * kept here. It is how a correction to the way sources are read — two names for one faction, say —
+ * reaches a stored snapshot without fetching tens of megabytes again.
+ */
+export function rebuildRequestFor(base: SourceRef[], now = new Date()): ImportRequest {
+  return { gameSystemId: BROWSER_GAME_SYSTEM_ID, sources: [], label: `Rebuilt ${now.toISOString().slice(0, 10)}`, base };
+}
+
+/**
+ * The same run with the rules text export left out, for a mirror that will not answer. The other
+ * sources are worth having on their own, so the run is offered again without the one that failed.
+ */
+export function withoutRulesText(req: ImportRequest): ImportRequest {
+  const out: ImportRequest = { ...req, sources: req.sources.filter((id) => id !== MIRRORED_SOURCE) };
+  delete out.wahapediaMirror;
+  return out;
+}
+
 /** Short names for the snapshot label a single-source refresh writes. */
 const SOURCE_LABEL: Record<BrowserSourceId, string> = { "mfm-yaml": "MFM updated", "bsdata-json": "BSData updated", "wahapedia-csv": "Rules text updated" };
 
@@ -208,10 +245,12 @@ export interface ImportSummary {
   counts: SourceCounts;
   conflicts: number;
   sources: Array<{ adapter: string; ref?: string; url?: string }>;
+  /** Sources the run asked for and did not get. A run that got everything leaves this empty. */
+  missingSources: MissingSource[];
   elapsedMs: number;
 }
 
-export type ImportErrorKind = "rate-limit" | "network" | "cancelled" | "other";
+export type ImportErrorKind = "rate-limit" | "network" | "cancelled" | "mirror" | "other";
 
 /** Reducer input: worker events plus the main thread's own lifecycle actions. */
 export type ImportAction =

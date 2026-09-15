@@ -47,8 +47,12 @@ export interface TourStep {
  * A card that both opens a screen and points at a control has nothing to point at until the screen
  * has been drawn. It measures every frame until the control is there, and then stops. The limit is
  * for a screen that never shows it, which settles the card on the rail item instead.
+ *
+ * Three seconds rather than one: the closing card opens the data screen, which draws its stored
+ * snapshots, its overrides and every tournament list on the device, and on a phone that took longer
+ * than a second. The card settled on the rail while the button it is about was on screen beside it.
  */
-export const TOUR_SETTLE_MS = 1200;
+export const TOUR_SETTLE_MS = 3000;
 
 /**
  * The tour in reading order: a card that offers the walk, then two cards per screen, then a card
@@ -206,6 +210,23 @@ function centred(viewport: Size, card: Size, margin: number): CardPlacement {
  * instead, and above it when there is no room below. With nothing to point at, which is a phone,
  * where navigation lives in a drawer, the card sits in the middle of the window.
  */
+/**
+ * The part of a control that is inside the window, which is what the highlight can ring.
+ *
+ * A strip wider than the window — the Codex's views on a tablet, which scrolls along its line — was
+ * ringed past the edge of the screen, so the highlight ran off and the reader saw three sides of it.
+ * A control scrolled out of sight has no visible part and is not highlighted at all; the step falls
+ * back to the rail item as it does for a control that is not on the screen.
+ */
+export function visibleRect(rect: Rect | undefined, viewport: Size, margin = 0): Rect | undefined {
+  if (!rect || rect.width <= 0 || rect.height <= 0) return undefined;
+  const left = Math.max(rect.left, margin);
+  const top = Math.max(rect.top, margin);
+  const right = Math.min(rect.left + rect.width, viewport.width - margin);
+  const bottom = Math.min(rect.top + rect.height, viewport.height - margin);
+  return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } : undefined;
+}
+
 export function placeCard(anchor: Rect | undefined, viewport: Size, card: Size, gap = CARD_GAP, margin = VIEWPORT_MARGIN): CardPlacement {
   if (!anchor) return centred(viewport, card, margin);
   const maxLeft = viewport.width - card.width - margin;

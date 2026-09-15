@@ -13,6 +13,18 @@ export const SourceRef = z.object({
 });
 export type SourceRef = z.infer<typeof SourceRef>;
 
+/**
+ * A source a run asked for and did not get. Kept on the snapshot so that what is missing from it can
+ * be said later, on any screen, rather than only in the panel that ran the fetch.
+ */
+export const MissingSource = z.object({
+  adapter: z.string(),
+  url: z.string().optional(),
+  /** What the fetch failed with, e.g. "GET https://.../Factions.csv -> HTTP 404". */
+  reason: z.string(),
+});
+export type MissingSource = z.infer<typeof MissingSource>;
+
 export const Conflict = z.object({
   entity: z.string(),
   id: Id,
@@ -44,6 +56,8 @@ export const Snapshot = RecordMeta.extend({
   /** SHA-256 of canonical JSON of `data`. */
   checksum: z.string(),
   conflicts: z.array(Conflict).default([]),
+  /** Sources that did not answer the run that built this. Absent when the run got everything it asked for. */
+  missingSources: z.array(MissingSource).optional(),
   data: SnapshotData,
 });
 export type Snapshot = z.infer<typeof Snapshot>;

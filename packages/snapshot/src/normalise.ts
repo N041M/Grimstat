@@ -52,17 +52,32 @@ export function normaliseName(s: string): string {
 export const FACTION_KEY_ALIASES: Record<string, string> = {
   "agents-of-the-imperium": "imperial-agents",
   craftworlds: "aeldari",
+  asuryani: "aeldari",
+  harlequins: "aeldari",
+  ynnari: "aeldari",
+  "heretic-astartes": "chaos-space-marines",
+  "legiones-daemonica": "chaos-daemons",
   "titanicus-traitoris": "chaos-titan-legions",
   "adeptus-titanicus": "titan-legions",
   titans: "titan-legions",
   "adeptus-astartes": "space-marines",
 };
 
+/** Chapters the points source lists as armies of their own; every other chapter is Space Marines. */
+const CHAPTER_ARMIES = new Set(["black-templars", "blood-angels", "dark-angels", "deathwatch", "space-wolves"]);
+const CHAPTER_PREFIX = "adeptus-astartes-";
+
 /** Canonical faction key from either a faction id ("faction:space-marines") or a display name ("Space Marines"). */
 export function factionKey(idOrName: string | undefined | null): string {
   if (!idOrName) return "";
   const raw = idOrName.startsWith("faction:") ? idOrName.slice("faction:".length) : normaliseName(idOrName).replace(/\s+/g, "-");
-  return FACTION_KEY_ALIASES[raw] ?? raw;
+  const direct = FACTION_KEY_ALIASES[raw];
+  if (direct) return direct;
+  if (raw.startsWith(CHAPTER_PREFIX)) {
+    const chapter = raw.slice(CHAPTER_PREFIX.length);
+    return CHAPTER_ARMIES.has(chapter) ? chapter : "space-marines";
+  }
+  return raw;
 }
 
 /** Turn a slug back into a comparable name key: "wolf-guard-battle-leader" -> "wolf guard battle leader". */

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Side } from "../../lib/game";
+import { rulesTextState } from "../../lib/importProgress";
 import { filterStratagems, groupStratagems, stratagemParts, stratagemsForRoster, type RosterStratagem, type StratagemGroup } from "../../lib/stratagems";
 import { hrefFor } from "../../router";
 import { Empty } from "../ui";
@@ -97,7 +98,7 @@ export function PlayStratagems({ ctx }: { ctx: PlayContext }) {
   if ((snapshot.data.stratagems ?? []).length === 0)
     return (
       <Empty>
-        <p>{t("roster.strat.noneInData")}</p>
+        <p>{t(rulesTextState(snapshot).state === "failed" ? "roster.strat.noneAfterFailure" : "roster.strat.noneInData")}</p>
         <p>
           <a href={hrefFor("data")}>{t("roster.strat.dataLink")}</a>
         </p>

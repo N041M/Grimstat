@@ -11,6 +11,10 @@
 # "Powered by Wahapedia", https://wahapedia.ru. The CLI writes that line into the dataset's README,
 # and anyone redistributing the files keeps it with them.
 #
+# This is one of the two places the job can live. The dataset N041M/grimstat-wahapedia carries a
+# workflow of its own that checks this repository out and pushes to itself, which needs no token at
+# all, and that is the one currently running. This one is for publishing a dataset from here.
+#
 # Setup, once: create an empty public repository for the dataset, set the repository variable
 # WAHAPEDIA_REPO to "owner/name", and add a secret WAHAPEDIA_TOKEN holding a fine-grained token with
 # contents read/write on that repository. Without the variable the job does not run, so nothing is

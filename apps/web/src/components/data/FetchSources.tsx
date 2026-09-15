@@ -5,8 +5,8 @@ import { db } from "../../db";
 import { useApp } from "../../state/AppContext";
 import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { ImportCancelledError, importClient } from "../../worker/importClient";
-import { BROWSER_GAME_SYSTEM_ID, BROWSER_SOURCES, DEFAULT_WAHAPEDIA_MIRROR, IDLE_PROGRESS, MIRRORED_SOURCE, WAHAPEDIA_MIRROR_SETTING, classifyError, errorMessage, hasMirror, importRequestFor, isRunning, reduceProgress, refreshRequestFor, wahapediaMirrorBase, type BrowserSourceId, type ImportErrorKind, type ImportRequest, type ImportSelection, type SourceProgress } from "../../lib/importProgress";
-import { freshnessOf, knownAfterFetch, latestRefFor, type Freshness } from "../../lib/sourceFreshness";
+import { BROWSER_GAME_SYSTEM_ID, BROWSER_SOURCES, DEFAULT_WAHAPEDIA_MIRROR, IDLE_PROGRESS, MIRRORED_SOURCE, WAHAPEDIA_MIRROR_SETTING, classifyError, errorMessage, hasMirror, importRequestFor, isRunning, rebuildRequestFor, reduceProgress, refreshRequestFor, rulesTextState, wahapediaMirrorBase, withoutRulesText, type BrowserSourceId, type ImportErrorKind, type ImportRequest, type ImportSelection, type SourceProgress } from "../../lib/importProgress";
+import { freshnessOf, knownAfterFetch, latestRefFor, mirrorAnswers, type Freshness } from "../../lib/sourceFreshness";
 import { fmtDay, fmtInt } from "../../lib/format";
 import { PanelHead, PillChip, ProportionBar } from "../kit";
 import { t, type I18nKey } from "../../i18n";
@@ -34,17 +34,24 @@ function parseSelection(raw: unknown): ImportSelection | undefined {
 interface FreshnessRecord {
   checkedAt?: string;
   latest: Partial<Record<CardSourceId, string>>;
+  /** What a source last failed with, kept so a card can say it is not answering before anything is fetched. */
+  problems?: Partial<Record<CardSourceId, string>>;
 }
 
 const NO_FRESHNESS: FreshnessRecord = { latest: {} };
 
 function parseFreshness(raw: unknown): FreshnessRecord | undefined {
   if (!raw || typeof raw !== "object") return undefined;
-  const r = raw as { checkedAt?: unknown; latest?: unknown };
+  const r = raw as { checkedAt?: unknown; latest?: unknown; problems?: unknown };
   const src = r.latest && typeof r.latest === "object" ? (r.latest as Record<string, unknown>) : {};
+  const bad = r.problems && typeof r.problems === "object" ? (r.problems as Record<string, unknown>) : {};
   const latest: Partial<Record<CardSourceId, string>> = {};
-  for (const id of BROWSER_SOURCES) if (typeof src[id] === "string") latest[id] = src[id] as string;
-  return { ...(typeof r.checkedAt === "string" ? { checkedAt: r.checkedAt } : {}), latest };
+  const problems: Partial<Record<CardSourceId, string>> = {};
+  for (const id of BROWSER_SOURCES) {
+    if (typeof src[id] === "string") latest[id] = src[id] as string;
+    if (typeof bad[id] === "string") problems[id] = bad[id] as string;
+  }
+  return { ...(typeof r.checkedAt === "string" ? { checkedAt: r.checkedAt } : {}), latest, problems };
 }
 
 const NAME_KEY: Record<CardSourceId, I18nKey> = { "mfm-yaml": "data.fetch.source.mfm-yaml", "bsdata-json": "data.fetch.source.bsdata-json", "wahapedia-csv": "data.fetch.source.wahapedia-csv" };
@@ -79,7 +86,9 @@ function stageLabel(stage: SourceProgress["stage"]): string {
 }
 
 function errorHint(kind: ImportErrorKind): string {
-  return kind === "rate-limit" ? t("data.fetch.hint.rate-limit") : kind === "network" ? t("data.fetch.hint.network") : t("data.fetch.hint.other");
+  if (kind === "rate-limit") return t("data.fetch.hint.rate-limit");
+  if (kind === "network") return t("data.fetch.hint.network");
+  return kind === "mirror" ? t("data.fetch.hint.mirror") : t("data.fetch.hint.other");
 }
 
 /** What one card shows: a status pill, a 5px bar and a detail/timestamp row. */
@@ -100,7 +109,7 @@ interface CardModel {
  * matches what upstream serves, outdated when it does not, not checked when nobody has asked, and
  * not fetched when there is no copy at all.
  */
-export function cardModel(id: CardSourceId, progress: SourceProgress | undefined, stored: SourceRef | undefined, storedCount: number | undefined, freshness: Freshness = "unknown"): CardModel {
+export function cardModel(id: CardSourceId, progress: SourceProgress | undefined, stored: SourceRef | undefined, storedCount: number | undefined, freshness: Freshness = "unknown", problem?: string): CardModel {
   if (progress && progress.stage !== "pending") {
     switch (progress.stage) {
       case "downloading":
@@ -113,6 +122,9 @@ export function cardModel(id: CardSourceId, progress: SourceProgress | undefined
         return { status: stageLabel(progress.stage), live: true, fraction: 0, detail: progress.message ?? t("data.fetch.stage.failed"), when: t("data.source.failed") };
     }
   }
+  // Said ahead of a run, because the address a mirror lives at is typed by hand and the run behind a
+  // dead one ends in a snapshot with no stratagems in it.
+  if (problem) return { status: t("data.source.notAnswering"), live: true, fraction: 0, detail: problem, when: stored ? fmtDay(stored.fetchedAt) : "–" };
   if (stored) {
     const status = freshness === "current" ? t("data.source.current") : freshness === "stale" ? t("data.source.outdated") : t("data.source.notChecked");
     return { status, live: false, stale: freshness === "stale", fraction: 1, detail: storedCount === undefined ? (stored.ref ?? t("data.source.stored")) : t("data.source.datasheets", { n: fmtInt(storedCount) }), when: fmtDay(stored.fetchedAt) };
@@ -154,6 +166,8 @@ function SourceCard({ id, model, selectable, selected, disabled, onSelect, onRef
 /** What the Data page's "Fetch everything" button drives: the same run as the panel's own button. */
 export interface FetchSourcesHandle {
   run: () => Promise<void>;
+  /** Rebuild the stored snapshot with the rules the app has now. See `fixData`. */
+  fix: () => Promise<void>;
 }
 
 /**
@@ -166,6 +180,8 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   const [mirror, setMirror] = usePersistedSetting<string>(WAHAPEDIA_MIRROR_SETTING, DEFAULT_WAHAPEDIA_MIRROR, (raw) => (typeof raw === "string" ? raw : undefined));
   const [freshness, setFreshness, freshnessLoaded] = usePersistedSetting<FreshnessRecord>(FRESHNESS_KEY, NO_FRESHNESS, parseFreshness);
   const [checking, setChecking] = useState(false);
+  // The run a dead mirror stopped, so it can be offered again without the source that failed.
+  const [blocked, setBlocked] = useState<ImportRequest | undefined>(undefined);
   const [progress, dispatch] = useReducer(reduceProgress, IDLE_PROGRESS);
   const clientRunning = useSyncExternalStore(subscribeToImport, importIsRunning);
   const alive = useRef(true);
@@ -192,23 +208,57 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
    * The one path both buttons take: run, store, activate, and record what each source came back at
    * so the freshness badges are right without asking upstream again.
    */
-  const runRequest = useCallback(async (req: ImportRequest) => {
+  const runRequest = useCallback(async (req: ImportRequest, opts: { rebuild?: boolean } = {}) => {
     const client = importClient();
     if (client.running) {
       notify(t("data.fetch.busy"), "info");
       return;
+    }
+    setBlocked(undefined);
+    // One small request before a download measured in tens of megabytes. A mirror that answers
+    // nothing would otherwise be found out at the end, in a snapshot that has no stratagems in it.
+    if (req.wahapediaMirror && req.sources.includes(MIRRORED_SOURCE)) {
+      const probe = await mirrorAnswers(req.wahapediaMirror, (url) => fetch(url));
+      if (!probe.ok) {
+        if (!alive.current) return;
+        setFreshness((f) => ({ ...f, problems: { ...f.problems, [MIRRORED_SOURCE]: probe.message } }));
+        setBlocked(req);
+        dispatch({ type: "error", message: probe.message, kind: "mirror" });
+        return;
+      }
     }
     dispatch({ type: "start", sources: req.sources });
     try {
       const { snapshot, summary } = await client.run(req, (e) => {
         if (alive.current) dispatch(e);
       });
+      // A rebuild that changes nothing is not worth a second copy of the same snapshot, and saying
+      // so is a useful answer in itself.
+      if (opts.rebuild && rawSnapshot && snapshot.checksum === rawSnapshot.checksum) {
+        notify(t("data.fix.nothing"), "info");
+        if (alive.current) dispatch({ type: "reset" });
+        return;
+      }
       // Store even if the panel was unmounted meanwhile: the download already happened.
       await db.snapshots.put(snapshot);
       await refreshSnapshots();
       await setActiveSnapshot(snapshot.id);
-      notify(t("data.fetch.doneNotice", { label: snapshot.label ?? snapshot.id }), "success");
-      setFreshness((f) => ({ ...f, latest: knownAfterFetch(f.latest, req.sources, snapshot.sources) }));
+      // A source that did not answer is not a footnote to a success: the snapshot is missing
+      // everything it carried. The notice stays until it is closed, and the panel keeps saying it
+      // for as long as the snapshot is the active one.
+      const missing = summary.missingSources ?? [];
+      const was = rawSnapshot?.data;
+      if (opts.rebuild && was && (was.factions.length !== summary.counts.factions || was.datasheets.length !== summary.counts.datasheets))
+        notify(t("data.fix.merged", { f0: fmtInt(was.factions.length), f1: fmtInt(summary.counts.factions), u0: fmtInt(was.datasheets.length), u1: fmtInt(summary.counts.datasheets) }), "success");
+      else if (opts.rebuild) notify(t("data.fix.done"), "success");
+      else if (missing.length) notify(t("data.fetch.doneMissing", { label: snapshot.label ?? snapshot.id }), "error", missing.map((m) => m.reason));
+      else notify(t("data.fetch.doneNotice", { label: snapshot.label ?? snapshot.id }), "success");
+      setFreshness((f) => {
+        const problems = { ...(f.problems ?? {}) };
+        for (const id of req.sources) delete problems[id];
+        for (const m of missing) problems[m.adapter as BrowserSourceId] = m.reason;
+        return { ...f, latest: knownAfterFetch(f.latest, req.sources, snapshot.sources), problems };
+      });
       if (alive.current) dispatch({ type: "done", summary });
     } catch (e) {
       if (!alive.current) return;
@@ -218,7 +268,7 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
       }
       dispatch({ type: "error", message: errorMessage(e), kind: classifyError(e) });
     }
-  }, [notify, refreshSnapshots, setActiveSnapshot, setFreshness]);
+  }, [notify, rawSnapshot, refreshSnapshots, setActiveSnapshot, setFreshness]);
 
   const start = useCallback(async () => {
     const req = importRequestFor(selection, undefined, mirror);
@@ -228,6 +278,22 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
     }
     await runRequest(req);
   }, [selection, mirror, notify, runRequest]);
+
+  /**
+   * Fix data: rebuild the stored snapshot from the files already on this device.
+   *
+   * How a source is read goes on being corrected, and a stored snapshot keeps whatever was known on
+   * the day it was built. One faction arriving under two names is the kind of thing this puts right.
+   * The files are already here; only the reading of them has moved on, so nothing is downloaded
+   * unless a source has no files kept on this machine.
+   */
+  const fixData = useCallback(async () => {
+    if (!rawSnapshot) {
+      notify(t("data.fetch.oneNeedsSnapshot"), "error");
+      return;
+    }
+    await runRequest(rebuildRequestFor(rawSnapshot.sources), { rebuild: true });
+  }, [rawSnapshot, notify, runRequest]);
 
   /** One card's own button: fetch that source and rebuild the snapshot already in hand around it. */
   const refreshOne = useCallback(
@@ -245,18 +311,21 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
   const checkUpdates = useCallback(async () => {
     setChecking(true);
     const latest: Partial<Record<BrowserSourceId, string>> = {};
+    const problems: Partial<Record<BrowserSourceId, string>> = {};
     await Promise.all(
       CARD_SOURCES.map(async (id) => {
         try {
           const ref = await latestRefFor(id, { fetch: (url) => fetch(url), ...(id === MIRRORED_SOURCE && hasMirror(mirror) ? { mirror: wahapediaMirrorBase(mirror, BROWSER_GAME_SYSTEM_ID) } : {}) });
           if (ref) latest[id] = ref;
-        } catch {
-          // A source that will not say stays unknown rather than failing the check for the others.
+        } catch (e) {
+          // Kept rather than dropped: a source that will not answer the cheap question will not
+          // answer the expensive one either, and the card says so before anything is fetched.
+          problems[id] = errorMessage(e);
         }
       }),
     );
     if (!alive.current) return;
-    setFreshness({ checkedAt: new Date().toISOString(), latest });
+    setFreshness({ checkedAt: new Date().toISOString(), latest, problems });
     setChecking(false);
   }, [mirror, setFreshness]);
 
@@ -274,10 +343,26 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
     importClient().cancel();
   }, []);
 
-  useImperativeHandle(ref, () => ({ run: start }), [start]);
+  useImperativeHandle(ref, () => ({ run: start, fix: fixData }), [start, fixData]);
 
   const toggle = (id: BrowserSourceId, on: boolean) => setSelection((s) => ({ ...s, sources: { ...s.sources, [id]: on } }));
+  /** A new address has not failed yet, so the verdict on the last one goes with it. */
+  const editMirror = (url: string) => {
+    setMirror(url);
+    setFreshness((f) => {
+      if (!f.problems?.[MIRRORED_SOURCE]) return f;
+      const problems = { ...f.problems };
+      delete problems[MIRRORED_SOURCE];
+      return { ...f, problems };
+    });
+  };
   const mirrorId = `${filterId}-mirror`;
+  const problems = freshness.problems ?? {};
+  // What the stored snapshot has of the rules text, which is the only source of stratagems. Read
+  // from the snapshot, so the answer outlives the run that built it. The built-in sample was not
+  // fetched from anywhere and has no rules text to be missing.
+  const rules = rulesTextState(rawSnapshot);
+  const fetchedSnapshot = (rawSnapshot?.sources ?? []).some((s) => BROWSER_SOURCES.includes(s.adapter as BrowserSourceId));
 
   return (
     <section className="src-block" aria-labelledby="data-fetch-h">
@@ -291,7 +376,7 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
       <div className="src-cards">
         {CARD_SOURCES.map((id) => {
           const stored = rawSnapshot?.sources.find((s) => s.adapter === id);
-          const model = cardModel(id, progress.sources.find((s) => s.id === id), stored, id === "bsdata-json" ? datasheetCount : undefined, freshnessOf(id, stored?.ref, freshness.latest[id]));
+          const model = cardModel(id, progress.sources.find((s) => s.id === id), stored, id === "bsdata-json" ? datasheetCount : undefined, freshnessOf(id, stored?.ref, freshness.latest[id]), problems[id]);
           const needsMirror = id === MIRRORED_SOURCE && !mirrored;
           return (
             <SourceCard
@@ -309,6 +394,17 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
         })}
       </div>
 
+      {fetchedSnapshot && rules.state !== "present" ? (
+        <div className="src-missing" role="status">
+          <p>{rules.state === "failed" ? t("data.fetch.rulesText.failed", { url: rules.url ?? "" }) : t("data.fetch.rulesText.absent")}</p>
+          {rules.state === "failed" ? <p className="mono small">{rules.reason}</p> : null}
+          <button type="button" className="sm" disabled={running || background || !mirrored} onClick={() => void refreshOne(MIRRORED_SOURCE)}>
+            {t("data.fetch.rulesText.fetch")}
+          </button>
+          {mirrored ? null : <span className="small muted">{t("data.fetch.rulesText.noMirror")}</span>}
+        </div>
+      ) : null}
+
       <div className="src-run">
         <label className="src-filter" htmlFor={filterId}>
           <span>{t("data.fetch.filter")}</span>
@@ -316,7 +412,7 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
         </label>
         <label className="src-filter" htmlFor={mirrorId}>
           <span>{t("data.fetch.mirror")}</span>
-          <input id={mirrorId} type="url" value={mirror} spellCheck={false} placeholder={DEFAULT_WAHAPEDIA_MIRROR} disabled={running} onChange={(e) => setMirror(e.target.value)} />
+          <input id={mirrorId} type="url" value={mirror} spellCheck={false} placeholder={DEFAULT_WAHAPEDIA_MIRROR} disabled={running} onChange={(e) => editMirror(e.target.value)} />
         </label>
         <button type="button" className="primary" disabled={running || background || request.sources.length === 0} onClick={() => void start()}>
           {t("data.fetch.run")}
@@ -334,13 +430,9 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
       {progress.merge ? <p className="src-note">{t("data.fetch.merged", { conflicts: fmtInt(progress.merge.conflicts), unmatched: fmtInt(progress.merge.unmatched), warnings: fmtInt(progress.merge.warnings) })}</p> : null}
 
       {progress.stage === "done" && progress.summary ? (
-        <>
-          <p className="src-note" role="status">
-            {t("data.fetch.done", { label: progress.summary.label ?? progress.summary.snapshotId, s: (progress.summary.elapsedMs / 1000).toFixed(1) })}
-          </p>
-          {/* Said here rather than three screens later, where an empty Stratagems tab was the first sign of it. */}
-          {progress.summary.counts.stratagems === 0 ? <p className="src-note warn-text">{t("data.fetch.noStratagems")}</p> : null}
-        </>
+        <p className="src-note" role="status">
+          {t("data.fetch.done", { label: progress.summary.label ?? progress.summary.snapshotId, s: (progress.summary.elapsedMs / 1000).toFixed(1) })}
+        </p>
       ) : null}
 
       {progress.stage === "cancelled" ? (
@@ -351,12 +443,31 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
 
       {progress.stage === "error" && progress.error ? (
         <div className="src-error" role="alert">
-          <strong>{t("data.fetch.failed", { msg: progress.error.message })}</strong>
+          <strong>{t(progress.error.kind === "mirror" ? "data.fetch.mirrorFailed" : "data.fetch.failed", { msg: progress.error.message })}</strong>
           <p>{errorHint(progress.error.kind)}</p>
           <div className="src-error-actions">
             <button type="button" className="primary" onClick={() => void start()}>
               {t("data.fetch.retry")}
             </button>
+            {progress.error.kind === "mirror" && blocked && mirror.trim() !== DEFAULT_WAHAPEDIA_MIRROR ? (
+              <button
+                type="button"
+                onClick={() => {
+                  // The address this app ships with: the local server's copy in development, the one
+                  // beside the app on a built site. It needs no setting up, and a mirror typed over
+                  // it can be put back in one press.
+                  setMirror(DEFAULT_WAHAPEDIA_MIRROR);
+                  void runRequest({ ...blocked, wahapediaMirror: wahapediaMirrorBase(DEFAULT_WAHAPEDIA_MIRROR, BROWSER_GAME_SYSTEM_ID) });
+                }}
+              >
+                {t("data.fetch.mirrorDefault")}
+              </button>
+            ) : null}
+            {blocked && blocked.sources.length > 1 ? (
+              <button type="button" onClick={() => void runRequest(withoutRulesText(blocked))}>
+                {t("data.fetch.withoutRulesText")}
+              </button>
+            ) : null}
             <button type="button" onClick={() => dispatch({ type: "reset" })}>
               {t("common.close")}
             </button>

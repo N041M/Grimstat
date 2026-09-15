@@ -49,6 +49,18 @@ describe("factionKey", () => {
     expect(factionKey("faction:craftworlds")).toBe("aeldari");
     expect(factionKey(undefined)).toBe("");
   });
+  it("reads a chapter catalogue and a keyword name as the army they belong to", () => {
+    // The same mapping as `factionSlug` in @grimstat/adapters, applied to ids the adapters already
+    // built. The two are kept in step by hand; these cases are the same on both sides.
+    expect(factionKey("faction:adeptus-astartes-space-marines")).toBe("space-marines");
+    expect(factionKey("Adeptus Astartes - Blood Angels")).toBe("blood-angels");
+    expect(factionKey("faction:adeptus-astartes-ultramarines")).toBe("space-marines");
+    expect(factionKey("faction:adeptus-astartes-crimson-fists")).toBe("space-marines");
+    expect(factionKey("Asuryani")).toBe("aeldari");
+    expect(factionKey("faction:legiones-daemonica")).toBe("chaos-daemons");
+    expect(factionKey("Heretic Astartes")).toBe("chaos-space-marines");
+  });
+
   it("turns slugs back into name keys", () => {
     expect(slugToNameKey("wolf-guard-battle-leader")).toBe("wolf guard battle leader");
   });
