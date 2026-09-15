@@ -30,3 +30,17 @@ describe("dialog width", () => {
     expect(Number(confirm)).toBeLessThan(Number(general));
   });
 });
+
+describe("unit table row actions", () => {
+  /*
+   * The actions hung over the right-hand end of the row before, on top of the status the row was
+   * reporting, so the count could be neither read nor clicked with the pointer on the row. The
+   * transform that centred the overlay also made it a stacking context, which left the row menu
+   * painted under every row below it.
+   */
+  it("sit in a column of their own rather than over the row", () => {
+    const rule = ruleFor(".gtable-cell.ut-actions");
+    expect(rule).not.toMatch(/position:\s*absolute/);
+    expect(rule).not.toMatch(/transform:/);
+  });
+});

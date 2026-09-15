@@ -8,6 +8,7 @@ import { loadsByTransport } from "../../lib/transport";
 import { fmtInt } from "../../lib/format";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable } from "../kit";
 import { AddUnitPanel } from "./AddUnitPanel";
+import { DiagnosticItem } from "./DiagnosticItem";
 import { Icon, Popover } from "../ui";
 import { t, tn, type I18nKey } from "../../i18n";
 
@@ -15,8 +16,18 @@ export { unitDisplayName };
 
 export type CalcSide = "attacker" | "defender";
 
-/** Unit | Role | Models | Points | Status. */
-const COLUMNS = "minmax(200px,2.2fr) 130px 90px 80px 92px";
+/**
+ * Unit | Role | Models | Points | Status | the row's actions.
+ *
+ * The actions have a column of their own. They used to hang over the right-hand end of the row,
+ * which put them on top of the status the row was reporting, so a count could be neither read nor
+ * clicked while the pointer was on the row. The room for them comes from the numeric columns, which
+ * were sized for the words in the header rather than for the one or two digits underneath them.
+ *
+ * Their column is `min-content` rather than `auto` because a table squeezed narrower than its
+ * columns want shrinks an `auto` track to nothing, which put the buttons back over the status.
+ */
+const COLUMNS = "minmax(150px,2.2fr) 120px 60px 64px 78px min-content";
 /** The same with a checkbox column in front, in selection mode. */
 const SELECT_COLUMNS = `28px ${COLUMNS}`;
 
@@ -157,17 +168,51 @@ function Guide({ hasDetachment, onDetachment, onUnits, onExport }: { hasDetachme
   );
 }
 
+/** The Status word: the severity that matters most and how many of it ("1 error", "2 warnings", "ok"). */
+function statusOf(issues: Diagnostic[]): { label: string; bad: boolean } {
+  const errors = issues.filter((d) => d.severity === "error").length;
+  const warns = issues.filter((d) => d.severity === "warn").length;
+  if (!errors && !warns) return { label: t("roster.status.legal"), bad: false };
+  return { label: errors ? tn(errors, "roster.issues.error.one", "roster.issues.error.many") : tn(warns, "roster.issues.warn.one", "roster.issues.warn.many"), bad: true };
+}
+
 /**
- * The Status cell: the severity that matters most and how many of it ("1 error", "2 warnings",
- * "ok"). Every message, with its fix, goes in the title so hovering reads the whole list.
+ * The Status cell. A count of checks the unit failed is a count of things to read, so it opens
+ * them: every message on this unit with the fix its rule suggests. The list was in the cell's
+ * tooltip before, which a reader had to hover to find and could not keep open while fixing it.
  */
-function statusOf(issues: Diagnostic[]): { label: string; title: string; bad: boolean } {
-  const errors = issues.filter((d) => d.severity === "error");
-  const warns = issues.filter((d) => d.severity === "warn");
-  if (!errors.length && !warns.length) return { label: t("roster.status.legal"), title: t("roster.status.legalTitle"), bad: false };
-  const label = errors.length ? tn(errors.length, "roster.issues.error.one", "roster.issues.error.many") : tn(warns.length, "roster.issues.warn.one", "roster.issues.warn.many");
-  const title = [...errors, ...warns].map((d) => (d.fix ? `${d.message} ${d.fix}` : d.message)).join("\n");
-  return { label, title, bad: true };
+function StatusCell({ name, label, bad, issues }: { name: string; label: string; bad: boolean; issues: Diagnostic[] }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  if (!bad)
+    return (
+      <span className="ut-status-ok" title={t("roster.status.legalTitle")}>
+        {label}
+      </span>
+    );
+  return (
+    <Popover
+      open={open}
+      onClose={close}
+      align="end"
+      className="ut-status-pop"
+      label={t("roster.units.issues", { name })}
+      trigger={
+        <button type="button" className="ut-status-btn" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {label}
+        </button>
+      }
+    >
+      <div className="stack">
+        <strong>{t("roster.inspector.issues")}</strong>
+        <ul className="val-list" role="list">
+          {issues.map((d, i) => (
+            <DiagnosticItem key={`${d.code}:${d.path ?? i}`} d={d} />
+          ))}
+        </ul>
+      </div>
+    </Popover>
+  );
 }
 
 interface DisplayRow {
@@ -394,6 +439,9 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                 <GridHeadCell align="end">{t("roster.col.models")}</GridHeadCell>
                 <GridHeadCell align="end">{t("roster.col.points")}</GridHeadCell>
                 <GridHeadCell align="end">{t("roster.col.status")}</GridHeadCell>
+                <GridHeadCell align="end">
+                  <span className="sr-only">{t("roster.col.actions")}</span>
+                </GridHeadCell>
               </GridHead>
               {visible.map(({ unit, nested }) => {
                 const ds = datasheets.get(unit.datasheetId);
@@ -470,9 +518,11 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                       <span className="ut-phrase">{cost ? t("unit.points", { v: fmtInt(cost.total) }) : "–"}</span>
                     </GridCell>
                     <GridCell align="end" mono tone={status.bad ? "accent" : "faint"} className="ut-status">
-                      <span title={status.title}>{status.label}</span>
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <StatusCell name={name} label={status.label} bad={status.bad} issues={issues} />
+                      </span>
                     </GridCell>
-                    <span className="ut-actions">
+                    <GridCell align="end" className="ut-actions">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -483,29 +533,6 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                         aria-label={`${t("roster.units.openAttacker")}: ${name}`}
                       >
                         <Icon name="calc" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDuplicate(unit);
-                        }}
-                        title={t("armies.duplicate")}
-                        aria-label={t("roster.units.duplicate", { name })}
-                      >
-                        <Icon name="copy" />
-                      </button>
-                      <button
-                        type="button"
-                        className="danger"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemove(unit);
-                        }}
-                        title={t("roster.inspector.removeUnit")}
-                        aria-label={t("roster.units.remove", { name })}
-                      >
-                        <Icon name="trash" />
                       </button>
                       <span onClick={(e) => e.stopPropagation()}>
                         <RowMenu
@@ -518,7 +545,7 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                           onCalc={(side) => onOpenInCalculator(unit, side)}
                         />
                       </span>
-                    </span>
+                    </GridCell>
                   </GridRow>
                 );
               })}

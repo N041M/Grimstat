@@ -3215,6 +3215,18 @@ body.sheet-open {
   .det-picker {
     width: auto;
   }
+  /* The unit table's two layers stand at the foot of the screen on a phone. `align-end` would pin
+     them to their trigger's right edge, which the rule above has made the edge of the screen, and
+     a row in a list that scrolls puts its trigger anywhere at all. */
+  .ut-status-pop .popover.align-end,
+  .ut-actions .popover.align-end {
+    left: 0.75rem;
+    right: 0.75rem;
+    top: auto;
+    bottom: 0.75rem;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
 }
 
 /* ---------- Analyses (Phase 5) ---------- */
@@ -5081,8 +5093,12 @@ a.btn:hover {
 .roster-issues.as-button:hover {
   text-decoration-style: solid;
 }
-.roster-issues-pop .popover {
-  width: min(92vw, 420px);
+/* Wide enough for a check and the fix under it. On a phone the popover lies across the screen
+   instead, so this waits for a window with the room for it. */
+@media (min-width: 900px) {
+  .roster-issues-pop .popover {
+    width: min(92vw, 420px);
+  }
 }
 .roster-header .page-title-field input {
   max-width: 520px;
@@ -5235,20 +5251,44 @@ a.btn:hover {
   overflow: visible;
   color: var(--muted);
 }
-.ut-status span {
+.ut-status-ok {
   font-size: 10px;
 }
-.ut-actions {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
+/* The count opens the checks it counts, so it keeps the cell's own type rather than a button's. */
+.ut-status-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.ut-status-btn:hover {
+  text-decoration-style: solid;
+}
+.ut-status-pop .popover {
+  /* The cell is right-aligned; the checks inside the layer are not. */
+  text-align: left;
+}
+@media (min-width: 900px) {
+  .ut-status-pop .popover {
+    width: min(92vw, 360px);
+  }
+}
+/* The row's actions have a column of their own, set in COLUMNS in UnitTable.tsx. As an overlay
+   pinned to the right edge they covered the status and part of the points, and the transform that
+   centred them also trapped the row menu under the rows below it. They keep their space while
+   hidden, so nothing moves as the pointer crosses a row. */
+.gtable-cell.ut-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
+  overflow: visible;
   visibility: hidden;
-  padding-left: 14px;
-  background: linear-gradient(to right, transparent, var(--hover) 14px);
 }
 .gtable-row:hover .ut-actions,
 .gtable-row:focus-within .ut-actions {
@@ -5269,10 +5309,6 @@ a.btn:hover {
 .ut-menu-btn:hover:not(:disabled) {
   border-color: var(--ink);
   color: var(--ink);
-}
-.ut-actions button.danger:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 .ut-keys {
   margin: 0;
@@ -8598,18 +8634,25 @@ dialog.dialog.confirm-dialog {
   margin: 0;
 }
 
-/* ===== Roster units table on phones =====
-   The five-column grid needs about 640px, and the narrow editor hides horizontal overflow, so the
-   row is rebuilt as two lines: name and role on the first, models, points and status on the second.
-   Each numeric cell carries a bare `.ut-num` for the table and a worded `.ut-phrase` for this
-   layout, so the second line reads as a sentence rather than as three loose figures. */
+/* ===== Roster units table in a narrow panel =====
+   The grid needs about 660px, so under that the row is rebuilt as three lines: name and role on the
+   first, models, points and status on the second, the row's actions on the third. Each numeric cell
+   carries a bare `.ut-num` for the table and a worded `.ut-phrase` for this layout, so the second
+   line reads as a sentence rather than as three loose figures.
+
+   What decides is the panel the table sits in, not the window: the editor's dock and its unit
+   inspector both take about 300px off a wide window, and against the window alone the columns were
+   still laid out for a screen the table did not have. */
+.unit-table-wrap {
+  container-type: inline-size;
+}
 .ut-num {
   display: inline;
 }
 .ut-phrase {
   display: none;
 }
-@media (max-width: 899px) {
+@container (max-width: 660px) {
   .ut-table .gtable-head {
     display: none;
   }
@@ -8662,11 +8705,9 @@ dialog.dialog.confirm-dialog {
   }
   .ut-table .ut-actions {
     grid-area: actions;
-    position: static;
-    transform: none;
+    justify-content: flex-start;
     visibility: visible;
     padding: 6px 0 0;
-    background: none;
   }
   /* In selection mode the checkbox keeps its own leading column. */
   .ut-table.selecting .gtable-row {
