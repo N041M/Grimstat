@@ -11,6 +11,19 @@
       "autoPort": true
     },
     {
+      "name": "grimstat-web-5174",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@grimstat/web",
+        "dev",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174
+    },
+    {
       "name": "grimstat-lan",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
