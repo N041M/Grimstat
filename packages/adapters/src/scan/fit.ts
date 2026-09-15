@@ -20,7 +20,7 @@ import { readArmy, sizeFor } from "./army";
 import type { NameEntry, ScanIndex } from "./names";
 import { matchName } from "./names";
 import type { Multiplier } from "./numbers";
-import { costAfter, modelsForCost, multipliersBefore, sizesOf } from "./numbers";
+import { costAfter, costIndexAfter, modelsForCost, multipliersBefore, sizesOf } from "./numbers";
 import { placeEvidence, type UnitAnchor } from "./own";
 import type { Token } from "./tokens";
 
@@ -241,7 +241,14 @@ export function scanList(snapshot: Snapshot, tokens: readonly Token[], options: 
     const sizes = sizesOf(snapshot, ds.id);
     const answered = answers[`models:${i}`];
     const printedCost = costAfter(tokens, a.span.to, sizes);
-    let readings = multipliersBefore(tokens, a.span.from, sizes);
+    // The numbers in front of this name stop at the unit before it on the line, and at that unit's
+    // cost. Three cards of a broadcast overlay read as one line otherwise leave each unit counted by
+    // the price of the one to its left.
+    const before = anchors[i - 1];
+    const prev = before && before.span.to <= a.span.from ? before : undefined;
+    const prevCost = prev ? costIndexAfter(tokens, prev.span.to, sizesOf(snapshot, prev.datasheetId)) : undefined;
+    const floor = prev ? Math.max(prev.span.to, (prevCost ?? prev.span.to - 1) + 1) : 0;
+    let readings = multipliersBefore(tokens, a.span.from, sizes, floor);
     /*
      * A count the picture lost, recovered from the cost it kept.
      *

@@ -137,10 +137,10 @@ export interface Multiplier {
 }
 
 /** Tokens before `from` that are numbers or the multiplier's own `x`, nearest first. */
-function leading(tokens: readonly Token[], from: number): { values: number[]; sawX: boolean } {
+function leading(tokens: readonly Token[], from: number, floor: number): { values: number[]; sawX: boolean } {
   const values: number[] = [];
   let sawX = false;
-  for (let at = from - 1; at >= 0 && from - at <= 4; at--) {
+  for (let at = from - 1; at >= floor && from - at <= 4; at--) {
     const token = tokens[at]!;
     if (token.line !== tokens[from]?.line) break;
     const n = integerOf(token);
@@ -165,8 +165,8 @@ function leading(tokens: readonly Token[], from: number): { values: number[]; sa
  * where it is fielded at two. Both are offered when both are legal, and the fit chooses using the
  * total. Where only one is legal there is nothing to choose.
  */
-export function multipliersBefore(tokens: readonly Token[], from: number, sizes: UnitSizes): Multiplier[] {
-  const { values, sawX } = leading(tokens, from);
+export function multipliersBefore(tokens: readonly Token[], from: number, sizes: UnitSizes, floor = 0): Multiplier[] {
+  const { values, sawX } = leading(tokens, from, floor);
   const out: Multiplier[] = [];
   const push = (m: Multiplier) => {
     if (!out.some((o) => o.copies === m.copies && o.models === m.models)) out.push(m);
@@ -215,13 +215,27 @@ export function modelsForCost(sizes: UnitSizes, cost: number, extras: readonly n
  * yields nothing here and is costed from the snapshot instead.
  */
 export function costAfter(tokens: readonly Token[], to: number, sizes: UnitSizes): number | undefined {
+  const at = costIndexAfter(tokens, to, sizes);
+  return at === undefined ? undefined : integerOf(tokens[at]!);
+}
+
+/**
+ * Where that cost sits in the stream.
+ *
+ * The unit after it needs to know. A broadcast overlay draws an army in columns, and a picture read
+ * as one block puts a unit from each of them on one line: the cost of the card on the left then sits
+ * just in front of the next card's name, where it reads as that unit's count. One list came back
+ * holding a hundred and eighty of a unit it had one of, and another as eleven copies of a unit that
+ * was in it twice. A number that has already been read as somebody's cost counts nothing.
+ */
+export function costIndexAfter(tokens: readonly Token[], to: number, sizes: UnitSizes): number | undefined {
   const line = tokens[to - 1]?.line;
   for (let at = to; at < tokens.length && at - to <= 3; at++) {
     const token = tokens[at]!;
     if (token.line !== line) break;
     const n = integerOf(token);
     if (n === undefined) continue;
-    if (canBeCost(sizes, n)) return n;
+    if (canBeCost(sizes, n)) return at;
   }
   return undefined;
 }
