@@ -22,6 +22,55 @@ export interface RecogniseProgress {
   readonly step: "loading" | "reading";
 }
 
+/**
+ * How long the recogniser may go without saying anything before the reader is told.
+ *
+ * Its files are fetched from this origin the first time a picture is read: a worker, a WebAssembly
+ * core and a language model, about seven megabytes between them. A browser that refuses one of them
+ * — an old copy of the page held by the service worker, whose policy did not allow WebAssembly, is
+ * the way this happened — leaves the load neither finished nor failed, and the bar sat at nothing
+ * for as long as the reader was willing to watch it. Every step the recogniser reports puts this
+ * off, so it only fires when nothing at all is happening.
+ */
+const STALL_MS = 45_000;
+
+/** Nothing has happened for a while. Named so the screen can say something better than a stack. */
+function stalledError(ms: number): Error {
+  const e = new Error(`the recogniser said nothing for ${Math.round(ms / 1000)} seconds`);
+  e.name = "RecogniserStalledError";
+  return e;
+}
+
+/**
+ * A promise that rejects once nothing has happened for `ms`. `tick` puts that off, `stop` ends it.
+ *
+ * Exported for the test; nothing outside this module uses it.
+ */
+export function stallGuard(ms: number): { stalled: Promise<never>; tick: () => void; stop: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fire: (e: Error) => void = () => undefined;
+  const stalled = new Promise<never>((_, reject) => {
+    fire = reject;
+  });
+  // The rejection is never left unhandled: every caller races it against the work it is guarding.
+  void stalled.catch(() => undefined);
+  const arm = (): void => {
+    timer = setTimeout(() => fire(stalledError(ms)), ms);
+  };
+  arm();
+  return {
+    stalled,
+    tick: () => {
+      if (timer !== undefined) clearTimeout(timer);
+      arm();
+    },
+    stop: () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+    },
+  };
+}
+
 export interface RecogniseOptions {
   readonly onProgress?: (progress: RecogniseProgress) => void;
   readonly signal?: AbortSignal;
@@ -66,22 +115,31 @@ export async function recognise(picture: Blob, options: RecogniseOptions = {}): 
   const { createWorker } = await import("tesseract.js");
   options.onProgress?.({ done: 0, step: "loading" });
 
-  const worker = await createWorker("eng", 1, {
-    workerPath: `${ASSETS}/worker.min.js`,
-    corePath: ASSETS,
-    langPath: ASSETS,
-    gzip: true,
-    logger: (m: { status: string; progress: number }) => {
-      if (options.signal?.aborted) return;
-      if (m.status === "recognizing text") options.onProgress?.({ done: m.progress, step: "reading" });
-      else options.onProgress?.({ done: m.progress, step: "loading" });
-    },
-  });
-
+  const guard = stallGuard(STALL_MS);
   try {
-    return await readWords(worker, await prepare(picture));
+    const worker = await Promise.race([
+      createWorker("eng", 1, {
+        workerPath: `${ASSETS}/worker.min.js`,
+        corePath: ASSETS,
+        langPath: ASSETS,
+        gzip: true,
+        logger: (m: { status: string; progress: number }) => {
+          guard.tick();
+          if (options.signal?.aborted) return;
+          if (m.status === "recognizing text") options.onProgress?.({ done: m.progress, step: "reading" });
+          else options.onProgress?.({ done: m.progress, step: "loading" });
+        },
+      }),
+      guard.stalled,
+    ]);
+
+    try {
+      return await Promise.race([readWords(worker, await prepare(picture)), guard.stalled]);
+    } finally {
+      await worker.terminate();
+    }
   } finally {
-    await worker.terminate();
+    guard.stop();
   }
 }
 

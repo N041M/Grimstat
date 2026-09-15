@@ -767,6 +767,7 @@ export const en = {
   "picture.reading": "Reading the picture… {n}%",
   "picture.nothing": "No units were found in that picture. Try a sharper or larger one, or paste the list as text.",
   "picture.failed": "The picture could not be read. {msg}",
+  "picture.stalled": "Its reader did not load. Reload the page and try again.",
   "picture.shotAlt": "Picture {n}",
   "picture.points": "{n} of {limit} pts",
   "picture.costRead": "read {n}",

@@ -91,7 +91,10 @@ export function PictureImport({ snapshot, pictures, onCancel, onSave }: PictureI
         const draft = scanList(snapshot, fromWords(all));
         setStage(draft.units.length ? { kind: "ready", draft } : { kind: "empty" });
       } catch (e) {
-        if (!stopped) setStage({ kind: "failed", message: e instanceof Error ? e.message : String(e) });
+        // A load that never finished and never failed is the one outcome the reader cannot act on,
+        // so it is named and answered with the thing that clears it.
+        const stalled = e instanceof Error && e.name === "RecogniserStalledError";
+        if (!stopped) setStage({ kind: "failed", message: stalled ? t("picture.stalled") : e instanceof Error ? e.message : String(e) });
       }
     })();
     return () => {
