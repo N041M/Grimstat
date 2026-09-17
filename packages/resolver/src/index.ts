@@ -6,7 +6,7 @@ import type { Datasheet, Detachment, Diagnostic, Enhancement, PriceRule, Roster,
  * provides the runner, the costing helpers and the lookup context.
  */
 
-export { compositionSegments, compositionPart, compositionParts, compositionLineBounds, compositionBranches, profileBounds } from "./composition";
+export { compositionSegments, compositionPart, compositionParts, compositionLineBounds, compositionBranches, compositionBounds, profileBounds } from "./composition";
 export type { CompositionPart, CompositionLineLike, ProfileBounds } from "./composition";
 
 export interface RosterContext {

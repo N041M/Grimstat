@@ -1,7 +1,7 @@
 import type { Datasheet, Roster, RosterDetachment, Snapshot } from "@grimstat/schema";
 import type { AttachRole } from "./import-common";
 import { normaliseName } from "@grimstat/snapshot";
-import { profileBounds } from "@grimstat/resolver";
+import { compositionBounds, profileBounds } from "@grimstat/resolver";
 import {
   MAX_COPIES,
   POINTS_BY_SIZE,
@@ -10,6 +10,7 @@ import {
   defaultGroups,
   isWargearOf,
   isWeaponOf,
+  namesWeaponOf,
   mergeGroup,
   profileGroups,
   wargearGroups,
@@ -1107,7 +1108,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       }
       // A weapon first. `profileFor` matches by prefix, so "10x Hormagaunt talons" would otherwise
       // read as ten more Hormagaunts — a second model group, the weapon gone, and no warning.
-      if (!isWeaponOf(st.cur.u.ds, normaliseName(body))) {
+      if (!namesWeaponOf(st.cur.u.ds, normaliseName(body))) {
         if (addModelLine(st.cur, body, count, [])) continue;
         // "1x Gun Servitor with Arc Rifle": the model and the weapon that tells it from its fellows,
         // on the line the other dialects write as "1 Custodian Guard with guardian spear".
@@ -1218,7 +1219,15 @@ function finishUnit(t: TextUnit, warnings: string[]): void {
    * is a squad with no points, since the points are written per unit size.
    */
   const written = groups.reduce((n, g) => n + Math.max(1, g.count), 0);
-  if (t.headerCount && written < t.headerCount) groups.push(...missingModels(ds, groups, t.headerCount));
+  /*
+   * A unit is as big as its header says. Where the header gives no size, the datasheet's own minimum
+   * stands in, because a list that states none has not said the unit is short — it has only written
+   * out the models it cared to name. Gaunt's Ghosts is written as a line per Ghost, and the five
+   * whose names the datasheet does not carry were read as wargear, leaving the Colonel-Commissar on
+   * his own; the Tempestus Aquilons lose the Gunfighter the same way.
+   */
+  const size = t.headerCount ?? (written > 0 ? compositionBounds(ds).min ?? 0 : 0);
+  if (size > written) groups.push(...missingModels(ds, groups, size));
   const out: PendingUnit["groups"] = [];
   for (const g of groups) {
     const count = Math.max(1, g.count);

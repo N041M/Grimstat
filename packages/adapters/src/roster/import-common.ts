@@ -45,6 +45,17 @@ export function isWeaponOf(ds: Datasheet, key: string): boolean {
   return ds.weapons.some((w) => normaliseName(w.name) === key || (w.groupName !== undefined && normaliseName(w.groupName) === key));
 }
 
+/**
+ * The same, for a line whose weapon is written in the other number: a list writes "10x Genestealers
+ * claws and talons" where the datasheet prints "Genestealer claws and talons". Read as a model line,
+ * that one doubled the unit, because the profile is called "Genestealers" and the line opens with it.
+ */
+export function namesWeaponOf(ds: Datasheet, key: string): boolean {
+  if (isWeaponOf(ds, key)) return true;
+  const want = singularKey(key);
+  return ds.weapons.some((w) => singularKey(w.name) === want || (w.groupName !== undefined && singularKey(w.groupName) === want));
+}
+
 const tokenKey = (s: string): string => [...new Set(tokens(s))].sort().join(" ");
 
 const SHEET_WARGEAR = new WeakMap<Datasheet, string>();

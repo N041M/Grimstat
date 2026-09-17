@@ -320,6 +320,33 @@ describe("text import edge cases", () => {
     expect(r2.units[0]!.models.map((g) => `${g.count}x${g.modelProfileId.split(":").pop()}`)).toEqual(["6xwarden"]);
   });
 
+  /**
+   * A list writes a weapon in the other number from the datasheet — "10x Genestealers claws and
+   * talons" against "Genestealer claws and talons" — and the line opens with the profile's name, so
+   * it read as ten more models and doubled the unit.
+   */
+  it("reads a weapon written in the other number as a weapon", () => {
+    const squad = snapshot.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;
+    const plural = { ...squad, models: [squad.models.find((m) => m.name === "Warden")!], weapons: squad.weapons.map((w) => (w.name === "Shock maul" ? { ...w, name: "Warden shock maul" } : w)) };
+    const snap = { ...snapshot, data: { ...snapshot.data, datasheets: snapshot.data.datasheets.map((d) => (d.id === squad.id ? plural : d)) } };
+    const { roster: r } = importRosterText(["Ashen Wardens", "Ember Vanguard", "5x Warden Squad (90 pts)", "• 5x Warden shock mauls"].join("\n"), snap);
+    expect(r.units[0]!.models.reduce((n, g) => n + g.count, 0)).toBe(5);
+    expect(r.units[0]!.models[0]!.wargear).toContain("Warden shock mauls");
+  });
+
+  /**
+   * A list that states no unit size has not said the unit is short: it has written out the models it
+   * cared to name. Gaunt's Ghosts is a line per Ghost, and the five the datasheet does not name were
+   * read as wargear, which left the Colonel-Commissar on his own — at a size his points do not cover.
+   */
+  it("fills a unit whose header gives no size up to the datasheet's minimum", () => {
+    const { roster: r } = importLines("Ashen Wardens", "Ember Vanguard", "Warden Squad (180 points)", "• 1x Warden Sergeant");
+    expect(r.units[0]!.models.reduce((n, g) => n + g.count, 0)).toBe(5);
+    // A size the list does state is left alone, so a unit written short is still reported as short.
+    const short = importLines("Ashen Wardens", "Ember Vanguard", "3x Warden Squad (180 points)", "• 1x Warden Sergeant", "• 2x Warden");
+    expect(short.roster.units[0]!.models.reduce((n, g) => n + g.count, 0)).toBe(3);
+  });
+
   it("splits a wargear entry that joins two weapons with `and`", () => {
     const rest = importLines("Ashen Wardens", "Ember Vanguard", "1x Ashen Crusher (180 points): Fusion beamer and Twin hail gun");
     const bullet = importLines("Ashen Wardens", "Ember Vanguard", "Ashen Crusher (180 points)", "• 1x Fusion beamer and Twin hail gun");
