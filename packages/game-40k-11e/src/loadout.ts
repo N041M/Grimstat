@@ -21,7 +21,7 @@
  */
 
 import type { Datasheet, RosterModelGroup, ScenarioUnit } from "@grimstat/schema";
-import { compositionBounds } from "./constraints";
+import { compositionBounds } from "./composition";
 import { baseWeaponName, parseLoadout } from "./resolve";
 
 /** Any number of models may take it: "Any number of models can each have their…". */
@@ -286,8 +286,19 @@ function allowance(line: string): ((models: number) => number) | undefined {
   return undefined;
 }
 
+/** Read once per datasheet, like the loadout prose it sits beside. */
+const READINGS = new WeakMap<Datasheet, WargearReading>();
+
 /** Read a datasheet's printed wargear options. */
 export function readWargearOptions(ds: Datasheet): WargearReading {
+  const cached = READINGS.get(ds);
+  if (cached) return cached;
+  const reading = readOptions(ds);
+  READINGS.set(ds, reading);
+  return reading;
+}
+
+function readOptions(ds: Datasheet): WargearReading {
   const bases = [...new Set(ds.weapons.map((w) => key(baseWeaponName(w.name))).filter(Boolean))];
   const options: WargearOption[] = [];
   const lines: WargearLine[] = [];

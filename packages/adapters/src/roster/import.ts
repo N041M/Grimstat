@@ -1,6 +1,7 @@
 import type { Datasheet, Roster, RosterDetachment, Snapshot } from "@grimstat/schema";
 import type { AttachRole } from "./import-common";
 import { normaliseName } from "@grimstat/snapshot";
+import { profileBounds } from "@grimstat/resolver";
 import {
   MAX_COPIES,
   POINTS_BY_SIZE,
@@ -1164,6 +1165,31 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
 }
 
 /**
+ * The models a unit of `size` is missing, given the groups a list wrote out.
+ *
+ * They are the ones the composition still wants: a Kommandos mob written as nine Kommandos is ten
+ * models, and the tenth is the Nob. Where the composition does not say — it names no profile, or no
+ * way of building the unit holds this many — the models are left without one, for `profileGroups` to
+ * place.
+ */
+function missingModels(ds: Datasheet, written: readonly RawGroup[], size: number): RawGroup[] {
+  let left = size - written.reduce((n, g) => n + g.count, 0);
+  if (left <= 0) return [];
+  const assigned = new Map<string, number>();
+  for (const g of written) if (g.modelProfileId) assigned.set(g.modelProfileId, (assigned.get(g.modelProfileId) ?? 0) + g.count);
+  const way = profileBounds(ds).find((w) => size >= w.reduce((n, p) => n + p.min, 0) && size <= w.reduce((n, p) => n + p.max, 0));
+  const out: RawGroup[] = [];
+  for (const p of way ?? []) {
+    const short = Math.min(left, Math.max(0, p.min - (assigned.get(p.profileId) ?? 0)));
+    if (short <= 0) continue;
+    out.push({ count: short, items: [], modelProfileId: p.profileId });
+    left -= short;
+  }
+  if (left > 0) out.push({ count: left, items: [] });
+  return out;
+}
+
+/**
  * Turns the raw groups of one unit into model groups: each group is partitioned by profile (explicit, or spread
  * over the datasheet's profiles when only the unit size was given) and by wargear, and the two partitions are
  * overlaid. Wargear that names no weapon of the datasheet is kept but reported — silently dropping it downstream
@@ -1179,9 +1205,9 @@ function finishUnit(t: TextUnit, warnings: string[]): void {
   const invented = t.groups.filter((g) => g.implied);
   if (named.length && invented.length) {
     const size = (gs: RawGroup[]) => gs.reduce((s, g) => s + g.count, 0);
-    const spare = size(invented) - size(named);
+    const whole = size(invented);
     for (const g of invented) named[0]!.items.push(...g.items);
-    t.groups = spare > 0 ? [...named, { count: spare, items: [] }] : named;
+    t.groups = whole > size(named) ? [...named, ...missingModels(ds, named, whole)] : named;
   }
   // no groups and no unit size: leave it to `defaultGroups` in the context's build step
   const groups: RawGroup[] = t.groups.length ? t.groups : t.headerCount ? [{ count: t.headerCount, items: [] }] : [];
@@ -1192,7 +1218,7 @@ function finishUnit(t: TextUnit, warnings: string[]): void {
    * is a squad with no points, since the points are written per unit size.
    */
   const written = groups.reduce((n, g) => n + Math.max(1, g.count), 0);
-  if (t.headerCount && written < t.headerCount) groups.push({ count: t.headerCount - written, items: [] });
+  if (t.headerCount && written < t.headerCount) groups.push(...missingModels(ds, groups, t.headerCount));
   const out: PendingUnit["groups"] = [];
   for (const g of groups) {
     const count = Math.max(1, g.count);

@@ -6,8 +6,8 @@ import type { Datasheet, Detachment, Diagnostic, Enhancement, PriceRule, Roster,
  * provides the runner, the costing helpers and the lookup context.
  */
 
-export { compositionSegments, compositionPart, compositionParts, compositionLineBounds, compositionBranches } from "./composition";
-export type { CompositionPart, CompositionLineLike } from "./composition";
+export { compositionSegments, compositionPart, compositionParts, compositionLineBounds, compositionBranches, profileBounds } from "./composition";
+export type { CompositionPart, CompositionLineLike, ProfileBounds } from "./composition";
 
 export interface RosterContext {
   roster: Roster;
@@ -72,10 +72,49 @@ function bandText(rule: PriceRule): string {
   return min === max ? `${min}` : `${min}-${max}`;
 }
 
+/**
+ * The lookups a context needs from a snapshot, built once per snapshot rather than once per context.
+ *
+ * A context is asked for by unit as well as by army — `unitFromRosterUnit` makes one to cost the
+ * unit it is resolving — so an army of twenty units used to index every datasheet, detachment,
+ * enhancement and price rule in the game twenty times over.
+ */
+interface SnapshotIndex {
+  ds: Map<string, Datasheet>;
+  det: Map<string, Detachment>;
+  enh: Map<string, Enhancement>;
+  pricesByDatasheet: Map<string, PriceRule[]>;
+}
+const INDEXES = new WeakMap<Snapshot, SnapshotIndex>();
+
+function indexOf(snapshot: Snapshot): SnapshotIndex {
+  const cached = INDEXES.get(snapshot);
+  if (cached) return cached;
+  const pricesByDatasheet = new Map<string, PriceRule[]>();
+  for (const r of snapshot.data.priceRules) pricesByDatasheet.set(r.datasheetId, [...(pricesByDatasheet.get(r.datasheetId) ?? []), r]);
+  const index: SnapshotIndex = {
+    ds: new Map(snapshot.data.datasheets.map((d) => [d.id, d] as const)),
+    det: new Map(snapshot.data.detachments.map((d) => [d.id, d] as const)),
+    enh: new Map(snapshot.data.enhancements.map((e) => [e.id, e] as const)),
+    pricesByDatasheet,
+  };
+  INDEXES.set(snapshot, index);
+  return index;
+}
+
+/** The context of the last army that asked, so the units of one army share one. */
+const CONTEXTS = new WeakMap<Roster, { snapshot: Snapshot; ctx: RosterContext }>();
+
 export function createContext(roster: Roster, snapshot: Snapshot): RosterContext {
-  const ds = new Map(snapshot.data.datasheets.map((d) => [d.id, d] as const));
-  const det = new Map(snapshot.data.detachments.map((d) => [d.id, d] as const));
-  const enh = new Map(snapshot.data.enhancements.map((e) => [e.id, e] as const));
+  const held = CONTEXTS.get(roster);
+  if (held && held.snapshot === snapshot) return held.ctx;
+  const ctx = buildContext(roster, snapshot);
+  CONTEXTS.set(roster, { snapshot, ctx });
+  return ctx;
+}
+
+function buildContext(roster: Roster, snapshot: Snapshot): RosterContext {
+  const { ds, det, enh, pricesByDatasheet } = indexOf(snapshot);
   const byDatasheet = new Map<string, RosterUnit[]>();
   for (const u of roster.units) byDatasheet.set(u.datasheetId, [...(byDatasheet.get(u.datasheetId) ?? []), u]);
   const costCache = new Map<string, UnitCost>();
@@ -89,7 +128,7 @@ export function createContext(roster: Roster, snapshot: Snapshot): RosterContext
     const copyIndex = Math.max(1, copies.findIndex((u) => u.id === unit.id) + 1);
     const modelCount = modelCountOf(unit);
     let base = 0;
-    const rules = snapshot.data.priceRules.filter((r) => r.datasheetId === unit.datasheetId);
+    const rules = pricesByDatasheet.get(unit.datasheetId) ?? [];
     let rule = rules.filter((r) => covers(r, copyIndex)).sort(bySpecificity)[0];
     if (!rule && rules.length) {
       // Every band is closed and this copy falls outside all of them, so the nearest band stands in for it.

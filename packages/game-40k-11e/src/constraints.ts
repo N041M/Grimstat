@@ -1,5 +1,8 @@
-import { compositionBranches, modelCountOf } from "@grimstat/resolver";
-import type { CompositionLineLike, ConstraintSet, RosterContext } from "@grimstat/resolver";
+import { modelCountOf } from "@grimstat/resolver";
+import type { ConstraintSet, RosterContext } from "@grimstat/resolver";
+import { compositionBounds, profileBounds } from "./composition";
+import { checkLoadout } from "./loadout";
+import { unitFromDatasheet, unitFromRosterUnit } from "./resolve";
 import type { BattleSize, Diagnostic, RosterUnit } from "@grimstat/schema";
 import { hasKeywordPhrase, parseTransportCapacity, unitFitsKeywords } from "./transport";
 
@@ -23,37 +26,6 @@ export const BATTLE_SIZES: Record<Exclude<BattleSize, "custom">, BattleSizeRules
   onslaught: { points: 3000, detachmentPoints: 4, enhancements: 6, duplicates: 4, assumed: true },
 };
 
-/** Bounds of one way of building the unit: per-line mins/maxs are summed ("1 Sergeant" + "4-9 Troopers" → 5..10). */
-function branchBounds(lines: readonly CompositionLineLike[]): { min?: number; max?: number } {
-  let min: number | undefined;
-  let max: number | undefined;
-  let maxKnown = true;
-  for (const c of lines) {
-    if (typeof c.min === "number") min = (min ?? 0) + c.min;
-    if (typeof c.max === "number") max = (max ?? 0) + c.max;
-    else if (typeof c.min === "number") max = (max ?? 0) + c.min; // a fixed line ("1 Sergeant") contributes its min to the max
-    else maxKnown = false;
-  }
-  const out: { min?: number; max?: number } = {};
-  if (min !== undefined) out.min = min;
-  if (max !== undefined && maxKnown && lines.some((c) => typeof c.max === "number")) out.max = max;
-  return out;
-}
-
-/**
- * Model-count bounds of a datasheet. A sheet that writes "OR" between its lines offers alternatives
- * rather than parts of one unit, so the unit is as small as the smallest alternative and as large
- * as the largest. A ceiling needs every alternative to have one.
- */
-export function compositionBounds(ds: { composition: Array<CompositionLineLike> }): { min?: number; max?: number } {
-  const branches = compositionBranches(ds.composition).map(branchBounds);
-  const mins = branches.map((b) => b.min).filter((m): m is number => m !== undefined);
-  const maxs = branches.map((b) => b.max);
-  const out: { min?: number; max?: number } = {};
-  if (mins.length === branches.length && mins.length > 0) out.min = Math.min(...mins);
-  if (maxs.every((m): m is number => m !== undefined) && maxs.length > 0) out.max = Math.max(...maxs);
-  return out;
-}
 
 function sizeRules(ctx: RosterContext): BattleSizeRules {
   const bs = ctx.roster.battleSize;
@@ -173,6 +145,66 @@ export const constraints11e: ConstraintSet = {
           const { min, max } = compositionBounds(ds);
           if (min !== undefined && n < min) out.push({ severity: "error", code: "units.size", message: `${ds.name} has ${n} models; minimum is ${min}.`, path: path(ctx, u) });
           if (max !== undefined && n > max) out.push({ severity: "error", code: "units.size", message: `${ds.name} has ${n} models; maximum is ${max}.`, path: path(ctx, u) });
+        }
+        return out;
+      },
+    },
+    {
+      /**
+       * Which models the unit is made of, against the composition that counts them.
+       *
+       * A size on its own does not say a squad may hold one sergeant: five of them and no troopers
+       * is five models, which is what a squad of five is. The composition names the models and
+       * counts them, and a unit has to fit one of the ways it offers.
+       */
+      code: "units.models",
+      run: (ctx) => {
+        const out: Diagnostic[] = [];
+        for (const u of ctx.roster.units) {
+          const ds = ctx.datasheet(u.datasheetId);
+          if (!ds) continue;
+          const ways = profileBounds(ds);
+          if (!ways.length) continue;
+          // A unit of the wrong size is already reported as one, and saying which models it is short
+          // of adds nothing to that.
+          const models = modelCountOf(u);
+          const size = compositionBounds(ds);
+          if ((size.min !== undefined && models < size.min) || (size.max !== undefined && models > size.max)) continue;
+          const have = new Map<string, number>();
+          for (const g of u.models) have.set(g.modelProfileId, (have.get(g.modelProfileId) ?? 0) + g.count);
+          // A group standing on no profile of this datasheet is somebody else's problem to report.
+          if ([...have.keys()].some((id) => !ds.models.some((m) => m.id === id))) continue;
+          const missed = ways.map((way) => way.filter((p) => (have.get(p.profileId) ?? 0) < p.min || (have.get(p.profileId) ?? 0) > p.max));
+          if (missed.some((m) => m.length === 0)) continue;
+          // The way it comes closest to is the one worth quoting.
+          for (const p of [...missed].sort((a, b) => a.length - b.length)[0]!) {
+            const n = have.get(p.profileId) ?? 0;
+            out.push({ severity: "error", code: "units.models", message: `${unitName(ctx, u)} has ${n} ${p.name}; the unit takes ${p.min === p.max ? p.min : `${p.min} to ${p.max}`}.`, path: path(ctx, u) });
+          }
+        }
+        return out;
+      },
+    },
+    {
+      /**
+       * The weapons a unit carries, against the options its datasheet prints.
+       *
+       * The check itself lives in `loadout.ts` and says what it could not read, so what arrives here
+       * is only what contradicts the printed options. The model-count problems it also reports are
+       * left out: `units.size` says the same thing, from the same datasheet, in the army's own words.
+       */
+      code: "units.wargear",
+      run: (ctx) => {
+        const out: Diagnostic[] = [];
+        for (const u of ctx.roster.units) {
+          const ds = ctx.datasheet(u.datasheetId);
+          if (!ds) continue;
+          const models = modelCountOf(u);
+          const check = checkLoadout(ds, unitFromRosterUnit(u, ctx.roster, ctx.snapshot), { baseline: unitFromDatasheet(ds, ctx.snapshot, { modelCount: models, modelGroups: u.models }) });
+          for (const p of check.problems) {
+            if (p.code.startsWith("models.")) continue;
+            out.push({ severity: p.severity, code: `units.wargear`, message: `${unitName(ctx, u)}: ${p.message}`, path: path(ctx, u), fix: p.rule ?? "Check the unit's wargear against its datasheet." });
+          }
         }
         return out;
       },

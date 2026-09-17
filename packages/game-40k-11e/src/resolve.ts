@@ -136,7 +136,23 @@ function subjectCount(ds: Datasheet, subject: string): number | undefined {
  *   "Every model is equipped with: flux carbine; shock maul.\nThe Warden Sergeant is also equipped with a power fist."
  * into weapons for every model and weapons for a specific profile. Option/replacement text is ignored.
  */
+/**
+ * Read once per datasheet. The prose behind a loadout does not change while a snapshot is open, and
+ * every unit built, costed or checked asks for it again: the army checks alone read it twice per
+ * unit, and re-reading it was most of what they spent their time on. A datasheet rewritten by an
+ * override is a new object, so it is parsed again.
+ */
+const PARSED = new WeakMap<Datasheet, ParsedLoadout>();
+
 export function parseLoadout(ds: Datasheet): ParsedLoadout {
+  const cached = PARSED.get(ds);
+  if (cached) return cached;
+  const parsed = readLoadout(ds);
+  PARSED.set(ds, parsed);
+  return parsed;
+}
+
+function readLoadout(ds: Datasheet): ParsedLoadout {
   const out: ParsedLoadout = { all: [], byProfile: {}, copies: {}, carriers: {} };
   const text = ds.loadout ?? "";
   if (!text) return out;

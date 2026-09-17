@@ -105,3 +105,57 @@ export function compositionBranches<T extends CompositionLineLike>(lines: readon
   const kept = branches.filter((b) => b.length > 0);
   return kept.length ? kept : [[]];
 }
+
+/** How many models of one profile a unit may be built with. */
+export interface ProfileBounds {
+  profileId: string;
+  name: string;
+  min: number;
+  max: number;
+}
+
+/** A name as a key that ignores how the sources pluralise it. */
+const fold = (s: string): string =>
+  s
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w.length > 3 ? w.replace(/[sz]$/, "") : w))
+    .join(" ");
+
+/**
+ * What each way of building the unit says about its models, profile by profile.
+ *
+ * The composition names the models and counts them — "1 Ravener Prime", "4 Raveners" — where the
+ * datasheet's profiles carry their stats. Read together they say a unit may hold one Prime and no
+ * more, which a bare model count cannot.
+ *
+ * A branch whose parts do not all name a profile is left out: the reader would be checking a unit
+ * against a rule it had only half read. So is a branch that names a single profile, which the model
+ * count already covers.
+ */
+export function profileBounds(ds: { composition: Array<CompositionLineLike>; models: ReadonlyArray<{ id: string; name: string }> }): ProfileBounds[][] {
+  const out: ProfileBounds[][] = [];
+  for (const branch of compositionBranches(ds.composition)) {
+    const want = new Map<string, ProfileBounds>();
+    let whole = true;
+    for (const line of branch) {
+      for (const part of compositionParts(line.description ?? "")) {
+        const key = fold(part.name);
+        const profile = ds.models.find((m) => fold(m.name) === key);
+        if (!profile) {
+          whole = false;
+          break;
+        }
+        const held = want.get(profile.id);
+        if (held) {
+          held.min += part.min;
+          held.max += part.max;
+        } else want.set(profile.id, { profileId: profile.id, name: profile.name, min: part.min, max: part.max });
+      }
+      if (!whole) break;
+    }
+    if (whole && want.size > 1) out.push([...want.values()]);
+  }
+  return out;
+}

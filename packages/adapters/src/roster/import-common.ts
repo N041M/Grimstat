@@ -1,6 +1,6 @@
 import type { Datasheet, Detachment, Enhancement, Faction, ModelProfile, Roster, RosterDetachment, RosterUnit, Snapshot } from "@grimstat/schema";
 import { normaliseName } from "@grimstat/snapshot";
-import { compositionBranches } from "@grimstat/resolver";
+import { compositionBranches, profileBounds } from "@grimstat/resolver";
 
 /** Battle-size labels as written by the GW app, New Recruit and BattleScribe. */
 export const SIZE_BY_LABEL: Record<string, Roster["battleSize"]> = { "combat patrol": "combat-patrol", incursion: "incursion", "strike force": "strike-force", onslaught: "onslaught" };
@@ -405,20 +405,53 @@ export function defaultGroups(ds: Datasheet): RosterUnit["models"] {
 }
 
 /**
- * Spreads `total` models over a datasheet's profiles the way a unit is actually built: one of each leading
- * profile (the sergeant, the gunner) and every remaining model on the last. Used when a list names the unit
- * size but not the profiles ("5x Warden Squad"), where the alternative — every model on `models[0]` — gives a
- * squad of five sergeants.
+ * Spreads `total` models over a datasheet's profiles, as a unit of that size is actually built. Used
+ * when a list names the unit size but not the profiles ("5x Warden Squad"), where every model on
+ * `models[0]` would give a squad of five sergeants.
+ *
+ * The composition is asked first, because it says which models a unit of this size holds: each
+ * profile takes the fewest it may have, and what is left goes to the one with the most room. A
+ * squad of Shadow Spectres, whose exarch is printed first and capped at one, came out as four
+ * exarchs and one spectre without it.
+ *
+ * Where the composition does not name the profiles, the old shape stands: one of each leading
+ * profile and the rest on the last.
  */
 export function profileGroups(ds: Datasheet, total: number): RosterUnit["models"] {
+  const size = Math.max(1, total);
+  const byComposition = spreadByComposition(ds, size);
+  if (byComposition) return byComposition;
   const out: RosterUnit["models"] = [];
-  let remaining = Math.max(1, total);
+  let remaining = size;
   for (let i = 0; i < ds.models.length - 1 && remaining > 1; i++) {
     out.push({ modelProfileId: ds.models[i]!.id, count: 1, wargear: [] });
     remaining -= 1;
   }
   out.push({ modelProfileId: ds.models[Math.min(out.length, ds.models.length - 1)]!.id, count: remaining, wargear: [] });
   return out;
+}
+
+/** The way of building the unit that holds `size` models, with each profile at its own smallest. */
+function spreadByComposition(ds: Datasheet, size: number): RosterUnit["models"] | undefined {
+  for (const way of profileBounds(ds)) {
+    const floor = way.reduce((n, p) => n + p.min, 0);
+    const ceiling = way.reduce((n, p) => n + p.max, 0);
+    if (size < floor || size > ceiling) continue;
+    const counts = new Map(way.map((p) => [p.profileId, p.min] as const));
+    let spare = size - floor;
+    // The profile with the most room takes the models the minimums leave over, and then the next.
+    for (const p of [...way].sort((a, b) => b.max - b.min - (a.max - a.min))) {
+      if (spare <= 0) break;
+      const take = Math.min(spare, p.max - p.min);
+      counts.set(p.profileId, (counts.get(p.profileId) ?? 0) + take);
+      spare -= take;
+    }
+    return ds.models.flatMap((m) => {
+      const count = counts.get(m.id) ?? 0;
+      return count > 0 ? [{ modelProfileId: m.id, count, wargear: [] }] : [];
+    });
+  }
+  return undefined;
 }
 
 /**

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Roster, Snapshot } from "@grimstat/schema";
 import { createContext, validateRoster } from "@grimstat/resolver";
-import { constraints11e, compositionBounds } from "./constraints";
+import { constraints11e } from "./constraints";
+import { compositionBounds } from "./composition";
 
 const now = new Date().toISOString();
 const model = { id: "m", name: "Trooper", T: 4, Sv: 3, W: 2 };
@@ -104,6 +105,60 @@ describe("11e constraints", () => {
   it("a legal roster has no errors", () => {
     expect(codes(roster())).toEqual([]);
   });
+  /**
+   * The weapons check lives in `loadout.ts` and was only ever shown beside the calculator, so an
+   * army could carry a loadout its datasheet does not offer and the army checks said nothing.
+   */
+  it("reports a unit carrying weapons its datasheet does not offer", () => {
+    const sheet = {
+      ...snapshot.data.datasheets.find((d) => d.id === "tank")!,
+      id: "walker",
+      name: "Test Walker",
+      loadout: "This model is equipped with: heavy gun; claws.",
+      wargearOptions: ["This model's heavy gun can be replaced with 1 flamer."],
+      weapons: [
+        { id: "w1", name: "Heavy gun", kind: "ranged" as const, range: 24, A: "2", skill: 3, S: 6, AP: 1, D: "2", keywords: [] },
+        { id: "w2", name: "Flamer", kind: "ranged" as const, range: 12, A: "D6", skill: null, S: 4, AP: 0, D: "1", keywords: [] },
+        { id: "w3", name: "Claws", kind: "melee" as const, range: null, A: "4", skill: 3, S: 7, AP: 2, D: "2", keywords: [] },
+      ],
+    };
+    const snap = { ...snapshot, data: { ...snapshot.data, datasheets: [...snapshot.data.datasheets, sheet] } };
+    const withWargear = (wargear: string[]): Roster => ({ ...roster(), units: [{ id: "w", datasheetId: "walker", models: [{ modelProfileId: "tk", count: 1, wargear }], isWarlord: false }] });
+    const swapped = validateRoster(withWargear(["Flamer", "Claws"]), snap, [constraints11e]).map((d) => d.code);
+    expect(swapped).not.toContain("units.wargear");
+    const both = validateRoster(withWargear(["Heavy gun", "Flamer", "Claws"]), snap, [constraints11e]).filter((d) => d.code === "units.wargear");
+    expect(both).toHaveLength(1);
+    expect(both[0]!.message).toContain("Flamer");
+  });
+
+  /**
+   * A model count on its own cannot say a squad may hold one sergeant: five sergeants and no
+   * troopers is five models, which is what a squad of five is.
+   */
+  it("reports a unit built from the wrong models, once its size is right", () => {
+    const sheet = {
+      ...snapshot.data.datasheets.find((d) => d.id === "squad")!,
+      id: "mixed",
+      name: "Test Mixed Squad",
+      models: [
+        { id: "sgt", name: "Sergeant", T: 4, Sv: 3, W: 2 },
+        { id: "trooper", name: "Trooper", T: 4, Sv: 4, W: 1 },
+      ],
+      composition: [
+        { description: "1 Sergeant", min: 1, max: 1 },
+        { description: "4-9 Troopers", min: 4, max: 9 },
+      ],
+    };
+    const snap = { ...snapshot, data: { ...snapshot.data, datasheets: [...snapshot.data.datasheets, sheet] } };
+    const built = (models: Array<{ modelProfileId: string; count: number }>): Roster => ({ ...roster(), units: [{ id: "m", datasheetId: "mixed", models: models.map((m) => ({ ...m, wargear: [] })), isWarlord: false }] });
+    expect(validateRoster(built([{ modelProfileId: "sgt", count: 1 }, { modelProfileId: "trooper", count: 4 }]), snap, [constraints11e]).map((d) => d.code)).not.toContain("units.models");
+    const wrong = validateRoster(built([{ modelProfileId: "sgt", count: 5 }]), snap, [constraints11e]).filter((d) => d.code === "units.models");
+    expect(wrong.map((d) => d.message)).toEqual(["Test Mixed Squad has 5 Sergeant; the unit takes 1.", "Test Mixed Squad has 0 Trooper; the unit takes 4 to 9."]);
+    // A unit of the wrong size is reported as one, and not again model by model.
+    expect(validateRoster(built([{ modelProfileId: "sgt", count: 2 }]), snap, [constraints11e]).map((d) => d.code)).toEqual(expect.arrayContaining(["units.size"]));
+    expect(validateRoster(built([{ modelProfileId: "sgt", count: 2 }]), snap, [constraints11e]).map((d) => d.code)).not.toContain("units.models");
+  });
+
   it("points limit", () => {
     expect(codes(roster({ pointsLimit: 100 }))).toContain("points.limit");
   });

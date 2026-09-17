@@ -294,6 +294,32 @@ describe("text import edge cases", () => {
     expect(r.units[0]!.models.reduce((n, g) => n + g.count, 0)).toBe(10);
   });
 
+  /**
+   * A list that names the unit size and not the models leaves the app to place them. Taking the
+   * profiles in printed order gave a squad of Shadow Spectres four exarchs and one spectre, since
+   * the exarch is printed first and the composition caps it at one.
+   */
+  it("spreads a unit over its profiles the way the composition counts them", () => {
+    const squad = snapshot.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;
+    const capped = {
+      ...squad,
+      models: [squad.models.find((m) => m.name === "Warden Sergeant")!, squad.models.find((m) => m.name === "Warden")!],
+      composition: [
+        { description: "1 Warden Sergeant", min: 1, max: 1 },
+        { description: "4-9 Wardens", min: 4, max: 9 },
+      ],
+    };
+    const snap = { ...snapshot, data: { ...snapshot.data, datasheets: snapshot.data.datasheets.map((d) => (d.id === squad.id ? capped : d)) } };
+    const { roster: r } = importRosterText(["Ashen Wardens", "Ember Vanguard", "6x Warden Squad (180 points)"].join("\n"), snap);
+    expect(r.units[0]!.models.map((g) => `${g.count}x${g.modelProfileId.split(":").pop()}`)).toEqual(["1xwarden-sergeant", "5xwarden"]);
+
+    // A profile the composition makes optional takes none of them.
+    const optional = { ...capped, composition: [{ description: "0-1 Warden Sergeant", min: 0, max: 1 }, { description: "5-10 Wardens", min: 5, max: 10 }] };
+    const snap2 = { ...snapshot, data: { ...snapshot.data, datasheets: snapshot.data.datasheets.map((d) => (d.id === squad.id ? optional : d)) } };
+    const { roster: r2 } = importRosterText(["Ashen Wardens", "Ember Vanguard", "6x Warden Squad (180 points)"].join("\n"), snap2);
+    expect(r2.units[0]!.models.map((g) => `${g.count}x${g.modelProfileId.split(":").pop()}`)).toEqual(["6xwarden"]);
+  });
+
   it("splits a wargear entry that joins two weapons with `and`", () => {
     const rest = importLines("Ashen Wardens", "Ember Vanguard", "1x Ashen Crusher (180 points): Fusion beamer and Twin hail gun");
     const bullet = importLines("Ashen Wardens", "Ember Vanguard", "Ashen Crusher (180 points)", "• 1x Fusion beamer and Twin hail gun");
