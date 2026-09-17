@@ -259,6 +259,20 @@ describe("text import edge cases", () => {
     expect(r.units[0]!.models.map((g) => `${g.count}x${g.modelProfileId}`)).toEqual(["1xmp:ashen-wardens:warden-squad:warden-sergeant", "9xmp:ashen-wardens:warden-squad:warden"]);
   });
 
+  /**
+   * One profile can stand for two kinds of model — "Combat Servitors and Gun Servitors" — and a list
+   * writes them a line each, sometimes with the weapon that tells them apart on the same line.
+   */
+  it("reads a model line that names one side of a compound profile, with its weapon", () => {
+    const squad = snapshot.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;
+    const renamed = { ...squad, models: squad.models.map((m) => (m.name === "Warden" ? { ...m, name: "Wardens and Gunners" } : m)) };
+    const snap = { ...snapshot, data: { ...snapshot.data, datasheets: snapshot.data.datasheets.map((d) => (d.id === squad.id ? renamed : d)) } };
+    const { roster: r, warnings } = importRosterText(["Ashen Wardens", "Ember Vanguard", "Warden Squad (180 points)", "• 1x Warden Sergeant", "• 8x Warden", "• 1x Gunner with Shock maul"].join("\n"), snap);
+    expect(warnings).toEqual([]);
+    const groups = r.units[0]!.models.map((g) => `${g.count}x${g.modelProfileId}:${g.wargear.join("+")}`);
+    expect(groups).toEqual(["1xmp:ashen-wardens:warden-squad:warden-sergeant:", "8xmp:ashen-wardens:warden-squad:warden:", "1xmp:ashen-wardens:warden-squad:warden:Shock maul"]);
+  });
+
   it("splits a wargear entry that joins two weapons with `and`", () => {
     const rest = importLines("Ashen Wardens", "Ember Vanguard", "1x Ashen Crusher (180 points): Fusion beamer and Twin hail gun");
     const bullet = importLines("Ashen Wardens", "Ember Vanguard", "Ashen Crusher (180 points)", "• 1x Fusion beamer and Twin hail gun");

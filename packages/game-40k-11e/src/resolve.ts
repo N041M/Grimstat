@@ -89,6 +89,13 @@ export interface ParsedLoadout {
    * Absent for the weapons it names singly, which is most of them.
    */
   copies: Record<string, number>;
+  /**
+   * How many models carry a weapon, where the prose hands it to a kind of model the datasheet has no
+   * profile for: "1 Gun Servitor is equipped with: heavy arc rifle", "Every Combat Servitor is
+   * equipped with: phosphor blaster". The number is the one the sentence gives, or the one the unit
+   * composition gives that kind.
+   */
+  carriers: Record<string, number>;
 }
 
 const strip = (s: string) => s.replace(/^(?:an?|one|\d+x?|the)\s+/i, "").trim();
@@ -96,13 +103,41 @@ const strip = (s: string) => s.replace(/^(?:an?|one|\d+x?|the)\s+/i, "").trim();
 /** The count a loadout item opens with: "3 dark lances", "2x twin pulse carbine". */
 const ITEM_COUNT = /^(\d+)\s*x?\s+/i;
 
+/** A name without its plural, so "Gun Servitors" and "Gun Servitor" are one kind. */
+const singular = (s: string): string =>
+  s
+    .split(" ")
+    .map((w) => (w.length > 3 ? w.replace(/[sz]$/, "") : w))
+    .join(" ");
+
+/**
+ * How many models a loadout sentence is about, when its subject is a kind of model rather than one
+ * of the datasheet's profiles.
+ *
+ * The sentence says so itself where it can — "1 Gun Servitor is equipped with…" — and otherwise the
+ * unit composition does: "6 Combat Servitors". Nothing else counts them, so a subject neither names
+ * is left to the caller.
+ */
+function subjectCount(ds: Datasheet, subject: string): number | undefined {
+  const own = /^(\d+)\s+(.*)$/.exec(subject);
+  if (own) return Number(own[1]);
+  const want = singular(subject.trim());
+  if (!want) return undefined;
+  for (const line of ds.composition) {
+    const m = /^\s*(\d+)\s+(.+?)\s*$/.exec(line.description);
+    if (!m) continue;
+    if (singular(m[2]!.toLowerCase().replace(/\bmodels?\b\s*$/, "").trim()) === want) return Number(m[1]);
+  }
+  return undefined;
+}
+
 /**
  * Parse default-loadout prose such as
  *   "Every model is equipped with: flux carbine; shock maul.\nThe Warden Sergeant is also equipped with a power fist."
  * into weapons for every model and weapons for a specific profile. Option/replacement text is ignored.
  */
 export function parseLoadout(ds: Datasheet): ParsedLoadout {
-  const out: ParsedLoadout = { all: [], byProfile: {}, copies: {} };
+  const out: ParsedLoadout = { all: [], byProfile: {}, copies: {}, carriers: {} };
   const text = ds.loadout ?? "";
   if (!text) return out;
   const bases = [...new Set(ds.weapons.map((w) => baseWeaponName(w.name).toLowerCase()).filter(Boolean))];
@@ -152,9 +187,24 @@ export function parseLoadout(ds: Datasheet): ParsedLoadout {
       for (const i of items) if (!out.all.includes(i)) out.all.push(i);
       continue;
     }
-    const profile = profiles.find((p) => p === subject || p.includes(subject) || subject.includes(p));
-    if (profile) out.byProfile[profile] = [...new Set([...(out.byProfile[profile] ?? []), ...items])];
-    else for (const i of items) if (!out.all.includes(i)) out.all.push(i);
+    // A profile that names two kinds of model at once — "Combat Servitors and Gun Servitors" — is not
+    // named by a sentence about one of them. Those weapons belong to that kind, and how many models
+    // it has is counted below rather than handed to the whole profile.
+    const profile = profiles.find((p) => p === subject || subject.includes(p) || (p.includes(subject) && !/\s+and\s+/.test(p)));
+    if (profile) {
+      out.byProfile[profile] = [...new Set([...(out.byProfile[profile] ?? []), ...items])];
+      continue;
+    }
+    // A subject the datasheet has no profile for is a kind of model inside the unit: "1 Gun Servitor",
+    // "Every Combat Servitor". How many of them there are is written either in the sentence or in the
+    // unit composition, and only when neither says do the weapons go to every model — which handed a
+    // nine-model Servitor Battleclade nine heavy arc rifles for the one it has.
+    const carriers = subjectCount(ds, subject);
+    if (carriers === undefined) {
+      for (const i of items) if (!out.all.includes(i)) out.all.push(i);
+      continue;
+    }
+    for (const i of items) out.carriers[i] = (out.carriers[i] ?? 0) + carriers;
   }
   // no recognisable clause: fall back to a plain substring match over the whole text
   if (!out.all.length && !Object.keys(out.byProfile).length) {
@@ -164,9 +214,9 @@ export function parseLoadout(ds: Datasheet): ParsedLoadout {
   return out;
 }
 
-/** Weapon base names mentioned in the datasheet's default loadout (lower-case), across all profiles. */
+/** Weapon base names the datasheet's default loadout mentions (lower-case), however it names them. */
 function defaultWeaponNames(p: ParsedLoadout): Set<string> {
-  return new Set([...p.all, ...Object.values(p.byProfile).flat()]);
+  return new Set([...p.all, ...Object.values(p.byProfile).flat(), ...Object.keys(p.carriers)]);
 }
 
 /**
@@ -185,7 +235,12 @@ function defaultWeaponCount(p: ParsedLoadout, base: string, modelCount: number, 
     const g = groups.find((m) => m.name.toLowerCase() === profile);
     n += g ? g.count : 1;
   }
-  return (n || modelCount) * copies;
+  if (n) return n * copies;
+  // A weapon the prose gives to a kind of model rather than to a profile: as many as there are of
+  // that kind, whatever the unit's own size.
+  const carriers = p.carriers[base];
+  if (carriers) return Math.min(carriers, modelCount) * copies;
+  return modelCount * copies;
 }
 
 const scenarioModel = (p: ModelProfile, count: number, isCharacter: boolean): ScenarioModel => ({ name: p.name, count, T: p.T, Sv: p.Sv, InvSv: p.InvSv ?? null, W: p.W, fnp: null, isCharacter, keywords: [] });

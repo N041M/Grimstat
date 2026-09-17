@@ -415,8 +415,14 @@ export function wargearItems(ds: Datasheet): string[] {
 export function omittedDefaults(ds: Datasheet, groups: readonly RosterModelGroup[]): Map<string, number> {
   const out = new Map<string, number>();
   const parsed = parseLoadout(ds);
-  if (!parsed.all.length && !Object.keys(parsed.byProfile).length) return out;
+  if (!parsed.all.length && !Object.keys(parsed.byProfile).length && !Object.keys(parsed.carriers).length) return out;
   const reading = readWargearOptions(ds);
+  // What the unit holds in total, in weapons, for the kinds counted per unit rather than per model.
+  const heldByUnit = new Map<string, number>();
+  const displacedModels = new Map<string, number>();
+  // What counts as a surplus copy is what the datasheet prints: a Ravager listed with three dark
+  // lances is holding the three it came with, not one it swapped for.
+  const printed = (base: string): number => parsed.copies[base] ?? 1;
   for (const g of groups) {
     const profile = ds.models.find((m) => m.id === g.modelProfileId)?.name.toLowerCase();
     const defaults = [...new Set([...parsed.all, ...(profile ? parsed.byProfile[profile] ?? [] : [])])];
@@ -424,18 +430,29 @@ export function omittedDefaults(ds: Datasheet, groups: readonly RosterModelGroup
     for (const item of g.wargear) {
       const k = key(baseWeaponName(item));
       held.set(k, (held.get(k) ?? 0) + 1);
+      heldByUnit.set(k, (heldByUnit.get(k) ?? 0) + g.count);
     }
     const byDefault = new Set(defaults.map(key));
-    // What counts as a surplus copy is what the datasheet prints: a Ravager listed with three dark
-    // lances is holding the three it came with, not one it swapped for.
-    const printed = (base: string): number => parsed.copies[base] ?? 1;
     const displaced = (base: string): boolean =>
       reading.options.some((o) => o.replaces.includes(base) && o.grants.some((granted) => (held.get(granted) ?? 0) > (byDefault.has(granted) ? printed(granted) : 0)));
+    for (const base of Object.keys(parsed.carriers)) if (displaced(base)) displacedModels.set(base, (displacedModels.get(base) ?? 0) + g.count);
     for (const d of defaults) {
       const k = key(d);
       if (held.has(k) || displaced(k)) continue;
       out.set(d, (out.get(d) ?? 0) + g.count * printed(k));
     }
+  }
+
+  /*
+   * A weapon the prose gives to a kind of model the datasheet has no profile for — "1 Gun Servitor
+   * is equipped with: heavy arc rifle" — belongs to that many models of the unit however the list
+   * writes its groups, so what is missing is counted once against the unit rather than group by
+   * group. Models that swapped the weapon away are taken off the total the same way.
+   */
+  for (const [base, carriers] of Object.entries(parsed.carriers)) {
+    const want = carriers * printed(base) - (displacedModels.get(base) ?? 0);
+    const missing = want - (heldByUnit.get(base) ?? 0);
+    if (missing > 0) out.set(base, (out.get(base) ?? 0) + missing);
   }
   return out;
 }
@@ -640,7 +657,7 @@ function slotProblem(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading)
   if (models !== 1 || !reading.complete || !reading.lines.length) return undefined;
 
   const parsed = parseLoadout(ds);
-  const printed = new Set([...parsed.all, ...Object.values(parsed.byProfile).flat()].map(key));
+  const printed = new Set([...parsed.all, ...Object.values(parsed.byProfile).flat(), ...Object.keys(parsed.carriers)].map(key));
   const held = carried(unit);
   const extras = new Map<string, number>();
   const swapped: string[] = [];
@@ -681,7 +698,7 @@ function problemsFor(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading)
 
   const bases = new Set(ds.weapons.map((w) => key(baseWeaponName(w.name))));
   const defaults = parseLoadout(ds);
-  const inLoadout = new Set([...defaults.all, ...Object.values(defaults.byProfile).flat()].map(key));
+  const inLoadout = new Set([...defaults.all, ...Object.values(defaults.byProfile).flat(), ...Object.keys(defaults.carriers)].map(key));
 
   for (const [base, { count, name }] of carried(unit)) {
     if (!bases.has(base)) {

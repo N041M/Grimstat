@@ -1102,7 +1102,13 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       }
       // A weapon first. `profileFor` matches by prefix, so "10x Hormagaunt talons" would otherwise
       // read as ten more Hormagaunts — a second model group, the weapon gone, and no warning.
-      if (!isWeaponOf(st.cur.u.ds, normaliseName(body)) && addModelLine(st.cur, body, count, [])) continue;
+      if (!isWeaponOf(st.cur.u.ds, normaliseName(body))) {
+        if (addModelLine(st.cur, body, count, [])) continue;
+        // "1x Gun Servitor with Arc Rifle": the model and the weapon that tells it from its fellows,
+        // on the line the other dialects write as "1 Custodian Guard with guardian spear".
+        const withCut = firstWith(body);
+        if (withCut && addModelLine(st.cur, withCut.label, count, parseWargearItems(withCut.wargear))) continue;
+      }
       addWargear(st.sub ?? st.cur, body, count);
       continue;
     }

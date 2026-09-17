@@ -151,6 +151,36 @@ describe("a weapon the prose does not name", () => {
   });
 });
 
+describe("a weapon the prose gives to a kind of model", () => {
+  /**
+   * A datasheet can carry one profile for models the prose talks about separately: a Servitor
+   * Battleclade's second profile is "Combat Servitors and Gun Servitors", and its loadout hands a
+   * heavy arc rifle to one Gun Servitor. Read as a sentence about every model, a nine-model unit
+   * fielded nine of them.
+   */
+  it("is carried by as many models as the sentence says", () => {
+    const ds = withLoadout("Every model is equipped with: flux carbine.\n\n1 Ember Gunner is equipped with: plasma gun.", ["Flux carbine", "Plasma gun", "Shock maul"]);
+    expect(parseLoadout(ds).carriers).toEqual({ "plasma gun": 1 });
+    const by = Object.fromEntries(unitFromDatasheet(ds, snapshot, { modelCount: 5 }).weapons.map((w) => [w.name, w]));
+    expect(by["Flux carbine"]!.count).toBe(5);
+    expect(by["Plasma gun"]!.count).toBe(1);
+    expect(by["Plasma gun"]!.enabled).toBe(true);
+  });
+
+  it("is carried by as many as the unit composition gives that kind", () => {
+    const base = withLoadout("Every model is equipped with: flux carbine.\n\nEvery Ember Gunner is equipped with: plasma gun.", ["Flux carbine", "Plasma gun", "Shock maul"]);
+    const ds = { ...base, composition: [{ description: "5 Wardens", min: 5, max: 10 }, { description: "2 Ember Gunners" }] };
+    expect(parseLoadout(ds).carriers).toEqual({ "plasma gun": 2 });
+    expect(Object.fromEntries(unitFromDatasheet(ds, snapshot, { modelCount: 5 }).weapons.map((w) => [w.name, w]))["Plasma gun"]!.count).toBe(2);
+  });
+
+  it("goes to every model when neither the sentence nor the composition counts them", () => {
+    const ds = withLoadout("Every model is equipped with: flux carbine.\n\nEvery Ember Gunner is equipped with: plasma gun.", ["Flux carbine", "Plasma gun", "Shock maul"]);
+    expect(parseLoadout(ds).carriers).toEqual({});
+    expect(parseLoadout(ds).all).toEqual(["flux carbine", "plasma gun"]);
+  });
+});
+
 describe("which weapon a loadout item names", () => {
   it("takes the name as written over the longer names that contain it", () => {
     const ds = withLoadout("Every model is equipped with: flux carbine; shock maul.", ["Flux carbine", "Heavy flux carbine", "Twin flux carbine", "Shock maul"]);

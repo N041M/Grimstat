@@ -266,6 +266,18 @@ export class RosterImportContext {
       .filter((x) => key.startsWith(`${x.k} `) || key.endsWith(` ${x.k}`) || x.k.endsWith(` ${key}`))
       .sort((a, b) => b.k.length - a.k.length);
     if (scored[0]) return scored[0].m;
+    // One profile can cover two kinds of model at once — "Combat Servitors and Gun Servitors" — and
+    // a list writes them a line each. Either side of the "and" names the profile, in the singular as
+    // well, since the profile is written in the plural and the line is written per model.
+    const singular = singularKey(key);
+    const compound = ds.models.find((m) =>
+      normaliseName(m.name)
+        .split(/\s+and\s+/)
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+        .some((part, _i, all) => all.length > 1 && (part === key || singularKey(part) === singular)),
+    );
+    if (compound) return compound;
     // The rank and file of an 11th-edition squad is the profile named after the datasheet —
     // "Infiltrator Squad" beside "Infiltrator Sergeant" — and the lists write it as "4x Infiltrator".
     // A label the profile names begin with belongs to that one, and to the shortest of them
