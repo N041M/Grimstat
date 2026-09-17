@@ -162,6 +162,43 @@ describe("checking a unit against its datasheet", () => {
     expect(check.problems[0]!.message).toContain("allow 2");
   });
 
+  /**
+   * A walker with a gun on each mount and a line for each mount is offered two of the same weapon,
+   * one line at a time. Reading only the larger of the two lines called the second one illegal, and
+   * the loadout the datasheet plainly offers could not be built.
+   */
+  it("adds up the lines that grant the same weapon", () => {
+    const options = ["This model's flux carbine can be replaced with 1 ember lance.", "This model's shock maul can be replaced with 1 ember lance."];
+    const ds = sheet({ options, loadout: "This model is equipped with: flux carbine; shock maul.", composition: [{ description: "1 Warden", min: 1, max: 1 }] });
+    expect(checkLoadout(ds, withWeapon(ds, 1, "Ember lance", 2)).problems).toEqual([]);
+    const over = checkLoadout(ds, withWeapon(ds, 1, "Ember lance", 3));
+    expect(over.problems.map((p) => p.code)).toEqual(["weapon.overLimit"]);
+    expect(over.problems[0]!.message).toContain("allow 2");
+    // No one line set that limit, so none is quoted as the rule it broke.
+    expect(over.problems[0]!.rule).toBeUndefined();
+  });
+
+  it("reads an allowance written after the subject", () => {
+    const ds = sheet({ options: ["This model can be equipped with up to 2 ember lances."], composition: [{ description: "1 Warden", min: 1, max: 1 }] });
+    expect(checkLoadout(ds, withWeapon(ds, 1, "Ember lance", 2)).problems).toEqual([]);
+    expect(checkLoadout(ds, withWeapon(ds, 1, "Ember lance", 3)).problems.map((p) => p.code)).toEqual(["weapon.overLimit"]);
+  });
+
+  it("withholds the over-limit report when an unread line names that weapon", () => {
+    const ds = sheet({
+      options: [
+        "Up to 1 Warden can have their flux carbine replaced with 1 ember lance.",
+        "Up to 1 Warden can have their flux carbine replaced with 1 shock maul.",
+        "* A Warden nominated by the sergeant may carry a second ember lance.",
+      ],
+    });
+    const lances = checkLoadout(ds, withWeapon(ds, 10, "Ember lance", 2));
+    expect(lances.unread).toHaveLength(1);
+    expect(lances.problems).toEqual([]);
+    // The same unread line says nothing about the shock maul, so that count is still checked.
+    expect(checkLoadout(ds, withWeapon(ds, 10, "Shock maul", 4)).problems.map((p) => p.code)).toEqual(["weapon.overLimit"]);
+  });
+
   it("accepts a count inside the allowance", () => {
     const ds = sheet({ options: ["Up to 2 Wardens can each have their flux carbine replaced with 1 ember lance."] });
     expect(checkLoadout(ds, withWeapon(ds, 10, "Ember lance", 2)).problems).toEqual([]);

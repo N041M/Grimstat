@@ -174,6 +174,15 @@ function allowance(line: string): ((models: number) => number) | undefined {
     if (n !== undefined) return () => n;
   }
 
+  // "This model can be equipped with up to 2 seeker missiles": the same allowance as "up to 2 X",
+  // written after the subject rather than at the head of the line. Read before the subject rules
+  // below, which would otherwise take the model for the allowance and hand it 1.
+  const inline = new RegExp(`\\bup to ${NUM}\\b`, "i").exec(s);
+  if (inline) {
+    const n = toNumber(inline[1]);
+    if (n !== undefined) return () => n;
+  }
+
   // "This model …", "The Sister Superior's boltgun …", "One Celestian Insidiant's …"
   if (/^(?:this model|the |one )/.test(s)) return () => 1;
 
@@ -427,6 +436,23 @@ export function checkLoadout(ds: Datasheet, unit: ScenarioUnit, opts: CheckLoado
   return { problems: kept, unread: reading.unread, read: reading.options.length, complete: reading.complete && (reading.options.length > 0 || reading.fixed) };
 }
 
+/**
+ * The most of one weapon the options allow, and the lines that allow it.
+ *
+ * Lines add up. A walker whose left mount and whose right mount may each be swapped for a rocket
+ * launcher is offered two of them, one line at a time, and reading only the larger of the two lines
+ * called the second one illegal. Each line is counted once at its own allowance: the reader files an
+ * option per weapon a line grants, so a line offering a choice of three weapons arrives here three
+ * times, and its allowance is the allowance of that one line however the choice went.
+ */
+function allowanceFor(granting: readonly WargearOption[], models: number): { allowed: number; lines: string[] } {
+  const perLine = new Map<string, number>();
+  for (const o of granting) perLine.set(o.text, Math.max(perLine.get(o.text) ?? 0, o.limit(models)));
+  let allowed = 0;
+  for (const n of perLine.values()) allowed += n;
+  return { allowed, lines: [...perLine.keys()] };
+}
+
 function problemsFor(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading): LoadoutProblem[] {
   const problems: LoadoutProblem[] = [];
   const models = modelsOf(unit);
@@ -445,12 +471,18 @@ function problemsFor(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading)
     }
     if (inLoadout.has(base)) continue;
 
+    // A line the parser could not read may be another grant of this weapon, and what it allows is
+    // unknown. The contract elsewhere in this file is to say so rather than to assume, so a count an
+    // unread line naming the weapon might allow is not called illegal.
+    if (reading.unread.some((line) => key(line).includes(base))) continue;
+
     const granting = reading.options.filter((o) => o.grants.includes(base));
     if (granting.length) {
-      // Several lines can grant the same weapon; the unit may take the best of them.
-      const allowed = Math.max(...granting.map((o) => o.limit(models)));
+      const { allowed, lines } = allowanceFor(granting, models);
       if (count > allowed) {
-        const rule = granting.find((o) => o.limit(models) === allowed)?.text;
+        // A single line's allowance is the rule that was broken and worth quoting. Where several
+        // lines add up to it, no one of them is.
+        const rule = lines.length === 1 ? lines[0] : undefined;
         problems.push({ severity: "error", code: "weapon.overLimit", weapon: name, count, ...(rule ? { rule } : {}), message: `${plural(count, name.toLowerCase())}; the options allow ${allowed === UNLIMITED ? "any number" : allowed}.` });
       }
       continue;
