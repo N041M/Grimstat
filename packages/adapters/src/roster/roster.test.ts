@@ -273,6 +273,27 @@ describe("text import edge cases", () => {
     expect(groups).toEqual(["1xmp:ashen-wardens:warden-squad:warden-sergeant:", "8xmp:ashen-wardens:warden-squad:warden:", "1xmp:ashen-wardens:warden-squad:warden:Shock maul"]);
   });
 
+  /**
+   * A header that carries wargear says what the unit holds, not which models it is made of, and the
+   * lines under it may still name them. Counting both gave the unit twice its size: five Incubi
+   * written over a Klaivex and four Incubi came out as ten models and twice the points.
+   */
+  it("does not count the header's models twice when the lines name them", () => {
+    const { roster: r, warnings } = importLines("Ashen Wardens", "Ember Vanguard", "5x Warden Squad (90 pts): Shock maul", "• 1x Warden Sergeant", "• 4x Warden");
+    expect(warnings).toEqual([]);
+    expect(r.units[0]!.models.reduce((n, g) => n + g.count, 0)).toBe(5);
+    expect(r.units[0]!.models.map((g) => `${g.count}x${g.modelProfileId.split(":").pop()}`)).toEqual(["1xwarden-sergeant", "4xwarden"]);
+  });
+
+  /**
+   * The other way round: the header counts the unit and the lines account for only some of it. A
+   * squad left a model short is a squad with no points at all, since points are written per size.
+   */
+  it("keeps the models the header counts when the lines leave some out", () => {
+    const { roster: r } = importLines("Ashen Wardens", "Ember Vanguard", "10x Warden Squad (180 pts)", "• 9x Warden");
+    expect(r.units[0]!.models.reduce((n, g) => n + g.count, 0)).toBe(10);
+  });
+
   it("splits a wargear entry that joins two weapons with `and`", () => {
     const rest = importLines("Ashen Wardens", "Ember Vanguard", "1x Ashen Crusher (180 points): Fusion beamer and Twin hail gun");
     const bullet = importLines("Ashen Wardens", "Ember Vanguard", "Ashen Crusher (180 points)", "• 1x Fusion beamer and Twin hail gun");

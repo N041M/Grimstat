@@ -949,7 +949,11 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       const gear = splitOutsideParens(groupsPart).filter((seg) => !applyFlag(t, seg));
       const gearText = gear.join(", ");
       const items = parseWargearItems(gearText);
-      if (items.length) t.groups.push({ count: Math.max(1, count ?? withGroupModels(gearText)), items });
+      // The header says what the unit carries, not which models it is made of. Model lines may still
+      // follow — "5x Incubi (90 pts): Incubi Shrine Token" over "1x Klaivex" and "4x Incubi" — and
+      // counting both left the unit twice its size, so this group is the one `finishUnit` folds away
+      // when the lines underneath account for the models themselves.
+      if (items.length) t.groups.push({ count: Math.max(1, count ?? withGroupModels(gearText)), items, implied: true });
     }
     for (const f of flagParts.join(" ").split(/;\s*/)) applyFlag(t, f.trim());
   };
@@ -1181,6 +1185,14 @@ function finishUnit(t: TextUnit, warnings: string[]): void {
   }
   // no groups and no unit size: leave it to `defaultGroups` in the context's build step
   const groups: RawGroup[] = t.groups.length ? t.groups : t.headerCount ? [{ count: t.headerCount, items: [] }] : [];
+  /*
+   * The header counts the unit; the lines under it need not account for every model. A list writes
+   * "10x Tempestus Scions (150 pts)" over a single line for the nine that share a loadout and says
+   * nothing about the tenth. Read as the whole unit, those lines left a squad a model short — which
+   * is a squad with no points, since the points are written per unit size.
+   */
+  const written = groups.reduce((n, g) => n + Math.max(1, g.count), 0);
+  if (t.headerCount && written < t.headerCount) groups.push({ count: t.headerCount - written, items: [] });
   const out: PendingUnit["groups"] = [];
   for (const g of groups) {
     const count = Math.max(1, g.count);
