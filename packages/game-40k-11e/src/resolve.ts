@@ -1,4 +1,4 @@
-import type { Ability, Archetype, AttachedCharacter, CoverageReport, Datasheet, EffectRecord, ManualToggle, PriceRule, PriceTier, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
+import type { Ability, Archetype, AttachedCharacter, CoverageReport, Datasheet, EffectRecord, ManualToggle, ModelProfile, PriceRule, PriceTier, Roster, RosterUnit, Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, Snapshot, WeaponProfile } from "@grimstat/schema";
 import { createContext } from "@grimstat/resolver";
 import { abilityEffects, applyFnpToModels } from "./patterns";
 import { CH } from "./channels";
@@ -188,22 +188,46 @@ function defaultWeaponCount(p: ParsedLoadout, base: string, modelCount: number, 
   return (n || modelCount) * copies;
 }
 
-function modelsFromDatasheet(ds: Datasheet, modelCount: number, isCharacter: boolean): ScenarioModel[] {
+const scenarioModel = (p: ModelProfile, count: number, isCharacter: boolean): ScenarioModel => ({ name: p.name, count, T: p.T, Sv: p.Sv, InvSv: p.InvSv ?? null, W: p.W, fnp: null, isCharacter, keywords: [] });
+
+/**
+ * The models a unit is made of, in profile order.
+ *
+ * A caller that knows which model is which says so. Without that the split is guessed — one of each
+ * profile the datasheet prints first, the rest on the last — which is the shape of most units and
+ * the wrong way round for the rest: a squad of Fire Dragons came out as one Dragon and nine
+ * Exarchs, with the Exarch's wounds and save on nine models that do not have them.
+ *
+ * Groups of the same profile are added together, since two groups differ by what they carry and the
+ * models themselves are the same.
+ */
+function modelsFromDatasheet(ds: Datasheet, modelCount: number, isCharacter: boolean, groups?: ReadonlyArray<{ modelProfileId: string; count: number }>): ScenarioModel[] {
   const profiles = ds.models;
   const out: ScenarioModel[] = [];
   if (isCharacter || profiles.length === 1) {
+    for (const p of profiles) out.push(scenarioModel(p, isCharacter ? 1 : modelCount, isCharacter));
+    return out;
+  }
+
+  const asked = new Map<string, number>();
+  for (const g of groups ?? []) {
+    if (!profiles.some((p) => p.id === g.modelProfileId) || g.count <= 0) continue;
+    asked.set(g.modelProfileId, (asked.get(g.modelProfileId) ?? 0) + g.count);
+  }
+  if (asked.size) {
     for (const p of profiles) {
-      out.push({ name: p.name, count: isCharacter ? 1 : modelCount, T: p.T, Sv: p.Sv, InvSv: p.InvSv ?? null, W: p.W, fnp: null, isCharacter, keywords: [] });
+      const count = asked.get(p.id);
+      if (count) out.push(scenarioModel(p, count, false));
     }
     return out;
   }
-  // multiple profiles (e.g. a sergeant + troopers): one of each leading profile, remainder on the last
+
   let remaining = modelCount;
   profiles.forEach((p, i) => {
     const isLast = i === profiles.length - 1;
     const count = isLast ? Math.max(1, remaining) : 1;
     remaining -= count;
-    out.push({ name: p.name, count, T: p.T, Sv: p.Sv, InvSv: p.InvSv ?? null, W: p.W, fnp: null, isCharacter: false, keywords: [] });
+    out.push(scenarioModel(p, count, false));
   });
   return out;
 }
@@ -211,7 +235,7 @@ function modelsFromDatasheet(ds: Datasheet, modelCount: number, isCharacter: boo
 export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitFromDatasheetOptions = {}): ScenarioUnit {
   const modelCount = Math.max(1, opts.modelCount ?? defaultModelCount(ds));
   const isCharacterSheet = ds.isCharacter && ds.models.length === 1 && !ds.keywords.some((k) => upper(k) === "VEHICLE" || upper(k) === "MONSTER");
-  let models = modelsFromDatasheet(ds, modelCount, isCharacterSheet);
+  let models = modelsFromDatasheet(ds, modelCount, isCharacterSheet, opts.modelGroups);
   const weapons: ScenarioWeapon[] = [];
   const parsed = parseLoadout(ds);
   const defaults = defaultWeaponNames(parsed);
@@ -353,7 +377,7 @@ export function unitFromRosterUnit(unit: RosterUnit, roster: Roster, snapshot: S
   if (!ds) throw new Error(`Unknown datasheet ${unit.datasheetId}`);
   const attached = roster.units.filter((u) => u.attachedTo?.unitId === unit.id);
   const modelCount = unit.models.reduce((s, m) => s + m.count, 0);
-  const base = unitFromDatasheet(ds, snapshot, { modelCount, attachedDatasheetIds: attached.map((a) => a.datasheetId) });
+  const base = unitFromDatasheet(ds, snapshot, { modelCount, modelGroups: unit.models, attachedDatasheetIds: attached.map((a) => a.datasheetId) });
   const attachedSheets = attached.map((a) => ({ entry: a, ds: snapshot.data.datasheets.find((d) => d.id === a.datasheetId) }));
   const prefixes = attachedSheets.flatMap((x) => (x.ds ? [`${x.ds.name}: `] : []));
   let weapons = applyWargearSelection(ds, base.weapons, unit.models, "", prefixes);

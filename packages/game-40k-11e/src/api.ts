@@ -7,6 +7,14 @@ import type { Archetype, CoverageReport, Datasheet, GameSystem, ManualToggle, Pl
 export interface UnitFromDatasheetOptions {
   /** Total models in the unit (defaults to the datasheet's minimum size, or 1). */
   modelCount?: number;
+  /**
+   * How the models are spread over the datasheet's profiles, when the caller knows.
+   *
+   * A roster says which model is which — one sergeant, nine troopers — and without that the split
+   * has to be guessed from the order the profiles are printed in. Ignored where a profile id names
+   * nothing on the datasheet, and `modelCount` still says how large the unit is.
+   */
+  modelGroups?: ReadonlyArray<{ modelProfileId: string; count: number }>;
   /** Characters (datasheet ids) attached to this unit as Leader/Support. */
   attachedDatasheetIds?: string[];
   /** Restrict weapons to these names (defaults to every ranged+melee profile with count = models). */

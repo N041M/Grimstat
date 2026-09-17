@@ -266,6 +266,16 @@ export class RosterImportContext {
       .filter((x) => key.startsWith(`${x.k} `) || key.endsWith(` ${x.k}`) || x.k.endsWith(` ${key}`))
       .sort((a, b) => b.k.length - a.k.length);
     if (scored[0]) return scored[0].m;
+    // The rank and file of an 11th-edition squad is the profile named after the datasheet —
+    // "Infiltrator Squad" beside "Infiltrator Sergeant" — and the lists write it as "4x Infiltrator".
+    // A label the profile names begin with belongs to that one, and to the shortest of them
+    // otherwise, since the plain model is the one with nothing added to its name.
+    const opening = ds.models
+      .map((m) => ({ m, k: normaliseName(m.name) }))
+      .filter((x) => x.k.startsWith(`${key} `))
+      .sort((a, b) => a.k.length - b.k.length);
+    const own = opening.find((x) => x.k === normaliseName(ds.name));
+    if (own ?? opening[0]) return (own ?? opening[0])!.m;
     const want = tokens(label).sort().join(" ");
     return ds.models.find((m) => tokens(m.name).sort().join(" ") === want);
   }

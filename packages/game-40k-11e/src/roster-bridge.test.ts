@@ -40,6 +40,37 @@ describe("unitFromRosterUnit", () => {
   });
 });
 
+describe("which model is which", () => {
+  /**
+   * The roster says who is in the unit — one sergeant, nine troopers — and the resolver used to take
+   * only the total and spread it over the profiles in the order the datasheet prints them. On a
+   * sheet that prints the rank and file first, a squad came out as one trooper and nine sergeants,
+   * carrying the sergeant's wounds and save on nine models that do not have them.
+   */
+  it("follows the roster's model groups", () => {
+    const u = unitFromRosterUnit(roster.units[0]!, roster, snapshot);
+    expect(u.models.map((m) => `${m.count}x ${m.name}`)).toEqual(["1x Warden Sergeant", "9x Warden", "1x Warden Captain"]);
+  });
+
+  it("reads the same unit the other way round when the roster says so", () => {
+    const swapped: Roster = {
+      ...roster,
+      units: roster.units.map((u) => (u.id === "u1" ? { ...u, models: [{ ...u.models[0]!, count: 4 }, { ...u.models[1]!, count: 6 }] } : u)),
+    };
+    const u = unitFromRosterUnit(swapped.units[0]!, swapped, snapshot);
+    expect(u.models.map((m) => `${m.count}x ${m.name}`)).toEqual(["4x Warden Sergeant", "6x Warden", "1x Warden Captain"]);
+  });
+
+  it("falls back to the datasheet's own spread when the groups name no profile it has", () => {
+    const strange: Roster = {
+      ...roster,
+      units: roster.units.map((u) => (u.id === "u1" ? { ...u, models: [{ modelProfileId: "mp:nothing", count: 10, wargear: [] }] } : u)),
+    };
+    const u = unitFromRosterUnit(strange.units[0]!, strange, snapshot);
+    expect(u.models.map((m) => `${m.count}x ${m.name}`)).toEqual(["1x Warden Sergeant", "9x Warden", "1x Warden Captain"]);
+  });
+});
+
 describe("attached characters", () => {
   it("takes the role from the roster rather than guessing it from the sheet", () => {
     const supported: Roster = { ...roster, units: roster.units.map((u) => (u.id === "u2" ? { ...u, attachedTo: { unitId: "u1", role: "support" as const } } : u)) };
