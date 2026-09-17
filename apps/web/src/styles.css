@@ -10808,8 +10808,12 @@ body.play-focused .shell.compact {
     width: max-content;
     min-width: 100%;
   }
+  /* A narrow template, where the tab gives one, states the name column's width in pixels instead of
+     as a share of a table that is wider than the screen. The gap closes up so one more stat fits. */
   .codex-table .gtable-head,
   .codex-table .gtable-row {
+    grid-template-columns: var(--gtable-cols-narrow, var(--gtable-cols));
+    gap: 8px;
     padding-inline: 0;
   }
   .codex-table .gtable-hc:first-child,
@@ -10817,9 +10821,15 @@ body.play-focused .shell.compact {
     position: sticky;
     left: 0;
     z-index: 1;
-    padding: 0 10px 0 14px;
+    padding: 2px 10px 2px 14px;
     background: var(--bg);
     box-shadow: 1px 0 0 var(--line-soft);
+  }
+  /* In a column this narrow a name would be cut after a word or two, so it wraps instead. Height is
+     the cheaper thing to spend on a phone. */
+  .codex-table .gtable-cell:first-child {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .codex-table .gtable-head .gtable-hc:first-child {
     z-index: 3;

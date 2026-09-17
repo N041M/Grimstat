@@ -16,6 +16,15 @@ import { t, tn, type I18nKey } from "../../i18n";
 const PROFILE_COLUMNS = "minmax(160px, 2fr) repeat(7, minmax(48px, 0.6fr))";
 /** Weapon | range | A | skill | S | AP | D | keywords. */
 const WEAPON_COLUMNS = "minmax(180px, 2fr) 62px 52px 52px 44px 50px 58px minmax(180px, 2.4fr)";
+/**
+ * The same tables on a phone, where they scroll sideways under a pinned name column.
+ *
+ * The name column is given a width of its own rather than a share of the table. A share is measured
+ * against the widest row once the table is wider than the screen, so on a unit whose weapons carry
+ * long keyword lists the name column grew past half the screen and pushed the stats out of sight.
+ */
+const PROFILE_COLUMNS_NARROW = "140px repeat(7, minmax(48px, 0.6fr))";
+const WEAPON_COLUMNS_NARROW = "140px 62px 52px 52px 44px 50px 58px minmax(180px, 2.4fr)";
 
 const BUCKET_KEY: Record<AbilityBucket, I18nKey> = { core: "codex.abil.core", faction: "codex.abil.faction", datasheet: "codex.abil.datasheet", wargear: "codex.abil.wargear", other: "codex.abil.other" };
 
@@ -33,7 +42,7 @@ function Section({ title, aside, children, className }: { title: string; aside?:
 function ProfileTable({ ds }: { ds: Datasheet }) {
   return (
     <div className="codex-table">
-      <GridTable columns={PROFILE_COLUMNS} label={t("codex.sec.profile")}>
+      <GridTable columns={PROFILE_COLUMNS} narrowColumns={PROFILE_COLUMNS_NARROW} label={t("codex.sec.profile")}>
         <GridHead>
           <GridHeadCell>{t("codex.col.model")}</GridHeadCell>
           {CHARACTERISTICS.map((c) => (
@@ -71,7 +80,7 @@ function WeaponTable({ kind, groups, snapshot }: { kind: WeaponProfile["kind"]; 
   if (!groups.length) return <p className="stat-note">{t(kind === "ranged" ? "codex.noRanged" : "codex.noMelee")}</p>;
   return (
     <div className="codex-table">
-      <GridTable columns={WEAPON_COLUMNS} label={t(kind === "ranged" ? "codex.sec.ranged" : "codex.sec.melee")}>
+      <GridTable columns={WEAPON_COLUMNS} narrowColumns={WEAPON_COLUMNS_NARROW} label={t(kind === "ranged" ? "codex.sec.ranged" : "codex.sec.melee")}>
         <GridHead>
           <GridHeadCell>{t("codex.col.weapon")}</GridHeadCell>
           <GridHeadCell align="end">{t("codex.col.range")}</GridHeadCell>

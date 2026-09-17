@@ -230,10 +230,17 @@ export function ProportionBar({ value, tone = "ink", height = 11, title }: { val
 
 export type Align = "start" | "end";
 
-/** Grid-based table: one CSS `grid-template-columns` string drives the header and every row. */
-export function GridTable({ columns, label, children, className }: { columns: string; label: string; children: ReactNode; className?: string }) {
+/**
+ * Grid-based table: one CSS `grid-template-columns` string drives the header and every row.
+ *
+ * `narrowColumns` is the template a phone uses instead, for a table wide enough to scroll sideways
+ * there. A `fr` column is sized against the widest cell in the table once the grid is wider than the
+ * screen, so a long column of keywords drags every other flexible column out with it; a narrow
+ * template states the widths a phone should use in pixels.
+ */
+export function GridTable({ columns, narrowColumns, label, children, className }: { columns: string; narrowColumns?: string; label: string; children: ReactNode; className?: string }) {
   return (
-    <div role="table" aria-label={label} className={`gtable ${className ?? ""}`.trim()} style={{ "--gtable-cols": columns } as CSSProperties}>
+    <div role="table" aria-label={label} className={`gtable ${className ?? ""}`.trim()} style={{ "--gtable-cols": columns, ...(narrowColumns ? { "--gtable-cols-narrow": narrowColumns } : {}) } as CSSProperties}>
       {children}
     </div>
   );

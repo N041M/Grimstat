@@ -44,3 +44,20 @@ describe("unit table row actions", () => {
     expect(rule).not.toMatch(/transform:/);
   });
 });
+
+describe("datasheet tables on a phone", () => {
+  /*
+   * The name column used to be a share of the table (`2fr`). Once the table is wider than the screen
+   * that share is measured against the widest row, so on a unit whose weapons carry long keyword
+   * lists the name column grew past half the screen and pushed the stats out of sight. The tab hands
+   * the phone a template of its own instead, and the pinned column wraps rather than truncating.
+   */
+  it("take the narrow column template when the tab gives one", () => {
+    const rule = ruleFor(".codex-table .gtable-head,\n  .codex-table .gtable-row");
+    expect(rule).toMatch(/grid-template-columns:\s*var\(--gtable-cols-narrow,\s*var\(--gtable-cols\)\)/);
+  });
+
+  it("wraps the pinned name column instead of cutting the name", () => {
+    expect(css).toMatch(/\.codex-table \.gtable-cell:first-child \{[^}]*white-space:\s*normal/);
+  });
+});
