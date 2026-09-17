@@ -43,6 +43,22 @@ function withWeapon(ds: Datasheet, models: number, weapon: string, count: number
   return { ...base, weapons: base.weapons.map((w) => (w.name === weapon ? { ...w, enabled: true, count } : w)) };
 }
 
+/** The datasheet's unit holding exactly these weapons, in these numbers. */
+function holding(ds: Datasheet, models: number, counts: Record<string, number>): ScenarioUnit {
+  const base = unitFromDatasheet(ds, snapshot, { modelCount: models });
+  return { ...base, weapons: base.weapons.map((w) => ({ ...w, count: counts[w.name] ?? 0, enabled: (counts[w.name] ?? 0) > 0 })) };
+}
+
+/** A one-model sheet with two guns to swap and a fist that stays. */
+function walker(options: string[]): Datasheet {
+  return sheet({
+    weapons: ["Flux carbine", "Shock maul", "Ember lance", "Plasma gun"],
+    loadout: "This model is equipped with: flux carbine; shock maul; power fist.",
+    composition: [{ description: "1 Warden", min: 1, max: 1 }],
+    options,
+  });
+}
+
 describe("reading wargear option prose", () => {
   it("reads the synthetic squad's option and keeps the line it came from", () => {
     const r = readWargearOptions(squad);
@@ -170,8 +186,9 @@ describe("checking a unit against its datasheet", () => {
   it("adds up the lines that grant the same weapon", () => {
     const options = ["This model's flux carbine can be replaced with 1 ember lance.", "This model's shock maul can be replaced with 1 ember lance."];
     const ds = sheet({ options, loadout: "This model is equipped with: flux carbine; shock maul.", composition: [{ description: "1 Warden", min: 1, max: 1 }] });
-    expect(checkLoadout(ds, withWeapon(ds, 1, "Ember lance", 2)).problems).toEqual([]);
-    const over = checkLoadout(ds, withWeapon(ds, 1, "Ember lance", 3));
+    // Both guns swapped: the lances are all the model is holding.
+    expect(checkLoadout(ds, holding(ds, 1, { "Ember lance": 2 })).problems).toEqual([]);
+    const over = checkLoadout(ds, holding(ds, 1, { "Ember lance": 3 }));
     expect(over.problems.map((p) => p.code)).toEqual(["weapon.overLimit"]);
     expect(over.problems[0]!.message).toContain("allow 2");
     // No one line set that limit, so none is quoted as the rule it broke.
@@ -252,3 +269,46 @@ describe("checking a unit against its datasheet", () => {
     expect(checkLoadout(ds, worse, { baseline: base }).problems.length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * A swap is a trade, and the mounts run out before the allowances do. Each weapon on a model can sit
+ * inside its own option's limit and the loadout still be one the datasheet never offers.
+ */
+describe("weapons the model has not paid for", () => {
+  const twoMounts = ["This model's flux carbine can be replaced with 1 ember lance.", "This model's shock maul can be replaced with 1 ember lance."];
+
+  it("passes a model that gave up a printed weapon for each one it took", () => {
+    const ds = walker(twoMounts);
+    expect(checkLoadout(ds, holding(ds, 1, { "Ember lance": 2 })).problems).toEqual([]);
+    expect(checkLoadout(ds, holding(ds, 1, { "Ember lance": 1, "Shock maul": 1 })).problems).toEqual([]);
+  });
+
+  it("reports a model that took both and kept one of the weapons they replace", () => {
+    const ds = walker(twoMounts);
+    const check = checkLoadout(ds, holding(ds, 1, { "Ember lance": 2, "Flux carbine": 1 }));
+    expect(check.problems.map((p) => p.code)).toEqual(["weapon.noSlot"]);
+    expect(check.problems[0]!.message).toContain("still carries Flux carbine");
+  });
+
+  it("counts a line that hands over two weapons for one as one mount", () => {
+    const ds = walker(["This model's flux carbine can be replaced with 1 ember lance and 1 plasma gun."]);
+    expect(checkLoadout(ds, holding(ds, 1, { "Ember lance": 1, "Plasma gun": 1, "Shock maul": 1 })).problems).toEqual([]);
+    expect(checkLoadout(ds, holding(ds, 1, { "Ember lance": 1, "Plasma gun": 1, "Flux carbine": 1, "Shock maul": 1 })).problems.map((p) => p.code)).toEqual(["weapon.noSlot"]);
+  });
+
+  it("asks nothing of a weapon a line only adds", () => {
+    const ds = walker(["This model can be equipped with 1 ember lance."]);
+    expect(checkLoadout(ds, holding(ds, 1, { "Ember lance": 1, "Flux carbine": 1, "Shock maul": 1 })).problems).toEqual([]);
+  });
+
+  it("leaves a unit of several models alone, whose mounts are not the unit's to count", () => {
+    const ds = sheet({ options: ["Any number of models can each have their flux carbine replaced with 1 ember lance."], loadout: "Every model is equipped with: flux carbine; shock maul." });
+    expect(checkLoadout(ds, holding(ds, 10, { "Ember lance": 10, "Flux carbine": 10, "Shock maul": 10 })).problems).toEqual([]);
+  });
+
+  it("withholds the verdict while a line went unread", () => {
+    const ds = walker([...twoMounts, "* A Warden nominated by the sergeant keeps whatever they were holding."]);
+    expect(checkLoadout(ds, holding(ds, 1, { "Ember lance": 2, "Flux carbine": 1 })).problems).toEqual([]);
+  });
+});
+

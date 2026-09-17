@@ -84,6 +84,42 @@ describe("how many of a weapon a model carries", () => {
   });
 });
 
+describe("a weapon the prose does not name", () => {
+  /**
+   * The shooting half of a weapon is sometimes printed under a name of its own, and the loadout
+   * sentence names only the other half. A model left with nothing of one kind takes the first weapon
+   * of that kind the option lines do not mention, since a weapon an option names is one it would
+   * have to swap for.
+   */
+  it("is taken up when no option line mentions it", () => {
+    const ds = { ...withLoadout("This model is equipped with: shock maul.", ["Flux carbine", "Shock maul"]), wargearOptions: [] };
+    const on = unitFromDatasheet(ds, snapshot, { modelCount: 1 }).weapons.filter((w) => w.enabled).map((w) => w.name);
+    expect(on).toEqual(["Flux carbine", "Shock maul"]);
+  });
+
+  it("is left alone when an option line grants it", () => {
+    const ds = { ...withLoadout("This model is equipped with: shock maul.", ["Flux carbine", "Shock maul"]), wargearOptions: ["This model's shock maul can be replaced with 1 flux carbine."] };
+    const on = unitFromDatasheet(ds, snapshot, { modelCount: 1 }).weapons.filter((w) => w.enabled).map((w) => w.name);
+    expect(on).toEqual(["Shock maul"]);
+  });
+
+  it("keeps both halves of a weapon that shoots and fights under one name", () => {
+    const base = snapshot.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;
+    const profile = base.weapons[0]!;
+    const ds = {
+      ...base,
+      loadout: "Every model is equipped with: flux carbine.",
+      wargearOptions: [],
+      weapons: [
+        { ...profile, id: "w0", name: "Flux carbine", kind: "ranged" as const },
+        { ...profile, id: "w1", name: "Flux carbine", kind: "melee" as const },
+      ],
+    };
+    const on = unitFromDatasheet(ds, snapshot, { modelCount: 5 }).weapons.filter((w) => w.enabled);
+    expect(on.map((w) => `${w.name}/${w.kind}`)).toEqual(["Flux carbine/ranged", "Flux carbine/melee"]);
+  });
+});
+
 describe("which weapon a loadout item names", () => {
   it("takes the name as written over the longer names that contain it", () => {
     const ds = withLoadout("Every model is equipped with: flux carbine; shock maul.", ["Flux carbine", "Heavy flux carbine", "Twin flux carbine", "Shock maul"]);

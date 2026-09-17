@@ -44,8 +44,31 @@ export interface WargearOption {
   limit(models: number): number;
 }
 
+/**
+ * One option line as a whole, which is what the mount count needs.
+ *
+ * `options` above is one entry per weapon a line grants, which answers "how many of this weapon may
+ * I have". It cannot answer "what does taking it cost me", because a line is a trade: it takes
+ * printed weapons away and puts others in their place, sometimes several at a time ("this model's
+ * twin battle cannon can be replaced with 1 oppressor cannon and 1 coaxial autocannon"), and
+ * sometimes as a choice between them.
+ */
+export interface WargearLine {
+  readonly text: string;
+  /** How many times the line may be applied to a unit of this many models. */
+  applications(models: number): number;
+  /** What one application puts on the model, by weapon base name. */
+  readonly grants: ReadonlyMap<string, number>;
+  /** What one application takes off it, by weapon base name. Empty when the line only adds. */
+  readonly replaces: ReadonlyMap<string, number>;
+  /** The grants are a choice of one, rather than all of them together. */
+  readonly alternatives: boolean;
+}
+
 export interface WargearReading {
   readonly options: readonly WargearOption[];
+  /** The same lines read whole, one entry each. */
+  readonly lines: readonly WargearLine[];
   /** Lines the parser could not read. Whatever they allow goes unchecked. */
   readonly unread: readonly string[];
   /** The datasheet prints "None": there are no options, so the loadout is the default one. */
@@ -71,21 +94,33 @@ const tidy = (s: string): string => s.replace(/[‘’ʼ]/g, "'").replace(/\s+/g
 /** One spelling of a weapon name for comparing: the sources mix apostrophes and casing. */
 const key = (name: string): string => tidy(name).toLowerCase();
 
-/** The bullet items of "one of the following:", or the whole tail when the grant is inline. */
-function grantCandidates(line: string): string[] {
+/**
+ * The bullet items of "one of the following:", or the whole tail when the grant is inline, and
+ * whether they are a choice of one or a set the line hands over together.
+ *
+ * Bullets are always a choice: they are what "one of the following" introduces. An inline tail is a
+ * choice when it is written with "or" and a set when it is written with "and", which is the only
+ * thing separating "1 oppressor cannon and 1 coaxial autocannon" — two guns for one — from a line
+ * offering either of them.
+ */
+function grantCandidates(line: string): { items: string[]; alternatives: boolean } {
   const bullets = line
     .split(/\n+/)
     .map((l) => l.trim())
     .filter((l) => /^[-•*]\s+/.test(l))
     .map((l) => l.replace(/^[-•*]\s+/, ""));
-  if (bullets.length) return bullets;
+  if (bullets.length) return { items: bullets, alternatives: true };
   const tail = /\b(?:replaced with|equipped with|replace their|select)\b\s*:?\s*(.+)$/i.exec(tidy(line));
-  if (!tail) return [];
-  return (tail[1] ?? "")
-    .replace(/\bone of the following\b\s*:?/i, "")
-    .split(/\s*,\s*|\s+and\s+|\s+or\s+/i)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  if (!tail) return { items: [], alternatives: true };
+  const text = (tail[1] ?? "").replace(/\bone of the following\b\s*:?/i, "");
+  const alternatives = /\bone of the following\b/i.test(tail[1] ?? "") || /\s+or\s+/i.test(text);
+  return {
+    items: text
+      .split(/\s*,\s*|\s+and\s+|\s+or\s+/i)
+      .map((s) => s.trim())
+      .filter(Boolean),
+    alternatives,
+  };
 }
 
 /**
@@ -135,12 +170,36 @@ function matchWeapon(name: string, bases: readonly string[]): string | undefined
  * twin hail gun does not read as a line about a hail gun as well.
  */
 function replacedWeapons(line: string, bases: readonly string[]): string[] {
-  const s = tidy(line);
-  const head = /^([\s\S]*?)\breplaced with\b/i.exec(s)?.[1] ?? /\breplaces?\s+(?:their|its|the)\s+([\s\S]*?)\s+with\b/i.exec(s)?.[1];
+  const head = replacedHead(line);
   if (head === undefined) return [];
   const lower = head.toLowerCase();
   const hit = bases.filter((b) => lower.includes(b));
   return hit.filter((b) => !hit.some((other) => other !== b && other.includes(b)));
+}
+
+/** The part of a line that names what it takes away, before "replaced with" or between "replace" and "with". */
+function replacedHead(line: string): string | undefined {
+  const s = tidy(line);
+  return /^([\s\S]*?)\breplaced with\b/i.exec(s)?.[1] ?? /\breplaces?\s+(?:their|its|the)\s+([\s\S]*?)\s+with\b/i.exec(s)?.[1];
+}
+
+/**
+ * How many of each weapon one application of the line takes away.
+ *
+ * The number is written in front of the name it belongs to — "this model's 2 Hades autocannons can
+ * be replaced with 2 ectoplasma cannons" gives up two guns for two — and is one where the line
+ * names the weapon without counting it.
+ */
+function replacedCounts(line: string, bases: readonly string[]): Map<string, number> {
+  const head = replacedHead(line) ?? "";
+  const out = new Map<string, number>();
+  for (const base of replacedWeapons(line, bases)) {
+    const at = head.toLowerCase().indexOf(base);
+    const before = at < 0 ? "" : head.slice(0, at);
+    const n = toNumber(new RegExp(`${NUM}\\s+[^,;]*$`, "i").exec(before)?.[1]);
+    out.set(base, n && n > 0 ? n : 1);
+  }
+  return out;
 }
 
 /**
@@ -204,6 +263,7 @@ function allowance(line: string): ((models: number) => number) | undefined {
 export function readWargearOptions(ds: Datasheet): WargearReading {
   const bases = [...new Set(ds.weapons.map((w) => key(baseWeaponName(w.name))).filter(Boolean))];
   const options: WargearOption[] = [];
+  const lines: WargearLine[] = [];
   const unread: string[] = [];
   let fixed = false;
 
@@ -226,7 +286,8 @@ export function readWargearOptions(ds: Datasheet): WargearReading {
     }
 
     const limit = allowance(line);
-    const grants = [...new Set(grantCandidates(line).map((c) => {
+    const candidates = grantCandidates(line);
+    const grants = [...new Set(candidates.items.map((c) => {
       const { copies, name } = splitCount(c);
       const base = matchWeapon(name, bases);
       return base ? `${base}\u0000${copies}` : undefined;
@@ -238,16 +299,19 @@ export function readWargearOptions(ds: Datasheet): WargearReading {
     }
 
     const replaces = replacedWeapons(line, bases);
+    const perApplication = new Map<string, number>();
     for (const packed of grants) {
       const [base, copiesText] = packed.split("\u0000");
       const copies = Number(copiesText) || 1;
+      perApplication.set(base!, Math.max(perApplication.get(base!) ?? 0, copies));
       options.push({ text: line, grants: [base!], replaces, limit: (models) => limit(models) * copies });
     }
+    lines.push({ text: line, applications: limit, grants: perApplication, replaces: replacedCounts(line, bases), alternatives: candidates.alternatives });
   }
 
   // A sheet whose options are all "None" is fixed; one with options as well is not.
   if (options.length) fixed = false;
-  return { options, unread, fixed, complete: unread.length === 0 };
+  return { options, lines, unread, fixed, complete: unread.length === 0 };
 }
 
 /** A printed item name with its decorations off: the allowance, the count, a bracketed aside, a footnote mark. */
@@ -288,7 +352,7 @@ export function wargearItems(ds: Datasheet): string[] {
   const out = new Map<string, string>();
   for (const line of ds.wargearOptions) {
     if (!allowance(line)) continue;
-    for (const candidate of grantCandidates(line)) {
+    for (const candidate of grantCandidates(line).items) {
       const whole = itemName(candidate);
       if (!whole || matchWeapon(whole, bases)) continue;
       for (const part of whole.split(ITEM_SPLIT)) {
@@ -359,7 +423,7 @@ export function omittedDefaults(ds: Datasheet, groups: readonly RosterModelGroup
 
 export interface LoadoutProblem {
   readonly severity: "error" | "warn";
-  readonly code: "models.min" | "models.max" | "weapon.unknown" | "weapon.overLimit" | "weapon.unsourced";
+  readonly code: "models.min" | "models.max" | "weapon.unknown" | "weapon.overLimit" | "weapon.unsourced" | "weapon.noSlot";
   readonly message: string;
   /** The weapon the problem is about, as the datasheet names it. */
   readonly weapon?: string;
@@ -457,6 +521,139 @@ function allowanceFor(granting: readonly WargearOption[], models: number): { all
   return { allowed, lines: [...perLine.keys()] };
 }
 
+/** "a, b and c", for naming the weapons a problem is about. */
+function list(names: readonly string[]): string {
+  if (names.length < 2) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** One way of applying a line: the line itself, and the single weapon chosen where it offers a choice. */
+interface Variant {
+  line: WargearLine;
+  /** What one application puts on the model. A choice narrows the line's grants to the one taken. */
+  grants: ReadonlyMap<string, number>;
+  /** How many applications are worth trying: more than the extras need only costs more. */
+  most: number;
+}
+
+/** Every way of applying these lines, with the applications each is worth trying. */
+function variantsFor(lines: readonly WargearLine[], extras: ReadonlyMap<string, number>, models: number): Variant[] {
+  const out: Variant[] = [];
+  for (const line of lines) {
+    const choices: Array<ReadonlyMap<string, number>> = line.alternatives ? [...line.grants].map(([w, n]) => new Map([[w, n]])) : [line.grants];
+    for (const grants of choices) {
+      let most = 0;
+      for (const [w, perApplication] of grants) {
+        const want = extras.get(w);
+        if (want) most = Math.max(most, Math.ceil(want / perApplication));
+      }
+      if (most > 0) out.push({ line, grants, most: Math.min(most, line.applications(models)) });
+    }
+  }
+  return out;
+}
+
+/** The most combinations worth walking; past this the answer is withheld rather than guessed at. */
+const SEARCH_CAP = 20000;
+
+/**
+ * Whether some number of applications of these lines explains the extras without spending printed
+ * weapons the model is still carrying.
+ *
+ * Small enough to walk: a datasheet offers a handful of lines and a mount is swapped once or twice,
+ * so the combinations are counted first and the whole question dropped if there are too many.
+ */
+function swapsFit(variants: Variant[], extras: ReadonlyMap<string, number>, spare: ReadonlyMap<string, number>, models: number): boolean | undefined {
+  let combinations = 1;
+  for (const v of variants) combinations *= v.most + 1;
+  if (combinations > SEARCH_CAP) return undefined;
+
+  const counts = new Array<number>(variants.length).fill(0);
+  for (let i = 0; i < combinations; i++) {
+    let n = i;
+    for (let v = 0; v < variants.length; v++) {
+      counts[v] = n % (variants[v]!.most + 1);
+      n = Math.floor(n / (variants[v]!.most + 1));
+    }
+    if (fits(variants, counts, extras, spare, models)) return true;
+  }
+  return false;
+}
+
+/** One assignment of applications: does it cover the extras, keep each line within its allowance and pay for itself? */
+function fits(variants: Variant[], counts: readonly number[], extras: ReadonlyMap<string, number>, spare: ReadonlyMap<string, number>, models: number): boolean {
+  const got = new Map<string, number>();
+  const spent = new Map<string, number>();
+  const perLine = new Map<string, number>();
+  variants.forEach((v, i) => {
+    const a = counts[i] ?? 0;
+    if (!a) return;
+    perLine.set(v.line.text, (perLine.get(v.line.text) ?? 0) + a);
+    for (const [w, n] of v.grants) got.set(w, (got.get(w) ?? 0) + n * a);
+    for (const [w, n] of v.line.replaces) spent.set(w, (spent.get(w) ?? 0) + n * a);
+  });
+  for (const [line, a] of perLine) if (a > (variants.find((v) => v.line.text === line)?.line.applications(models) ?? 0)) return false;
+  for (const [w, want] of extras) if ((got.get(w) ?? 0) < want) return false;
+  for (const [w, used] of spent) if (used > (spare.get(w) ?? 0)) return false;
+  return true;
+}
+
+/**
+ * Weapons taken from the options that the model has not paid for.
+ *
+ * A swap is a trade: the model gives up a printed weapon and takes another in its place. Each weapon
+ * can sit inside its own option's allowance and the loadout still be one the datasheet never offers,
+ * because the mounts run out. A Deff Dread may swap its Big Shoota for a Kustom Mega-blasta and its
+ * Skorcha for a Rokkit Launcha, but not do both and keep the Big Shoota as well.
+ *
+ * The question is put as a search rather than a sum, because a line is not one weapon for one: it
+ * can hand over two guns for one mount, take two away at once, or offer a choice of what to put
+ * there. So this asks whether any number of applications of the lines explains what the model is
+ * holding while spending only the printed weapons it has actually given up. If one does, nothing is
+ * reported.
+ *
+ * Held back where a verdict would be a guess: a unit of several models, whose lines are written per
+ * model and whose mounts are not the unit's to count; a datasheet with a line the parser could not
+ * read, which may be the one that adds a mount; a weapon granted by a line that only adds, which
+ * costs no mount at all; and a search too large to walk.
+ */
+function slotProblem(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading): LoadoutProblem | undefined {
+  const models = modelsOf(unit);
+  if (models !== 1 || !reading.complete || !reading.lines.length) return undefined;
+
+  const parsed = parseLoadout(ds);
+  const printed = new Set([...parsed.all, ...Object.values(parsed.byProfile).flat()].map(key));
+  const held = carried(unit);
+  const extras = new Map<string, number>();
+  const swapped: string[] = [];
+  for (const [base, { count, name }] of held) {
+    if (printed.has(base)) continue;
+    const granting = reading.lines.filter((l) => l.grants.has(base));
+    if (!granting.length || granting.some((l) => l.replaces.size === 0)) continue;
+    extras.set(base, count);
+    swapped.push(name);
+  }
+  if (!extras.size) return undefined;
+
+  // What each printed weapon has left to give: what the datasheet prints, less what is still held.
+  const spare = new Map<string, number>();
+  for (const base of printed) spare.set(base, Math.max(0, (parsed.copies[base] ?? 1) - (held.get(base)?.count ?? 0)));
+
+  const variants = variantsFor(reading.lines, extras, models);
+  if (!variants.length) return undefined;
+  if (swapsFit(variants, extras, spare, models) !== false) return undefined;
+
+  const kept = [...printed].filter((base) => held.has(base) && reading.lines.some((l) => l.replaces.has(base) && [...l.grants.keys()].some((g) => extras.has(g)))).map((base) => held.get(base)!.name);
+  return {
+    severity: "error",
+    code: "weapon.noSlot",
+    count: [...extras.values()].reduce((a, b) => a + b, 0),
+    message: kept.length
+      ? `${list(swapped)} ${swapped.length === 1 ? "replaces a printed weapon" : "replace printed weapons"}, and this model still carries ${list(kept)}.`
+      : `${list(swapped)} ${swapped.length === 1 ? "replaces more printed weapons" : "replace more printed weapons"} than this model has given up.`,
+  };
+}
+
 function problemsFor(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading): LoadoutProblem[] {
   const problems: LoadoutProblem[] = [];
   const models = modelsOf(unit);
@@ -497,6 +694,13 @@ function problemsFor(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading)
     } else if (reading.complete && reading.options.length) {
       problems.push({ severity: "error", code: "weapon.unsourced", weapon: name, count, message: `${name} is not in the default loadout and no wargear option grants it.` });
     }
+  }
+
+  // A weapon already reported as over its own limit is why the mounts ran out, and naming it twice
+  // says nothing new.
+  if (!problems.some((p) => p.code === "weapon.overLimit")) {
+    const noSlot = slotProblem(ds, unit, reading);
+    if (noSlot) problems.push(noSlot);
   }
   return problems;
 }

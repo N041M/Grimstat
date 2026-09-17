@@ -220,7 +220,11 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
   let anyMelee = false;
   for (const w of ds.weapons) {
     if (opts.weaponNames && !opts.weaponNames.includes(w.name)) continue;
-    const group = w.groupName ?? baseWeaponName(w.name);
+    // Only the first profile of a weapon is live, because the rest are the same weapon fired another
+    // way. A weapon that both shoots and fights has one profile of each kind, though, and the model
+    // uses them in different phases, so the two are kept apart here: a guardian spear that lost its
+    // melee profile left a Custodian with nothing to fight with.
+    const group = `${w.groupName ?? baseWeaponName(w.name)}\u0000${w.kind}`;
     let enabled = defaults.has(baseWeaponName(w.name).toLowerCase());
     if (seenGroup.has(group)) enabled = false;
     seenGroup.add(group);
@@ -234,10 +238,19 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
     const count = isCharacterSheet ? (enabled ? parsed.copies[base] ?? 1 : 1) : enabled ? defaultWeaponCount(parsed, base, modelCount, models) : modelCount;
     weapons.push(weaponToScenario(w, count, opts.weaponNames ? true : enabled));
   }
-  // fall back to the first weapon of each kind when the loadout text named nothing usable
+  /*
+   * A model with nothing of one kind takes the first weapon of that kind the options do not mention.
+   *
+   * The prose does not always name both halves of a weapon. Trajann Valoris is "equipped with:
+   * Watcher's Axe", and the shooting half of that axe is printed under its own name, so reading the
+   * sentence leaves him unable to shoot. What the options mention is the test: a weapon an option
+   * line names is one the model would have to swap something for, and handing it over for free gave
+   * a Maulerfiend the magma cutters it can only have in place of its tendrils.
+   */
+  const optionText = ds.wargearOptions.join("\n").toLowerCase();
   for (const kind of ["ranged", "melee"] as const) {
     if (kind === "ranged" ? anyRanged : anyMelee) continue;
-    const first = weapons.find((w) => w.kind === kind);
+    const first = weapons.find((w) => w.kind === kind && !optionText.includes(baseWeaponName(w.name).toLowerCase()));
     if (first) first.enabled = true;
   }
   const effects: EffectRecord[] = [];
