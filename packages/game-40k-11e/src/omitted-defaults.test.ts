@@ -24,6 +24,28 @@ const held = (r: Roster, u: RosterUnit) =>
  * the default loadout out. Read as a full selection, a Warden Squad written that way loses the shock
  * maul every model carries and the sergeant's power fist, which leaves it with nothing to fight with.
  */
+/**
+ * A default the list leaves out comes back as many as the datasheet gives one model, not as one.
+ * The prose writes a vehicle's pair of guns as "2 heavy bolters", and a list that mentions neither
+ * of them used to get a single gun back.
+ */
+describe("a default the list does not mention", () => {
+  const twin = () => {
+    const base = sheet("ashen-crusher");
+    return { ...base, loadout: "This model is equipped with: 2 vortex cannons; crusher fists.", wargearOptions: [] };
+  };
+
+  it("comes back as many as one model carries", () => {
+    const ds = twin();
+    expect(omittedDefaults(ds, [{ modelProfileId: ds.models[0]!.id, count: 1, wargear: [] }]).get("vortex cannon")).toBe(2);
+  });
+
+  it("counts the models as well as the copies", () => {
+    const ds = twin();
+    expect(omittedDefaults(ds, [{ modelProfileId: ds.models[0]!.id, count: 3, wargear: [] }]).get("vortex cannon")).toBe(6);
+  });
+});
+
 describe("a list that names only part of a unit's loadout", () => {
   const roster = listed("gw-app-attached.txt");
 

@@ -58,6 +58,51 @@ describe("attached characters", () => {
   });
 });
 
+/** The synthetic squad with the loadout prose under test, and weapons to read it against. */
+function withLoadout(loadout: string, names: string[]) {
+  const base = snapshot.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;
+  const profile = base.weapons[0]!;
+  return { ...base, loadout, wargearOptions: [], weapons: names.map((name, i) => ({ ...profile, id: `w${i}`, name, kind: i === names.length - 1 ? ("melee" as const) : ("ranged" as const) })) };
+}
+
+describe("how many of a weapon a model carries", () => {
+  /**
+   * The prose writes a vehicle's several guns as one line: "3 dark lances". Read as one weapon per
+   * model, every unit built that way fired a fraction of the shots it has.
+   */
+  it("is the number the loadout prose puts in front of it", () => {
+    const ds = withLoadout("Every model is equipped with: 2 flux carbines; shock maul.", ["Flux carbine", "Shock maul"]);
+    expect(parseLoadout(ds).copies).toEqual({ "flux carbine": 2 });
+    const by = Object.fromEntries(unitFromDatasheet(ds, snapshot, { modelCount: 5 }).weapons.map((w) => [w.name, w]));
+    expect(by["Flux carbine"]!.count).toBe(10);
+    expect(by["Shock maul"]!.count).toBe(5);
+  });
+
+  it("is one where the prose names the weapon on its own", () => {
+    const ds = withLoadout("Every model is equipped with: flux carbine; shock maul.", ["Flux carbine", "Shock maul"]);
+    expect(parseLoadout(ds).copies).toEqual({});
+  });
+});
+
+describe("which weapon a loadout item names", () => {
+  it("takes the name as written over the longer names that contain it", () => {
+    const ds = withLoadout("Every model is equipped with: flux carbine; shock maul.", ["Flux carbine", "Heavy flux carbine", "Twin flux carbine", "Shock maul"]);
+    expect(parseLoadout(ds).all).toEqual(["flux carbine", "shock maul"]);
+  });
+
+  it("takes the one longer name that contains it, and none when several do", () => {
+    const one = withLoadout("Every model is equipped with: carbine; shock maul.", ["Heavy flux carbine", "Shock maul"]);
+    expect(parseLoadout(one).all).toEqual(["heavy flux carbine", "shock maul"]);
+    const several = withLoadout("Every model is equipped with: carbine; shock maul.", ["Heavy flux carbine", "Twin flux carbine", "Shock maul"]);
+    expect(parseLoadout(several).all).toEqual(["shock maul"]);
+  });
+
+  it("still reads an item that spells a weapon out with words to spare", () => {
+    const ds = withLoadout("Every model is equipped with: 2 flux carbines; shock maul.", ["Flux carbine", "Shock maul"]);
+    expect(parseLoadout(ds).all).toEqual(["flux carbine", "shock maul"]);
+  });
+});
+
 describe("parseLoadout", () => {
   it("separates every-model weapons from profile-specific ones and ignores option text", () => {
     const squad = snapshot.data.datasheets.find((d) => d.id === "ds:ashen-wardens:warden-squad")!;

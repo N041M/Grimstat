@@ -326,7 +326,8 @@ export function wargearItems(ds: Datasheet): string[] {
  * weapon is one the datasheet itself prints, and it sits on the unit where the player can take it
  * off again. A weapon dropped in silence only shows up as a unit that does no damage.
  *
- * The counts are in models, ready to add to a selection tallied the same way.
+ * The counts are in weapons, ready to add to a selection tallied the same way: the models that carry
+ * the weapon, times the number the datasheet prints for each of them.
  */
 export function omittedDefaults(ds: Datasheet, groups: readonly RosterModelGroup[]): Map<string, number> {
   const out = new Map<string, number>();
@@ -342,12 +343,15 @@ export function omittedDefaults(ds: Datasheet, groups: readonly RosterModelGroup
       held.set(k, (held.get(k) ?? 0) + 1);
     }
     const byDefault = new Set(defaults.map(key));
+    // What counts as a surplus copy is what the datasheet prints: a Ravager listed with three dark
+    // lances is holding the three it came with, not one it swapped for.
+    const printed = (base: string): number => parsed.copies[base] ?? 1;
     const displaced = (base: string): boolean =>
-      reading.options.some((o) => o.replaces.includes(base) && o.grants.some((granted) => (held.get(granted) ?? 0) > (byDefault.has(granted) ? 1 : 0)));
+      reading.options.some((o) => o.replaces.includes(base) && o.grants.some((granted) => (held.get(granted) ?? 0) > (byDefault.has(granted) ? printed(granted) : 0)));
     for (const d of defaults) {
       const k = key(d);
       if (held.has(k) || displaced(k)) continue;
-      out.set(d, (out.get(d) ?? 0) + g.count);
+      out.set(d, (out.get(d) ?? 0) + g.count * printed(k));
     }
   }
   return out;

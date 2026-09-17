@@ -186,20 +186,30 @@ export function distributeModelCount(groups: ModelGroup[], target: number): Mode
 
 /**
  * Weapon base names mentioned in the datasheet's default-loadout prose (case-insensitive substring
- * match on the part of the weapon name before " – "), in weapon order, de-duplicated.
+ * match on the part of the weapon name before " – "), in weapon order.
+ *
+ * A weapon the prose gives a model several of is listed once per copy, because that is how a model
+ * group records two of anything. A Ravager's three dark lances arrive as three entries.
  */
 export function loadoutWargear(ds: Datasheet): string[] {
   const parsed = parseLoadout(ds);
   const wanted = new Set([...parsed.all, ...Object.values(parsed.byProfile).flat()]);
-  return weaponBaseNames(ds).filter((b) => wanted.has(b.toLowerCase()));
+  return repeatCopies(weaponBaseNames(ds).filter((b) => wanted.has(b.toLowerCase())), parsed.copies);
 }
 
 /** Default wargear for one model profile: every-model weapons plus that profile's own. */
 export function loadoutWargearFor(ds: Datasheet, profileName: string): string[] {
   const parsed = parseLoadout(ds);
   const wanted = new Set([...parsed.all, ...(parsed.byProfile[profileName.toLowerCase()] ?? [])]);
-  return weaponBaseNames(ds).filter((b) => wanted.has(b.toLowerCase()));
+  return repeatCopies(weaponBaseNames(ds).filter((b) => wanted.has(b.toLowerCase())), parsed.copies);
 }
+
+/** How many of a weapon the datasheet's printed loadout gives one model. */
+export function printedCopies(ds: Datasheet, item: string): number {
+  return parseLoadout(ds).copies[item.toLowerCase()] ?? 1;
+}
+
+const repeatCopies = (names: string[], copies: Record<string, number>): string[] => names.flatMap((n) => Array.from({ length: copies[n.toLowerCase()] ?? 1 }, () => n));
 
 /**
  * Everything a datasheet's models can be given, in the order the unit inspector offers it: its weapons
@@ -356,10 +366,17 @@ export function hasWargear(group: ModelGroup, item: string): boolean {
   return group.wargear.some((w) => w.toLowerCase() === key);
 }
 
-export function toggleWargear(group: ModelGroup, item: string, on: boolean): ModelGroup {
+/**
+ * Put an item on a model group or take it off.
+ *
+ * `copies` is how many of it one model carries, for a weapon the datasheet prints more than one of.
+ * Turning such a weapon off and on again would otherwise leave the model holding one where the
+ * datasheet gives it three.
+ */
+export function toggleWargear(group: ModelGroup, item: string, on: boolean, copies = 1): ModelGroup {
   const key = item.toLowerCase();
   const without = group.wargear.filter((w) => w.toLowerCase() !== key);
-  return { ...group, wargear: on ? [...without, item] : without };
+  return { ...group, wargear: on ? [...without, ...Array.from({ length: Math.max(1, copies) }, () => item)] : without };
 }
 
 // ---------- diff ----------

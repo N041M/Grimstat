@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
-import { canAddCopy, compositionBounds, duplicateUnit, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, factionLineage, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearChoices, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
+import { canAddCopy, compositionBounds, duplicateUnit, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, factionLineage, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, printedCopies, toggleWargear, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearChoices, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
 import { decodeRosterPermalink, encodeRosterPermalink, rosterPermalinkUrl, rosterTokenFromHash } from "./rosterPermalink";
 
 const NOW = "2026-09-09T10:00:00.000Z";
@@ -182,6 +182,22 @@ describe("loadout-based wargear prefill", () => {
 
   it("returns nothing without loadout text", () => {
     expect(loadoutWargear(sheet({ ...squad, id: "n", loadout: undefined }))).toEqual([]);
+  });
+
+  /** A model group records two of a weapon as the name twice, which is how a pair of guns is stored. */
+  it("lists a weapon the prose gives a model two of twice", () => {
+    const pair = sheet({ ...squad, id: "ds-pair", loadout: "Every model is equipped with: 2 flux carbines; shock maul." });
+    expect(loadoutWargear(pair)).toEqual(["Flux carbine", "Flux carbine", "Shock maul"]);
+    expect(printedCopies(pair, "Flux carbine")).toBe(2);
+    expect(printedCopies(pair, "Shock maul")).toBe(1);
+  });
+
+  it("puts the printed copies back when a weapon is switched off and on again", () => {
+    const group: ModelGroup = { modelProfileId: "m-trooper", count: 1, wargear: ["Flux carbine", "Flux carbine", "Shock maul"] };
+    const off = toggleWargear(group, "Flux carbine", false);
+    expect(off.wargear).toEqual(["Shock maul"]);
+    expect(toggleWargear(off, "Flux carbine", true, 2).wargear).toEqual(["Shock maul", "Flux carbine", "Flux carbine"]);
+    expect(toggleWargear(off, "Flux carbine", true).wargear).toEqual(["Shock maul", "Flux carbine"]);
   });
 
   it("builds model groups at the minimum size with the prefilled wargear", () => {

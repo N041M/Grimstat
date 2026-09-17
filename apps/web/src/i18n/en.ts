@@ -1069,6 +1069,7 @@ export const en = {
   "roster.inspector.otherWargear": "Other wargear",
   "roster.inspector.otherPlaceholder": "Add an item and press Enter",
   "roster.inspector.addOther": "Add",
+  "roster.inspector.copies": "×{n}",
   "roster.inspector.removeOther": "Remove {name}",
   "roster.inspector.attach": "Attached to",
   "roster.inspector.notAttached": "Not attached",

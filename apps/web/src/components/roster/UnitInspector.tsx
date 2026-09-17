@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import type { UnitCost } from "@grimstat/resolver";
-import { groupBounds, hasWargear, isCharacterSheet, modelCountOf, toggleWargear, unitDisplayName, wargearChoices, type ModelGroup } from "../../lib/roster";
+import { groupBounds, hasWargear, isCharacterSheet, modelCountOf, printedCopies, toggleWargear, unitDisplayName, wargearChoices, type ModelGroup } from "../../lib/roster";
 import { canEmbark, loadsByTransport, transportCandidates } from "../../lib/transport";
 import { fmtInt } from "../../lib/format";
 import { DiagnosticItem } from "./DiagnosticItem";
@@ -28,6 +28,8 @@ interface Props {
 interface WargearItem {
   name: string;
   price: number | undefined;
+  /** How many of it the datasheet gives one model, where that is more than one. */
+  copies: number;
 }
 
 function GroupEditor({ group, profileName, bounds, items, onChange }: { group: ModelGroup; profileName: string; bounds: { min: number; max: number | undefined }; items: WargearItem[]; onChange: (g: ModelGroup) => void }) {
@@ -101,8 +103,11 @@ function GroupEditor({ group, profileName, bounds, items, onChange }: { group: M
       <div className="check-list wargear-list">
         {items.map((it) => (
           <label key={it.name} className="inline">
-            <input type="checkbox" checked={hasWargear(group, it.name)} onChange={(e) => onChange(toggleWargear(group, it.name, e.target.checked))} />
-            <span className="grow">{it.name}</span>
+            <input type="checkbox" checked={hasWargear(group, it.name)} onChange={(e) => onChange(toggleWargear(group, it.name, e.target.checked, it.copies))} />
+            <span className="grow">
+              {it.name}
+              {it.copies > 1 ? <span className="muted small"> {t("roster.inspector.copies", { n: it.copies })}</span> : null}
+            </span>
             {it.price ? <span className="muted small tabular">{t("roster.inspector.priced", { v: fmtInt(it.price) })}</span> : null}
           </label>
         ))}
@@ -152,8 +157,8 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
   const items = useMemo<WargearItem[]>(() => {
     if (!ds) return [];
     const prices = snapshot.data.wargearPrices.filter((w) => w.datasheetId === ds.id);
-    const out: WargearItem[] = wargearChoices(ds).map((name) => ({ name, price: prices.find((p) => p.item.toLowerCase() === name.toLowerCase())?.points }));
-    for (const p of prices) if (!out.some((i) => i.name.toLowerCase() === p.item.toLowerCase())) out.push({ name: p.item, price: p.points });
+    const out: WargearItem[] = wargearChoices(ds).map((name) => ({ name, price: prices.find((p) => p.item.toLowerCase() === name.toLowerCase())?.points, copies: printedCopies(ds, name) }));
+    for (const p of prices) if (!out.some((i) => i.name.toLowerCase() === p.item.toLowerCase())) out.push({ name: p.item, price: p.points, copies: 1 });
     return out;
   }, [ds, snapshot]);
 

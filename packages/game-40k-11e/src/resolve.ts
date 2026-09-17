@@ -84,9 +84,17 @@ export interface ParsedLoadout {
   all: string[];
   /** Weapon base names carried only by a named model profile (key: lower-case profile name). */
   byProfile: Record<string, string[]>;
+  /**
+   * How many of a weapon one model carries, where the prose says more than one ("3 dark lances").
+   * Absent for the weapons it names singly, which is most of them.
+   */
+  copies: Record<string, number>;
 }
 
 const strip = (s: string) => s.replace(/^(?:an?|one|\d+x?|the)\s+/i, "").trim();
+
+/** The count a loadout item opens with: "3 dark lances", "2x twin pulse carbine". */
+const ITEM_COUNT = /^(\d+)\s*x?\s+/i;
 
 /**
  * Parse default-loadout prose such as
@@ -94,14 +102,42 @@ const strip = (s: string) => s.replace(/^(?:an?|one|\d+x?|the)\s+/i, "").trim();
  * into weapons for every model and weapons for a specific profile. Option/replacement text is ignored.
  */
 export function parseLoadout(ds: Datasheet): ParsedLoadout {
-  const out: ParsedLoadout = { all: [], byProfile: {} };
+  const out: ParsedLoadout = { all: [], byProfile: {}, copies: {} };
   const text = ds.loadout ?? "";
   if (!text) return out;
   const bases = [...new Set(ds.weapons.map((w) => baseWeaponName(w.name).toLowerCase()).filter(Boolean))];
+  /**
+   * The weapons one item of the prose names.
+   *
+   * An exact name settles it. Without one, an item that spells a weapon out with words to spare
+   * ("twin-linked heavy bolter" against "heavy bolter") names it, and failing that an item that is
+   * part of exactly one weapon's name names that weapon. The last of those has to be unambiguous:
+   * "shoota" is part of a shoota, a big shoota and a kustom shoota, and a Boy carrying a shoota is
+   * carrying one of them.
+   */
+  const matchBases = (item: string): string[] => {
+    const exact = bases.filter((b) => b === item);
+    if (exact.length) return exact;
+    const spelled = bases.filter((b) => item.includes(b));
+    if (spelled.length) return spelled;
+    const partOf = bases.filter((b) => b.includes(item));
+    return partOf.length === 1 ? partOf : [];
+  };
+  // The count in front of an item belongs to the weapon that item names, and is read before the
+  // name is stripped of it.
   const matchItems = (itemsText: string): string[] => {
-    const items = itemsText.split(/[;,]|\band\b/).map((i) => strip(i.replace(/\.$/, "")).toLowerCase()).filter(Boolean);
     const found: string[] = [];
-    for (const item of items) for (const b of bases) if ((item.includes(b) || b.includes(item)) && !found.includes(b)) found.push(b);
+    for (const raw of itemsText.split(/[;,]|\band\b/)) {
+      const piece = raw.replace(/\.$/, "").trim();
+      const item = strip(piece).toLowerCase();
+      if (!item) continue;
+      const n = Number(ITEM_COUNT.exec(piece)?.[1] ?? 1);
+      for (const b of matchBases(item)) {
+        if (found.includes(b)) continue;
+        found.push(b);
+        if (n > 1) out.copies[b] = Math.max(out.copies[b] ?? 1, n);
+      }
+    }
     return found;
   };
   const profiles = ds.models.map((m) => m.name.toLowerCase());
@@ -129,22 +165,27 @@ export function parseLoadout(ds: Datasheet): ParsedLoadout {
 }
 
 /** Weapon base names mentioned in the datasheet's default loadout (lower-case), across all profiles. */
-function defaultWeaponNames(ds: Datasheet): Set<string> {
-  const p = parseLoadout(ds);
+function defaultWeaponNames(p: ParsedLoadout): Set<string> {
   return new Set([...p.all, ...Object.values(p.byProfile).flat()]);
 }
 
-/** How many models of the unit carry a weapon by default: every model, or just the named profile's models. */
-function defaultWeaponCount(ds: Datasheet, base: string, modelCount: number, groups: ScenarioModel[]): number {
-  const p = parseLoadout(ds);
-  if (p.all.includes(base)) return modelCount;
+/**
+ * How many of a weapon the unit fields by default: the models carrying it, times the number each of
+ * them carries.
+ *
+ * The second half is what the datasheet writes as "3 dark lances" or "2 twin pulse carbines". Read
+ * as one weapon per model, a Ravager fired a third of the shots it has and a Monolith a quarter.
+ */
+function defaultWeaponCount(p: ParsedLoadout, base: string, modelCount: number, groups: ScenarioModel[]): number {
+  const copies = p.copies[base] ?? 1;
+  if (p.all.includes(base)) return modelCount * copies;
   let n = 0;
   for (const [profile, items] of Object.entries(p.byProfile)) {
     if (!items.includes(base)) continue;
     const g = groups.find((m) => m.name.toLowerCase() === profile);
     n += g ? g.count : 1;
   }
-  return n || modelCount;
+  return (n || modelCount) * copies;
 }
 
 function modelsFromDatasheet(ds: Datasheet, modelCount: number, isCharacter: boolean): ScenarioModel[] {
@@ -172,7 +213,8 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
   const isCharacterSheet = ds.isCharacter && ds.models.length === 1 && !ds.keywords.some((k) => upper(k) === "VEHICLE" || upper(k) === "MONSTER");
   let models = modelsFromDatasheet(ds, modelCount, isCharacterSheet);
   const weapons: ScenarioWeapon[] = [];
-  const defaults = defaultWeaponNames(ds);
+  const parsed = parseLoadout(ds);
+  const defaults = defaultWeaponNames(parsed);
   const seenGroup = new Set<string>();
   let anyRanged = false;
   let anyMelee = false;
@@ -187,7 +229,9 @@ export function unitFromDatasheet(ds: Datasheet, snapshot: Snapshot, opts: UnitF
       else anyMelee = true;
     }
     const base = baseWeaponName(w.name).toLowerCase();
-    const count = isCharacterSheet ? 1 : enabled ? defaultWeaponCount(ds, base, modelCount, models) : modelCount;
+    // A character sheet is one model whatever the unit around it counts, but the pair of pistols in
+    // its hands is still a pair.
+    const count = isCharacterSheet ? (enabled ? parsed.copies[base] ?? 1 : 1) : enabled ? defaultWeaponCount(parsed, base, modelCount, models) : modelCount;
     weapons.push(weaponToScenario(w, count, opts.weaponNames ? true : enabled));
   }
   // fall back to the first weapon of each kind when the loadout text named nothing usable
