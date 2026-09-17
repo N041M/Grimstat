@@ -598,6 +598,8 @@ export const en = {
   "about.what1": "Grimstat models unit-versus-unit attacks with exact probability distributions, falling back to Monte Carlo when the sums grow too large to solve outright, and shows honest coverage of which rules were actually modelled.",
   "about.what2": "Everything runs in your browser and is stored on this device. There is no account to make and no server involved, and a permalink carries the whole scenario with it.",
   "about.data3": "The same rule covers the tournament terrain layouts. The Data page fetches them onto your device, credited, from the community dataset",
+  "about.thanksTitle": "Thanks",
+  "about.thanks1": "These players sent feedback that changed the app.",
   "about.artTitle": "Artwork",
   "about.art1": "Unit pictures are generic silhouettes chosen by keyword. Every class has a picture for what it is: vehicle, walker, monster and so on. Plain infantry, the commonest class, shows a picture for its faction instead, so a list can be told apart at a glance.",
   "about.artClasses": "What a unit is",

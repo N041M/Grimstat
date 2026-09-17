@@ -2,6 +2,7 @@ import { currentPlan } from "@grimstat/entitlements";
 import { FORTYKDC } from "@grimstat/adapters";
 import { UnitArt } from "../components/UnitArt";
 import { UNIT_ART_CREDITS, UNIT_CLASS_IDS, UNIT_FACTION_IDS, UNIT_ART_SOURCE, unitArtAuthors } from "../lib/unitArt";
+import { THANKS, thanksSite } from "../lib/thanks";
 import { gameSystem, manifest } from "@grimstat/game-40k-11e";
 import { host } from "../plugin";
 import { hrefFor } from "../router";
@@ -103,6 +104,30 @@ export function AboutPage() {
             </div>
           ))}
         </section>
+
+        {THANKS.length > 0 && (
+          <section className="about-card" aria-labelledby="about-thanks-h">
+            <h2 className="t-eyebrow" id="about-thanks-h">
+              {t("about.thanksTitle")}
+            </h2>
+            <p className="about-card-body prose">{t("about.thanks1")}</p>
+            <ul className="about-thanks-list">
+              {THANKS.map((p) => (
+                <li key={p.name}>
+                  {p.link ? (
+                    <a href={p.link} target="_blank" rel="noreferrer">
+                      {p.name}
+                    </a>
+                  ) : (
+                    <span className="about-thanks-name">{p.name}</span>
+                  )}
+                  {p.link && <span className="about-thanks-site">{thanksSite(p.link)}</span>}
+                  {p.note && <span className="about-thanks-note">{p.note}</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <div className="about-stats">
           {stats.map((s) => (
