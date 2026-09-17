@@ -1025,7 +1025,10 @@ body.tour-open {
     top var(--tour-travel) cubic-bezier(0.32, 0.72, 0, 1);
   width: min(360px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
-  overflow: hidden;
+  /* The arrow below is drawn outside the card's edges, so the card must not clip or scroll its own
+     overflow. Clipping hides the arrow on every side, and where the arrow sits past the right or
+     bottom edge the card scrolls to it and shows a scrollbar. The text inside scrolls instead. */
+  overflow: visible;
   padding: 14px 15px 12px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1084,6 +1087,11 @@ body.tour-open {
   display: flex;
   flex-direction: column;
   gap: 7px;
+  /* A card taller than the window scrolls here rather than as a whole, which keeps the buttons
+     below it in view. `min-height` lets this shrink past its text, which a flex item will not
+     do on its own. */
+  min-height: 0;
+  overflow-y: auto;
 }
 .tour-count {
   margin: 0;
