@@ -233,6 +233,18 @@ describe("text import edge cases", () => {
     expect(warnings).toEqual([`Warden Captain: unknown wargear "Fluxx pistol".`]);
   });
 
+  /**
+   * Lists write a model out in full — "1x Beast Snagga Nob" for a profile the datasheet calls "Nob"
+   * — and the line was read as wargear instead, so the unit came out a model short and the model
+   * that was lost took its profile with it.
+   */
+  it("reads a model line whose label ends with the profile's name", () => {
+    const { roster: r, warnings } = importLines("Ashen Wardens", "Ember Vanguard", "Warden Squad (180 points)", "• 1x Warden Sergeant", "• 9x Ashen Warden");
+    expect(warnings).toEqual([]);
+    const groups = r.units[0]!.models.map((g) => `${g.count}x${g.modelProfileId}`);
+    expect(groups).toEqual(["1xmp:ashen-wardens:warden-squad:warden-sergeant", "9xmp:ashen-wardens:warden-squad:warden"]);
+  });
+
   it("splits a wargear entry that joins two weapons with `and`", () => {
     const rest = importLines("Ashen Wardens", "Ember Vanguard", "1x Ashen Crusher (180 points): Fusion beamer and Twin hail gun");
     const bullet = importLines("Ashen Wardens", "Ember Vanguard", "Ashen Crusher (180 points)", "• 1x Fusion beamer and Twin hail gun");

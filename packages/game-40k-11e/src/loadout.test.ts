@@ -195,6 +195,20 @@ describe("checking a unit against its datasheet", () => {
     expect(over.problems[0]!.rule).toBeUndefined();
   });
 
+  /**
+   * A bullet of "one of the following" can itself be a pair — "1 despoiler battle cannon and 1
+   * diabolus heavy stubber" — and a bullet naming two weapons matched neither, so the line granted
+   * nothing: the battle cannon read as a weapon nothing grants, and the stubber as one weapon too
+   * many.
+   */
+  it("reads a bullet that hands over two weapons together", () => {
+    const line = "This model's flux carbine can be replaced with one of the following:\n\n- 1 shock maul\n- 1 ember lance and 1 plasma gun";
+    const ds = sheet({ options: [line], loadout: "This model is equipped with: flux carbine.", composition: [{ description: "1 Warden", min: 1, max: 1 }] });
+    expect(readWargearOptions(ds).unread).toEqual([]);
+    expect(checkLoadout(ds, holding(ds, 1, { "Ember lance": 1, "Plasma gun": 1 })).problems).toEqual([]);
+    expect(checkLoadout(ds, holding(ds, 1, { "Shock maul": 1 })).problems).toEqual([]);
+  });
+
   it("reads an allowance written after the subject", () => {
     const ds = sheet({ options: ["This model can be equipped with up to 2 ember lances."], composition: [{ description: "1 Warden", min: 1, max: 1 }] });
     expect(checkLoadout(ds, withWeapon(ds, 1, "Ember lance", 2)).problems).toEqual([]);
@@ -226,10 +240,22 @@ describe("checking a unit against its datasheet", () => {
     expect(checkLoadout(ds, withWeapon(ds, 10, "Shock maul", 10)).problems).toEqual([]);
   });
 
-  it("reports a weapon nothing grants when the datasheet prints no options", () => {
-    const ds = sheet({ loadout: "Every model is equipped with: flux carbine.", options: ["None"] });
+  it("reports a weapon nothing grants when every option line was read", () => {
+    const ds = sheet({ loadout: "Every model is equipped with: flux carbine.", options: ["Up to 2 Wardens can each have their flux carbine replaced with 1 shock maul."] });
     const check = checkLoadout(ds, withWeapon(ds, 10, "Ember lance", 1));
     expect(check.problems.map((p) => p.code)).toEqual(["weapon.unsourced"]);
+  });
+
+  /**
+   * A datasheet whose options are "None" has nothing to swap, so a weapon printed on it belongs to
+   * somebody's kit whether the loadout sentence names it or not. The sentences do leave things out:
+   * one names the gun drone a model carries and not the weapon the drone shoots with, which is
+   * printed as a weapon of the sheet, and reading the sentence as the whole truth called two
+   * tournament lists illegal.
+   */
+  it("says nothing about a weapon on a datasheet that prints no options at all", () => {
+    const ds = sheet({ loadout: "Every model is equipped with: flux carbine.", options: ["None"] });
+    expect(checkLoadout(ds, withWeapon(ds, 10, "Ember lance", 1)).problems).toEqual([]);
   });
 
   /**
@@ -255,7 +281,7 @@ describe("checking a unit against its datasheet", () => {
   });
 
   it("keeps quiet about a problem the app's own default loadout already has", () => {
-    const ds = sheet({ loadout: "Every model carries whatever it likes.", options: ["None"] });
+    const ds = sheet({ loadout: "Every model carries whatever it likes.", options: ["Up to 2 Wardens can each have their flux carbine replaced with 1 ember lance."] });
     const base = unitFromDatasheet(ds, snapshot, { modelCount: 10 });
     // The loadout prose names nothing matchable, so the unit arrives already unexplainable.
     expect(checkLoadout(ds, base).problems.length).toBeGreaterThan(0);
@@ -263,7 +289,7 @@ describe("checking a unit against its datasheet", () => {
   });
 
   it("still reports a count the player pushed past the default", () => {
-    const ds = sheet({ loadout: "Every model carries whatever it likes.", options: ["None"] });
+    const ds = sheet({ loadout: "Every model carries whatever it likes.", options: ["Up to 2 Wardens can each have their flux carbine replaced with 1 ember lance."] });
     const base = unitFromDatasheet(ds, snapshot, { modelCount: 10 });
     const worse = { ...base, weapons: base.weapons.map((w) => ({ ...w, enabled: true, count: 99 })) };
     expect(checkLoadout(ds, worse, { baseline: base }).problems.length).toBeGreaterThan(0);

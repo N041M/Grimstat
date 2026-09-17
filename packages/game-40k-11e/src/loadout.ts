@@ -57,12 +57,10 @@ export interface WargearLine {
   readonly text: string;
   /** How many times the line may be applied to a unit of this many models. */
   applications(models: number): number;
-  /** What one application puts on the model, by weapon base name. */
-  readonly grants: ReadonlyMap<string, number>;
+  /** What one application may put on the model: one of these sets, whose weapons come together. */
+  readonly grants: ReadonlyArray<ReadonlyMap<string, number>>;
   /** What one application takes off it, by weapon base name. Empty when the line only adds. */
   readonly replaces: ReadonlyMap<string, number>;
-  /** The grants are a choice of one, rather than all of them together. */
-  readonly alternatives: boolean;
 }
 
 export interface WargearReading {
@@ -95,32 +93,61 @@ const tidy = (s: string): string => s.replace(/[‘’ʼ]/g, "'").replace(/\s+/g
 const key = (name: string): string => tidy(name).toLowerCase();
 
 /**
- * The bullet items of "one of the following:", or the whole tail when the grant is inline, and
- * whether they are a choice of one or a set the line hands over together.
+ * What a line offers, as the sets of weapons one application may put on the model.
  *
- * Bullets are always a choice: they are what "one of the following" introduces. An inline tail is a
- * choice when it is written with "or" and a set when it is written with "and", which is the only
- * thing separating "1 oppressor cannon and 1 coaxial autocannon" — two guns for one — from a line
- * offering either of them.
+ * One set means the weapons come together; several mean a choice of one of them. Both shapes are
+ * written both ways round. "1 oppressor cannon and 1 coaxial autocannon" is two guns for one mount,
+ * where the same line written with "or" would be a choice, and a bullet of "one of the following"
+ * can itself be a pair: "- 1 despoiler battle cannon and 1 diabolus heavy stubber".
+ *
+ * Each item is left whole here. Splitting on "and" is the reader's last resort, because 73 weapons
+ * in the game data have an "and" in their name.
  */
-function grantCandidates(line: string): { items: string[]; alternatives: boolean } {
+function grantGroups(line: string): string[][] {
   const bullets = line
     .split(/\n+/)
     .map((l) => l.trim())
     .filter((l) => /^[-•*]\s+/.test(l))
     .map((l) => l.replace(/^[-•*]\s+/, ""));
-  if (bullets.length) return { items: bullets, alternatives: true };
+  if (bullets.length) return bullets.map((b) => [b]);
   const tail = /\b(?:replaced with|equipped with|replace their|select)\b\s*:?\s*(.+)$/i.exec(tidy(line));
-  if (!tail) return { items: [], alternatives: true };
+  if (!tail) return [];
   const text = (tail[1] ?? "").replace(/\bone of the following\b\s*:?/i, "");
-  const alternatives = /\bone of the following\b/i.test(tail[1] ?? "") || /\s+or\s+/i.test(text);
-  return {
-    items: text
-      .split(/\s*,\s*|\s+and\s+|\s+or\s+/i)
-      .map((s) => s.trim())
-      .filter(Boolean),
-    alternatives,
-  };
+  const items = text
+    .split(/\s*,\s*|\s+and\s+|\s+or\s+/i)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!items.length) return [];
+  const choice = /\bone of the following\b/i.test(tail[1] ?? "") || /\s+or\s+/i.test(text);
+  return choice ? items.map((i) => [i]) : [items];
+}
+
+/**
+ * The weapons one group names, with how many of each, or nothing when any part of it is unreadable.
+ *
+ * A group is tried whole first, so a weapon whose own name joins two things with "and" is matched as
+ * itself. Only when the whole names no single weapon is it cut up, and then every piece has to name
+ * one: half a rule read is worse than none.
+ */
+function grantSet(items: readonly string[], bases: readonly string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const item of items) {
+    const whole = splitCount(item);
+    const one = matchWeapon(whole.name, bases);
+    if (one) {
+      out.set(one, (out.get(one) ?? 0) + whole.copies);
+      continue;
+    }
+    const parts = item.split(/\s+and\s+|\s*,\s*/i).map((x) => x.trim()).filter(Boolean);
+    if (parts.length < 2) return new Map();
+    for (const part of parts) {
+      const { copies, name } = splitCount(part);
+      const base = matchWeapon(name, bases);
+      if (!base) return new Map();
+      out.set(base, (out.get(base) ?? 0) + copies);
+    }
+  }
+  return out;
 }
 
 /**
@@ -286,27 +313,19 @@ export function readWargearOptions(ds: Datasheet): WargearReading {
     }
 
     const limit = allowance(line);
-    const candidates = grantCandidates(line);
-    const grants = [...new Set(candidates.items.map((c) => {
-      const { copies, name } = splitCount(c);
-      const base = matchWeapon(name, bases);
-      return base ? `${base}\u0000${copies}` : undefined;
-    }).filter((x): x is string => !!x))];
+    const sets = grantGroups(line).map((group) => grantSet(group, bases)).filter((set) => set.size > 0);
 
-    if (!limit || !grants.length) {
+    if (!limit || !sets.length) {
       unread.push(line);
       continue;
     }
 
     const replaces = replacedWeapons(line, bases);
-    const perApplication = new Map<string, number>();
-    for (const packed of grants) {
-      const [base, copiesText] = packed.split("\u0000");
-      const copies = Number(copiesText) || 1;
-      perApplication.set(base!, Math.max(perApplication.get(base!) ?? 0, copies));
-      options.push({ text: line, grants: [base!], replaces, limit: (models) => limit(models) * copies });
-    }
-    lines.push({ text: line, applications: limit, grants: perApplication, replaces: replacedCounts(line, bases), alternatives: candidates.alternatives });
+    // The per-weapon view takes the most of a weapon any one set of this line offers.
+    const most = new Map<string, number>();
+    for (const set of sets) for (const [base, copies] of set) most.set(base, Math.max(most.get(base) ?? 0, copies));
+    for (const [base, copies] of most) options.push({ text: line, grants: [base], replaces, limit: (models) => limit(models) * copies });
+    lines.push({ text: line, applications: limit, grants: sets, replaces: replacedCounts(line, bases) });
   }
 
   // A sheet whose options are all "None" is fixed; one with options as well is not.
@@ -352,7 +371,7 @@ export function wargearItems(ds: Datasheet): string[] {
   const out = new Map<string, string>();
   for (const line of ds.wargearOptions) {
     if (!allowance(line)) continue;
-    for (const candidate of grantCandidates(line).items) {
+    for (const candidate of grantGroups(line).flat()) {
       const whole = itemName(candidate);
       if (!whole || matchWeapon(whole, bases)) continue;
       for (const part of whole.split(ITEM_SPLIT)) {
@@ -540,8 +559,7 @@ interface Variant {
 function variantsFor(lines: readonly WargearLine[], extras: ReadonlyMap<string, number>, models: number): Variant[] {
   const out: Variant[] = [];
   for (const line of lines) {
-    const choices: Array<ReadonlyMap<string, number>> = line.alternatives ? [...line.grants].map(([w, n]) => new Map([[w, n]])) : [line.grants];
-    for (const grants of choices) {
+    for (const grants of line.grants) {
       let most = 0;
       for (const [w, perApplication] of grants) {
         const want = extras.get(w);
@@ -628,7 +646,7 @@ function slotProblem(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading)
   const swapped: string[] = [];
   for (const [base, { count, name }] of held) {
     if (printed.has(base)) continue;
-    const granting = reading.lines.filter((l) => l.grants.has(base));
+    const granting = reading.lines.filter((l) => l.grants.some((set) => set.has(base)));
     if (!granting.length || granting.some((l) => l.replaces.size === 0)) continue;
     extras.set(base, count);
     swapped.push(name);
@@ -643,7 +661,7 @@ function slotProblem(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading)
   if (!variants.length) return undefined;
   if (swapsFit(variants, extras, spare, models) !== false) return undefined;
 
-  const kept = [...printed].filter((base) => held.has(base) && reading.lines.some((l) => l.replaces.has(base) && [...l.grants.keys()].some((g) => extras.has(g)))).map((base) => held.get(base)!.name);
+  const kept = [...printed].filter((base) => held.has(base) && reading.lines.some((l) => l.replaces.has(base) && l.grants.some((set) => [...set.keys()].some((g) => extras.has(g))))).map((base) => held.get(base)!.name);
   return {
     severity: "error",
     code: "weapon.noSlot",
@@ -689,9 +707,11 @@ function problemsFor(ds: Datasheet, unit: ScenarioUnit, reading: WargearReading)
       continue;
     }
 
-    if (reading.fixed) {
-      problems.push({ severity: "error", code: "weapon.unsourced", weapon: name, count, message: `${name} is not in the default loadout, and this datasheet has no wargear options.` });
-    } else if (reading.complete && reading.options.length) {
+    // A datasheet whose options are "None" has nothing to swap, so a weapon printed on it is part of
+    // somebody's kit whether the loadout sentence names it or not — and the sentences do leave
+    // things out. "The Twin Lance" names the gun drone each of its models carries without naming the
+    // twin pulse blaster the drone shoots with, which is printed as a weapon of the sheet.
+    if (reading.complete && reading.options.length) {
       problems.push({ severity: "error", code: "weapon.unsourced", weapon: name, count, message: `${name} is not in the default loadout and no wargear option grants it.` });
     }
   }

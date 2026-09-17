@@ -257,9 +257,13 @@ export class RosterImportContext {
     // the datasheet's own name ("10x Warden Squad") names a profile only when there is a single one to name;
     // on a multi-profile datasheet it describes the whole unit, and the prefix rule below must not claim it
     if (normaliseName(ds.name) === key) return ds.models.length === 1 ? ds.models[0] : undefined;
+    // A label and a profile name each other when one ends where the other does: lists write out the
+    // model in full, "1x Beast Snagga Nob", for a profile the datasheet calls "Nob", and write "1x
+    // Sergeant" for one it calls "Warden Sergeant". The longest profile that fits wins, so a label
+    // naming two of them is read as the more particular one.
     const scored = ds.models
       .map((m) => ({ m, k: normaliseName(m.name) }))
-      .filter((x) => key.startsWith(`${x.k} `) || x.k.endsWith(` ${key}`))
+      .filter((x) => key.startsWith(`${x.k} `) || key.endsWith(` ${x.k}`) || x.k.endsWith(` ${key}`))
       .sort((a, b) => b.k.length - a.k.length);
     if (scored[0]) return scored[0].m;
     const want = tokens(label).sort().join(" ");
