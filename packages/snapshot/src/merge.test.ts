@@ -340,3 +340,126 @@ describe("mergeSources: glossary", () => {
     expect(part1.glossary![0]!.text).toBe("from bsdata");
   });
 });
+
+/**
+ * Precedence decides which source is right about a price the sources disagree on. When the points
+ * authority's table is missing rows another source has, there is nothing to disagree about, and
+ * taking the authority's table whole would leave a unit at that size with no price.
+ */
+describe("mergeSources: a points table that is missing rows", () => {
+  const priced = (rules: { min: number; max?: number; tiers: [number, number][] }[]): PriceRule[] =>
+    rules.map((r) => ({ datasheetId: "ds:f:squad", copyRange: r.max === undefined ? { min: r.min } : { min: r.min, max: r.max }, tiers: r.tiers.map(([models, points]) => ({ models, points })) }));
+
+  const sig = (rules: PriceRule[]): string =>
+    rules.map((r) => `[${r.copyRange.min},${r.copyRange.max ?? ""}]${r.tiers.map((t) => `${t.models}:${t.points}`).join(",")}`).sort().join(" | ");
+
+  const merge = (authority: PriceRule[], other: PriceRule[]): ReturnType<typeof mergeSources> =>
+    mergeSources([
+      part("mfm-yaml", { datasheets: [datasheet({})], priceRules: authority }),
+      part("wahapedia-csv", { datasheets: [datasheet({ models: [MODEL] })], priceRules: other }),
+    ]);
+
+  it("takes the table that prices the larger unit as well", () => {
+    const merged = merge(priced([{ min: 1, tiers: [[10, 160]] }]), priced([{ min: 1, tiers: [[10, 160], [20, 320]] }]));
+    expect(sig(merged.data.priceRules)).toBe("[1,]10:160,20:320");
+  });
+
+  it("takes the copy bands from the source that has them when the authority states one base price", () => {
+    const merged = merge(priced([{ min: 1, tiers: [[5, 100]] }]), priced([{ min: 1, max: 3, tiers: [[5, 100], [10, 190]] }, { min: 4, tiers: [[5, 110], [10, 200]] }]));
+    expect(sig(merged.data.priceRules)).toBe("[1,3]5:100,10:190 | [4,]5:110,10:200");
+  });
+
+  it("records the conflict with the fuller table as the chosen one", () => {
+    const merged = merge(priced([{ min: 1, tiers: [[10, 160]] }]), priced([{ min: 1, tiers: [[10, 160], [20, 320]] }]));
+    expect(merged.conflicts.filter((c) => c.field === "points")).toEqual([
+      {
+        entity: "datasheet",
+        id: "ds:f:squad",
+        field: "points",
+        chosen: "[1,]10:160,20:320",
+        candidates: [
+          { adapter: "mfm-yaml", value: "[1,]10:160" },
+          { adapter: "wahapedia-csv", value: "[1,]10:160,20:320" },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps the authority's price when the two disagree about a size they both price", () => {
+    const merged = merge(priced([{ min: 1, tiers: [[5, 90]] }]), priced([{ min: 1, tiers: [[5, 100], [10, 200]] }]));
+    expect(sig(merged.data.priceRules)).toBe("[1,]5:90");
+    expect(merged.conflicts.some((c) => c.field === "points" && c.chosen === "[1,]5:90")).toBe(true);
+  });
+
+  it("keeps the authority's copy bands rather than trading them for extra sizes", () => {
+    const merged = merge(priced([{ min: 1, max: 2, tiers: [[5, 90]] }, { min: 3, tiers: [[5, 100]] }]), priced([{ min: 1, tiers: [[5, 90], [10, 180], [20, 360]] }]));
+    expect(sig(merged.data.priceRules)).toBe("[1,2]5:90 | [3,]5:100");
+  });
+
+  it("carries the fuller table's smallest first-copy price into the fallback", () => {
+    const merged = merge(priced([{ min: 1, tiers: [[10, 160]] }]), priced([{ min: 1, tiers: [[5, 90], [10, 160]] }]));
+    expect(sig(merged.data.priceRules)).toBe("[1,]5:90,10:160");
+    expect(merged.data.datasheets[0]!.fallbackPoints).toBe(90);
+  });
+});
+
+/**
+ * BSData is a constraint system rather than a points table, and this importer reconstructs a table by
+ * replaying its modifiers. A builder that evaluates the catalogue never reaches a modifier the unit's
+ * own constraints forbid, but replaying them on their own does, so the reconstruction can carry a
+ * price for a size the unit cannot be.
+ */
+describe("mergeSources: a points table reconstructed from a rules engine", () => {
+  const priced = (tiers: [number, number][], min = 1, max?: number): PriceRule[] => [
+    { datasheetId: "ds:f:squad", copyRange: max === undefined ? { min } : { min, max }, tiers: tiers.map(([models, points]) => ({ models, points })) },
+  ];
+
+  const sig = (rules: PriceRule[]): string =>
+    rules.map((r) => `[${r.copyRange.min},${r.copyRange.max ?? ""}]${r.tiers.map((t) => `${t.models}:${t.points}`).join(",")}`).sort().join(" | ");
+
+  const published = (rules: PriceRule[]): MergePart => part("mfm-yaml", { datasheets: [datasheet({ models: [MODEL] })], priceRules: rules });
+  const derived = (rules: PriceRule[]): MergePart => part("bsdata-json", { datasheets: [datasheet({})], priceRules: rules });
+
+  it("drops a row for a size the published table does not list", () => {
+    const merged = mergeSources([published(priced([[5, 145]])), derived(priced([[5, 145], [6, 360]]))]);
+    expect(sig(merged.data.priceRules)).toBe("[1,]5:145");
+    expect(merged.warnings).toContain('datasheet ds:f:squad ("Squad"): bsdata-json prices 6 models at 360. No published points table lists that size, so the row was dropped.');
+  });
+
+  it("does not let a size nobody publishes make a derived table look fuller", () => {
+    const merged = mergeSources([published(priced([[5, 145]])), derived(priced([[5, 145], [6, 360]]))]);
+    expect(merged.data.priceRules[0]!.tiers).toEqual([{ models: 5, points: 145 }]);
+    expect(merged.conflicts.filter((c) => c.field === "points")).toEqual([]);
+  });
+
+  it("keeps the rows whose size is published and drops only the rest", () => {
+    const merged = mergeSources([published(priced([[3, 85], [6, 170]])), derived(priced([[3, 85], [4, 150]]))]);
+    expect(sig(merged.data.priceRules)).toBe("[1,]3:85,6:170");
+    expect(merged.warnings.some((w) => w.includes("4 models at 150"))).toBe(true);
+    expect(merged.warnings.some((w) => w.includes("3 models at 85"))).toBe(false);
+  });
+
+  it("names every dropped row in one warning", () => {
+    const merged = mergeSources([published(priced([[3, 85], [6, 170]])), derived(priced([[1, 85], [4, 150]]))]);
+    expect(merged.warnings.filter((w) => w.includes("published points table"))).toEqual([
+      'datasheet ds:f:squad ("Squad"): bsdata-json prices 1 model at 85 and 4 models at 150. No published points table lists those sizes, so the rows were dropped.',
+    ]);
+  });
+
+  it("still takes a copy band from the derived source when every size it prices is published", () => {
+    const merged = mergeSources([published(priced([[6, 145]])), derived([...priced([[6, 145]], 1, 2), ...priced([[6, 160]], 3)])]);
+    expect(sig(merged.data.priceRules)).toBe("[1,2]6:145 | [3,]6:160");
+    expect(merged.warnings.some((w) => w.includes("published points table"))).toBe(false);
+  });
+
+  it("uses the derived table whole when no source publishes one", () => {
+    const merged = mergeSources([derived(priced([[5, 145], [6, 360]]))], { dropStubs: false });
+    expect(sig(merged.data.priceRules)).toBe("[1,]5:145,6:360");
+    expect(merged.warnings.some((w) => w.includes("published points table"))).toBe(false);
+  });
+
+  it("leaves every source alone when no adapter is marked as derived", () => {
+    const merged = mergeSources([published(priced([[5, 145]])), derived(priced([[5, 145], [6, 360]]))], { derivedPoints: [] });
+    expect(sig(merged.data.priceRules)).toBe("[1,]5:145,6:360");
+  });
+});
