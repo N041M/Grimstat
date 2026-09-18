@@ -1,6 +1,6 @@
 # Accounts, sync and hosting — design plan
 
-> Status: plan (18 Sep 2026). Phase 1 is live at grimstat.com and Phase 0 is built, both on 18 Sep 2026; Phases 2 to 4 are not started. Builds on the service seams in
+> Status: plan (18 Sep 2026). Phase 1 is live at grimstat.com and Phase 0 is built, both on 18 Sep 2026. Phase 2 is built and tested on 18 Sep 2026 and waits on the setup under "Phase 2 — what was built". Phases 3 and 4 are not started. Builds on the service seams in
 > `apps/web/src/services/`, the record metadata in `packages/schema/src/common.ts` and the Dexie
 > store in `apps/web/src/db.ts`.
 
@@ -274,6 +274,42 @@ analytics, no IP logs beyond Cloudflare's own rolling ones, no third party excep
 email. The privacy page says this in one paragraph. Export and deletion are the two rights the page
 has to offer, and both exist.
 
+### Phase 2 — what was built (18 Sep 2026)
+
+The server is `apps/api`: Hono, one `Db` interface with a D1 and a `node:sqlite` implementation, the
+migration in `apps/api/migrations`, and fifteen end-to-end tests that drive the routes on SQLite.
+The Worker entry is `apps/api/src/worker.ts`, and `apps/web/wrangler.jsonc` makes it the script of
+the site's Worker with `run_worker_first` for `/api/*` and `/l/*` only. The deploy workflow applies
+migrations before each deploy. `pnpm --filter @grimstat/api dev` runs it on Node with sign-in links
+printed to the terminal, and the web dev server proxies `/api` and `/l` to it.
+
+On the device, `lib/syncEngine.ts` is the round described under "The protocol",
+`lib/syncScheduler.ts` decides when it runs, `lib/accountService.ts` is the `AuthService` with
+adoption and the replace question, and the Profile page is `pages/ProfilePage.tsx`. Eight tests in
+`lib/syncEngine.test.ts` run two real stores against the real server in-process, including the
+conflict that keeps a copy in History. The two-device flow was also walked by hand in the browser
+against the Node server.
+
+Three things differ from the plan above:
+
+- **No Turnstile yet.** The sign-up gate is the three rate limits in `apps/api/src/auth.ts`, plus a
+  hard stop at ninety sign-in emails a day, which together cap what a script can cost. Turnstile
+  needs a change to the page's content policy for its script, and comes when sign-ups are open.
+- **Backups are D1's own.** Time Travel keeps thirty days of point-in-time restore on every plan,
+  which is more than a nightly export would give, so there is no export job.
+- **The privacy text is on the About page**, two paragraphs under "Data policy", rather than a page
+  of its own. The Profile page links to it.
+
+Setup before the first deploy of it, with wrangler signed in to the Cloudflare account:
+
+1. `pnpm --filter @grimstat/web exec wrangler d1 create grimstat`, and put the id it prints into
+   `database_id` in `apps/web/wrangler.jsonc`.
+2. `pnpm --filter @grimstat/web exec wrangler secret put IP_SALT` with any long random string.
+3. A Resend account, the sending domain grimstat.com verified there with the DNS records it gives
+   (they go into Cloudflare's DNS), and `wrangler secret put RESEND_API_KEY` with its API key.
+   Until the domain is verified, Resend only delivers to the account's own address.
+4. The deploy token needs `Account / D1 / Edit` as well as the Workers permissions.
+
 ## Phase 3 — profiles and share pages
 
 A handle is optional and chosen on the Profile page, three to twenty characters, letters, digits and
@@ -336,7 +372,7 @@ income above a threshold, which is an accountant's question before the first pay
 |---|---|---|
 | 0 | Stable snapshot ids, outbox and tombstones middleware, `updatedAt` and `ownerId` everywhere, adoption on sign-in | 1 week |
 | 1 | Domain, Cloudflare static site, links in D1, the closing banner on Pages | 3 days |
-| 2 | Magic-link auth, the sync endpoint, quotas and the pause, Profile page, privacy page, nightly D1 export to R2 | 3 to 4 weeks |
+| 2 | Magic-link auth, the sync endpoint, quotas and the pause, Profile page, privacy text, D1 Time Travel for backups | built 18 Sep 2026 |
 | 3 | Handles, shared rosters, `/u/<handle>` | 1 to 2 weeks |
 | 4 | Capacitor, Android listing, deep links | 2 weeks plus review |
 

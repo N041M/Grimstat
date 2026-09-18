@@ -8,3 +8,4 @@ export * from "./scenario";
 export * from "./results";
 export * from "./diagnostics";
 export * from "./plugin";
+export * from "./sync";

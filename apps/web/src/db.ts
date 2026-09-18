@@ -32,12 +32,14 @@ export const SETTING_ACTIVE_SNAPSHOT = "activeSnapshotId";
 
 /** One autosaved revision of a roster (full JSON), kept for the History panel. */
 export interface RosterVersionRecord {
-  /** `${rosterId}:${revision}` */
+  /** `${rosterId}:${revision}`, or `${rosterId}:${revision}:kept:<time>` for a copy sync set aside. */
   id: string;
   rosterId: string;
   revision: number;
   updatedAt: string;
   json: string;
+  /** Why this copy is here when it is not one of the autosaved revisions. */
+  note?: "kept";
 }
 
 /** Versions kept per roster; older ones are pruned on every save. */
@@ -550,7 +552,7 @@ export async function putSourceFiles(rec: Omit<SourceFilesRecord, "key">): Promi
  */
 export const STORE_CHANGED = "grimstat:store-changed";
 
-export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts" | "publishedLists" | "publishedResolved" | "games" | "unitPresets" | "collection";
+export type StoreName = "rosters" | "scenarios" | "snapshots" | "overrides" | "terrainLayouts" | "publishedLists" | "publishedResolved" | "games" | "unitPresets" | "collection" | "layouts" | "settings";
 
 export function notifyStoreChanged(store: StoreName): void {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORE_CHANGED, { detail: store }));

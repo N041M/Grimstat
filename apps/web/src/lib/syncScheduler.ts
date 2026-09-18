@@ -1,0 +1,114 @@
+/**
+ * When sync runs. Thirty seconds after the last change, when the tab is hidden, when the app opens,
+ * when the tab comes back, and when the network comes back. A paused sync waits for the reset and
+ * tries once then. A failed sync tries again after a minute.
+ *
+ * This is the `SyncService` the shell reads. It owns no data; the engine does the work.
+ */
+import type { GrimstatDb } from "../db";
+import type { SyncService, SyncState } from "../services/sync";
+import { ApiError, runSync } from "./syncEngine";
+import { OUTBOX_CHANGED } from "./syncTracking";
+import { LAST_SYNC_SETTING, type FetchLike } from "./account";
+
+export const SYNC_DEBOUNCE_MS = 30_000;
+const RETRY_MS = 60_000;
+
+export interface SchedulerDeps {
+  db: GrimstatDb;
+  fetchImpl: FetchLike;
+  token: () => string | undefined;
+  now?: () => Date;
+}
+
+export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date() }: SchedulerDeps): SyncService & { start(): void; stop(): void } {
+  let state: SyncState = { status: "idle" };
+  const listeners = new Set<(s: SyncState) => void>();
+  let timer: number | undefined;
+  let running: Promise<void> | undefined;
+  let again = false;
+
+  const set = (next: Partial<SyncState>): void => {
+    state = { ...state, ...next };
+    listeners.forEach((l) => l(state));
+  };
+
+  const schedule = (ms: number): void => {
+    if (typeof window === "undefined") return;
+    if (timer !== undefined) window.clearTimeout(timer);
+    timer = window.setTimeout(() => void run(), ms);
+  };
+
+  const run = async (): Promise<void> => {
+    if (running) {
+      again = true;
+      return running;
+    }
+    const t = token();
+    if (!t) return;
+    if (state.status === "paused" && state.pausedUntil && state.pausedUntil > now().toISOString()) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    running = (async () => {
+      set({ status: "syncing", error: undefined });
+      try {
+        await runSync({ db, fetchImpl, token: t, now });
+        set({ status: "idle", lastSyncedAt: now().toISOString(), pausedUntil: undefined });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 503 && e.pausedUntil) {
+          set({ status: "paused", pausedUntil: e.pausedUntil });
+          schedule(Math.max(1000, new Date(e.pausedUntil).getTime() - now().getTime()));
+        } else if (e instanceof ApiError && e.status === 401) {
+          // The session is gone. The account layer signs the device out on its next look.
+          set({ status: "error", error: e.message });
+        } else {
+          set({ status: "error", error: e instanceof Error ? e.message : String(e) });
+          schedule(RETRY_MS);
+        }
+      } finally {
+        running = undefined;
+        if (again) {
+          again = false;
+          schedule(SYNC_DEBOUNCE_MS);
+        }
+      }
+    })();
+    return running;
+  };
+
+  const onOutbox = (): void => schedule(SYNC_DEBOUNCE_MS);
+  const onVisibility = (): void => {
+    if (typeof document === "undefined") return;
+    if (document.hidden) void run();
+    else schedule(0);
+  };
+  const onOnline = (): void => schedule(0);
+
+  return {
+    state: () => state,
+    syncNow: () => run(),
+    subscribe(l) {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    start() {
+      if (typeof window === "undefined") return;
+      void db.settings.get(LAST_SYNC_SETTING).then((r) => {
+        if (typeof r?.value === "string") set({ lastSyncedAt: r.value });
+      });
+      window.addEventListener(OUTBOX_CHANGED, onOutbox);
+      document.addEventListener("visibilitychange", onVisibility);
+      window.addEventListener("online", onOnline);
+      schedule(0);
+    },
+    stop() {
+      if (typeof window === "undefined") return;
+      window.removeEventListener(OUTBOX_CHANGED, onOutbox);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("online", onOnline);
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+      state = { status: "disabled" };
+      listeners.forEach((l) => l(state));
+    },
+  };
+}

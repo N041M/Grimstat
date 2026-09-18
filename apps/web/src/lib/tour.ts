@@ -105,6 +105,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
   { id: "battle-layout", route: "battle", titleKey: "battle.pick.title", bodyKey: "tour.battle.layout", focus: "battle-layout" },
   { id: "play", route: "play", titleKey: "nav.play", bodyKey: "tour.play.body" },
   { id: "play-start", route: "play", titleKey: "play.setup.begin", bodyKey: "tour.play.start", focus: "play-start" },
+  { id: "profile", route: "profile", titleKey: "nav.profile", bodyKey: "tour.profile.body" },
+  { id: "profile-signin", route: "profile", titleKey: "profile.sendLink", bodyKey: "tour.profile.signin", focus: "profile-signin" },
   { id: "about", route: "about", titleKey: "nav.about", bodyKey: "tour.about.body" },
   STORE_BUILD
     ? { id: "finish", route: "about", titleKey: "nav.about", bodyKey: "tour.finish.store", bookend: true }

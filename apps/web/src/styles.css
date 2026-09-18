@@ -692,7 +692,34 @@ code,
   min-height: 0;
   overflow: auto;
 }
-/* The line a build shows when the app has moved to another address (see lib/moved.ts). It sits
+/* ---- profile: the account on this device ---- */
+.profile-page > section + section {
+  margin-top: 26px;
+}
+.profile-page .field-row label.grow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 240px;
+}
+.profile-devices {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.profile-devices li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.profile-page .data-note {
+  display: block;
+  margin-top: 8px;
+}
+
+ (see lib/moved.ts). It sits
    above the screen rather than over it, so nothing on the screen is hidden for the weeks it is up. */
 .moved-banner {
   display: flex;

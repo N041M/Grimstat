@@ -126,6 +126,7 @@ export function HistoryPanel({ roster, snapshot, onRestore, onClose }: Props) {
                 <div className="grow">
                   <div>
                     <strong>{t("roster.history.revision", { n: rec.revision })}</strong> {current ? <span className="badge accent">{t("roster.history.current")}</span> : null}
+                    {rec.note === "kept" ? <span className="badge">{t("roster.history.kept")}</span> : null}
                   </div>
                   <div className="small muted">
                     {fmtDate(rec.updatedAt)}

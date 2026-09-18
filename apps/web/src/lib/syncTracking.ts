@@ -31,6 +31,13 @@ import type { DBCore, DBCoreMutateRequest, DBCoreTable, DBCoreTransaction, Middl
 export const OUTBOX_STORE = "outbox";
 export const TOMBSTONE_STORE = "tombstones";
 
+/** Raised on `window` after a tracked change, so the sync scheduler knows there is something to send. */
+export const OUTBOX_CHANGED = "grimstat:outbox-changed";
+
+function announce(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(OUTBOX_CHANGED));
+}
+
 /** A change waiting to be sent: the record in `store` with this `id`, last changed at `changedAt`. */
 export interface OutboxRecord {
   store: string;
@@ -143,6 +150,7 @@ export function trackingMiddleware(): Middleware<DBCore> {
                 if (changed.length) {
                   await outbox().mutate({ type: "put", trans: req.trans, values: changed });
                   await tombstones().mutate({ type: "delete", trans: req.trans, keys: changed.map((c) => [name, c.id]) });
+                  announce();
                 }
                 return res;
               }
@@ -155,6 +163,7 @@ export function trackingMiddleware(): Middleware<DBCore> {
               if (keys.length) {
                 await tombstones().mutate({ type: "put", trans: req.trans, values: keys.map((id) => ({ store: name, id, deletedAt: now })) });
                 await outbox().mutate({ type: "delete", trans: req.trans, keys: keys.map((id) => [name, id]) });
+                announce();
               }
               return res;
             },

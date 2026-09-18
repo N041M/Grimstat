@@ -36,6 +36,16 @@
         "4173"
       ],
       "port": 4173
+    },
+    {
+      "name": "grimstat-api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@grimstat/api",
+        "dev"
+      ],
+      "port": 8787
     }
   ]
 }

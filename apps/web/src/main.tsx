@@ -7,6 +7,7 @@ import { AppProvider } from "./state/AppContext";
 import { App } from "./App";
 import { ErrorBoundary, StartupError } from "./components/ErrorBoundary";
 import { swStore } from "./lib/sw";
+import { account } from "./lib/accountBoot";
 
 /*
  * The build registers with `registerType: "autoUpdate"`. A new version takes over and the page
@@ -45,7 +46,9 @@ const el = document.getElementById("root");
 if (!el) throw new Error("#root not found");
 const root = createRoot(el);
 
-pluginsReady
+// A device that was signed in is signed in from the first screen, so the account is read before
+// anything renders. A store that cannot be opened is reported by the app itself, not here.
+Promise.all([pluginsReady, account.boot().catch(() => undefined)])
   .then(() => {
     root.render(
       <StrictMode>

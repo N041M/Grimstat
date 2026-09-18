@@ -1,10 +1,11 @@
 # The live site at grimstat.com: the built app, served as static files by a Cloudflare Worker.
 #
 # Setup, once: in the Cloudflare dashboard make an API token from the "Edit Cloudflare Workers"
-# template, scoped to this account and to the grimstat.com zone, and store it as the repository
-# secret CLOUDFLARE_API_TOKEN. Set the repository variable CLOUDFLARE_ACCOUNT_ID to the account id
-# shown on the domain's overview page. Without the variable this workflow does not run, so a push
-# before setup is not a failed deploy.
+# template with D1 edit added, scoped to this account and to the grimstat.com zone, and store it as
+# the repository secret CLOUDFLARE_API_TOKEN. Set the repository variable CLOUDFLARE_ACCOUNT_ID to
+# the account id shown on the domain's overview page. Without the variable this workflow does not
+# run, so a push before setup is not a failed deploy. The database and the Worker's secrets are
+# made once by hand; apps/web/wrangler.jsonc says how.
 #
 # The checks run here against the exact commit about to go out, as they do for the Pages build.
 # While the old GitHub Pages address is still open the two workflows build side by side, with
@@ -70,6 +71,16 @@ jobs:
         run: pnpm --filter @grimstat/web build
         env:
           VITE_BASE: /
+      # The database takes any new migration before the code that expects it goes live. A migration
+      # already applied is skipped, so this is a no-op on most deploys.
+      - name: Apply database migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          packageManager: pnpm
+          command: d1 migrations apply grimstat --remote
       - name: Deploy to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:

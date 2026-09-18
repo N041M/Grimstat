@@ -451,6 +451,7 @@ export function ContextColumn({ route, param, inSheet }: { route: Route; param?:
       return <PlayBody {...props} />;
     case "data":
       return <DataBody {...props} />;
+    case "profile":
     case "about":
       return <AboutBody {...props} />;
   }
@@ -477,6 +478,7 @@ export function contextEyebrow(route: Route): string {
       return t("ctxcol.play");
     case "data":
       return t("ctxcol.sources");
+    case "profile":
     case "about":
       return t("ctxcol.project");
   }

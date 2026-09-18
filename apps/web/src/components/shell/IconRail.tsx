@@ -13,7 +13,7 @@ export interface RailEntry {
   labelKey: I18nKey;
 }
 
-/** `C S A M X N B P D ?` — the rail's whole vocabulary. Reused by the command palette's "Go to" group. */
+/** `C S A M X N B P D U ?` — the rail's whole vocabulary. Reused by the command palette's "Go to" group. */
 export const RAIL_ENTRIES: readonly RailEntry[] = [
   { route: "calculator", glyph: "C", labelKey: "nav.calculator" },
   { route: "scenarios", glyph: "S", labelKey: "nav.scenarios" },
@@ -24,6 +24,7 @@ export const RAIL_ENTRIES: readonly RailEntry[] = [
   { route: "battle", glyph: "B", labelKey: "nav.battle" },
   { route: "play", glyph: "P", labelKey: "nav.play" },
   { route: "data", glyph: "D", labelKey: "nav.data" },
+  { route: "profile", glyph: "U", labelKey: "nav.profile" },
   { route: "about", glyph: "?", labelKey: "nav.about" },
 ];
 
@@ -31,7 +32,7 @@ export const RAIL_ENTRIES: readonly RailEntry[] = [
  * About is not one of the places the work happens, so it sits at the foot of the rail and of the
  * drawer, beside the theme control, rather than at the end of the run of destinations.
  */
-const FOOT_ROUTES: readonly Route[] = ["about"];
+const FOOT_ROUTES: readonly Route[] = ["profile", "about"];
 const WORK_ENTRIES = RAIL_ENTRIES.filter((e) => !FOOT_ROUTES.includes(e.route));
 const FOOT_ENTRIES = RAIL_ENTRIES.filter((e) => FOOT_ROUTES.includes(e.route));
 

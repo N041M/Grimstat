@@ -257,12 +257,17 @@ export default defineConfig({
      * A built site has no server of its own, so a deployment reads a published mirror instead. Both
      * paths end up at `<base>/<gameSystemId>/<Table>.csv`, which is the one shape the app fetches.
      */
-    proxy: Object.fromEntries(
-      Object.entries(WAHAPEDIA_DEV_PATHS).map(([id, upstream]) => [
-        `${WAHAPEDIA_DEV_PROXY}${id}`,
-        { target: "https://wahapedia.ru", changeOrigin: true, rewrite: (path: string) => path.replace(`${WAHAPEDIA_DEV_PROXY}${id}`, upstream) },
-      ]),
-    ),
+    proxy: {
+      // The sync API, when `pnpm --filter @grimstat/api dev` is running. Same paths as on the site.
+      "/api": { target: "http://localhost:8787", changeOrigin: false },
+      "/l/": { target: "http://localhost:8787", changeOrigin: false },
+      ...Object.fromEntries(
+        Object.entries(WAHAPEDIA_DEV_PATHS).map(([id, upstream]) => [
+          `${WAHAPEDIA_DEV_PROXY}${id}`,
+          { target: "https://wahapedia.ru", changeOrigin: true, rewrite: (path: string) => path.replace(`${WAHAPEDIA_DEV_PROXY}${id}`, upstream) },
+        ]),
+      ),
+    },
   },
   build: {
     target: "es2022",

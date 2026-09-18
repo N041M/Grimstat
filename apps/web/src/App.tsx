@@ -20,12 +20,15 @@ import { PlayPage } from "./pages/PlayPage";
 import { DataPage } from "./pages/DataPage";
 import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
+import { fmtResume, ProfilePage } from "./pages/ProfilePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sheet, useConfirm, useEdgeFade } from "./components/ui";
 import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, Tour, useBarHostRef } from "./components/shell";
 import { mayReplaceScenario, setReplaceScenarioGuard } from "./components/shell/ContextColumn";
 import { useOnline } from "./lib/sw";
 import { formatClosesOn, movedNotice } from "./lib/moved";
+import { setAskReplace } from "./lib/accountBoot";
+import { sync } from "./services/sync";
 import { t } from "./i18n";
 
 /** The notice this build carries when the app has moved; see `lib/moved.ts`. Read once. */
@@ -69,6 +72,21 @@ export function App() {
   useEffect(() => {
     if (!phone) setNav(false);
   }, [phone]);
+
+  // The account asks one question of its own, when a device holds another account's lists, and
+  // the shell's dialog is where it is asked.
+  useEffect(() => setAskReplace(() => confirm({ title: t("profile.replaceTitle"), body: t("profile.replaceBody"), confirmLabel: t("profile.replace"), danger: true })), [confirm]);
+
+  // Sync says when it is paused or failing, once per change of state, wherever the reader is.
+  useEffect(() => {
+    let last = sync().state().status;
+    return sync().subscribe((s) => {
+      if (s.status === last) return;
+      last = s.status;
+      if (s.status === "paused" && s.pausedUntil) notify(t("sync.paused", { time: fmtResume(s.pausedUntil) }), "info");
+      else if (s.status === "error" && s.error) notify(t("sync.error", { error: s.error }), "error");
+    });
+  }, [notify]);
 
   // The shell owns the question every way of loading a scenario has to ask, because the calculator
   // holds one scenario and loading another drops it. The screens and the palette ask through
@@ -149,7 +167,7 @@ export function App() {
     <p className="muted shell-loading">{t("shell.loading")}</p>
   ) : (
     <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
-      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "collection" ? <CollectionPage /> : route === "codex" ? <CodexPage id={param} /> : route === "analyses" ? <AnalysesPage /> : route === "battle" ? <BattlePage /> : route === "play" ? <PlayPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : <AboutPage />}
+      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "collection" ? <CollectionPage /> : route === "codex" ? <CodexPage id={param} /> : route === "analyses" ? <AnalysesPage /> : route === "battle" ? <BattlePage /> : route === "play" ? <PlayPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : route === "profile" ? <ProfilePage /> : <AboutPage />}
     </ErrorBoundary>
   );
 

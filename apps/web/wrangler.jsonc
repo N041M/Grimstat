@@ -1,8 +1,8 @@
-// The deployed site: the built app served as static files from Cloudflare under its own domain.
+// The deployed site and its API, one Worker under grimstat.com.
 //
-// There is no Worker script yet, only the files in dist/. The sync API planned in docs/SYNC.md
-// becomes the script of this same Worker, so the domain, the deploy step and the name stay as they
-// are when it arrives.
+// The files in dist/ are served as static assets and never reach the script. Only the paths in
+// `run_worker_first` do: the sync API and the short links. A request for a file costs nothing
+// against the Worker's daily allowance, which is why the split is drawn there.
 //
 // A path that matches no file gets a 404 rather than the app's page. The app routes by hash, so it
 // never needs a fallback, and the Wahapedia copy under wahapedia/ is checked by fetching a file
@@ -12,10 +12,34 @@
 // Only the bare domain is served here. www is a redirect rule in the Cloudflare dashboard, with a
 // placeholder DNS record for it, because a request answered by a rule never reaches the Worker
 // and so never counts against its daily allowance.
+//
+// Setup, once, with wrangler signed in to the account:
+//   pnpm --filter @grimstat/web exec wrangler d1 create grimstat      → the database_id below
+//   pnpm --filter @grimstat/web exec wrangler secret put RESEND_API_KEY
+//   pnpm --filter @grimstat/web exec wrangler secret put IP_SALT      → any long random string
+// The deploy workflow applies apps/api/migrations before every deploy.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "grimstat",
+  "main": "../api/src/worker.ts",
   "compatibility_date": "2026-09-01",
-  "assets": { "directory": "./dist" },
-  "routes": [{ "pattern": "grimstat.com", "custom_domain": true }]
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/l/*"]
+  },
+  "routes": [{ "pattern": "grimstat.com", "custom_domain": true }],
+  "vars": {
+    "APP_URL": "https://grimstat.com",
+    "MAIL_FROM": "Grimstat <hello@grimstat.com>"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "grimstat",
+      "database_id": "REPLACE_WITH_THE_ID_FROM_wrangler_d1_create",
+      "migrations_dir": "../api/migrations"
+    }
+  ],
+  "observability": { "enabled": true }
 }

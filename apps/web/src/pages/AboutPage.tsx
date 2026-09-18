@@ -63,6 +63,8 @@ export function AboutPage() {
           </h2>
           <p className="about-card-body prose">{t("about.data1")}</p>
           <p className="about-card-body prose">{t("about.data2")}</p>
+          <p className="about-card-body prose">{t("about.account")}</p>
+          <p className="about-card-body prose">{t("about.sync")}</p>
           <p className="about-card-body prose">
             {t("about.data3")}{" "}
             <a href={FORTYKDC.repo} target="_blank" rel="noreferrer">

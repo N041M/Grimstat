@@ -1,0 +1,251 @@
+/**
+ * The server, end to end, on Node's own SQLite. Every request goes through the routes as a browser
+ * would send it, with a fixed clock and a mailer that keeps the message instead of sending it.
+ */
+import { DatabaseSync } from "node:sqlite";
+import { beforeEach, describe, expect, it } from "vitest";
+import { SYNC_PAGE } from "@grimstat/schema";
+import { createApp, nextReset } from "./app";
+import { LIMIT_PER_DAY, LIMIT_PER_EMAIL } from "./auth";
+import { sqliteDb, type Db } from "./db";
+import type { Deps } from "./deps";
+import { migrate } from "./node";
+
+const APP = "https://grimstat.test";
+
+interface Harness {
+  deps: Deps;
+  app: ReturnType<typeof createApp>;
+  mail: Array<{ to: string; text: string }>;
+  clock: { now: Date };
+  json<T = unknown>(method: string, path: string, body?: unknown, token?: string, headers?: Record<string, string>): Promise<{ status: number; body: T }>;
+  signIn(email: string, device?: string): Promise<string>;
+}
+
+function harness(dbOverride?: (db: Db) => Db): Harness {
+  const sqlite = new DatabaseSync(":memory:");
+  migrate(sqlite);
+  const mail: Harness["mail"] = [];
+  const clock = { now: new Date("2026-09-18T12:00:00.000Z") };
+  const base = sqliteDb(sqlite);
+  const deps: Deps = { db: dbOverride ? dbOverride(base) : base, mail: { send: async (to, _subject, text) => void mail.push({ to, text }) }, appUrl: APP, ipSalt: "salt", now: () => clock.now };
+  const app = createApp(deps);
+  const h: Harness = {
+    deps,
+    app,
+    mail,
+    clock,
+    async json(method, path, body, token, headers = {}) {
+      const res = await app.request(path, {
+        method,
+        headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.7", ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const text = await res.text();
+      return { status: res.status, body: (text ? JSON.parse(text) : undefined) as never };
+    },
+    async signIn(email, device = "Test device") {
+      const started = await h.json("POST", "/api/auth/start", { email });
+      expect(started.status).toBe(200);
+      const code = /code=([0-9a-f]+)/.exec(mail[mail.length - 1]!.text)![1]!;
+      const finished = await h.json<{ token: string }>("POST", "/api/auth/finish", { code, device });
+      expect(finished.status).toBe(200);
+      return finished.body.token;
+    },
+  };
+  return h;
+}
+
+const NOW = "2026-09-18T12:00:00.000Z";
+const roster = (id: string, name = id, updatedAt = NOW) => ({ store: "rosters" as const, id, revision: 1, updatedAt, body: { id, name, units: [] } });
+
+describe("signing in", () => {
+  let h: Harness;
+  beforeEach(() => {
+    h = harness();
+  });
+
+  it("mails a link, takes the code back once, and names the device", async () => {
+    const token = await h.signIn("Player@Example.com", "Kitchen laptop");
+    expect(h.mail[0]!.to).toBe("player@example.com");
+    expect(h.mail[0]!.text).toContain(`${APP}/#/profile?code=`);
+    const me = await h.json<{ session: { user: { email: string } }; devices: Array<{ deviceName: string; current: boolean }> }>("GET", "/api/me", undefined, token);
+    expect(me.status).toBe(200);
+    expect(me.body.session.user.email).toBe("player@example.com");
+    expect(me.body.devices).toMatchObject([{ deviceName: "Kitchen laptop", current: true }]);
+
+    // The same code a second time is refused.
+    const code = /code=([0-9a-f]+)/.exec(h.mail[0]!.text)![1]!;
+    expect((await h.json("POST", "/api/auth/finish", { code })).status).toBe(400);
+  });
+
+  it("refuses a code after fifteen minutes and a token after a year", async () => {
+    await h.json("POST", "/api/auth/start", { email: "a@example.com" });
+    const code = /code=([0-9a-f]+)/.exec(h.mail[0]!.text)![1]!;
+    h.clock.now = new Date("2026-09-18T12:16:00.000Z");
+    expect((await h.json("POST", "/api/auth/finish", { code })).status).toBe(400);
+
+    h.clock.now = new Date(NOW);
+    const token = await h.signIn("a@example.com");
+    h.clock.now = new Date("2027-09-19T12:00:00.000Z");
+    expect((await h.json("GET", "/api/me", undefined, token)).status).toBe(401);
+  });
+
+  it("is the same account on every device", async () => {
+    const t1 = await h.signIn("a@example.com", "one");
+    const t2 = await h.signIn("a@example.com", "two");
+    const me = await h.json<{ session: { user: { id: string } }; devices: unknown[] }>("GET", "/api/me", undefined, t2);
+    const other = await h.json<{ session: { user: { id: string } } }>("GET", "/api/me", undefined, t1);
+    expect(me.body.session.user.id).toBe(other.body.session.user.id);
+    expect(me.body.devices).toHaveLength(2);
+  });
+
+  it("stops after five emails an hour to one address, and ninety a day in all", async () => {
+    for (let i = 0; i < LIMIT_PER_EMAIL; i++) expect((await h.json("POST", "/api/auth/start", { email: "a@example.com" })).status).toBe(200);
+    expect((await h.json("POST", "/api/auth/start", { email: "a@example.com" })).status).toBe(429);
+    h.clock.now = new Date("2026-09-18T13:01:00.000Z");
+    expect((await h.json("POST", "/api/auth/start", { email: "a@example.com" })).status).toBe(200);
+
+    for (let i = h.mail.length; i < LIMIT_PER_DAY; i++) {
+      // A different address and a different network each time, so only the daily total counts.
+      expect((await h.json("POST", "/api/auth/start", { email: `p${i}@example.com` }, undefined, { "cf-connecting-ip": `198.51.100.${i % 250}` })).status).toBe(200);
+    }
+    expect((await h.json("POST", "/api/auth/start", { email: "z@example.com" }, undefined, { "cf-connecting-ip": "192.0.2.1" })).status).toBe(503);
+  });
+
+  it("signs one device out, and deletes the whole account", async () => {
+    const t1 = await h.signIn("a@example.com", "one");
+    const t2 = await h.signIn("a@example.com", "two");
+    const me = await h.json<{ devices: Array<{ id: string; current: boolean }> }>("GET", "/api/me", undefined, t1);
+    const other = me.body.devices.find((d) => !d.current)!;
+    expect((await h.json("DELETE", `/api/sessions/${other.id}`, undefined, t1)).status).toBe(200);
+    expect((await h.json("GET", "/api/me", undefined, t2)).status).toBe(401);
+    expect((await h.json("GET", "/api/me", undefined, t1)).status).toBe(200);
+
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1")] }, t1);
+    expect((await h.json("DELETE", "/api/me", undefined, t1)).status).toBe(200);
+    expect((await h.json("GET", "/api/me", undefined, t1)).status).toBe(401);
+    expect(await h.deps.db.all("SELECT * FROM records")).toEqual([]);
+    expect(await h.deps.db.all("SELECT * FROM users")).toEqual([]);
+  });
+});
+
+describe("sync", () => {
+  let h: Harness;
+  let token: string;
+  beforeEach(async () => {
+    h = harness();
+    token = await h.signIn("a@example.com");
+  });
+
+  it("needs a session and a request it understands", async () => {
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [] })).status).toBe(401);
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [{ store: "snapshots", id: "x", updatedAt: NOW, body: {} }] }, token)).status).toBe(400);
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [{ store: "rosters", id: "x", updatedAt: NOW }] }, token)).status).toBe(400);
+  });
+
+  it("applies a push, and a second device pulls it", async () => {
+    const first = await h.json<{ cursor: number; applied: unknown[]; changes: unknown[] }>("POST", "/api/sync", { cursor: 0, changes: [roster("r1"), roster("r2")] }, token);
+    expect(first.status).toBe(200);
+    expect(first.body.applied).toEqual([
+      { store: "rosters", id: "r1" },
+      { store: "rosters", id: "r2" },
+    ]);
+    expect(first.body.cursor).toBe(2);
+    expect(first.body.changes).toHaveLength(2);
+
+    const second = await h.signIn("a@example.com", "two");
+    const pulled = await h.json<{ cursor: number; changes: Array<{ id: string; body: { name: string } }>; more: boolean }>("POST", "/api/sync", { cursor: 0, changes: [] }, second);
+    expect(pulled.body.changes.map((c) => c.id)).toEqual(["r1", "r2"]);
+    expect(pulled.body.cursor).toBe(2);
+    expect(pulled.body.more).toBe(false);
+
+    // Nothing new since: nothing comes back and the cursor stays.
+    const again = await h.json<{ cursor: number; changes: unknown[] }>("POST", "/api/sync", { cursor: 2, changes: [] }, second);
+    expect(again.body.changes).toEqual([]);
+    expect(again.body.cursor).toBe(2);
+  });
+
+  it("keeps the later change and hands the earlier one its winner", async () => {
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "newer", "2026-09-18T11:30:00.000Z")] }, token);
+    const res = await h.json<{ applied: unknown[]; rejected: Array<{ id: string; server: { body: { name: string } } }> }>("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "older", "2026-09-18T11:00:00.000Z")] }, token);
+    expect(res.body.applied).toEqual([]);
+    expect(res.body.rejected).toMatchObject([{ id: "r1", server: { body: { name: "newer" } } }]);
+
+    const later = await h.json<{ applied: unknown[] }>("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "newest", "2026-09-18T11:45:00.000Z")] }, token);
+    expect(later.body.applied).toEqual([{ store: "rosters", id: "r1" }]);
+  });
+
+  it("carries a deletion as a tombstone that competes like any change", async () => {
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1")] }, token);
+    const gone = await h.json<{ changes: Array<{ id: string; deletedAt?: string; body?: unknown }> }>("POST", "/api/sync", { cursor: 0, changes: [{ store: "rosters", id: "r1", updatedAt: "2026-09-18T12:01:00.000Z", deletedAt: "2026-09-18T12:01:00.000Z" }] }, token);
+    expect(gone.body.changes).toMatchObject([{ id: "r1", deletedAt: "2026-09-18T12:01:00.000Z" }]);
+    expect(gone.body.changes[0]!.body).toBeUndefined();
+    // An edit from before the deletion loses to it.
+    const stale = await h.json<{ rejected: unknown[] }>("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "late edit", "2026-09-18T12:00:30.000Z")] }, token);
+    expect(stale.body.rejected).toHaveLength(1);
+  });
+
+  it("pulls its own clock forward when a device's is ahead", async () => {
+    const res = await h.json<{ changes: Array<{ updatedAt: string }> }>("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "r1", "2026-09-18T13:00:00.000Z")] }, token);
+    expect(res.body.changes[0]!.updatedAt).toBe(NOW);
+    const near = await h.json<{ changes: Array<{ updatedAt: string }> }>("POST", "/api/sync", { cursor: 1, changes: [roster("r2", "r2", "2026-09-18T12:04:00.000Z")] }, token);
+    expect(near.body.changes[0]!.updatedAt).toBe("2026-09-18T12:04:00.000Z");
+  });
+
+  it("refuses a record over the size limit and an account over its total", async () => {
+    const big = { store: "games", id: "g", revision: 0, updatedAt: NOW, body: { log: "x".repeat(300 * 1024) } };
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [big] }, token)).status).toBe(413);
+    const changes = Array.from({ length: 90 }, (_, i) => ({ store: "games", id: `g${i}`, revision: 0, updatedAt: NOW, body: { log: "x".repeat(240 * 1024) } }));
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes }, token)).status).toBe(413);
+    expect(await h.deps.db.all("SELECT id FROM records")).toEqual([]);
+  });
+
+  it("pages a long pull", async () => {
+    const changes = Array.from({ length: 200 }, (_, i) => ({ store: "collection", id: `c${i}`, revision: 0, updatedAt: NOW, body: { owned: i } }));
+    for (let k = 0; k < 3; k++) await h.json("POST", "/api/sync", { cursor: 0, changes: changes.map((c) => ({ ...c, id: `${k}-${c.id}` })) }, token);
+    const page = await h.json<{ cursor: number; changes: unknown[]; more: boolean }>("POST", "/api/sync", { cursor: 0, changes: [] }, token);
+    expect(page.body.changes).toHaveLength(SYNC_PAGE);
+    expect(page.body.more).toBe(true);
+    const rest = await h.json<{ cursor: number; changes: unknown[]; more: boolean }>("POST", "/api/sync", { cursor: page.body.cursor, changes: [] }, token);
+    expect(rest.body.changes).toHaveLength(600 - SYNC_PAGE);
+    expect(rest.body.more).toBe(false);
+    expect(rest.body.cursor).toBe(600);
+  });
+
+  it("answers a paused database with the time it resumes", async () => {
+    const paused = harness((db) => ({ ...db, all: async () => Promise.reject(new Error("D1_ERROR: daily row read limit exceeded")) }));
+    const t = await paused.signIn("p@example.com");
+    const res = await paused.json<{ pausedUntil: string }>("POST", "/api/sync", { cursor: 0, changes: [] }, t);
+    expect(res.status).toBe(503);
+    expect(res.body.pausedUntil).toBe("2026-09-19T00:00:00.000Z");
+    expect(nextReset(new Date("2026-12-31T23:59:59.000Z"))).toBe("2027-01-01T00:00:00.000Z");
+  });
+});
+
+describe("short links", () => {
+  let h: Harness;
+  beforeEach(() => {
+    h = harness();
+  });
+
+  it("shortens a scenario link without an account and opens it for ninety days", async () => {
+    const made = await h.json<{ id: string }>("POST", "/api/links", { kind: "scenario", token: "abc" });
+    expect(made.status).toBe(200);
+    expect(made.body.id).toMatch(/^[a-z0-9]{8}$/);
+    const res = await h.app.request(`/l/${made.body.id}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(`${APP}/#s=abc`);
+    h.clock.now = new Date("2026-12-18T12:00:01.000Z");
+    expect((await h.app.request(`/l/${made.body.id}`)).status).toBe(404);
+  });
+
+  it("keeps a signed-in player's roster link for good", async () => {
+    const token = await h.signIn("a@example.com");
+    const made = await h.json<{ id: string }>("POST", "/api/links", { kind: "roster", token: "xyz" }, token);
+    h.clock.now = new Date("2029-01-01T00:00:00.000Z");
+    const res = await h.app.request(`/l/${made.body.id}`);
+    expect(res.headers.get("location")).toBe(`${APP}/#/armies?r=xyz`);
+    expect((await h.app.request("/l/nothere1")).status).toBe(404);
+  });
+});
