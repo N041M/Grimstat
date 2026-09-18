@@ -2,7 +2,7 @@
 
 An **unofficial, fan-made, local-first** statistics dashboard and army builder for Warhammer 40,000.
 
-**Live app:** https://n041m.github.io/Grimstat/ (deployed from `master` by GitHub Actions, and it all runs in your browser with nothing uploaded).
+**Live app:** https://grimstat.com (deployed from `master` by GitHub Actions, and it all runs in your browser with nothing uploaded). The earlier address at https://n041m.github.io/Grimstat/ stays open for a while so that data stored there can be carried across with a backup, and then closes.
 
 - **Calculator** — one unit against another with exact probability distributions rather than averages: the whole damage curve, models slain, kill chance, damage per 100 points, and a what-if panel that ranks which single change moves the result most. Monte Carlo is the fallback, used only where an exact answer is out of reach.
 - **Army builder** — 11th-edition validation while you type: Detachment Points, Leader and Support attachment, tiered unit costs, enhancements, transport capacity.
