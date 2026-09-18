@@ -37,7 +37,7 @@
     {
       "binding": "DB",
       "database_name": "grimstat",
-      "database_id": "REPLACE_WITH_THE_ID_FROM_wrangler_d1_create",
+      "database_id": "52726ce3-ae31-4a14-8812-90b9c1bee092",
       "migrations_dir": "../api/migrations"
     }
   ],
