@@ -9,14 +9,13 @@
 // from it: a fallback there would hand the check a page of HTML with a 200 and it would read it as
 // a table.
 //
-// Both domains are served, and public/_redirects sends www to the bare one.
+// Only the bare domain is served here. www is a redirect rule in the Cloudflare dashboard, with a
+// placeholder DNS record for it, because a request answered by a rule never reaches the Worker
+// and so never counts against its daily allowance.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "grimstat",
   "compatibility_date": "2026-09-01",
   "assets": { "directory": "./dist" },
-  "routes": [
-    { "pattern": "grimstat.com", "custom_domain": true },
-    { "pattern": "www.grimstat.com", "custom_domain": true }
-  ]
+  "routes": [{ "pattern": "grimstat.com", "custom_domain": true }]
 }
