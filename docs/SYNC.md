@@ -249,7 +249,13 @@ three thousand players editing on the same day, or about a hundred thousand save
 total. Idle accounts cost nothing.
 
 Per-account limits enforced in the Worker: 256 KB per record body, 20 MB per account, two hundred
-changes per request. A request over a limit is rejected with a message the Profile page shows.
+changes per request, and two thousand records written per account per UTC day. A request over a
+size limit is rejected with a message the Profile page shows. A push past the daily allowance is
+answered like the pause below, with the reset time, and the device waits it out. The daily
+allowance is what keeps one account from spending the database's writes for everyone, and it is
+the one limit that would matter on a paid plan, where rows written are billed. The account's size
+and its writes for the day are two counters on the users row, moved in the same statement that
+hands out sequence numbers, so a push reads one row rather than every record the account holds.
 
 When D1 returns its limit error, the Worker answers `503` with the next reset time. The device sets
 its status to `paused`, keeps its outbox, and retries after the reset. The shell says, in the
@@ -336,7 +342,8 @@ request and the data, in the order a request meets it:
   out per device. A token travels in a header, never a cookie.
 - **Every query is bound to the signed-in user** and every value is a parameter. A record's body
   must carry the id it is stored under. Records are capped at 256 KB, accounts at 20 MB, requests
-  at 200 changes. Anonymous links are capped at 16 KB each and five hundred a day.
+  at 200 changes, and an account at two thousand writes a day. Anonymous links are capped at 16 KB
+  each and five hundred a day.
 - **A nightly purge** removes used codes, expired links and idle sessions. On Node it runs hourly.
 - **A backup file never carries the session.** `exportAll` leaves out every `account.` and `sync.`
   setting, and `importAll` drops them from a file that has them.

@@ -2,7 +2,10 @@
  * The server, end to end, on Node's own SQLite. Every request goes through the routes as a browser
  * would send it, with a fixed clock and a mailer that keeps the message instead of sending it.
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SYNC_PAGE } from "@grimstat/schema";
 import { createApp, nextReset } from "./app";
@@ -13,6 +16,7 @@ import { memoryLimiter, noLimiter, RATE_LIMITS, type RateLimiter } from "./limit
 import { ANON_LIMIT_PER_DAY } from "./links";
 import { migrate } from "./node";
 import { purge } from "./purge";
+import { MAX_WRITES_PER_DAY } from "./sync";
 
 const APP = "https://grimstat.test";
 
@@ -214,6 +218,51 @@ describe("sync", () => {
     expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(1) }, token)).status).toBe(200);
     expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(2) }, token)).status).toBe(507);
     expect((await h.deps.db.all("SELECT id FROM records")).length).toBe(45);
+    // Writing the same records again replaces them and takes no more room.
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(1).map((c) => ({ ...c, updatedAt: "2026-09-18T12:01:00.000Z" })) }, token)).status).toBe(200);
+  });
+
+  it("counts the account's size as bodies are written, replaced and deleted", async () => {
+    const stored = async () => (await h.deps.db.first<{ n: number; kept: number }>("SELECT bytes AS n, (SELECT COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM records) AS kept FROM users"))!;
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "Первая"), roster("r2", "x".repeat(1000))] }, token);
+    let s = await stored();
+    expect(s.n).toBe(s.kept);
+    expect(s.n).toBeGreaterThan(1000);
+    // A replacement counts the difference, a tombstone frees the body, and a rejected change counts nothing.
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r2", "short", "2026-09-18T12:01:00.000Z"), { store: "rosters", id: "r1", revision: 2, updatedAt: "2026-09-18T12:01:00.000Z", deletedAt: "2026-09-18T12:01:00.000Z" }] }, token);
+    s = await stored();
+    expect(s.n).toBe(s.kept);
+    expect(s.n).toBeLessThan(200);
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r2", "y".repeat(5000), "2026-09-18T11:00:00.000Z")] }, token);
+    expect((await stored()).n).toBe(s.n);
+  });
+
+  it("stops an account after its daily allowance of changes, and resumes after the reset", async () => {
+    const batch = (k: number) => Array.from({ length: 200 }, (_, i) => ({ store: "collection", id: `${k}-${i}`, revision: 0, updatedAt: NOW, body: { id: `${k}-${i}` } }));
+    const rounds = MAX_WRITES_PER_DAY / 200;
+    for (let k = 0; k < rounds; k++) expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(k) }, token)).status).toBe(200);
+    const over = await h.json<{ error: string; pausedUntil: string }>("POST", "/api/sync", { cursor: 0, changes: batch(rounds) }, token);
+    expect(over.status).toBe(503);
+    expect(over.body.pausedUntil).toBe("2026-09-19T00:00:00.000Z");
+    expect((await h.deps.db.all("SELECT id FROM records")).length).toBe(MAX_WRITES_PER_DAY);
+    // A pull still answers, and nothing was counted for the refused push.
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [] }, token)).status).toBe(200);
+    h.clock.now = new Date("2026-09-19T00:00:01.000Z");
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(rounds).map((c) => ({ ...c, updatedAt: "2026-09-19T00:00:00.000Z" })) }, token)).status).toBe(200);
+    expect((await h.deps.db.all("SELECT id FROM records")).length).toBe(MAX_WRITES_PER_DAY + 200);
+  });
+
+  it("fills the size counter for accounts that existed before it", async () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
+    const sqlite = new DatabaseSync(":memory:");
+    sqlite.exec(readFileSync(join(dir, "0001_init.sql"), "utf8"));
+    sqlite.prepare("INSERT INTO users (id, email, created_at) VALUES ('u1', 'a@example.com', ?)").run(NOW);
+    sqlite.prepare("INSERT INTO records (user_id, store, id, seq, revision, updated_at, body) VALUES ('u1', 'rosters', 'r', 1, 0, ?, ?)").run(NOW, JSON.stringify({ id: "r", name: "Первая" }));
+    sqlite.prepare("INSERT INTO records (user_id, store, id, seq, revision, updated_at, deleted_at) VALUES ('u1', 'rosters', 'gone', 2, 0, ?, ?)").run(NOW, NOW);
+    sqlite.exec(readFileSync(join(dir, "0002_quotas.sql"), "utf8"));
+    const user = sqlite.prepare("SELECT bytes, day_writes FROM users").get() as { bytes: number; day_writes: number };
+    expect(user.bytes).toBe(new TextEncoder().encode(JSON.stringify({ id: "r", name: "Первая" })).length);
+    expect(user.day_writes).toBe(0);
   });
 
   it("pages a long pull", async () => {
@@ -283,6 +332,9 @@ describe("the gates in front of the routes", () => {
     expect((await h.json("POST", "/api/auth/start", { email: "z@example.com" }, undefined, { "cf-connecting-ip": "198.51.100.9" })).status).toBe(200);
     h.clock.now = new Date(h.clock.now.getTime() + 61_000);
     expect((await h.json("POST", "/api/auth/start", { email: "z@example.com" })).status).toBe(200);
+    // The health check counts like any other request, so a loop on it is stopped too.
+    for (let i = 0; i < RATE_LIMITS.api.limit; i++) expect((await h.json("GET", "/api/health")).status).toBe(200);
+    expect((await h.json("GET", "/api/health")).status).toBe(429);
   });
 
   it("answers a body that is not JSON with a 400 rather than a server error", async () => {

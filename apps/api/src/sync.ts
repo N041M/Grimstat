@@ -10,12 +10,23 @@
  *
  * The whole push is one batch. If any statement fails, nothing is written and the device keeps its
  * outbox for next time.
+ *
+ * Two counters on the users row bound what one account can cost. `bytes` is the size of everything
+ * stored for the account and caps it at SYNC_MAX_ACCOUNT_BYTES. `day_writes` is how many records
+ * the account has written today and caps it at MAX_WRITES_PER_DAY. Both are checked and moved in
+ * the one statement that hands out sequence numbers, so two devices pushing at once cannot pass a
+ * cap between them. The daily cap keeps one account from spending the database's daily allowance
+ * of writes for everyone, and it answers like the pause: 503 with the time it resets.
  */
 import { z } from "zod";
 import { SYNC_MAX_ACCOUNT_BYTES, SYNC_MAX_BODY_BYTES, SYNC_MAX_CHANGES, SYNC_PAGE, SYNC_STORES } from "@grimstat/schema";
-import { iso, type Deps } from "./deps";
+import { iso, nextReset, type Deps } from "./deps";
 
 const SKEW = 5 * 60 * 1000;
+/** Records one account may write in a UTC day. An active player writes about thirty. */
+export const MAX_WRITES_PER_DAY = 2000;
+/** Pairs looked up per query. D1 binds at most a hundred parameters to one statement. */
+const LOOKUP_CHUNK = 40;
 
 /** The field each store is keyed by. A body stored under one id must carry that id, or a device would write it under another. */
 export const keyField = (store: string): "key" | "id" => (store === "settings" || store === "overrides" ? "key" : "id");
@@ -51,6 +62,8 @@ export class SyncError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Set when the answer is a pause: when the device may try again. */
+    readonly pausedUntil?: string,
   ) {
     super(message);
   }
@@ -77,6 +90,24 @@ const toChange = (r: Row): Change => ({
   ...(r.deleted_at ? { deletedAt: r.deleted_at } : { body: JSON.parse(r.body ?? "{}") as Record<string, unknown> }),
 });
 
+const byteLength = (text: string | null | undefined): number => (text ? new TextEncoder().encode(text).length : 0);
+
+/** The rows the request names, fetched by primary key in chunks small enough for D1's parameter limit. */
+async function existingRows(deps: Deps, userId: string, changes: Change[]): Promise<Row[]> {
+  const rows: Row[] = [];
+  for (let i = 0; i < changes.length; i += LOOKUP_CHUNK) {
+    const part = changes.slice(i, i + LOOKUP_CHUNK);
+    rows.push(
+      ...(await deps.db.all<Row>(
+        `SELECT store, id, seq, revision, updated_at, deleted_at, body FROM records WHERE user_id = ? AND (${part.map(() => "(store = ? AND id = ?)").join(" OR ")})`,
+        userId,
+        ...part.flatMap((c) => [c.store, c.id]),
+      )),
+    );
+  }
+  return rows;
+}
+
 export async function sync(deps: Deps, userId: string, req: SyncRequest): Promise<SyncResponse> {
   const now = deps.now();
   const ceiling = iso(new Date(now.getTime() + SKEW));
@@ -89,40 +120,63 @@ export async function sync(deps: Deps, userId: string, req: SyncRequest): Promis
 
   const applied: SyncResponse["applied"] = [];
   const rejected: SyncResponse["rejected"] = [];
-  const winners: Array<Change & { bytes: number }> = [];
+  const winners: Change[] = [];
+  // How many bytes the push adds to the account, counting a replaced body as gone.
+  let added = 0;
 
   if (req.changes.length) {
-    // One round trip for everything the request names.
-    const keys = req.changes.map((c) => keyOf(c.store, c.id));
-    const existing = await deps.db.all<Row>(
-      `SELECT store, id, seq, revision, updated_at, deleted_at, body FROM records WHERE user_id = ? AND (store || '|' || id) IN (${keys.map(() => "?").join(",")})`,
-      userId,
-      ...keys,
-    );
-    const held = new Map(existing.map((r) => [keyOf(r.store, r.id), r]));
+    const held = new Map((await existingRows(deps, userId, req.changes)).map((r) => [keyOf(r.store, r.id), r]));
+    const sizes = new Map([...held].map(([k, r]) => [k, byteLength(r.body)]));
     for (const change of req.changes) {
       const body = change.body === undefined ? undefined : JSON.stringify(change.body);
-      const bytes = body ? new TextEncoder().encode(body).length : 0;
+      const bytes = byteLength(body);
       if (bytes > SYNC_MAX_BODY_BYTES) throw new SyncError(413, `One record is larger than ${Math.round(SYNC_MAX_BODY_BYTES / 1024)} KB and cannot be synced.`);
       const updatedAt = clamp(change.updatedAt);
       const deletedAt = change.deletedAt ? clamp(change.deletedAt) : undefined;
-      const have = held.get(keyOf(change.store, change.id));
+      const key = keyOf(change.store, change.id);
+      const have = held.get(key);
       if (have && have.updated_at > updatedAt) {
         rejected.push({ store: change.store, id: change.id, server: toChange(have) });
         continue;
       }
-      winners.push({ ...change, updatedAt, ...(deletedAt ? { deletedAt } : {}), bytes });
+      winners.push({ ...change, updatedAt, ...(deletedAt ? { deletedAt } : {}) });
+      added += bytes - (sizes.get(key) ?? 0);
+      sizes.set(key, bytes);
     }
   }
 
   if (winners.length) {
-    const size = await deps.db.first<{ n: number }>("SELECT COALESCE(SUM(LENGTH(body)), 0) AS n FROM records WHERE user_id = ?", userId);
-    const added = winners.reduce((n, w) => n + w.bytes, 0);
-    // A full account is not a record too large, and the device treats the two differently: a
-    // record too large is set aside, a full account is waited out.
-    if ((size?.n ?? 0) + added > SYNC_MAX_ACCOUNT_BYTES) throw new SyncError(507, `This account has reached its ${Math.round(SYNC_MAX_ACCOUNT_BYTES / 1024 / 1024)} MB of synced data. Delete an army or a game you no longer need, and sync again.`);
-    const counter = await deps.db.first<{ seq: number }>("UPDATE users SET seq = seq + ? WHERE id = ? RETURNING seq", winners.length, userId);
-    if (!counter) throw new SyncError(401, "This account no longer exists.");
+    const today = iso(now).slice(0, 10);
+    // The counters move only while both caps hold, in the statement that hands out the sequence
+    // numbers. No row back means the account is full, over its day, or gone.
+    const counter = await deps.db.first<{ seq: number }>(
+      `UPDATE users
+         SET seq = seq + ?, bytes = MAX(0, bytes + ?), day_writes = CASE WHEN day = ? THEN day_writes + ? ELSE ? END, day = ?
+       WHERE id = ? AND bytes + ? <= ? AND (CASE WHEN day = ? THEN day_writes ELSE 0 END) + ? <= ?
+       RETURNING seq`,
+      winners.length,
+      added,
+      today,
+      winners.length,
+      winners.length,
+      today,
+      userId,
+      added,
+      SYNC_MAX_ACCOUNT_BYTES,
+      today,
+      winners.length,
+      MAX_WRITES_PER_DAY,
+    );
+    if (!counter) {
+      const user = await deps.db.first<{ bytes: number; day: string; day_writes: number }>("SELECT bytes, day, day_writes FROM users WHERE id = ?", userId);
+      if (!user) throw new SyncError(401, "This account no longer exists.");
+      if (user.day === today && user.day_writes + winners.length > MAX_WRITES_PER_DAY) {
+        throw new SyncError(503, `This account has synced ${MAX_WRITES_PER_DAY} changes today, which is its daily allowance. Everything is saved on this device and syncs after the reset.`, nextReset(now));
+      }
+      // A full account is not a record too large, and the device treats the two differently: a
+      // record too large is set aside, a full account is waited out.
+      throw new SyncError(507, `This account has reached its ${Math.round(SYNC_MAX_ACCOUNT_BYTES / 1024 / 1024)} MB of synced data. Delete an army or a game you no longer need, and sync again.`);
+    }
     let seq = counter.seq - winners.length;
     await deps.db.batch(
       winners.map((w) => ({

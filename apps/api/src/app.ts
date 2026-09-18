@@ -14,7 +14,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
 import { AuthError, deleteAccount, devices, finish, sessionFor, signOut, start, type Session } from "./auth";
 import { isDailyLimit } from "./db";
-import type { Deps } from "./deps";
+import { nextReset, type Deps } from "./deps";
 import type { RateBucket } from "./limits";
 import { createLink, LinkError, LinkRequest, resolveLink } from "./links";
 import { publicProfile, setHandle } from "./profile";
@@ -61,11 +61,7 @@ function bearer(c: Context): string | undefined {
   return h?.toLowerCase().startsWith("bearer ") ? h.slice(7).trim() : undefined;
 }
 
-/** Midnight UTC after `now`, when Cloudflare's daily allowances start again. */
-export function nextReset(now: Date): string {
-  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-  return next.toISOString();
-}
+export { nextReset };
 
 /**
  * A browser names the page a request came from. One from another site is refused, so no other
@@ -98,6 +94,7 @@ export function createApp(deps: Deps): App {
   const app: App = new Hono<Env>();
 
   app.onError((err, c) => {
+    if (err instanceof SyncError && err.pausedUntil) return c.json({ error: err.message, pausedUntil: err.pausedUntil }, err.status as 503);
     if (err instanceof Refused || err instanceof AuthError || err instanceof SyncError || err instanceof LinkError) return c.json({ error: err.message }, err.status as 400);
     if (err instanceof z.ZodError) return c.json({ error: "The request was not understood.", issues: err.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`) }, 400);
     if (isDailyLimit(err)) return c.json({ error: "Sync is paused until the daily allowance resets.", pausedUntil: nextReset(deps.now()) }, 503);
@@ -115,6 +112,7 @@ export function createApp(deps: Deps): App {
   app.use("/api/auth/*", rateGate(deps, "auth"), sized(BODY_SMALL));
   app.use("/api/links", rateGate(deps, "links"), sized(BODY_LINK));
   app.use("/api/sync", rateGate(deps, "api"), sized(BODY_SYNC));
+  app.use("/api/health", rateGate(deps, "api"));
   app.use("/api/me", rateGate(deps, "api"));
   app.use("/api/me/*", rateGate(deps, "api"), sized(BODY_SMALL));
   app.use("/api/sessions/*", rateGate(deps, "api"));

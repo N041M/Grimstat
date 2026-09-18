@@ -27,3 +27,9 @@ export interface Deps {
 
 export const iso = (d: Date): string => d.toISOString();
 export const plusMs = (d: Date, ms: number): string => iso(new Date(d.getTime() + ms));
+
+/** Midnight UTC after `now`, when Cloudflare's daily allowances start again. */
+export function nextReset(now: Date): string {
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  return next.toISOString();
+}

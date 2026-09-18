@@ -5,12 +5,16 @@
  * short links, which costs storage. `api` is everything else. On Cloudflare the counting is done by
  * the platform's rate-limit bindings, one per bucket, declared in the web app's wrangler.jsonc with
  * the same numbers as below. On Node it is a sliding window in memory.
+ *
+ * A device syncs every five minutes and after a change, and a first sync of a large account takes
+ * a few requests in a row, so sixty a minute leaves room. What bounds a script is the account's
+ * daily allowance of writes, in sync.ts.
  */
 export type RateBucket = "auth" | "api" | "links";
 
 export const RATE_LIMITS: Readonly<Record<RateBucket, { limit: number; periodSec: number }>> = {
   auth: { limit: 5, periodSec: 60 },
-  api: { limit: 120, periodSec: 60 },
+  api: { limit: 60, periodSec: 60 },
   links: { limit: 20, periodSec: 60 },
 };
 
