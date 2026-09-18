@@ -25,7 +25,11 @@ import { Sheet, useConfirm, useEdgeFade } from "./components/ui";
 import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, Tour, useBarHostRef } from "./components/shell";
 import { mayReplaceScenario, setReplaceScenarioGuard } from "./components/shell/ContextColumn";
 import { useOnline } from "./lib/sw";
+import { formatClosesOn, movedNotice } from "./lib/moved";
 import { t } from "./i18n";
+
+/** The notice this build carries when the app has moved; see `lib/moved.ts`. Read once. */
+const MOVED = movedNotice(import.meta.env);
 
 export function App() {
   const { route, param } = useRouteInfo();
@@ -156,6 +160,15 @@ export function App() {
       {/* The screen on show, named so the tour can point at the one its card is about: on a phone
           there is no rail to light, and the page's own title stands in for it. */}
       <main className="main-region" data-route={route}>
+        {MOVED ? (
+          <div className="moved-banner" role="status">
+            <span>
+              {MOVED.closesOn ? t("moved.text", { host: MOVED.host, date: formatClosesOn(MOVED.closesOn) }) : t("moved.textNoDate", { host: MOVED.host })}
+            </span>
+            <a href="#/data">{t("data.backup")}</a>
+            <a href={MOVED.url}>{t("moved.open", { host: MOVED.host })}</a>
+          </div>
+        ) : null}
         {compact ? (
           <div className="ctx-bar">
             {phone ? (

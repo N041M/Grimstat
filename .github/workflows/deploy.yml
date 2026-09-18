@@ -1,0 +1,80 @@
+# The live site at grimstat.com: the built app, served as static files by a Cloudflare Worker.
+#
+# Setup, once: in the Cloudflare dashboard make an API token from the "Edit Cloudflare Workers"
+# template, scoped to this account and to the grimstat.com zone, and store it as the repository
+# secret CLOUDFLARE_API_TOKEN. Set the repository variable CLOUDFLARE_ACCOUNT_ID to the account id
+# shown on the domain's overview page. Without the variable this workflow does not run, so a push
+# before setup is not a failed deploy.
+#
+# The checks run here against the exact commit about to go out, as they do for the Pages build.
+# While the old GitHub Pages address is still open the two workflows build side by side, with
+# different base paths. pages.yml goes when that address closes.
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  # A deploy that has started is allowed to finish, and a push that arrives during one waits.
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ vars.CLOUDFLARE_ACCOUNT_ID != '' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://grimstat.com
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm --filter @grimstat/web typecheck
+      - run: pnpm test
+      # Wahapedia sends no CORS headers, so the browser cannot read it from the site. Its export is
+      # copied into the site here, same-origin, where the Data page's one button reaches it like any
+      # other source. The step is allowed to fail: the site is worth deploying without the copy, and
+      # the Data page then reports the source as unavailable. Set the repository variable
+      # SKIP_WAHAPEDIA to any value to leave it out.
+      - name: Copy the Wahapedia export into the site
+        id: mirror
+        if: ${{ vars.SKIP_WAHAPEDIA == '' }}
+        continue-on-error: true
+        timeout-minutes: 20
+        run: pnpm cli mirror --system wh40k-11e --system wh40k-10e --out apps/web/public/wahapedia
+      - name: Say so when the Wahapedia copy did not arrive
+        if: ${{ steps.mirror.outcome == 'failure' }}
+        run: |
+          echo "Copying the Wahapedia export failed, and the reason is in the previous step's log."
+          echo "This deploy goes out without it, and the Data page reports the source as unavailable."
+          echo "::warning title=Wahapedia copy skipped::The site is deploying without the Wahapedia tables. The previous step's log says why."
+      # The recogniser's core, worker and language model, 26 MB of binaries that are not in the
+      # repository and that the picture importer fetches from the site at runtime.
+      - name: Fetch the recogniser's files
+        run: node scripts/ocr-assets.mjs
+      - name: Build the web app at the root of the domain
+        run: pnpm --filter @grimstat/web build
+        env:
+          VITE_BASE: /
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          packageManager: pnpm
+          command: deploy

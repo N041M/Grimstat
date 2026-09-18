@@ -29,6 +29,11 @@ export const en = {
   "page.sub.about": "version {v}",
   "page.sub.overrides": "{n} active · applied to every snapshot",
 
+  // shell: the line a build made for an address the app has left shows on every screen
+  "moved.text": "Grimstat has moved to {host}. This address closes on {date}. Back up your data here and import it there.",
+  "moved.textNoDate": "Grimstat has moved to {host}. Back up your data here and import it there.",
+  "moved.open": "Open {host}",
+
   // shell: solve state on the brand mark
   "solve.current": "Result is up to date",
   "solve.pending": "Working out a new result…",

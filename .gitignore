@@ -16,3 +16,6 @@ apps/web/dev-dist/
 # Fetched by scripts/ocr-assets.mjs; see docs/LIST-FROM-PICTURE.md
 apps/web/public/ocr/
 .venv-pictures/
+
+# Wrangler's local state
+.wrangler/

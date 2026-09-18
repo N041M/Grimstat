@@ -8,3 +8,9 @@ declare const __GS_PACKAGES__: number;
 declare const __GS_BUNDLE__: string;
 /** The commit this build came from, or "dev" for a build made outside the repository. */
 declare const __GS_BUILD__: string;
+
+/** Set on a build made for an address the app has left; see `lib/moved.ts`. */
+interface ImportMetaEnv {
+  readonly VITE_MOVED_TO?: string;
+  readonly VITE_CLOSES_ON?: string;
+}

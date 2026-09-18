@@ -1,0 +1,22 @@
+// The deployed site: the built app served as static files from Cloudflare under its own domain.
+//
+// There is no Worker script yet, only the files in dist/. The sync API planned in docs/SYNC.md
+// becomes the script of this same Worker, so the domain, the deploy step and the name stay as they
+// are when it arrives.
+//
+// A path that matches no file gets a 404 rather than the app's page. The app routes by hash, so it
+// never needs a fallback, and the Wahapedia copy under wahapedia/ is checked by fetching a file
+// from it: a fallback there would hand the check a page of HTML with a 200 and it would read it as
+// a table.
+//
+// Both domains are served, and public/_redirects sends www to the bare one.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "grimstat",
+  "compatibility_date": "2026-09-01",
+  "assets": { "directory": "./dist" },
+  "routes": [
+    { "pattern": "grimstat.com", "custom_domain": true },
+    { "pattern": "www.grimstat.com", "custom_domain": true }
+  ]
+}

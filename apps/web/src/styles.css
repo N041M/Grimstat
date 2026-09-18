@@ -692,6 +692,22 @@ code,
   min-height: 0;
   overflow: auto;
 }
+/* The line a build shows when the app has moved to another address (see lib/moved.ts). It sits
+   above the screen rather than over it, so nothing on the screen is hidden for the weeks it is up. */
+.moved-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1rem;
+  padding: 0.55rem 22px;
+  border-bottom: 1px solid var(--accent);
+  background: var(--panel);
+  font-size: 0.92rem;
+}
+.moved-banner a {
+  white-space: nowrap;
+}
+
 .page-header {
   padding: 18px 22px 14px;
   border-bottom: 1px solid var(--line);

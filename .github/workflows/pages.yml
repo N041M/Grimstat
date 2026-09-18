@@ -65,10 +65,16 @@ jobs:
       # and importing a picture fails on a 404. See scripts/ocr-assets.mjs.
       - name: Fetch the recogniser's files
         run: node scripts/ocr-assets.mjs
+      # The app has moved to grimstat.com (deploy.yml), and this address stays open for a while so
+      # that people can carry their data across with a backup. Set the repository variable MOVED_TO
+      # to the new address to put the line saying so on every screen, and CLOSES_ON to the closing
+      # date as YYYY-MM-DD. This workflow goes when the address closes.
       - name: Build web app under the repository sub-path
         run: pnpm --filter @grimstat/web build
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_MOVED_TO: ${{ vars.MOVED_TO }}
+          VITE_CLOSES_ON: ${{ vars.CLOSES_ON }}
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
