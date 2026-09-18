@@ -223,8 +223,11 @@ the server copy replaces the local one. Pulled changes are written through the s
 so they do not re-enter the outbox. A pulled change that is older than a local outbox entry for the
 same record is ignored, and the local one goes up on the next sync.
 
-Sync runs thirty seconds after the last change, when the tab is hidden, when the app opens, and
-when the tab becomes visible again. The status seam reports `idle`, `syncing`, `paused` (new) or
+Sync runs thirty seconds after the last change, when the tab is hidden, when the app opens, when
+the tab becomes visible again, and every five minutes while a tab is visible, so a change made on
+another device reaches an open tab without anyone touching it. A first sync after signing in is
+cut into requests of at most 4 MB, and a record the server refuses as too large is set aside on
+the device rather than retried. The status seam reports `idle`, `syncing`, `paused` (new) or
 `error`, and the shell shows one line for it beside the last-synced time.
 
 ### Quotas and the pause
