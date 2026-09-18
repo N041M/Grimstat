@@ -1,6 +1,6 @@
 # Accounts, sync and hosting — design plan
 
-> Status: plan (18 Sep 2026). Phase 1 is live at grimstat.com and Phase 0 is built, both on 18 Sep 2026. Phase 2 is built and tested on 18 Sep 2026 and waits on the setup under "Phase 2 — what was built". Phases 3 and 4 are not started. Builds on the service seams in
+> Status: plan (18 Sep 2026). Phase 1 is live at grimstat.com and Phase 0 is built, both on 18 Sep 2026. Phase 2 went live on 18 Sep 2026, and Phase 3 was built the same day. Phase 4 is not started. Builds on the service seams in
 > `apps/web/src/services/`, the record metadata in `packages/schema/src/common.ts` and the Dexie
 > store in `apps/web/src/db.ts`.
 
@@ -358,13 +358,16 @@ device pushes the same records when the server resumes and the server sees nothi
 share link already does this for one list. About a day and a half, most of it the receiving side
 and its tests. Not started, because the pause is rare at the app's size.
 
-## Phase 3 — profiles and share pages
+## Phase 3 — profiles and share pages (built 18 Sep 2026)
 
 A handle is optional and chosen on the Profile page, three to twenty characters, letters, digits and
-hyphens, unique. A roster gets a `shared` flag. `/u/<handle>` is served by the Worker and lists that
-account's shared rosters with name, faction, points and date, and each opens through a link like any
-other. The page renders on the viewer's device against the viewer's own snapshot. The server sends
-the roster body and never a datasheet, so a share page rehosts nothing.
+hyphens, unique, compared without regard to case, and a short list of names it could be confused
+with is refused. A roster gets a `shared` flag, set from the army card's menu on the Armies page,
+which syncs like any other change. `/u/<handle>` is answered by the Worker with a redirect into
+the app, `GET /api/u/<handle>` returns the account's shared rosters with the owner's notes taken
+out, and the app's public page renders them against the viewer's own snapshot. The server sends
+the roster body and never a datasheet, so a share page rehosts nothing. Each army opens through
+the existing army link, which asks before keeping a copy.
 
 ## Phase 4 — the phone app
 
@@ -421,7 +424,7 @@ income above a threshold, which is an accountant's question before the first pay
 | 0 | Stable snapshot ids, outbox and tombstones middleware, `updatedAt` and `ownerId` everywhere, adoption on sign-in | 1 week |
 | 1 | Domain, Cloudflare static site, links in D1, the closing banner on Pages | 3 days |
 | 2 | Magic-link auth, the sync endpoint, quotas and the pause, Profile page, privacy text, D1 Time Travel for backups | built 18 Sep 2026 |
-| 3 | Handles, shared rosters, `/u/<handle>` | 1 to 2 weeks |
+| 3 | Handles, shared rosters, `/u/<handle>` | built 18 Sep 2026 |
 | 4 | Capacitor, Android listing, deep links | 2 weeks plus review |
 
 Open before Phase 1 starts: the domain name, and the closing date for the old address.

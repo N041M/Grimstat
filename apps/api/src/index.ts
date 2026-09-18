@@ -6,3 +6,4 @@ export { Change, SyncRequest, type SyncResponse } from "./sync";
 export type { Session, User, DeviceRow } from "./auth";
 export { memoryLimiter, bindingLimiter, noLimiter, RATE_LIMITS, type RateLimiter, type RateBucket } from "./limits";
 export { purge } from "./purge";
+export { normaliseHandle, type PublicProfile, type PublicArmy } from "./profile";

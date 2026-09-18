@@ -398,3 +398,44 @@ describe("one account cannot reach another's rows", () => {
     for (const t of ["", "x", alice.slice(1), alice.toUpperCase(), `${alice}0`]) expect((await h.json("GET", "/api/me", undefined, t)).status).toBe(401);
   });
 });
+
+describe("handles and public pages", () => {
+  it("takes a handle once, in lower case, and refuses one that is taken or malformed", async () => {
+    const h = harness();
+    const alice = await h.signIn("alice@example.com");
+    const bob = await h.signIn("bob@example.com");
+    expect((await h.json<{ handle: string }>("PUT", "/api/me/handle", { handle: "Alice-Plays" }, alice)).body.handle).toBe("alice-plays");
+    expect((await h.json("PUT", "/api/me/handle", { handle: "ALICE-plays" }, bob)).status).toBe(409);
+    for (const bad of ["ab", "-alice", "alice_", "a".repeat(21), "api", "www", "al ice"]) expect((await h.json("PUT", "/api/me/handle", { handle: bad }, alice)).status).toBe(400);
+    // Keeping one's own handle is fine, and an empty one clears it.
+    expect((await h.json("PUT", "/api/me/handle", { handle: "alice-plays" }, alice)).status).toBe(200);
+    expect((await h.json<{ handle: null }>("PUT", "/api/me/handle", { handle: "" }, alice)).body.handle).toBeNull();
+    expect((await h.json("PUT", "/api/me/handle", { handle: "alice-plays" }, bob)).status).toBe(200);
+    expect((await h.json("PUT", "/api/me/handle", { handle: "x" }, undefined)).status).toBe(401);
+  });
+
+  it("lists only the shared armies, without the owner's notes, and 404s an unknown name", async () => {
+    const h = harness();
+    const alice = await h.signIn("alice@example.com");
+    await h.json("PUT", "/api/me/handle", { handle: "alice" }, alice);
+    const army = (id: string, shared: boolean, name: string) => ({ store: "rosters" as const, id, revision: 1, updatedAt: NOW, body: { id, name, shared, ownerId: "u_alice", notes: "secret plan", units: [{ id: "u1", datasheetId: "ds", notes: "hide", models: [] }] } });
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [army("r1", true, "Public one"), army("r2", false, "Private one"), army("r3", true, "Deleted one")] }, alice);
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [{ store: "rosters", id: "r3", updatedAt: "2026-09-18T12:01:00.000Z", deletedAt: "2026-09-18T12:01:00.000Z" }] }, alice);
+
+    const page = await h.json<{ handle: string; armies: Array<{ roster: Record<string, unknown>; updatedAt: string }> }>("GET", "/api/u/Alice");
+    expect(page.status).toBe(200);
+    expect(page.body.handle).toBe("alice");
+    expect(page.body.armies.map((a) => a.roster.name)).toEqual(["Public one"]);
+    const shown = page.body.armies[0]!.roster;
+    expect(shown.notes).toBeUndefined();
+    expect(shown.ownerId).toBeUndefined();
+    expect((shown.units as Array<Record<string, unknown>>)[0]!.notes).toBeUndefined();
+    expect((shown.units as Array<Record<string, unknown>>)[0]!.datasheetId).toBe("ds");
+
+    expect((await h.json("GET", "/api/u/nobody")).status).toBe(404);
+    expect((await h.json("GET", "/api/u/bad%20name")).status).toBe(404);
+    const redirect = await h.app.request("/u/Alice");
+    expect(redirect.status).toBe(302);
+    expect(redirect.headers.get("location")).toBe(`${APP}/#/u/alice`);
+  });
+});

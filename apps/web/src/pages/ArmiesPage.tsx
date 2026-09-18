@@ -5,7 +5,8 @@ import { rosterSummary } from "@grimstat/resolver";
 import { db, deleteRoster, saveRosterWithVersion } from "../db";
 import { useApp } from "../state/AppContext";
 import { hrefFor, navigate } from "../router";
-import { BATTLE_SIZE_ORDER, cloneRoster, newRoster, pointsLimitFor, pointsTone } from "../lib/roster";
+import { BATTLE_SIZE_ORDER, cloneRoster, newRoster, pointsLimitFor, pointsTone, touchRoster } from "../lib/roster";
+import { useAuthUser } from "../hooks/useAccount";
 import { newId } from "../lib/ids";
 import { looksLikeJson, looksLikeRosterXml, rosterFileKind, rostersFromJson } from "../lib/rosterFile";
 import { fmtDay, fmtInt } from "../lib/format";
@@ -32,7 +33,7 @@ export function typedPointsLimit(text: string): number | undefined {
   return points >= 1 ? points : undefined;
 }
 
-function CardMenu({ name, busy, onDuplicate, onDelete }: { name: string; busy: boolean; onDuplicate: () => void; onDelete: () => void }) {
+function CardMenu({ name, busy, shared, onDuplicate, onDelete, onShare }: { name: string; busy: boolean; shared?: boolean; onDuplicate: () => void; onDelete: () => void; onShare?: (shared: boolean) => void }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const run = (fn: () => void) => () => {
@@ -56,6 +57,12 @@ function CardMenu({ name, busy, onDuplicate, onDelete }: { name: string; busy: b
           <Icon name="copy" />
           {t("armies.duplicate")}
         </button>
+        {onShare ? (
+          <button type="button" role="menuitem" onClick={run(() => onShare(!shared))}>
+            <Icon name="export" />
+            {shared ? t("armies.unshare") : t("armies.share")}
+          </button>
+        ) : null}
         <button type="button" role="menuitem" className="danger" onClick={run(onDelete)}>
           <Icon name="trash" />
           {t("armies.delete")}
@@ -67,6 +74,7 @@ function CardMenu({ name, busy, onDuplicate, onDelete }: { name: string; busy: b
 
 export function ArmiesPage() {
   const { snapshot, activeSnapshotId, notify, withOverrides } = useApp();
+  const me = useAuthUser();
   const [items, setItems] = useState<Roster[] | undefined>(undefined);
   const [others, setOthers] = useState<Map<string, Snapshot | null>>(new Map());
   const [dialog, setDialog] = useState<"new" | "import" | undefined>(undefined);
@@ -196,6 +204,18 @@ export function ArmiesPage() {
       await saveRosterWithVersion(copy);
       await refresh();
       notify(t("armies.duplicated", { name: r.name, copy: copy.name }), "success");
+    });
+
+  /** On or off the owner's public page. A page needs a handle first, and the Profile page is where one is chosen. */
+  const share = (r: Roster, shared: boolean) =>
+    run(async () => {
+      if (shared && !me.handle) {
+        notify(t("armies.needHandle"), "info", undefined, { label: t("nav.profile"), run: () => navigate("profile") });
+        return;
+      }
+      await saveRosterWithVersion(touchRoster({ ...r, shared }));
+      await refresh();
+      notify(shared ? t("armies.sharedOn", { name: r.name }) : t("armies.sharedOff", { name: r.name }), "success");
     });
 
   /** Deleting drops the revision history with the army; only the list itself can be put back. */
@@ -583,10 +603,11 @@ export function ArmiesPage() {
                 <a href={hrefFor("armies", r.id)} className="army-card-title">
                   {r.name}
                 </a>
-                <CardMenu name={r.name} busy={busy} onDuplicate={() => void duplicate(r)} onDelete={() => void remove(r)} />
+                <CardMenu name={r.name} busy={busy} shared={r.shared} onDuplicate={() => void duplicate(r)} onDelete={() => void remove(r)} onShare={me.anonymous ? undefined : (shared) => void share(r, shared)} />
               </div>
               <div className="army-card-kind">
                 {faction} · {t(battleSizeKey(r.battleSize))}
+                {r.shared ? <span className="badge">{t("armies.public")}</span> : null}
               </div>
               <ProportionBar value={points === undefined ? 0 : points / Math.max(1, r.pointsLimit)} height={5} tone={points !== undefined && pointsTone(points, r.pointsLimit) === "danger" ? "dim" : "ink"} title={t("roster.meter.aria", { points: fmtInt(points ?? 0), limit: fmtInt(r.pointsLimit) })} />
               <div className="army-card-foot">

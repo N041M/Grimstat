@@ -17,6 +17,7 @@ import { isDailyLimit } from "./db";
 import type { Deps } from "./deps";
 import type { RateBucket } from "./limits";
 import { createLink, LinkError, LinkRequest, resolveLink } from "./links";
+import { publicProfile, setHandle } from "./profile";
 import { sync, SyncError, SyncRequest } from "./sync";
 
 type Vars = { session?: Session };
@@ -25,6 +26,7 @@ type App = Hono<Env>;
 
 const StartRequest = z.object({ email: z.string().min(3).max(254) });
 const FinishRequest = z.object({ code: z.string().min(16).max(128), device: z.string().max(200).default("") });
+const HandleRequest = z.object({ handle: z.string().max(40) });
 
 /** Request bodies larger than these are refused before they are read. */
 const BODY_SMALL = 4 * 1024;
@@ -114,8 +116,11 @@ export function createApp(deps: Deps): App {
   app.use("/api/links", rateGate(deps, "links"), sized(BODY_LINK));
   app.use("/api/sync", rateGate(deps, "api"), sized(BODY_SYNC));
   app.use("/api/me", rateGate(deps, "api"));
+  app.use("/api/me/*", rateGate(deps, "api"), sized(BODY_SMALL));
   app.use("/api/sessions/*", rateGate(deps, "api"));
+  app.use("/api/u/*", rateGate(deps, "api"));
   app.use("/l/*", rateGate(deps, "links"));
+  app.use("/u/*", rateGate(deps, "links"));
 
   app.get("/api/health", (c) => c.json({ ok: true }));
 
@@ -159,6 +164,13 @@ export function createApp(deps: Deps): App {
     return c.json({ ok: true });
   });
 
+  app.put("/api/me/handle", async (c) => {
+    const session = await signedIn(c);
+    const { handle } = HandleRequest.parse(await readJson(c));
+    const set = await setHandle(deps, session.user.id, handle);
+    return c.json({ handle: set });
+  });
+
   app.delete("/api/me", async (c) => {
     const session = await signedIn(c);
     await deleteAccount(deps, session.user.id);
@@ -178,6 +190,16 @@ export function createApp(deps: Deps): App {
     const req = LinkRequest.parse(await readJson(c));
     return c.json(await createLink(deps, req, session?.user.id, ipOf(c)));
   });
+
+  // ---- a public page, with or without an account ----
+
+  app.get("/api/u/:handle", async (c) => {
+    const page = await publicProfile(deps, c.req.param("handle"));
+    if (!page) return c.json({ error: "There is no page by that name." }, 404);
+    return c.json(page);
+  });
+
+  app.get("/u/:handle", (c) => c.redirect(`${deps.appUrl}/#/u/${encodeURIComponent(c.req.param("handle").toLowerCase())}`, 302));
 
   app.get("/l/:id", async (c) => {
     const target = await resolveLink(deps, c.req.param("id"));

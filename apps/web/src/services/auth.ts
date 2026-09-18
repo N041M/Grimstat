@@ -8,6 +8,8 @@ export interface UserInfo {
   id: string;
   displayName: string;
   anonymous: boolean;
+  /** The name of the public page, when one has been chosen. */
+  handle?: string | null;
 }
 
 export interface DeviceInfo {
@@ -29,6 +31,8 @@ export interface AuthService {
   signOutDevice(id: string): Promise<void>;
   /** Remove everything the server holds for the account, and sign this device out. */
   deleteAccount(): Promise<void>;
+  /** Choose the public page's name, or clear it with an empty string. */
+  setHandle(handle: string): Promise<UserInfo>;
   subscribe(listener: (u: UserInfo) => void): () => void;
 }
 
@@ -44,6 +48,7 @@ export const localAuth: AuthService = {
   devices: async () => [],
   signOutDevice: async () => undefined,
   deleteAccount: async () => undefined,
+  setHandle: unavailable,
   subscribe: () => () => undefined,
 };
 

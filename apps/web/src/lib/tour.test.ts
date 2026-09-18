@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ROUTES } from "../router";
+import { PUBLIC_ROUTES, ROUTES } from "../router";
 import { CARD_GAP, VIEWPORT_MARGIN, clampStep, isLastStep, placeCard, screenAt, shouldAutoOpen, stepAt, TOUR_SCREEN_COUNT, TOUR_STEPS, type Rect , visibleRect} from "./tour";
 
 const VIEWPORT = { width: 1440, height: 900 };
@@ -13,14 +13,14 @@ const railItem = (top: number): Rect => ({ left: 0, top, width: 56, height: 38 }
 describe("TOUR_STEPS", () => {
   it("visits every screen in the app exactly once", () => {
     const visited = [...new Set(TOUR_STEPS.filter((s) => !s.bookend).map((s) => s.route))];
-    expect([...visited].sort()).toEqual([...ROUTES].sort());
+    expect([...visited].sort()).toEqual(ROUTES.filter((r) => !PUBLIC_ROUTES.includes(r)).sort());
     expect(visited).toHaveLength(TOUR_SCREEN_COUNT);
   });
 
   it("opens a screen with one card for its rail letter, then a card per control", () => {
     const withControl = new Set(TOUR_STEPS.filter((s) => !s.bookend && s.focus).map((s) => s.route));
     // Every screen but About, whose only control would be the button that starts this tour.
-    expect([...ROUTES].filter((r) => !withControl.has(r))).toEqual(["profile", "about"]);
+    expect(ROUTES.filter((r) => !withControl.has(r) && !PUBLIC_ROUTES.includes(r))).toEqual(["profile", "about"]);
     expect(TOUR_STEPS.filter((s) => !s.bookend && !s.focus)).toHaveLength(TOUR_SCREEN_COUNT);
   });
 
@@ -64,7 +64,7 @@ describe("TOUR_STEPS", () => {
   });
 
   it("counts only the screen stops, so the two bookends carry no number", () => {
-    expect(TOUR_SCREEN_COUNT).toBe(ROUTES.length);
+    expect(TOUR_SCREEN_COUNT).toBe(ROUTES.length - PUBLIC_ROUTES.length);
     expect(TOUR_STEPS.filter((s) => s.bookend)).toHaveLength(2);
   });
 

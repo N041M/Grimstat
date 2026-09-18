@@ -146,6 +146,18 @@ export function createAccount({ db: store = db, fetchImpl = (input, init) => fet
       await api(fetchImpl, "DELETE", `/api/sessions/${encodeURIComponent(id)}`, undefined, session.token);
     },
 
+    async setHandle(handle: string) {
+      const s = session;
+      if (!s) throw new Error("Sign in to choose a handle.");
+      const res = await api<{ handle: string | null }>(fetchImpl, "PUT", "/api/me/handle", { handle }, s.token);
+      const next: StoredSession = { ...s, user: { ...s.user, handle: res.handle } };
+      await writeSession(next, store);
+      session = next;
+      user = userInfo(next);
+      listeners.forEach((l) => l(user));
+      return user;
+    },
+
     async deleteAccount() {
       const s = session;
       if (!s) return;

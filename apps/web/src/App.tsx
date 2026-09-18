@@ -21,6 +21,7 @@ import { DataPage } from "./pages/DataPage";
 import { OverridesPage } from "./pages/OverridesPage";
 import { AboutPage } from "./pages/AboutPage";
 import { fmtResume, ProfilePage } from "./pages/ProfilePage";
+import { PublicProfilePage } from "./pages/PublicProfilePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sheet, useConfirm, useEdgeFade } from "./components/ui";
 import { CommandPalette, ContextColumn, contextEyebrow, IconRail, NavDrawer, Tour, useBarHostRef } from "./components/shell";
@@ -167,7 +168,7 @@ export function App() {
     <p className="muted shell-loading">{t("shell.loading")}</p>
   ) : (
     <ErrorBoundary resetKey={`${route}/${param ?? ""}`}>
-      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "collection" ? <CollectionPage /> : route === "codex" ? <CodexPage id={param} /> : route === "analyses" ? <AnalysesPage /> : route === "battle" ? <BattlePage /> : route === "play" ? <PlayPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : route === "profile" ? <ProfilePage /> : <AboutPage />}
+      {route === "calculator" ? <CalculatorPage /> : route === "scenarios" ? <ScenariosPage /> : route === "armies" ? param ? <RosterEditorPage id={param} /> : <ArmiesPage /> : route === "collection" ? <CollectionPage /> : route === "codex" ? <CodexPage id={param} /> : route === "analyses" ? <AnalysesPage /> : route === "battle" ? <BattlePage /> : route === "play" ? <PlayPage /> : route === "data" ? param === "overrides" ? <OverridesPage /> : <DataPage /> : route === "profile" ? <ProfilePage /> : route === "u" ? <PublicProfilePage handle={param} /> : <AboutPage />}
     </ErrorBoundary>
   );
 

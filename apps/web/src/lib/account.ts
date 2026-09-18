@@ -60,7 +60,7 @@ export async function writeSession(s: StoredSession | undefined, store: Grimstat
   else await store.settings.delete(SESSION_SETTING);
 }
 
-export const userInfo = (s: StoredSession): UserInfo => ({ id: s.user.id, displayName: s.user.handle ?? s.user.email, anonymous: false });
+export const userInfo = (s: StoredSession): UserInfo => ({ id: s.user.id, displayName: s.user.email, anonymous: false, handle: s.user.handle });
 
 /** A short name for this device, for the Profile page's list. */
 export function deviceName(): string {

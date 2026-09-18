@@ -718,6 +718,9 @@ code,
   display: block;
   margin-top: 8px;
 }
+.army-card-kind .badge {
+  margin-left: 0.5rem;
+}
 
  (see lib/moved.ts). It sits
    above the screen rather than over it, so nothing on the screen is hidden for the weeks it is up. */

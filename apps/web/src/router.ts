@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-export type Route = "calculator" | "scenarios" | "armies" | "collection" | "codex" | "analyses" | "battle" | "play" | "data" | "profile" | "about";
-export const ROUTES: Route[] = ["calculator", "scenarios", "armies", "collection", "codex", "analyses", "battle", "play", "data", "profile", "about"];
+export type Route = "calculator" | "scenarios" | "armies" | "collection" | "codex" | "analyses" | "battle" | "play" | "data" | "profile" | "about" | "u";
+export const ROUTES: Route[] = ["calculator", "scenarios", "armies", "collection", "codex", "analyses", "battle", "play", "data", "profile", "about", "u"];
+/** Routes that are somebody's page rather than a screen of the app: reached by link, not from the rail or the tour. */
+export const PUBLIC_ROUTES: Route[] = ["u"];
 
 /** Parsed hash: `#/armies/<param>?a=b` → route "armies", param "<param>", query {a: "b"}. */
 export interface RouteInfo {

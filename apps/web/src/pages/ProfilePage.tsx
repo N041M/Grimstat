@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { auth, type DeviceInfo, type UserInfo } from "../services/auth";
-import { sync, type SyncState } from "../services/sync";
+import { auth, type DeviceInfo } from "../services/auth";
+import { sync } from "../services/sync";
+import { useAuthUser, useSyncState } from "../hooks/useAccount";
+import { SITE_URL } from "../components/shell";
 import { SignInDeclined } from "../lib/accountService";
 import { fmtRelative } from "../lib/format";
 import { hrefFor, navigate, useRouteInfo } from "../router";
@@ -16,21 +18,6 @@ export function fmtResume(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
-function useAuthUser(): UserInfo {
-  const [user, setUser] = useState(() => auth().currentUser());
-  useEffect(() => auth().subscribe(setUser), []);
-  return user;
-}
-
-function useSyncState(): SyncState {
-  const [state, setState] = useState(() => sync().state());
-  useEffect(() => {
-    setState(sync().state());
-    return sync().subscribe(setState);
-  }, []);
-  return state;
-}
-
 export function ProfilePage() {
   const { notify } = useApp();
   const user = useAuthUser();
@@ -39,7 +26,10 @@ export function ProfilePage() {
   const [email, setEmail] = useState("");
   const [phase, setPhase] = useState<"idle" | "sending" | "sent" | "finishing">("idle");
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
+  const [handle, setHandle] = useState("");
+  const [savingHandle, setSavingHandle] = useState(false);
   const finishing = useRef<string | undefined>(undefined);
+  useEffect(() => setHandle(user.handle ?? ""), [user.handle]);
   const code = useRouteInfo().query.get("code");
 
   // The sign-in link lands here with `?code=`, whether the page was open already or not. The code
@@ -93,6 +83,18 @@ export function ProfilePage() {
       notify(t("profile.deleted"), "success");
     } catch (e) {
       notify(e instanceof Error ? e.message : String(e), "error");
+    }
+  };
+
+  const saveHandle = async (next: string): Promise<void> => {
+    setSavingHandle(true);
+    try {
+      const u = await auth().setHandle(next);
+      notify(u.handle ? t("profile.handleSaved", { url: `${SITE_URL}/u/${u.handle}` }) : t("profile.handleCleared"), "success");
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setSavingHandle(false);
     }
   };
 
@@ -153,6 +155,41 @@ export function ProfilePage() {
                   {t("profile.signOut")}
                 </button>
               </div>
+            </section>
+
+            <section aria-labelledby="profile-page-h">
+              <PanelHead id="profile-page-h" title={t("profile.pageTitle")} />
+              {user.handle ? (
+                <p className="data-note">
+                  {t("profile.pageAt")}{" "}
+                  <a href={hrefFor("u", user.handle)}>
+                    grimstat.com/u/{user.handle}
+                  </a>
+                </p>
+              ) : (
+                <p className="data-note">{t("profile.noHandle")}</p>
+              )}
+              <form
+                className="field-row"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void saveHandle(handle);
+                }}
+              >
+                <label className="grow">
+                  <span className="t-meta">{t("profile.handle")}</span>
+                  <input type="text" value={handle} maxLength={20} autoComplete="off" spellCheck={false} onChange={(e) => setHandle(e.target.value)} disabled={savingHandle} />
+                </label>
+                <button type="submit" disabled={savingHandle || handle.trim() === (user.handle ?? "")}>
+                  {t("profile.setHandle")}
+                </button>
+                {user.handle ? (
+                  <button type="button" className="ghost" disabled={savingHandle} onClick={() => void saveHandle("")}>
+                    {t("profile.clearHandle")}
+                  </button>
+                ) : null}
+              </form>
+              <p className="data-note">{t("profile.handleHint")}</p>
             </section>
 
             <section aria-labelledby="profile-devices-h">

@@ -50,5 +50,7 @@ export const Roster = RecordMeta.extend({
   notes: z.string().optional(),
   /** Previous revision id for version history. */
   parentRevisionId: Id.optional(),
+  /** Listed on the owner's public page. Only meaningful with an account and a handle. */
+  shared: z.boolean().optional(),
 });
 export type Roster = z.infer<typeof Roster>;
