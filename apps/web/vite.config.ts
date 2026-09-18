@@ -213,7 +213,7 @@ export default defineConfig({
       manifest: {
         name: "Grimstat",
         short_name: "Grimstat",
-        description: "Unofficial, local-first Warhammer 40,000 statistics dashboard.",
+        description: "Unofficial, local-first Warhammer 40,000 statistics dashboard and army builder.",
         theme_color: "#15161a",
         background_color: "#15161a",
         display: "standalone",
@@ -237,7 +237,7 @@ export default defineConfig({
          * fetched the first time one does and cached from then on. Precaching them would make every
          * first visit pay for a feature most visits never reach.
          */
-        globIgnores: ["**/ocr/**"],
+        globIgnores: ["**/ocr/**", "**/og.png"],
         navigateFallback: "index.html",
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
