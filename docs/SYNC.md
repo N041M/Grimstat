@@ -241,6 +241,8 @@ The daily allowance is account-wide on Cloudflare and resets at midnight UTC. Si
 | D1 rows written | 100,000 | about 1.6 million |
 | D1 rows read | 5,000,000 | about 830 million |
 
+Donations help pay for this. The link is [ko-fi.com/grimstat](https://ko-fi.com/grimstat).
+
 At ten syncs a day carrying three changed records each, one active player writes about thirty rows
 and makes about twenty requests. Rows written is the binding limit, so the free tier carries about
 three thousand players editing on the same day, or about a hundred thousand saved changes a day in
@@ -252,10 +254,10 @@ changes per request. A request over a limit is rejected with a message the Profi
 When D1 returns its limit error, the Worker answers `503` with the next reset time. The device sets
 its status to `paused`, keeps its outbox, and retries after the reset. The shell says, in the
 player's local time: "Sync paused until 02:00. Everything is saved on this device and will sync
-then." The About page says, once: "Sync runs on a free hosting allowance shared by everyone, about
-100,000 saved changes a day. If donations cover it, the allowance grows." Those two strings are the
-whole disclaimer. The upgrade is Workers Paid at 60 USD a year, which raises every number in the
-table by an order of magnitude and is the first thing the Ko-fi pays for.
+then." The About page says, once: "Sync is free and shared by everyone using Grimstat. Donations
+keep it running." Those two strings are the whole disclaimer. The upgrade is Workers Paid at 60 USD
+a year, which raises every number in the table by an order of magnitude and is the first thing
+donations pay for.
 
 ### The Profile page
 
@@ -343,6 +345,18 @@ request and the data, in the order a request meets it:
 
 Not yet in place: Turnstile on sign-in, and HSTS, which is a switch under SSL/TLS, Edge
 Certificates in the Cloudflare dashboard and belongs on once the site has run on HTTPS for a while.
+
+### Deferred: a changes link for when sync is paused (noted 18 Sep 2026)
+
+When the daily allowance is spent, or a device is offline, the outbox could be carried to another
+device without the server: a link that holds the outbox compressed, offered on the Profile page
+only while sync is paused or offline, with Copy, Share (the phone's share sheet) and Save as file
+for a backlog too large for a link. The receiving device opens the link, asks "Import N changes
+from another device?", and applies them through `applyChanges` so the same rules hold: the later
+edit wins, an older army copy goes to History, and nothing received is sent back. The sending
+device pushes the same records when the server resumes and the server sees nothing new. The army
+share link already does this for one list. About a day and a half, most of it the receiving side
+and its tests. Not started, because the pause is rare at the app's size.
 
 ## Phase 3 — profiles and share pages
 

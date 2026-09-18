@@ -687,7 +687,7 @@ export const en = {
   "about.data1": "None of the Games Workshop rules text, datasheets, points or artwork is part of the app. You fetch that data from community sources, either in the browser or with the CLI, and it is stored on your device as a checksummed snapshot, which is what the app reads.",
   "about.data2": "The built-in sample uses invented units and numbers so the calculator can be tried without any import.",
   "about.account": "With an account, the server holds your email address and the armies, scenarios, collection, games, layouts and settings you made, so they reach your other devices. It holds no game data, no snapshot and no rules text. You can export everything on the Data page and delete the account on the Profile page.",
-  "about.sync": "Sync runs on a free hosting allowance shared by everyone, about 100,000 saved changes a day. If donations cover it, the allowance grows.",
+  "about.sync": "Sync is free and shared by everyone using Grimstat. Donations keep it running.",
   "about.systemTitle": "Game system & plugins",
   "about.gameSystem": "Game system",
   "about.edition": "edition {e}",
