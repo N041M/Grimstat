@@ -72,6 +72,10 @@ const { FakeDexie, resetTables } = vi.hoisted(() => {
   class FakeDexie {
     readonly tables = created;
     constructor(readonly name: string) {}
+    /** The tracking middleware is registered here in the real store; this stand-in has no core to put it under. */
+    use(): this {
+      return this;
+    }
     version(_n: number) {
       return {
         stores: (defs: Record<string, string>) => {
@@ -250,8 +254,9 @@ describe("the downloaded files", () => {
 describe("the backup bundle", () => {
   it("carries every store but the ones the app can produce again", async () => {
     // `publishedResolved` is worked out from the lists and the snapshot. `sourceFiles` holds the
-    // downloads the snapshots were built from, which are larger than everything else here.
-    const derived = ["publishedResolved", "sourceFiles"];
+    // downloads the snapshots were built from, which are larger than everything else here. The
+    // outbox and the tombstones are this device's account of what it has not sent yet.
+    const derived = ["publishedResolved", "sourceFiles", "outbox", "tombstones"];
     const bundle = await exportAll();
     const carried = Object.keys(bundle.stores).sort();
     const stored = db.tables.map((t) => t.name).sort();

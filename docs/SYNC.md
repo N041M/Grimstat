@@ -1,6 +1,6 @@
 # Accounts, sync and hosting — design plan
 
-> Status: plan (18 Sep 2026). Nothing here is built. Builds on the service seams in
+> Status: plan (18 Sep 2026). Phase 1 is live at grimstat.com and Phase 0 is built, both on 18 Sep 2026; Phases 2 to 4 are not started. Builds on the service seams in
 > `apps/web/src/services/`, the record metadata in `packages/schema/src/common.ts` and the Dexie
 > store in `apps/web/src/db.ts`.
 

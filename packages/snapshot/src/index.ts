@@ -4,7 +4,7 @@ export { mergeSources, DEFAULT_MERGE_POLICY } from "./merge";
 export type { MergePart, MergePolicy, MergeResult, PartialDatasheet, Unmatched } from "./merge";
 export { applyOverrides, mergePatch } from "./overrides";
 export type { ApplyOverridesResult } from "./overrides";
-export { buildSnapshot, normaliseData, verifySnapshot } from "./build";
+export { buildSnapshot, normaliseData, verifySnapshot, stableSnapshotId, isStableSnapshotId } from "./build";
 export type { BuildSnapshotInput } from "./build";
 export { diffSnapshots, fieldChanges } from "./diff";
 export type { SnapshotDiff, EntityChange, EntityRef, FieldChange, PointsChange, DiffEntity } from "./diff";

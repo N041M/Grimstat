@@ -54,13 +54,25 @@ export function normaliseData(data: SnapshotData): SnapshotData {
   return out;
 }
 
-function yyyymmdd(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
+/**
+ * The id a snapshot with this checksum has, on every device.
+ *
+ * The id is a prefix of the checksum and nothing else. It used to carry the build date as well,
+ * which meant two devices building the same sources on different days held the same data under
+ * two ids, and a roster pinned to one could not find the other. The build date is `createdAt`.
+ * Twelve hex digits are 48 bits, enough that two different snapshots on one device never share
+ * an id by accident.
+ */
+export function stableSnapshotId(checksum: string): string {
+  return `snap_${checksum.slice(0, 12)}`;
 }
 
+/** Whether an id is one this function gives, as opposed to a dated one from an earlier build. */
+export const isStableSnapshotId = (id: string): boolean => /^snap_[0-9a-f]{12}$/.test(id);
+
 /**
- * Build an immutable, checksummed snapshot. The id is `snap_<yyyymmdd>_<first 8 hex of the checksum>`;
- * the checksum is SHA-256 of the canonical JSON of `data` (sorted keys, sorted collections).
+ * Build an immutable, checksummed snapshot. The checksum is SHA-256 of the canonical JSON of
+ * `data` (sorted keys, sorted collections), and the id is `stableSnapshotId` of it.
  */
 export async function buildSnapshot(input: BuildSnapshotInput): Promise<Snapshot> {
   const data = normaliseData(input.data);
@@ -68,7 +80,7 @@ export async function buildSnapshot(input: BuildSnapshotInput): Promise<Snapshot
   const now = input.now === undefined ? new Date() : typeof input.now === "string" ? new Date(input.now) : input.now;
   const iso = now.toISOString();
   const snapshot = {
-    id: `snap_${yyyymmdd(now)}_${checksum.slice(0, 8)}`,
+    id: stableSnapshotId(checksum),
     gameSystemId: data.gameSystem.id,
     label: input.label,
     sources: input.sources ?? [],

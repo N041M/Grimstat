@@ -1,7 +1,9 @@
-import Dexie, { type Table } from "dexie";
+import Dexie, { type Table, type Transaction } from "dexie";
 import type { Roster, Scenario, ScenarioUnit, Snapshot } from "@grimstat/schema";
 import { publishedListKey, type StoredPublishedList } from "@grimstat/adapters";
+import { stableSnapshotId } from "@grimstat/snapshot";
 import { fnv1a128, type OverrideRecord } from "./lib/overrides";
+import { OUTBOX_STORE, SYNCED, SYNCED_STORES, TOMBSTONE_STORE, syncOwner, trackingMiddleware, type OutboxRecord, type SyncKey, type TombstoneRecord } from "./lib/syncTracking";
 import type { ResolvedSummary } from "./lib/meta";
 import type { GameState, LogEntry } from "./lib/game";
 import type { Layout } from "react-grid-layout";
@@ -12,11 +14,18 @@ export interface DashboardLayoutRecord {
   layout: Layout[];
   hidden: string[];
   updatedAt: string;
+  ownerId?: string;
 }
 
+/**
+ * One setting. `updatedAt` and `ownerId` are filled in by the store for the settings that sync
+ * (see `SYNCED_SETTING_KEYS`), and are absent on records written before that.
+ */
 export interface SettingRecord {
   key: string;
   value: unknown;
+  updatedAt?: string;
+  ownerId?: string;
 }
 
 export const SETTING_ACTIVE_SNAPSHOT = "activeSnapshotId";
@@ -50,6 +59,7 @@ export interface TerrainLayoutRecord {
   updatedAt: string;
   json: string;
   source?: string;
+  ownerId?: string;
 }
 
 /**
@@ -72,6 +82,9 @@ export interface PublishedListRecord extends StoredPublishedList {
    * adding it needed no new store version.
    */
   origin?: "corpus" | "hand";
+  /** Filled in by the store for a list that is the player's own; absent on a relay's. */
+  updatedAt?: string;
+  ownerId?: string;
 }
 
 /**
@@ -139,6 +152,7 @@ export interface UnitPresetRecord {
   snapshotId?: string;
   datasheetId?: string;
   factionId?: string;
+  ownerId?: string;
 }
 
 /**
@@ -159,6 +173,7 @@ export interface CollectionEntryRecord {
   owned: number;
   painted: number;
   updatedAt: string;
+  ownerId?: string;
 }
 
 /**
@@ -211,9 +226,14 @@ export class GrimstatDb extends Dexie {
   unitPresets!: Table<UnitPresetRecord, string>;
   collection!: Table<CollectionEntryRecord, string>;
   sourceFiles!: Table<SourceFilesRecord, string>;
+  /** Changes not yet sent, kept by the tracking middleware. Never exported. */
+  outbox!: Table<OutboxRecord, SyncKey>;
+  /** Deletions not yet sent, kept by the tracking middleware. Never exported. */
+  tombstones!: Table<TombstoneRecord, SyncKey>;
 
   constructor(name = "grimstat") {
     super(name);
+    this.use(trackingMiddleware());
     this.version(1).stores({
       snapshots: "id, gameSystemId, updatedAt",
       scenarios: "id, name, updatedAt, snapshotId",
@@ -366,7 +386,86 @@ export class GrimstatDb extends Dexie {
       collection: "id, factionId, updatedAt",
       sourceFiles: "key, gameSystemId, adapter",
     });
+    // v12: snapshot ids are the checksum alone, so two devices building the same sources hold the
+    // same id; and the two tables the tracking middleware keeps for sync.
+    this.version(12)
+      .stores({
+        snapshots: "id, gameSystemId, updatedAt",
+        scenarios: "id, name, updatedAt, snapshotId",
+        layouts: "id",
+        settings: "key",
+        rosters: "id, name, factionId, snapshotId, updatedAt",
+        rosterVersions: "id, rosterId, updatedAt",
+        overrides: "&key, entity, id, updatedAt",
+        terrainLayouts: "id, name, updatedAt",
+        publishedLists: "id, faction, placing, importedAt",
+        publishedResolved: "&key, snapshotId, recordId",
+        games: "id, rosterId, updatedAt",
+        unitPresets: "id, name, factionId, updatedAt",
+        collection: "id, factionId, updatedAt",
+        sourceFiles: "key, gameSystemId, adapter",
+        [OUTBOX_STORE]: "[store+id], changedAt",
+        [TOMBSTONE_STORE]: "[store+id], deletedAt",
+      })
+      .upgrade(async (tx) => {
+        const renamed = await rekeySnapshots(tx);
+        if (!renamed.size) return;
+        const next = (id: unknown): string | undefined => (typeof id === "string" ? renamed.get(id) : undefined);
+        for (const store of ["rosters", "scenarios", "games", "unitPresets"]) {
+          await tx
+            .table(store)
+            .toCollection()
+            .modify((r: { snapshotId?: string }) => {
+              const to = next(r.snapshotId);
+              if (to) r.snapshotId = to;
+            });
+        }
+        // A roster's history is stored as text. Only a version naming a renamed snapshot is parsed.
+        await tx
+          .table("rosterVersions")
+          .toCollection()
+          .modify((v: RosterVersionRecord) => {
+            const hit = [...renamed.keys()].find((old) => v.json.includes(old));
+            if (!hit) return;
+            try {
+              const roster = JSON.parse(v.json) as { snapshotId?: string };
+              const to = next(roster.snapshotId);
+              if (to) v.json = JSON.stringify({ ...roster, snapshotId: to });
+            } catch {
+              /* a version that does not parse is left as it was */
+            }
+          });
+        const active = await tx.table("settings").get(SETTING_ACTIVE_SNAPSHOT);
+        const to = next(active?.value);
+        if (to) await tx.table("settings").put({ ...active, value: to });
+        // Derived from the lists and the snapshot, keyed by the old ids. The Meta tab rebuilds it.
+        await tx.table("publishedResolved").clear();
+      });
   }
+}
+
+/**
+ * Give every stored snapshot the id its checksum has, and say which ids changed.
+ *
+ * Two snapshots of the same data built on different days had two ids, and both now want the same
+ * one. The first keeps its record under the new id and the second is dropped, since they hold the
+ * same data. Both old ids map to the new one, so nothing that named either is left pointing at
+ * nothing.
+ */
+async function rekeySnapshots(tx: Transaction): Promise<Map<string, string>> {
+  const snapshots = tx.table("snapshots");
+  const renamed = new Map<string, string>();
+  await snapshots.each((s: { id: string; checksum: string }) => {
+    const want = stableSnapshotId(s.checksum);
+    if (s.id !== want) renamed.set(s.id, want);
+  });
+  for (const [old, want] of renamed) {
+    const s = await snapshots.get(old);
+    if (!s) continue;
+    if (!(await snapshots.get(want))) await snapshots.put({ ...s, id: want });
+    await snapshots.delete(old);
+  }
+  return renamed;
 }
 
 export const db = new GrimstatDb();
@@ -377,8 +476,43 @@ export async function getSetting<T>(key: string): Promise<T | undefined> {
 }
 
 export async function setSetting(key: string, value: unknown): Promise<void> {
-  await db.settings.put({ key, value });
+  await db.settings.put({ key, value, updatedAt: new Date().toISOString() });
 }
+
+/**
+ * Give every record written before there was an account to the account signing in.
+ *
+ * A record written while signed out carries `ownerId: "local"`, or none at all on the older
+ * tables. On the first sign-in the whole store becomes the account's in one transaction, and
+ * every record it claims enters the outbox by way of the tracking middleware, so the first sync
+ * carries everything. Records already owned by this account are left alone. Records owned by a
+ * different account are left alone too: that case is answered before this is called.
+ */
+export async function adoptLocalRecords(ownerId: string, store: GrimstatDb = db): Promise<number> {
+  let claimed = 0;
+  await store.transaction(
+    "rw",
+    SYNCED_STORES.map((s) => store.table(s)),
+    async () => {
+      for (const name of SYNCED_STORES) {
+        const own = SYNCED[name]!;
+        await store
+          .table(name)
+          .toCollection()
+          .modify((r: { ownerId?: string }) => {
+            if (!own(r as Record<string, unknown>)) return;
+            if (r.ownerId && r.ownerId !== "local") return;
+            r.ownerId = ownerId;
+            claimed++;
+          });
+      }
+    },
+  );
+  return claimed;
+}
+
+/** The id of whoever owns records written now; see `setSyncOwner` in `lib/syncTracking.ts`. */
+export { syncOwner };
 
 /** The files a source was last downloaded as, or nothing when it has not been fetched on this machine. */
 export async function readSourceFiles(gameSystemId: string, adapter: string): Promise<SourceFilesRecord | undefined> {

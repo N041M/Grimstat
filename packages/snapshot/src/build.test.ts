@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { buildSnapshot, normaliseData, verifySnapshot } from "./build";
+import { buildSnapshot, isStableSnapshotId, normaliseData, stableSnapshotId, verifySnapshot } from "./build";
 import { loadSyntheticSnapshot } from "./synthetic/index";
 
 describe("buildSnapshot", () => {
   const base = loadSyntheticSnapshot();
   const SOME_DAY = "2026-01-01T00:00:00.000Z";
 
-  it("produces a dated id with the checksum prefix and record meta", async () => {
+  it("gives the id from the checksum alone, with record meta", async () => {
     const snap = await buildSnapshot({ data: base.data, now: "2026-03-04T05:06:07.000Z", label: "x", sources: base.sources });
-    expect(snap.id).toBe(`snap_20260304_${snap.checksum.slice(0, 8)}`);
+    expect(snap.id).toBe(`snap_${snap.checksum.slice(0, 12)}`);
+    expect(snap.id).toBe(stableSnapshotId(snap.checksum));
+    expect(isStableSnapshotId(snap.id)).toBe(true);
+    expect(isStableSnapshotId("snap_20260304_abcdef01")).toBe(false);
     expect(snap.checksum).toMatch(/^[0-9a-f]{64}$/);
     expect(snap.createdAt).toBe("2026-03-04T05:06:07.000Z");
     expect(snap.updatedAt).toBe(snap.createdAt);
@@ -16,6 +19,13 @@ describe("buildSnapshot", () => {
     expect(snap.revision).toBe(0);
     expect(snap.gameSystemId).toBe(base.data.gameSystem.id);
     expect(snap.label).toBe("x");
+  });
+
+  it("gives the same id on two days for the same data", async () => {
+    const a = await buildSnapshot({ data: base.data, now: "2026-03-04T05:06:07.000Z" });
+    const b = await buildSnapshot({ data: base.data, now: "2026-03-09T18:00:00.000Z" });
+    expect(b.id).toBe(a.id);
+    expect(b.createdAt).not.toBe(a.createdAt);
   });
 
   it("checksum ignores key order and collection order", async () => {
