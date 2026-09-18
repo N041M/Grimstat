@@ -14,7 +14,7 @@
  */
 
 import type { Aabb2, BoardSize, CoherencyReport, Footprint, ModelHull, ReachNode, ReachOptions, ReachResult, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
-import { COHERENCY_RANGE, LAYOUTS, MOVE_RULES, TOUCH, TerrainIndex, bounds, canStand, chargeGeometry, circleBase, coherency, coreSegment, coverFor, distance, edgeZones, footReach, heightForKeywords, horizontalGap, inBox, inEngagementRange, inZone, onBoard, ovalBase, pointInPolygon, reachable, segPolygonDistance, sight, unitDistance } from "@grimstat/board";
+import { COHERENCY_RANGE, LAYOUTS, MM_PER_INCH, MOVE_RULES, TOUCH, TerrainIndex, bounds, canStand, chargeGeometry, circleBase, coherency, coreSegment, coverFor, distance, edgeZones, footReach, heightForKeywords, horizontalGap, inBox, inEngagementRange, inZone, onBoard, ovalBase, pointInPolygon, reachable, segPolygonDistance, sight, unitDistance } from "@grimstat/board";
 import type { ModelProfile, Roster, Snapshot } from "@grimstat/schema";
 import { unitClassFor, type UnitClassId } from "./unitArt";
 
@@ -133,8 +133,14 @@ export function formation(count: number, spacing: number): Vec2[] {
   return out;
 }
 
-/** How far apart the model centres of a unit stand when it is set down as a block. */
-const blockSpacing = (unit: BattleUnit): number => Math.max(1.2, unit.models[0] ? unit.models[0].hull.foot.r * 2 + 0.6 : 1.6);
+/**
+ * How far apart the model centres of a unit stand when it is set down as a block.
+ *
+ * Measured from the base's longest half-extent, so an oval base has room along its length as well
+ * as across it. The block is laid out on a square grid and the bases turn with the unit, so the
+ * spacing has to hold whichever way they face.
+ */
+const blockSpacing = (unit: BattleUnit): number => Math.max(1.2, unit.models[0] ? footReach(unit.models[0].hull.foot) * 2 + 0.6 : 1.6);
 
 /**
  * How much floor a unit takes up as a block, measured to the outside of the outermost bases.
@@ -855,8 +861,28 @@ export function musterUnit(unit: BattleUnit, at: Vec2): BattleUnit {
   return { ...placed, reserve: true, models: placed.models.map((m) => ({ ...m, from: undefined, spent: 0, route: undefined })) };
 }
 
-/** Take a unit off the table and put it back in its berth on its side's muster table. */
-export const withdrawUnit = (state: BattleState, unit: BattleUnit): BattleUnit => musterUnit(unit, berthOf(state, unit));
+/** Turn every model of a unit to the same facing, in place. */
+export const faceUnit = (unit: BattleUnit, facing: number): BattleUnit => ({ ...unit, models: unit.models.map((m) => ({ ...m, hull: { ...m.hull, facing } })) });
+
+/** The average of a polygon's corners, which is near enough to the middle of a deployment zone. */
+const centreOf = (polygon: readonly Vec2[]): Vec2 => ({ x: polygon.reduce((s, p) => s + p.x, 0) / polygon.length, y: polygon.reduce((s, p) => s + p.y, 0) / polygon.length });
+
+/**
+ * The way a side's models face when they are first set down. It runs from the middle of the side's
+ * own deployment zone towards the middle of the enemy's. With the usual pair of edge zones that is
+ * straight up the table for the attacker and straight down it for the defender.
+ */
+export function enemyBearing(state: BattleState, side: Side): number {
+  const own = centreOf(zoneOf(state, side).polygon);
+  const foe = centreOf(zoneOf(state, side === "attacker" ? "defender" : "attacker").polygon);
+  const dx = foe.x - own.x;
+  const dy = foe.y - own.y;
+  if (Math.hypot(dx, dy) < 1e-6) return side === "attacker" ? Math.PI / 2 : -Math.PI / 2;
+  return Math.atan2(dy, dx);
+}
+
+/** Take a unit off the table and put it back in its berth on its side's muster table, facing the board. */
+export const withdrawUnit = (state: BattleState, unit: BattleUnit): BattleUnit => musterUnit(faceUnit(unit, enemyBearing(state, unit.side)), berthOf(state, unit));
 
 /** An angle brought back into (−π, π]. */
 const wrapAngle = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
@@ -893,10 +919,12 @@ export const clearDeployment = (state: BattleState): BattleState => ({ ...state,
  *
  * Back edge first and centre outwards, one inch at a time, first legal spot wins: the way a player
  * fills a zone when the terrain, not the plan, is deciding. Units that fit nowhere stay in reserve.
+ * Every unit set down is turned to face the enemy's zone.
  */
 export function autoDeploy(state: BattleState, side: Side, index = indexOf(state)): BattleState {
   let next = state;
   const zone = zoneOf(state, side);
+  const bearing = enemyBearing(state, side);
   const xs = zone.polygon.map((p) => p.x);
   const ys = zone.polygon.map((p) => p.y);
   const box = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
@@ -911,8 +939,9 @@ export function autoDeploy(state: BattleState, side: Side, index = indexOf(state
     for (const x of [width / 2 - d, width / 2 + d]) if (x >= box.minX && x <= box.maxX && !cols.includes(x)) cols.push(x);
   }
 
-  for (const unit of state.units) {
-    if (unit.side !== side || !unit.reserve) continue;
+  for (const waiting of state.units) {
+    if (waiting.side !== side || !waiting.reserve) continue;
+    const unit = faceUnit(waiting, bearing);
     let placed: BattleUnit | undefined;
     search: for (const y of rows) {
       for (const x of cols) {
@@ -1057,7 +1086,8 @@ export function battleWith(layout: TerrainLayout, units: readonly BattleUnit[]):
  * Each side is spread in one row along its zone, evenly across the table's width. A unit that
  * cannot stand where the row puts it (terrain, a crowded row, a zone of another shape) is
  * auto-deployed instead, and stays on its muster table if it fits nowhere. The units keep their
- * identity, so a force built from an army survives being deployed and withdrawn again.
+ * identity, so a force built from an army survives being deployed and withdrawn again. Every model
+ * is turned to face the enemy's zone.
  */
 export function freshDeployment(state: BattleState): BattleState {
   const { width, depth } = state.layout.size;
@@ -1065,7 +1095,9 @@ export function freshDeployment(state: BattleState): BattleState {
   const index = indexOf(state);
   for (const side of ["attacker", "defender"] as const) {
     const mine = unitsOf(next, side);
-    mine.forEach((unit, i) => {
+    const bearing = enemyBearing(next, side);
+    mine.forEach((u, i) => {
+      const unit = faceUnit(u, bearing);
       const x = ((i + 1) / (mine.length + 1)) * width;
       const at = side === "attacker" ? { x, y: 6 } : { x: width - x, y: depth - 6 };
       if (deployVerdict(next, unit, at, index).ok) next = replaceUnit(next, deployUnit(unit, at));
@@ -1127,6 +1159,38 @@ const CLASS_BASES: Readonly<Record<UnitClassId, () => Footprint>> = {
   fortification: () => circleBase(152.4),
 };
 
+/** The classes whose models often come without a base and stand on their own hull instead. */
+const HULL_CLASSES: ReadonlySet<UnitClassId> = new Set(["vehicle", "transport", "monster", "titanic", "walker", "aircraft"]);
+
+/**
+ * A footprint for a model whose datasheet names no base ("Use model"). The hull is sized from Wounds.
+ *
+ * This is an assumption, like the default heights. Among the vehicles that carry no base, length
+ * grows with Wounds at about a third of an inch per wound. A ten-wound carrier comes out four and a
+ * half inches long, a thirteen-wound battle tank close to six and a twenty-four-wound superheavy
+ * nine and a half, which is near what the kits measure. Hulls are drawn two thirds as wide as they
+ * are long. A walker stands on its feet rather than lying on tracks, so it gets a round footprint
+ * as wide as such a hull would be.
+ */
+export function hullFromWounds(keywords: readonly string[], wounds: number): Footprint {
+  const length = Math.min(12, Math.max(2, 4.5 + (wounds - 10) * 0.36));
+  const width = length * 0.65;
+  const walker = keywords.some((k) => k.toUpperCase() === "WALKER");
+  return walker ? circleBase(width * MM_PER_INCH) : ovalBase(length * MM_PER_INCH, width * MM_PER_INCH);
+}
+
+/**
+ * What a model stands on. The base its datasheet names comes first. A vehicle or monster with no
+ * named base gets a hull sized from its Wounds. Anything else gets the base its class usually has.
+ */
+export function footprintFor(keywords: readonly string[], profile: ModelProfile | undefined): Footprint {
+  const named = footprintFromBaseSize(profile?.baseSize);
+  if (named) return named;
+  const cls = unitClassFor(keywords);
+  if (profile && HULL_CLASSES.has(cls)) return hullFromWounds(keywords, profile.W);
+  return CLASS_BASES[cls]();
+}
+
 /** The Move a datasheet gives, in inches. `null` means the profile does not move, and is not used for an unknown Move. */
 const DEFAULT_MOVE = 6;
 const profileMove = (p: ModelProfile | undefined): number | undefined => (p === undefined ? undefined : p.M === null ? 0 : p.M);
@@ -1134,8 +1198,9 @@ const profileMove = (p: ModelProfile | undefined): number | undefined => (p === 
 /**
  * The units of an army as battle units for one side, from the snapshot the army was built against.
  *
- * Model counts come from the army; base sizes and Move from each model's profile on the datasheet,
- * with the class of the unit (from its keywords) standing in where the datasheet names no base.
+ * Model counts come from the army; base sizes and Move from each model's profile on the datasheet.
+ * Where the datasheet names no base, a vehicle or monster gets a hull sized from its Wounds and
+ * anything else the base its class usually has. See `footprintFor`.
  * A unit whose datasheet is not in the snapshot is left out. Everything arrives off the board, to
  * be deployed from the muster table; a unit embarked in a transport or held in reserves is listed
  * like any other, since the table plans deployment rather than enforcing it.
@@ -1149,12 +1214,11 @@ export function unitsFromRoster(roster: Roster, snapshot: Snapshot, side: Side):
     const lead = sheet.models[0];
     const keywords = [...sheet.keywords];
     const height = heightForKeywords(keywords);
-    const classBase = CLASS_BASES[unitClassFor(keywords)]();
     const unitMove = profileMove(lead) ?? DEFAULT_MOVE;
     const models: BattleModel[] = [];
     for (const group of entry.models) {
       const profile = sheet.models.find((m) => m.id === group.modelProfileId) ?? lead;
-      const foot = footprintFromBaseSize(profile?.baseSize) ?? classBase;
+      const foot = footprintFor(keywords, profile);
       const move = profileMove(profile);
       for (let i = 0; i < group.count; i++) {
         models.push({ id: `${side}-${entry.id}-${models.length}`, hull: { pos: { x: 0, y: 0, z: 0 }, facing: 0, foot, height }, ...(move !== undefined && move !== unitMove ? { move } : {}) });

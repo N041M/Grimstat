@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, TerrainIndex, bounds, canSee, canStand, circleBase, coherency, coreSegment, distance, inBox, inZone, ovalBase, segPolygonDistance, terrain, type ReachNode, type TerrainLayout, type Vec2 } from "@grimstat/board";
+import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, TerrainIndex, bounds, canSee, canStand, circleBase, coherency, coreSegment, distance, footReach, inBox, inZone, ovalBase, segPolygonDistance, terrain, type ReachNode, type TerrainLayout, type Vec2 } from "@grimstat/board";
+import type { ModelProfile } from "@grimstat/schema";
 import {
   anchorOf,
   applyGroupMove,
   applyModelMove,
   applyUnitMove,
   autoDeploy,
+  battleWith,
+  blockSize,
   clearDeployment,
+  enemyBearing,
+  faceUnit,
+  footprintFor,
+  hullFromWounds,
   deployUnit,
   deployVerdict,
   deployedUnits,
@@ -641,12 +648,13 @@ describe("the reach overlay", () => {
 describe("turning in place", () => {
   it("turns one model, or the whole unit, about its own base and keeps the angle in range", () => {
     const unit = attacker(0);
+    const start = unit.models[1]!.hull.facing;
     const one = rotateUnit(unit, Math.PI / 12, unit.models[1]!.id);
-    expect(one.models[1]!.hull.facing).toBeCloseTo(Math.PI / 12);
+    expect(one.models[1]!.hull.facing).toBeCloseTo(start + Math.PI / 12);
     expect(one.models[0]!.hull.facing).toBe(unit.models[0]!.hull.facing);
     expect(one.models[1]!.hull.pos).toEqual(unit.models[1]!.hull.pos);
     const all = rotateUnit(unit, 2 * Math.PI + 0.1);
-    for (const m of all.models) expect(m.hull.facing).toBeCloseTo(0.1);
+    for (const m of all.models) expect(m.hull.facing).toBeCloseTo(start + 0.1);
   });
 
   it("lets a round base turn anywhere, but not an oval one that would swing off the table", () => {
@@ -794,8 +802,8 @@ describe("moving a selection together", () => {
     const unit = attacker(0);
     const ids = new Set(unit.models.slice(0, 2).map((m) => m.id));
     const turned = rotateUnit(unit, Math.PI / 12, ids);
-    expect(turned.models[0]!.hull.facing).toBeCloseTo(Math.PI / 12);
-    expect(turned.models[1]!.hull.facing).toBeCloseTo(Math.PI / 12);
+    expect(turned.models[0]!.hull.facing).toBeCloseTo(unit.models[0]!.hull.facing + Math.PI / 12);
+    expect(turned.models[1]!.hull.facing).toBeCloseTo(unit.models[1]!.hull.facing + Math.PI / 12);
     expect(turned.models[2]!.hull.facing).toBe(unit.models[2]!.hull.facing);
   });
 
@@ -942,5 +950,91 @@ describe("dragging a whole unit", () => {
       const after = applyUnitMove(moved, short.at!, short.cost!, short.path);
       for (const each of after.models) expect(each.spent ?? 0).toBeLessThanOrEqual(moveOf(after, each) + 1e-6);
     }
+  });
+});
+
+describe("facing the enemy", () => {
+  const start = sampleBattle(OPEN_APPROACH);
+
+  it("points a side straight at the other's zone: up the table for the attacker, down it for the defender", () => {
+    expect(enemyBearing(start, "attacker")).toBeCloseTo(Math.PI / 2);
+    expect(enemyBearing(start, "defender")).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it("follows the zones when they are not the usual strips", () => {
+    const corners = battleWith(
+      { ...OPEN_APPROACH, zones: [{ id: "a", owner: "attacker", polygon: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }] }, { id: "d", owner: "defender", polygon: [{ x: 60, y: 44 }, { x: 40, y: 44 }, { x: 60, y: 24 }] }] },
+      start.units,
+    );
+    const up = enemyBearing(corners, "attacker");
+    expect(Math.cos(up)).toBeGreaterThan(0);
+    expect(Math.sin(up)).toBeGreaterThan(0);
+    expect(enemyBearing(corners, "defender")).toBeCloseTo(up - Math.PI);
+  });
+
+  it("turns every model to face the enemy on the muster table and again when it is set down", () => {
+    for (const u of start.units) for (const m of u.models) expect(m.hull.facing).toBeCloseTo(enemyBearing(start, u.side));
+    const down = freshDeployment(start);
+    for (const u of down.units) for (const m of u.models) expect(m.hull.facing).toBeCloseTo(u.side === "attacker" ? Math.PI / 2 : -Math.PI / 2);
+    const auto = autoDeploy(clearDeployment(down), "defender");
+    for (const u of auto.units) if (u.side === "defender") for (const m of u.models) expect(m.hull.facing).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it("keeps a turn the player made when the unit is deployed by hand, and forgets it on withdrawal", () => {
+    const unit = start.units.find((u) => u.side === "attacker")!;
+    const turned = faceUnit(unit, 0.3);
+    expect(deployUnit(turned, { x: 20, y: 6 }).models.every((m) => m.hull.facing === 0.3)).toBe(true);
+    const back = withdrawUnit(start, deployUnit(turned, { x: 20, y: 6 }));
+    for (const m of back.models) expect(m.hull.facing).toBeCloseTo(Math.PI / 2);
+  });
+});
+
+describe("a block of oval bases", () => {
+  const bikes: BattleUnit = {
+    id: "bikes",
+    side: "attacker",
+    name: "bikes",
+    move: 12,
+    oc: 2,
+    keywords: ["MOUNTED"],
+    models: [0, 1, 2].map((i) => ({ id: `b${i}`, hull: { pos: { x: 0, y: 0, z: 0 }, facing: 0, foot: ovalBase(75, 42), height: 2 } })),
+  };
+
+  it("leaves room for the length of the base whichever way the unit faces", () => {
+    for (const facing of [0, Math.PI / 2, 1]) {
+      const placed = placeUnit(faceUnit(bikes, facing), { x: 30, y: 20 });
+      const reach = footReach(placed.models[0]!.hull.foot);
+      placed.models.forEach((a, i) => placed.models.slice(i + 1).forEach((b) => expect(Math.hypot(a.hull.pos.x - b.hull.pos.x, a.hull.pos.y - b.hull.pos.y)).toBeGreaterThanOrEqual(2 * reach)));
+    }
+    const size = blockSize(bikes);
+    expect(size.width).toBeGreaterThanOrEqual(2 * 2 * footReach(bikes.models[0]!.hull.foot));
+  });
+});
+
+describe("what a model stands on", () => {
+  const profile = (baseSize: string | undefined, W: number): ModelProfile => ({ id: "m", name: "m", T: 4, Sv: 3, W, baseSize });
+
+  it("takes the base the datasheet names, whatever the class", () => {
+    expect(footprintFor(["VEHICLE"], profile("120 x 92mm", 10))).toEqual(ovalBase(120, 92));
+    expect(footprintFor(["INFANTRY"], profile("28.5mm", 1))).toEqual(circleBase(28.5));
+  });
+
+  it("sizes a hull from Wounds when a vehicle or monster has no base, and grows it with them", () => {
+    const carrier = footprintFor(["VEHICLE", "TRANSPORT"], profile("Use model", 10));
+    const tank = footprintFor(["VEHICLE"], profile("Use model", 13));
+    const superheavy = footprintFor(["VEHICLE", "TITANIC"], profile(undefined, 24));
+    expect(carrier.kind).toBe("capsule");
+    expect(2 * footReach(carrier)).toBeCloseTo(4.5, 1);
+    expect(2 * footReach(tank)).toBeCloseTo(5.6, 1);
+    expect(2 * footReach(superheavy)).toBeCloseTo(9.5, 1);
+    expect(footReach(tank)).toBeGreaterThan(footReach(carrier));
+    expect(footReach(superheavy)).toBeGreaterThan(footReach(tank));
+    // A walker stands on its feet: round, as wide as the hull would have been.
+    expect(hullFromWounds(["VEHICLE", "WALKER"], 10)).toEqual(circleBase(4.5 * 0.65 * 25.4));
+  });
+
+  it("falls back on the class's usual base for anything else without one", () => {
+    expect(footprintFor(["INFANTRY"], profile("Use model", 4))).toEqual(circleBase(32));
+    expect(footprintFor(["INFANTRY", "CHARACTER"], undefined)).toEqual(circleBase(40));
   });
 });
