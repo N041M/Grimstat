@@ -23,6 +23,25 @@ const TABLE_HEADROOM = 14;
 const RECENTRE_MS = 420;
 
 /**
+ * What the toolbars along the head and the foot of the table cover, in CSS pixels each.
+ *
+ * The fit holds the whole scene in the canvas, and the muster tables are at its top and bottom
+ * edges, which is where the tool strip and the action row are drawn. Without this allowance the
+ * top-down view opened with both muster tables under the toolbars.
+ */
+const HUD_PX = 56;
+
+/**
+ * How large the table is on screen: CSS pixels per inch of table at the point the camera is turning
+ * about, written every frame.
+ *
+ * The unit labels read it, so that a name over a model grows as the model does when the table is
+ * zoomed in. It is measured against the screen rather than against the opening view, since a
+ * label has to keep its proportion to the model under it whatever size the canvas is.
+ */
+export const viewScale = { pxPerInch: 0 };
+
+/**
  * The canvas height the orbit was tuned at, in CSS pixels.
  *
  * OrbitControls turns the view by the fraction of the canvas height a drag covers, so one
@@ -58,6 +77,8 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
 
   const aspect = Math.max(viewport.width / Math.max(1, viewport.height), 0.2);
   const viewportHeight = Math.max(1, viewport.height);
+  /** How much taller the canvas is than the part of it the toolbars leave clear. */
+  const hudScale = viewportHeight / Math.max(1, viewportHeight - 2 * HUD_PX);
 
   /**
    * How far back the perspective camera has to sit to hold the whole scene.
@@ -75,8 +96,8 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
     const forward = new Vector3(0, -Math.sin(elevation), -Math.cos(elevation));
     const right = new Vector3(1, 0, 0);
     const up = new Vector3().crossVectors(right, forward).normalize();
-    const tanV = Math.tan(((perspective.fov * Math.PI) / 180) / 2);
-    const tanH = tanV * aspect;
+    const tanH = Math.tan(((perspective.fov * Math.PI) / 180) / 2) * aspect;
+    const tanV = Math.tan(((perspective.fov * Math.PI) / 180) / 2) / hudScale;
 
     let needed = 1;
     for (const qx of [-halfX, halfX]) {
@@ -89,7 +110,7 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
       }
     }
     return needed * 1.04;
-  }, [halfX, halfY, aspect, perspective.fov]);
+  }, [halfX, halfY, aspect, hudScale, perspective.fov]);
 
   /**
    * The framing a view opens on, which is also where Recentre travels back to.
@@ -121,7 +142,7 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
 
     // The orthographic frustum holds the scene exactly, then grows on the axis the pane has to spare.
     let halfWidth = halfX * 1.06;
-    let halfDepth = halfY * 1.06;
+    let halfDepth = halfY * 1.06 * hudScale;
     if (halfWidth / halfDepth < aspect) halfWidth = halfDepth * aspect;
     else halfDepth = halfWidth / aspect;
     orthographic.left = -halfWidth;
@@ -129,7 +150,7 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
     orthographic.top = halfDepth;
     orthographic.bottom = -halfDepth;
     orthographic.updateProjectionMatrix();
-  }, [perspective, orthographic, aspect, halfX, halfY]);
+  }, [perspective, orthographic, aspect, hudScale, halfX, halfY]);
 
   /*
    * Swap the active camera, put it where this mode was left, and rebuild the controls around it.
@@ -244,6 +265,13 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
     return () => cancelAnimationFrame(frame);
   }, [recentre, invalidate]);
 
-  useFrame(() => controls.current?.update());
+  useFrame(() => {
+    const next = controls.current;
+    if (!next) return;
+    next.update();
+    const camera = next.object as PerspectiveCamera | OrthographicCamera;
+    if (camera instanceof OrthographicCamera) viewScale.pxPerInch = (viewportHeight / Math.max(0.001, camera.top - camera.bottom)) * camera.zoom;
+    else viewScale.pxPerInch = viewportHeight / 2 / (Math.max(0.001, camera.position.distanceTo(next.target)) * Math.tan(((camera.fov * Math.PI) / 180) / 2));
+  });
   return null;
 }

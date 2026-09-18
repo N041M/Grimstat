@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { Raycaster, Vector2, Vector3 } from "three";
+import { Raycaster, Vector2, Vector3, type OrthographicCamera } from "three";
 import type { ModelHull, ReachNode, Vec2, Vec3 } from "@grimstat/board";
 import type { BattleState, BattleUnit, Tape } from "../../lib/battle";
 import { anchorOf, deployVerdict, dragVerdict, findModel, findUnit, groupMoveVerdict, indexOf, modelMoveVerdict, muster, musterAt, musterVerdict, placeUnit, sceneFrame, translateUnit, unitHulls, type GroupMember, type GroupMove, type Side } from "../../lib/battle";
 import { toScene } from "../../lib/battleScene";
 import { centre } from "../../lib/layoutEdit";
-import { Cameras, type CameraMode } from "./Cameras";
+import { Cameras, viewScale, type CameraMode } from "./Cameras";
 import { boardPointOn, pressOf, type Press } from "./press";
 import { dragsSelection } from "./selection";
 import { Lighting, MusterTables, Objectives, Table, Terrain, Zones } from "./TableScene";
@@ -146,6 +146,19 @@ export function BattleCanvas(props: BattleCanvasProps) {
 /** Rungs the staging labels cycle through, and the gap between them in inches. */
 const MUSTER_RUNGS = 3;
 const MUSTER_RUNG = 2.4;
+/** A rung of the same ladder seen from straight above, in CSS pixels: a label's height and a gap. */
+const MUSTER_RUNG_PX = 22;
+/**
+ * How a unit label grows when the table is zoomed in.
+ *
+ * It grows with the models under it, so a name still sits in proportion over a model filling the
+ * screen. At the opening view of a full table an inch is about 12 pixels, and there the label is
+ * its resting size. It never shrinks below that: zoomed out, the name still has to be read. It
+ * stops growing at a multiple of the resting size, since past that the name is over the model
+ * rather than beside it.
+ */
+const LABEL_REST_PX_PER_INCH = 12;
+const LABEL_SCALE_MAX = 2.5;
 
 /** The models of a selection, in table order, skipping any in reserve. */
 function membersOf(state: BattleState, ids: ReadonlySet<string>): GroupMember[] {
@@ -747,6 +760,8 @@ function LabelProjector({ labelsRef, units }: { labelsRef: RefObject<HTMLDivElem
     const host = labelsRef.current;
     if (!host) return;
     const children = host.children;
+    const scale = Math.min(LABEL_SCALE_MAX, Math.max(1, viewScale.pxPerInch / LABEL_REST_PX_PER_INCH));
+    const topDown = (camera as OrthographicCamera).isOrthographicCamera === true;
     for (let i = 0; i < units.length && i < children.length; i++) {
       const unit = units[i]!;
       const el = children[i] as HTMLElement;
@@ -754,11 +769,18 @@ function LabelProjector({ labelsRef, units }: { labelsRef: RefObject<HTMLDivElem
       // The label follows the token, which may still be on its way.
       const live = unit.models[0] ? livePositions.get(unit.models[0].id) : undefined;
       const pos = live ?? anchor.pos;
-      scratch.set(pos.x, pos.z + anchor.height + 0.6 + (lifts[i] ?? 0), -pos.y).project(camera);
+      // The ladder climbs straight up, which the top-down camera looks along and cannot see. There
+      // it climbs the screen instead, a label's height at a time, so a rung is a rung at any zoom.
+      // It climbs towards the middle of the board, since the muster tables are at the edges of the
+      // picture and a ladder climbing outward ends under the toolbars.
+      const lift = lifts[i] ?? 0;
+      scratch.set(pos.x, pos.z + anchor.height + 0.6 + (topDown ? 0 : lift), -pos.y).project(camera);
+      const liftPx = topDown ? (lift / MUSTER_RUNG) * MUSTER_RUNG_PX * scale * (scratch.y > 0 ? -1 : 1) : 0;
       const behind = scratch.z > 1;
       el.style.visibility = behind ? "hidden" : "visible";
       if (behind) continue;
-      el.style.transform = `translate(-50%, -100%) translate(${((scratch.x + 1) / 2) * size.width}px, ${((1 - scratch.y) / 2) * size.height}px)`;
+      // Placed by its bottom centre, then grown about that point, so the anchor holds as it scales.
+      el.style.transform = `translate(${((scratch.x + 1) / 2) * size.width}px, ${((1 - scratch.y) / 2) * size.height - liftPx}px) scale(${scale}) translate(-50%, -100%)`;
     }
   });
   return null;

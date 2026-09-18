@@ -6928,6 +6928,10 @@ button.val-row:hover {
      the tools are built from the same two, which is what keeps them on the same line. */
   --battle-mark-box: 24px;
   --battle-strip-pad: 4px;
+  /* The chip drawn inside a mark is 30px, and on a desktop the box is smaller than that. The gap
+     between marks grows to keep the chips 2px apart, so a filled chip is not painted over by the
+     dark chip of the mark below it. */
+  --battle-mark-gap: max(2px, 32px - var(--battle-mark-box));
   position: relative;
   min-width: 0;
   overflow: hidden;
@@ -6964,6 +6968,8 @@ button.val-row:hover {
   position: absolute;
   top: 0;
   left: 0;
+  /* The projector writes the whole transform, anchor included, so it scales about the corner. */
+  transform-origin: 0 0;
   visibility: hidden;
   white-space: nowrap;
   font: 500 10px/1 var(--mono);
@@ -11137,7 +11143,7 @@ body.battle-focused .battle-stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--battle-mark-gap);
   /* The same padding the tool strip carries, so the two start on the same line. */
   padding: var(--battle-strip-pad) 0;
 }
@@ -11151,12 +11157,12 @@ body.battle-focused .battle-stage {
  */
 .battle-camera {
   position: absolute;
-  top: calc(100% - var(--battle-strip-pad) + 4px);
+  top: calc(100% - var(--battle-strip-pad) + max(4px, var(--battle-mark-gap)));
   right: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--battle-mark-gap);
   opacity: 1;
   transform: scale(1);
   transform-origin: top center;
@@ -11270,8 +11276,14 @@ body.battle-focused .battle-stage {
 .battle-view-btn[aria-expanded="true"] {
   color: #15161a;
 }
-.battle-view-btn[aria-pressed="true"]:hover:not(:disabled)::before {
+.battle-view-btn[aria-pressed="true"]:hover:not(:disabled)::before,
+.battle-view-btn[aria-expanded="true"]:hover:not(:disabled)::before {
   background: #ffffff;
+}
+/* The hover rule above would otherwise win on specificity and paint the glyph white on a white chip. */
+.battle-view-btn[aria-pressed="true"]:hover:not(:disabled),
+.battle-view-btn[aria-expanded="true"]:hover:not(:disabled) {
+  color: #15161a;
 }
 /* The corner is the corner in focus as well. A control that moves when it is used is one you have
    to find twice. */

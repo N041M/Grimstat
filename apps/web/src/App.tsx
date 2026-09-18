@@ -79,15 +79,21 @@ export function App() {
   useEffect(() => setAskReplace(() => confirm({ title: t("profile.replaceTitle"), body: t("profile.replaceBody"), confirmLabel: t("profile.replace"), danger: true })), [confirm]);
 
   // Sync says when it is paused or failing, once per change of state, wherever the reader is.
+  // A failure notice stays until it is closed, and every retry that fails again replaces it rather
+  // than stacking a copy beneath it.
   useEffect(() => {
     let last = sync().state().status;
+    let failure: number | undefined;
     return sync().subscribe((s) => {
       if (s.status === last) return;
       last = s.status;
       if (s.status === "paused" && s.pausedUntil) notify(t("sync.paused", { time: fmtResume(s.pausedUntil) }), "info");
-      else if (s.status === "error" && s.error) notify(t("sync.error", { error: s.error }), "error");
+      else if (s.status === "error" && s.error) {
+        if (failure !== undefined) dismissNotice(failure);
+        failure = notify(t("sync.error", { error: s.error }), "error");
+      }
     });
-  }, [notify]);
+  }, [notify, dismissNotice]);
 
   // The shell owns the question every way of loading a scenario has to ask, because the calculator
   // holds one scenario and loading another drops it. The screens and the palette ask through
