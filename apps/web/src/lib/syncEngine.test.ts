@@ -175,6 +175,47 @@ describe("sync between two devices", () => {
   });
 });
 
+describe("a first sync with a lot to send", () => {
+  it("cuts it into requests the server accepts, by size as well as count", async () => {
+    const s = server();
+    const token = await s.signIn("a@example.com");
+    const a = device();
+    // Sixty rosters of about 120 KB each is about 7 MB, over the 4 MB a request may carry.
+    const pad = "x".repeat(120 * 1024);
+    await a.rosters.bulkPut(Array.from({ length: 60 }, (_, i) => ({ ...roster(`r${i}`, `list ${i}`), notes: pad })));
+    let requests = 0;
+    const counting: FetchLike = (input, init) => {
+      requests++;
+      return s.fetchImpl(input, init);
+    };
+    const result = await runSync({ db: a, fetchImpl: counting, token });
+    expect(result.sent).toBe(60);
+    expect(result.skipped).toBe(0);
+    expect(requests).toBeGreaterThanOrEqual(2);
+    expect(await a.outbox.count()).toBe(0);
+    const b = device();
+    await runSync({ db: b, fetchImpl: s.fetchImpl, token });
+    expect(await b.rosters.count()).toBe(60);
+  });
+
+  it("sets aside a record the server refuses as too large, and sends the rest", async () => {
+    const s = server();
+    const token = await s.signIn("a@example.com");
+    const a = device();
+    await a.games.put({ id: "g-big", ownerId: "local", createdAt: NOW, updatedAt: NOW, revision: 0, name: "long game", state: {} as never, log: [{ note: "y".repeat(300 * 1024) }] as never });
+    await a.rosters.put(roster("r1", "fine"));
+    const result = await runSync({ db: a, fetchImpl: s.fetchImpl, token });
+    expect(result.skipped).toBe(1);
+    expect(result.sent).toBe(1);
+    expect(await a.outbox.count()).toBe(0);
+    expect(await a.games.get("g-big")).toBeDefined();
+    const b = device();
+    await runSync({ db: b, fetchImpl: s.fetchImpl, token });
+    expect((await b.rosters.get("r1"))?.name).toBe("fine");
+    expect(await b.games.get("g-big")).toBeUndefined();
+  });
+});
+
 describe("replacing another account's records", () => {
   it("removes what an account carries and leaves the device's own state and the corpus", async () => {
     const a = device();

@@ -1,7 +1,9 @@
 /**
  * When sync runs. Thirty seconds after the last change, when the tab is hidden, when the app opens,
- * when the tab comes back, and when the network comes back. A paused sync waits for the reset and
- * tries once then. A failed sync tries again after a minute.
+ * when the tab comes back, when the network comes back, and every five minutes while the tab is
+ * being looked at, so a change made on another device reaches an open tab without anyone touching
+ * it. A paused sync waits for the reset and tries once then. A failed sync tries again after a
+ * minute.
  *
  * This is the `SyncService` the shell reads. It owns no data; the engine does the work.
  */
@@ -13,6 +15,8 @@ import { LAST_SYNC_SETTING, type FetchLike } from "./account";
 
 export const SYNC_DEBOUNCE_MS = 30_000;
 const RETRY_MS = 60_000;
+/** How often an open, visible tab asks for what other devices sent. A dozen requests an hour. */
+export const SYNC_POLL_MS = 5 * 60_000;
 
 export interface SchedulerDeps {
   db: GrimstatDb;
@@ -25,6 +29,7 @@ export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date
   let state: SyncState = { status: "idle" };
   const listeners = new Set<(s: SyncState) => void>();
   let timer: number | undefined;
+  let poll: number | undefined;
   let running: Promise<void> | undefined;
   let again = false;
 
@@ -83,6 +88,10 @@ export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date
     else schedule(0);
   };
   const onOnline = (): void => schedule(0);
+  const onPoll = (): void => {
+    if (typeof document !== "undefined" && document.hidden) return;
+    void run();
+  };
 
   return {
     state: () => state,
@@ -101,6 +110,7 @@ export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date
       window.addEventListener(OUTBOX_CHANGED, onOutbox);
       document.addEventListener("visibilitychange", onVisibility);
       window.addEventListener("online", onOnline);
+      poll = window.setInterval(onPoll, SYNC_POLL_MS);
       schedule(0);
     },
     stop() {
@@ -110,6 +120,8 @@ export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date
       window.removeEventListener("online", onOnline);
       if (timer !== undefined) window.clearTimeout(timer);
       timer = undefined;
+      if (poll !== undefined) window.clearInterval(poll);
+      poll = undefined;
       state = { status: "disabled" };
       listeners.forEach((l) => l(state));
     },
