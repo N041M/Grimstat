@@ -754,10 +754,20 @@ code,
 }
 .profile-devices li {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
+}
+/* The device name takes the width of the row, which puts the sign-out button at the right edge. */
+.profile-devices li .grow {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.profile-devices li button {
+  flex: 0 0 auto;
 }
 .profile-page .data-note {
   display: block;
