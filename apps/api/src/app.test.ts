@@ -340,3 +340,30 @@ describe("the purge", () => {
     expect((await h.deps.db.all<{ id: string }>("SELECT id FROM links")).map((r) => r.id)).toEqual([kept.body.id]);
   });
 });
+
+describe("one account cannot reach another's rows", () => {
+  it("sees, changes, signs out and deletes only its own", async () => {
+    const h = harness();
+    const alice = await h.signIn("alice@example.com", "alice's laptop");
+    const bob = await h.signIn("bob@example.com", "bob's phone");
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "alice's list")] }, alice);
+
+    // Bob pulls everything and gets nothing of Alice's, and the same record id is his own row.
+    const pulled = await h.json<{ changes: unknown[] }>("POST", "/api/sync", { cursor: 0, changes: [] }, bob);
+    expect(pulled.body.changes).toEqual([]);
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "bob's list", "2027-01-01T00:00:00.000Z")] }, bob);
+    const alices = await h.json<{ changes: Array<{ body: { name: string } }> }>("POST", "/api/sync", { cursor: 0, changes: [] }, alice);
+    expect(alices.body.changes.map((c) => c.body.name)).toEqual(["alice's list"]);
+
+    // Bob cannot sign Alice's device out by its id, and his account's deletion leaves hers whole.
+    const me = await h.json<{ devices: Array<{ id: string }> }>("GET", "/api/me", undefined, alice);
+    expect((await h.json("DELETE", `/api/sessions/${me.body.devices[0]!.id}`, undefined, bob)).status).toBe(200);
+    expect((await h.json("GET", "/api/me", undefined, alice)).status).toBe(200);
+    expect((await h.json("DELETE", "/api/me", undefined, bob)).status).toBe(200);
+    expect((await h.json("GET", "/api/me", undefined, alice)).status).toBe(200);
+    expect((await h.deps.db.all<{ name: string }>("SELECT json_extract(body, '$.name') AS name FROM records")).map((r) => r.name)).toEqual(["alice's list"]);
+
+    // A bearer token that is not a session's is nothing, however close it comes.
+    for (const t of ["", "x", alice.slice(1), alice.toUpperCase(), `${alice}0`]) expect((await h.json("GET", "/api/me", undefined, t)).status).toBe(401);
+  });
+});
