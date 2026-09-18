@@ -12,6 +12,10 @@ export default tseslint.config(
       "data/**",
       // The recogniser's own bundles, copied in by scripts/ocr-assets.mjs rather than written here.
       "apps/web/public/ocr/**",
+      // The Android project: Gradle files, and the web build that `cap sync` copies into it.
+      "apps/mobile/android/**",
+      // Wrangler's local state and the bundles a local run of the Worker leaves behind.
+      "**/.wrangler/**",
       // A git worktree is a second checkout of this same repo. Linting it from the parent reports
       // every file twice, against a node_modules it does not have.
       ".claude/worktrees/**",

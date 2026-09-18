@@ -31,6 +31,9 @@
   "routes": [{ "pattern": "grimstat.com", "custom_domain": true }],
   "vars": {
     "APP_URL": "https://grimstat.com",
+    // The phone app's WebView runs from this origin (apps/mobile). The API accepts its requests
+    // and names it in the CORS answer. Nothing else is added to the list.
+    "APP_ORIGINS": "https://localhost",
     "MAIL_FROM": "Grimstat <hello@grimstat.com>"
   },
   "d1_databases": [

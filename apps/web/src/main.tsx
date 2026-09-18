@@ -28,19 +28,30 @@ import { account } from "./lib/accountBoot";
  */
 const UPDATE_EVERY_MS = 60 * 60 * 1000;
 
-registerSW({
-  immediate: true,
-  onRegisteredSW: (_url, registration) => {
-    if (!registration) return;
-    const look = (): void => {
-      if (!document.hidden) void registration.update();
-    };
-    // Coming back to the tab is the moment a stale build is about to be used again.
-    document.addEventListener("visibilitychange", look);
-    window.setInterval(look, UPDATE_EVERY_MS);
-  },
-  onOfflineReady: () => swStore.offlineReady(),
-});
+/**
+ * The phone app is its own copy of the build and updates through the store, so it has no service
+ * worker (the build leaves it out; see `vite.config.ts`). It listens for the site's addresses the
+ * phone hands it instead.
+ */
+const STORE_BUILD = Boolean(import.meta.env.VITE_STORE_BUILD);
+
+if (STORE_BUILD) {
+  void import("./lib/native").then((m) => m.installNativeLinks()).catch(() => undefined);
+} else {
+  registerSW({
+    immediate: true,
+    onRegisteredSW: (_url, registration) => {
+      if (!registration) return;
+      const look = (): void => {
+        if (!document.hidden) void registration.update();
+      };
+      // Coming back to the tab is the moment a stale build is about to be used again.
+      document.addEventListener("visibilitychange", look);
+      window.setInterval(look, UPDATE_EVERY_MS);
+    },
+    onOfflineReady: () => swStore.offlineReady(),
+  });
+}
 
 const el = document.getElementById("root");
 if (!el) throw new Error("#root not found");

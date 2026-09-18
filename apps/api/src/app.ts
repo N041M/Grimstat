@@ -7,9 +7,14 @@
  * Before any route runs, a request passes four gates, in this order: the response headers that
  * every answer carries, the origin check on a request that changes something, the per-address rate
  * limit for its kind, and the size limit on its body. Each is a plain refusal with a sentence.
+ *
+ * The phone app runs from an origin of its own and reaches the API across origins. Its origin is
+ * listed in `deps.extraOrigins`, so it passes the origin check, and the CORS answer names it so
+ * the WebView lets the app read the response. No other origin is named.
  */
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
 import { AuthError, deleteAccount, devices, finish, sessionFor, signOut, start, type Session } from "./auth";
@@ -63,22 +68,43 @@ function bearer(c: Context): string | undefined {
 
 export { nextReset };
 
+/** The origins a browser may send a request from: the site's own and the ones the host lists. */
+function allowedOrigins(deps: Deps): Set<string> {
+  return new Set([new URL(deps.appUrl).origin, ...(deps.extraOrigins ?? [])]);
+}
+
 /**
  * A browser names the page a request came from. One from another site is refused, so no other
  * site can make a visitor's browser spend this server's allowances. A request naming no origin,
  * as a command-line tool sends, passes: it carries no one's credentials but its own.
+ *
+ * An origin on the list passes even when the browser marks the request as cross-site, which is
+ * how the phone app's requests arrive.
  */
 function originGate(deps: Deps): MiddlewareHandler<Env> {
-  const allowed = new Set([new URL(deps.appUrl).origin, ...(deps.extraOrigins ?? [])]);
+  const allowed = allowedOrigins(deps);
   return async (c, next) => {
     const method = c.req.method.toUpperCase();
     if (method === "GET" || method === "HEAD" || method === "OPTIONS") return next();
-    const site = c.req.header("sec-fetch-site");
-    if (site === "cross-site") throw new Refused(403, "Requests from other sites are not accepted.");
     const origin = c.req.header("origin");
-    if (origin && !allowed.has(origin)) throw new Refused(403, "Requests from other sites are not accepted.");
+    if (origin && allowed.has(origin)) return next();
+    if (origin || c.req.header("sec-fetch-site") === "cross-site") throw new Refused(403, "Requests from other sites are not accepted.");
     return next();
   };
+}
+
+/**
+ * The CORS answer for the listed origins. A request from any other origin gets no
+ * `Access-Control-Allow-Origin` header, and its browser refuses to hand the response over.
+ */
+function corsGate(deps: Deps): MiddlewareHandler<Env> {
+  const allowed = allowedOrigins(deps);
+  return cors({
+    origin: (origin) => (allowed.has(origin) ? origin : null),
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["content-type", "authorization"],
+    maxAge: 24 * 60 * 60,
+  });
 }
 
 function rateGate(deps: Deps, bucket: RateBucket): MiddlewareHandler<Env> {
@@ -108,9 +134,11 @@ export function createApp(deps: Deps): App {
     c.header("Cache-Control", "no-store");
     await next();
   });
+  app.use("/api/*", corsGate(deps));
   app.use("/api/*", originGate(deps));
   app.use("/api/auth/*", rateGate(deps, "auth"), sized(BODY_SMALL));
   app.use("/api/links", rateGate(deps, "links"), sized(BODY_LINK));
+  app.use("/api/links/*", rateGate(deps, "links"));
   app.use("/api/sync", rateGate(deps, "api"), sized(BODY_SYNC));
   app.use("/api/health", rateGate(deps, "api"));
   app.use("/api/me", rateGate(deps, "api"));
@@ -187,6 +215,14 @@ export function createApp(deps: Deps): App {
     const session = await sessionFor(deps, bearer(c));
     const req = LinkRequest.parse(await readJson(c));
     return c.json(await createLink(deps, req, session?.user.id, ipOf(c)));
+  });
+
+  // The phone app opens `/l/<id>` itself and asks here where the link goes, since a redirect to
+  // the website would leave the app.
+  app.get("/api/links/:id", async (c) => {
+    const target = await resolveLink(deps, c.req.param("id"));
+    if (!target) return c.json({ error: "This link has expired or never existed." }, 404);
+    return c.json({ url: target });
   });
 
   // ---- a public page, with or without an account ----

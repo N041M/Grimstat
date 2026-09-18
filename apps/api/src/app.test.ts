@@ -30,13 +30,16 @@ interface Harness {
   signIn(email: string, device?: string): Promise<string>;
 }
 
-function harness(dbOverride?: (db: Db) => Db, limiter: RateLimiter = noLimiter): Harness {
+/** The phone app's origin, as the Worker's configuration lists it. */
+const PHONE = "https://localhost";
+
+function harness(dbOverride?: (db: Db) => Db, limiter: RateLimiter = noLimiter, extraOrigins?: string[]): Harness {
   const sqlite = new DatabaseSync(":memory:");
   migrate(sqlite);
   const mail: Harness["mail"] = [];
   const clock = { now: new Date("2026-09-18T12:00:00.000Z") };
   const base = sqliteDb(sqlite);
-  const deps: Deps = { db: dbOverride ? dbOverride(base) : base, mail: { send: async (to, _subject, text) => void mail.push({ to, text }) }, appUrl: APP, ipSalt: "salt", limiter, now: () => clock.now };
+  const deps: Deps = { db: dbOverride ? dbOverride(base) : base, mail: { send: async (to, _subject, text) => void mail.push({ to, text }) }, appUrl: APP, ipSalt: "salt", limiter, now: () => clock.now, ...(extraOrigins ? { extraOrigins } : {}) };
   const app = createApp(deps);
   const h: Harness = {
     deps,
@@ -357,6 +360,41 @@ describe("the gates in front of the routes", () => {
     expect((await h.json("POST", "/api/auth/start", { email: "a@example.com" }, undefined, { origin: APP, "sec-fetch-site": "same-origin" })).status).toBe(200);
     // A read from anywhere is fine; it needs a token to say anything.
     expect((await h.json("GET", "/api/health", undefined, undefined, { origin: "https://evil.example" })).status).toBe(200);
+  });
+
+  it("lets the phone app through, whose requests arrive from its own origin and marked cross-site", async () => {
+    const headers = { origin: PHONE, "sec-fetch-site": "cross-site" };
+    const without = harness();
+    expect((await without.json("POST", "/api/auth/start", { email: "a@example.com" }, undefined, headers)).status).toBe(403);
+    const h = harness(undefined, noLimiter, [PHONE]);
+    const res = await h.app.request("/api/auth/start", { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ email: "a@example.com" }) });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe(PHONE);
+    // Another site is still refused, and is not named in the answer either.
+    const other = await h.app.request("/api/auth/start", { method: "POST", headers: { "content-type": "application/json", origin: "https://evil.example" }, body: JSON.stringify({ email: "a@example.com" }) });
+    expect(other.status).toBe(403);
+    expect(other.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("answers the phone app's preflight and nobody else's", async () => {
+    const h = harness(undefined, noLimiter, [PHONE]);
+    const ask = (origin: string) => h.app.request("/api/sync", { method: "OPTIONS", headers: { origin, "access-control-request-method": "POST", "access-control-request-headers": "authorization,content-type" } });
+    const ours = await ask(PHONE);
+    expect(ours.status).toBe(204);
+    expect(ours.headers.get("access-control-allow-origin")).toBe(PHONE);
+    expect(ours.headers.get("access-control-allow-methods")).toContain("POST");
+    expect(ours.headers.get("access-control-allow-headers")).toContain("authorization");
+    const theirs = await ask("https://evil.example");
+    expect(theirs.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("tells the phone app where a short link goes, as JSON", async () => {
+    const h = harness(undefined, noLimiter, [PHONE]);
+    const made = await h.json<{ id: string }>("POST", "/api/links", { kind: "scenario", token: "abc" });
+    const found = await h.json<{ url: string }>("GET", `/api/links/${made.body.id}`, undefined, undefined, { origin: PHONE });
+    expect(found.status).toBe(200);
+    expect(found.body.url).toBe(`${APP}/#s=abc`);
+    expect((await h.json("GET", "/api/links/nothere1")).status).toBe(404);
   });
 
   it("stops an address that asks too often, per kind of request", async () => {

@@ -8,6 +8,7 @@
  *   DB                          the D1 database
  *   AUTH_RL, API_RL, LINKS_RL   rate-limit bindings, one per kind of request
  *   APP_URL                     where the app is served from, for the links in emails
+ *   APP_ORIGINS                 other origins the app runs from, comma-separated: the phone app's
  *   MAIL_FROM                   the sender, such as "Grimstat <hello@grimstat.com>"
  *   RESEND_API_KEY              secret
  *   IP_SALT                     secret, any long random string
@@ -25,6 +26,7 @@ interface Env {
   API_RL?: RateLimitBinding;
   LINKS_RL?: RateLimitBinding;
   APP_URL: string;
+  APP_ORIGINS?: string;
   MAIL_FROM: string;
   RESEND_API_KEY?: string;
   IP_SALT?: string;
@@ -38,6 +40,10 @@ function depsFrom(env: Env): Deps {
     db: d1Db(env.DB),
     mail: env.RESEND_API_KEY ? resendMailer(env.RESEND_API_KEY, env.MAIL_FROM) : unconfiguredMailer,
     appUrl: env.APP_URL.replace(/\/$/, ""),
+    extraOrigins: (env.APP_ORIGINS ?? "")
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean),
     ipSalt: env.IP_SALT ?? "unsalted",
     limiter: bindingLimiter({ auth: env.AUTH_RL, api: env.API_RL, links: env.LINKS_RL }),
     now: () => new Date(),

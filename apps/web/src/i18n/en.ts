@@ -705,6 +705,7 @@ export const en = {
   "about.data2": "The built-in sample uses invented units and numbers so the calculator can be tried without any import.",
   "about.account": "With an account, the server holds your email address and the armies, scenarios, collection, games, layouts and settings you made, so they reach your other devices. It holds no game data, no snapshot and no rules text. You can export everything on the Data page and delete the account on the Profile page.",
   "about.sync": "Sync is free and shared by everyone using Grimstat. Donations keep it running.",
+  "about.syncStore": "Sync is free and shared by everyone using Grimstat.",
   "about.systemTitle": "Game system & plugins",
   "about.gameSystem": "Game system",
   "about.edition": "edition {e}",

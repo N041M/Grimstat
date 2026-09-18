@@ -27,6 +27,13 @@ function buildId(): string {
 const base = process.env.VITE_BASE ?? "/";
 
 /**
+ * A build for a phone store (apps/mobile). It runs inside the app's WebView from files the store
+ * installed, so it has no service worker to register and no web manifest to install from. The
+ * About page and the tour read the same setting to leave the donation link out.
+ */
+const storeBuild = Boolean(process.env.VITE_STORE_BUILD);
+
+/**
  * Where the dev server answers for Wahapedia, and which of its exports each edition maps to.
  *
  * Node loads this config directly, so it cannot import the workspace's TypeScript. The path is
@@ -209,6 +216,7 @@ export default defineConfig({
     cspPlugin(),
     react(),
     VitePWA({
+      disable: storeBuild,
       registerType: "autoUpdate",
       manifest: {
         name: "Grimstat",

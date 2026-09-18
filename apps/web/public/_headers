@@ -1,0 +1,5 @@
+# Headers Cloudflare adds to the site's files. The phone app (apps/mobile) runs from its own
+# origin and reads the Wahapedia copy from here, so that copy answers for the app's origin.
+# Nothing else on the site is opened to another origin.
+/wahapedia/*
+  Access-Control-Allow-Origin: https://localhost

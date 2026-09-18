@@ -2,10 +2,12 @@
  * The device's side of an account: the session it holds and the calls it makes.
  *
  * The session token lives in `settings` under a key that never syncs. Everything here is a plain
- * request to the API, which is same-origin on the site and proxied by the dev server.
+ * request to the API, which is same-origin on the site and proxied by the dev server. The phone
+ * app reaches it at the site's address instead; see `lib/site.ts`.
  */
 import type { DeviceInfo, UserInfo } from "../services/auth";
 import { db, type GrimstatDb } from "../db";
+import { onSite } from "./site";
 
 export const SESSION_SETTING = "account.session";
 export const CURSOR_SETTING = "sync.cursor";
@@ -31,7 +33,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 /** One JSON call. Throws `ApiError` with the server's own sentence on anything but success. */
 export async function api<T>(fetchImpl: FetchLike, method: string, path: string, body?: unknown, token?: string): Promise<T> {
-  const res = await fetchImpl(path, {
+  const res = await fetchImpl(onSite(path), {
     method,
     headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -67,6 +69,9 @@ export function deviceName(): string {
   if (typeof navigator === "undefined") return "Device";
   const ua = navigator.userAgent;
   const os = /iPhone|iPad/.test(ua) ? "iPhone" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "Device";
+  // The phone app's WebView reports itself as Chrome. Capacitor puts its bridge on the window.
+  const native = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() === true;
+  if (native) return `Grimstat app on ${os}`;
   const browser = /Firefox\//.test(ua) ? "Firefox" : /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
   return browser ? `${browser} on ${os}` : os;
 }

@@ -122,7 +122,9 @@ export async function recognise(picture: Blob, options: RecogniseOptions = {}): 
         workerPath: `${ASSETS}/worker.min.js`,
         corePath: ASSETS,
         langPath: ASSETS,
-        gzip: true,
+        // The phone app carries the model uncompressed, because the Android build treats a `.gz`
+        // asset as the same file as the one beside it (see apps/mobile/android/app/build.gradle).
+        gzip: !import.meta.env.VITE_STORE_BUILD,
         logger: (m: { status: string; progress: number }) => {
           guard.tick();
           if (options.signal?.aborted) return;

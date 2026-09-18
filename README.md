@@ -62,6 +62,7 @@ packages/entitlements  feature gating abstraction (local: everything unlocked)
 packages/plugin-host   plugin manifest loader + registration API
 apps/cli               node CLI: import → snapshot → simulate
 apps/web               Vite + React offline PWA (the Battle table is three.js, code-split)
+apps/mobile            Capacitor project: the web app's store build as an Android app
 docs/DESIGN.md         full design & research document
 docs/BATTLE-SIM.md     3D battle simulator design plan
 docs/SYNC.md           accounts, sync, hosting and phone app design plan

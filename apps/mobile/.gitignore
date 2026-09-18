@@ -1,0 +1,5 @@
+# The upload key for Google Play and its passwords. Made once by hand; see README.md.
+android/keystore.properties
+*.jks
+*.keystore
+android/app/release/

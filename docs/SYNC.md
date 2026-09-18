@@ -1,6 +1,6 @@
 # Accounts, sync and hosting — design plan
 
-> Status: plan (18 Sep 2026). Phase 1 is live at grimstat.com and Phase 0 is built, both on 18 Sep 2026. Phase 2 went live on 18 Sep 2026, and Phase 3 was built the same day. Phase 4 is not started. Builds on the service seams in
+> Status: plan (18 Sep 2026). Phase 1 is live at grimstat.com and Phase 0 is built, both on 18 Sep 2026. Phase 2 went live on 18 Sep 2026, and Phases 3 and 4 were built the same day. The Android app waits on the Play Console steps listed under Phase 4. Builds on the service seams in
 > `apps/web/src/services/`, the record metadata in `packages/schema/src/common.ts` and the Dexie
 > store in `apps/web/src/db.ts`.
 
@@ -397,6 +397,77 @@ for `/l/<id>` and `/u/<handle>` open in the app when it is installed.
 The store builds carry no donation link and no mention of one. Both stores treat a tip to the
 developer inside an app as a purchase that has to go through their own payment flow.
 
+### Phase 4 — what was built (18 Sep 2026)
+
+`apps/mobile` is the Capacitor 8 project, with the Android platform added and the web app's build
+output as its `webDir`. `apps/mobile/README.md` holds the build steps, the signing setup and the
+Play Console steps. `apps/mobile/store/listing.md` holds the listing text. The debug build was
+compiled here (`app-debug.apk`, 16 MB, minimum Android 8.0, target Android 16). What the wrapper
+needed, and where each piece is:
+
+- **One build setting for the site's address.** `VITE_SITE_URL` (`apps/web/src/lib/site.ts`)
+  makes the API calls absolute and joins the Wahapedia copy's path to the site. The website
+  leaves it unset and stays relative. The mirror setting syncs between devices, so the phone
+  resolves the website's relative default rather than storing an absolute one of its own.
+- **The app's origin on the server.** The WebView runs from `https://localhost`. The Worker
+  lists it in `APP_ORIGINS` (`apps/web/wrangler.jsonc`), the origin gate lets a listed origin
+  through even when the browser marks the request cross-site, and a CORS middleware names the
+  listed origins and nobody else. The website's own requests are same-origin and unaffected.
+  Three tests in `apps/api/src/app.test.ts` cover the gate, the preflight and the link lookup.
+- **Short links from inside the app.** `GET /api/links/<id>` answers where a link goes, as JSON,
+  since the redirect at `/l/<id>` would leave the app. `lib/deepLink.ts` maps every address the
+  app is registered for to a hash for the router, and `lib/native.ts` (loaded only in the store
+  build) listens for the addresses Capacitor reports and sets the hash. A sign-in link thus lands
+  on the Profile page with its code as it does in a browser.
+- **App Links.** The manifest claims `https://grimstat.com/`, `/l/` and `/u/` with `autoVerify`.
+  The root path is included because sign-in emails and long share links point there. The site
+  serves `/.well-known/assetlinks.json` from `apps/web/public`, with a placeholder for the app
+  signing key's fingerprint, which only Play Console knows.
+- **No service worker in the app.** The store build turns the PWA plugin off and skips
+  registration in `main.tsx`. The app updates through the store.
+- **The content policy stays.** Capacitor 8 injects its bridge through the WebView's
+  document-start script API, which the policy does not govern, so the hashed inline policy the
+  site carries works unchanged in the app. A WebView too old for that API (before Chrome 90,
+  2021) would fall back to an inline script the policy blocks.
+- **The recogniser's files are bundled**, about 26 MB, so the picture import works offline and
+  needs no cross-origin setup. The Android build treats a `.gz` asset as the same file as its
+  uncompressed neighbour, so the store build reads the model uncompressed and the `.gz` is left
+  out of the app.
+- **The Wahapedia copy is read from the site.** The site's `_headers` file names the app's origin
+  for `/wahapedia/*` and nothing else. The copy itself is not bundled: it is large and it changes.
+- **Icons and launch screen** are vector drawables made from the site's favicon. The device list
+  on the Profile page names the app "Grimstat app on Android".
+
+Two things differ from the plan above:
+
+- **The site's root opens in the app too**, not only `/l/` and `/u/`. Without it a sign-in email
+  tapped on the phone would open the browser, and the code would sign the browser in rather than
+  the app. The cost is that every tap on a grimstat.com link opens the app once it is installed,
+  which is how Android treats verified links.
+- **Minimum Android 8.0** rather than Capacitor's default 7.0, for adaptive icons.
+
+Steps that need the owner:
+
+1. The Play Console account (25 USD) and identity verification.
+2. The upload key, with `keytool`, and `android/keystore.properties` beside it. The README has
+   the commands.
+3. After the first upload, the app signing key's SHA-256 fingerprint from Play Console into
+   `apps/web/public/.well-known/assetlinks.json`, then a push, so links verify.
+4. The listing: the text from `store/listing.md`, a 1024 by 500 feature graphic, phone
+   screenshots, the content rating questionnaire and the data safety form. The README lists the
+   answers.
+5. A mailbox or forwarding for hello@grimstat.com, which Play shows as the contact.
+6. The closed test Play requires of a new personal account before production.
+
+- **The About page's sync sentence** drops "Donations keep it running." in the store build, since
+  the stores treat a mention of a tip like the tip itself.
+
+Checked on the Android 16 emulator with the debug build: the app starts and draws under the
+status and gesture bars correctly, a link opened while the app runs lands on the screen it names,
+and a link that starts the app cold does too. The public page's fetch to the live site is refused
+by the WebView until the CORS change here is deployed, which the next push does. Not done: iOS,
+and a sign-in from the app end to end, which needs the deployed server and a real email.
+
 ## Money
 
 Ko-fi, linked from the About page and the footer of the website. Ko-fi takes nothing from a one-off
@@ -439,6 +510,6 @@ income above a threshold, which is an accountant's question before the first pay
 | 1 | Domain, Cloudflare static site, links in D1, the closing banner on Pages | 3 days |
 | 2 | Magic-link auth, the sync endpoint, quotas and the pause, Profile page, privacy text, D1 Time Travel for backups | built 18 Sep 2026 |
 | 3 | Handles, shared rosters, `/u/<handle>` | built 18 Sep 2026 |
-| 4 | Capacitor, Android listing, deep links | 2 weeks plus review |
+| 4 | Capacitor, Android listing, deep links | built 18 Sep 2026, Play steps pending |
 
 Open before Phase 1 starts: the domain name, and the closing date for the old address.

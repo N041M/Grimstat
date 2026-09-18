@@ -15,4 +15,6 @@ interface ImportMetaEnv {
   readonly VITE_CLOSES_ON?: string;
   /** Set on a build for a phone store, which carries no donation link. */
   readonly VITE_STORE_BUILD?: string;
+  /** The website's address, set on a build that runs elsewhere and reaches the site's API and files there; see `lib/site.ts`. */
+  readonly VITE_SITE_URL?: string;
 }

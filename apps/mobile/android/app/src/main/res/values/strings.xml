@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Grimstat</string>
+    <string name="title_activity_main">Grimstat</string>
+    <string name="package_name">com.grimstat.app</string>
+    <string name="custom_url_scheme">com.grimstat.app</string>
+</resources>

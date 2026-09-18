@@ -1,5 +1,6 @@
 import type { SourceId } from "@grimstat/adapters";
 import type { MissingSource, SourceRef } from "@grimstat/schema";
+import { onSite } from "./site";
 
 /**
  * Pure model behind the Data page's "Fetch from community sources" panel: which sources a browser can
@@ -48,9 +49,12 @@ export const DEFAULT_WAHAPEDIA_MIRROR = import.meta.env.DEV ? WAHAPEDIA_DEV_PROX
 /**
  * The mirror's base for one edition, with one trailing slash. The relay writes a directory per game
  * system, so one dataset repository holds both editions.
+ *
+ * The setting syncs between devices, and the website stores the default as a path on the site. In
+ * the phone app that path is joined to the site's address, so the same setting reads the same copy.
  */
 export function wahapediaMirrorBase(url: string, gameSystemId: string): string {
-  const root = url.trim().replace(/\/+$/, "");
+  const root = onSite(url.trim().replace(/\/+$/, ""));
   return `${root}/${gameSystemId}/`;
 }
 
