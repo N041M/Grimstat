@@ -64,6 +64,7 @@ apps/cli               node CLI: import → snapshot → simulate
 apps/web               Vite + React offline PWA (the Battle table is three.js, code-split)
 docs/DESIGN.md         full design & research document
 docs/BATTLE-SIM.md     3D battle simulator design plan
+docs/SYNC.md           accounts, sync, hosting and phone app design plan
 ```
 
 ## Getting started
@@ -153,4 +154,4 @@ of it ships in this repository.
 
 `.github/workflows/pages.yml` builds `apps/web` with `VITE_BASE=/<repo>/` and publishes it to GitHub Pages on every push to `master`. `ci.yml` runs the lint, the typecheck and the test suite. The app uses a hash router, so deep links work under the sub-path.
 
-See `docs/DESIGN.md` for the research findings, architecture and roadmap, `docs/MODELLING-NOTES.md` for what the maths assumes, `docs/BATTLE-SIM.md` for the 3D battle simulator plan, and `docs/PLUGINS.md` for extension points.
+See `docs/DESIGN.md` for the research findings, architecture and roadmap, `docs/MODELLING-NOTES.md` for what the maths assumes, `docs/BATTLE-SIM.md` for the 3D battle simulator plan, `docs/SYNC.md` for accounts, sync and hosting, and `docs/PLUGINS.md` for extension points.

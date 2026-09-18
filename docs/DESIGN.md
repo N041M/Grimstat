@@ -86,7 +86,7 @@ The user wants a Warhammer 40,000 app that is (a) a **statistics dashboard** for
 
 ### R5. Legal / IP (drives the data strategy)
 - GW sent BattleScribe takedowns (2011, 2020), Wahapedia a C&D (2021, survives on .ru). BSData *data* repos have **no licence**. GW IP guidelines: unofficial, no copied art/text, **non-commercial**.
-- Survivable pattern: **the app ships importers and no data.** Data is fetched on the user's device from upstream URLs, cached locally and not rehosted. Free, no ads, no donations tied to the app. Engine and schemas contain no GW text (OSS-publishable). Attribution everywhere. Design for any upstream vanishing on 14 days' notice (pluggable adapters = legal risk mitigation).
+- Survivable pattern: **the app ships importers and no data.** Data is fetched on the user's device from upstream URLs, cached locally and not rehosted. Free, no ads. A donation link on the website is worded as support for the work and unlocks nothing (see `docs/SYNC.md`). Engine and schemas contain no GW text (OSS-publishable). Attribution everywhere. Design for any upstream vanishing on 14 days' notice (pluggable adapters = legal risk mitigation).
 
 ---
 
@@ -122,17 +122,16 @@ The user wants a Warhammer 40,000 app that is (a) a **statistics dashboard** for
 - Meta-weighted efficiency built on the published corpus (the weekly MiniHeadQuarters relay; BCP forbids automated access by contract and Tabletop Battles gates its pages, so neither is a source) to build the empirical T/Sv/W target distribution.
 - Game tracker (VP/CP/secondaries) that feeds back real outcomes.
 - Geometry-lite: range/cover/HIDDEN toggles per scenario (full LoS out of scope).
-- Kill Team / AoS plugins; Tauri desktop wrapper; optional CRDT sync (Yjs) with no server-side data.
+- Kill Team / AoS plugins; Tauri desktop wrapper. Accounts, sync between devices, short links and the phone app are planned in `docs/SYNC.md`.
 
 **Won't**
 - Bundle or rehost GW datasheets/rules text; require an account for any local feature; retroactively lock content a user already created; sell access to data; GW artwork/icons.
 
-### Future-public / paid-tier readiness (build the seams now, not the features)
-Scope today is a personal local tool, but the architecture must let a public web app and paid tiers be added without redesign:
-- **Server-optional by construction.** Every feature works fully offline against IndexedDB. A future backend only *adds*: permalink relay (short links), cross-device sync, accounts, shared override packs, hosted heavy compute (turn optimiser). Web app talks to it through a `services/` interface with a local no-op implementation.
-- **Entitlements abstraction.** `packages/entitlements`: `can(feature) → boolean` with a `LocalAllUnlocked` provider now and a server-backed provider later. Widgets/analyses declare `requires?: FeatureKey`. Nothing in `engine`/`resolver` ever checks entitlements (keeps them OSS-publishable).
-- **What could ever be paid** (per research on what users punish vs accept): convenience and compute — sync, cloud storage, hosted optimiser runs, team/TO features. Data access, the pairwise matrix (the differentiator vs UnitCrunch) and anything already free stay unpaid. Legal note from R5: GW's guidelines are non-commercial for fan content and the Wahapedia C&D cited monetisation, so a paid tier must charge for *software services* with user-imported data, and should get a solicitor's review before launch.
-- **Identity-ready data model.** Every stored record carries `ownerId` (local: `"local"`), `createdAt`, `updatedAt`, `revision` so a CRDT/sync layer can be added later without migration.
+### Server-optional seams (superseded by `docs/SYNC.md`, 18 Sep 2026)
+The plan for accounts, sync, hosting and the phone app is in `docs/SYNC.md`. It settles what this section left open: there is no paid tier, the app stays free, a Ko-fi link on the website is the only money involved, and the server holds only records a player made. The seams built for it stay:
+- **Server-optional by construction.** Every feature works fully offline against IndexedDB. The backend only *adds*: short links, sync between devices, accounts and profile pages. The web app talks to it through the `services/` interfaces, which have local no-op implementations.
+- **Entitlements abstraction.** `packages/entitlements` stays on the `LocalAllUnlocked` provider. Nothing is gated and nothing in `engine`/`resolver` checks it.
+- **Identity-ready data model.** Every stored record carries `ownerId` (local: `"local"`), `createdAt`, `updatedAt`, `revision`, which is what the sync layer keys on.
 - **Privacy defaults.** No telemetry in v1; if added later, opt-in only.
 - **i18n groundwork.** All user-facing strings through an i18n layer; data strings already arrive as locale maps from GDC-style sources.
 - **Deployability.** `apps/web` builds to static assets (any CDN); optional `apps/api` (Hono + Postgres) added in a later phase without touching packages.
@@ -260,6 +259,6 @@ Points computed from `PriceRule{copyRange, tiers[{models, points}]}` + `WargearP
 
 ## Decisions (confirmed with the user, 2026-09-09)
 1. **Stack:** TypeScript web PWA (Vite + React), engine in Web Worker + Node CLI, Tauri optional later.
-2. **Audience:** personal local tool now; infrastructure prepared for a future public web app and potential paid tiers (see "Future-public / paid-tier readiness"). No backend in v1.
+2. **Audience:** personal local tool now; infrastructure prepared for a public web app with optional accounts (see `docs/SYNC.md`). No backend in v1.
 3. **v1 vertical slice:** stats engine + 1v1 calculator first (Phases 0–3), army builder next (Phase 4), army-level analytics after (Phase 5).
 4. **Primary game system:** 40k 11th edition; 10e as the second plugin to prove modularity.
