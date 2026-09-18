@@ -41,6 +41,10 @@ function rectOf(el: HTMLElement | null): Rect | undefined {
  * The blocking layer for a card that lets the reader work the control it points at: four panes
  * around the hole rather than one over the whole page. Everything else stays dead to clicks, so the
  * tour keeps its place, and the control inside the hole takes its press.
+ *
+ * The panes are siblings of the shell's columns rather than children of a wrapper. The shell is a
+ * grid, and a wrapper, which is not fixed like the panes inside it, took a cell of its own and
+ * pushed the page into the rail's column on a tablet.
  */
 function BlockAround({ hole }: { hole: Rect }) {
   const left = Math.max(0, hole.left - SPOT_PAD);
@@ -48,12 +52,12 @@ function BlockAround({ hole }: { hole: Rect }) {
   const right = hole.left + hole.width + SPOT_PAD;
   const bottom = hole.top + hole.height + SPOT_PAD;
   return (
-    <div aria-hidden="true">
-      <div className="tour-pane" style={{ left: 0, right: 0, top: 0, height: top }} />
-      <div className="tour-pane" style={{ left: 0, right: 0, top: bottom, bottom: 0 }} />
-      <div className="tour-pane" style={{ left: 0, width: left, top, height: bottom - top }} />
-      <div className="tour-pane" style={{ left: right, right: 0, top, height: bottom - top }} />
-    </div>
+    <>
+      <div className="tour-pane" aria-hidden="true" style={{ left: 0, right: 0, top: 0, height: top }} />
+      <div className="tour-pane" aria-hidden="true" style={{ left: 0, right: 0, top: bottom, bottom: 0 }} />
+      <div className="tour-pane" aria-hidden="true" style={{ left: 0, width: left, top, height: bottom - top }} />
+      <div className="tour-pane" aria-hidden="true" style={{ left: right, right: 0, top, height: bottom - top }} />
+    </>
   );
 }
 
@@ -148,7 +152,11 @@ export function Tour() {
     const card = cardRef.current;
     if (!card) return false;
     const current = stepAt(step);
-    const control = rectOf(focusItem(current.focus));
+    const item = focusItem(current.focus);
+    // A control that is on the page but scrolled out of sight is brought into view first. The
+    // Ko-fi link the closing card points at sits far down the About screen.
+    if (item && !rectOf(item)) item.scrollIntoView({ block: "center" });
+    const control = rectOf(item);
     const anchor = control ?? rectOf(screenItem(current.route));
     const box = card.getBoundingClientRect();
     setSpot(anchor);
@@ -159,10 +167,10 @@ export function Tour() {
 
   useLayoutEffect(() => {
     if (!tourOpen) return;
-    // Nothing under the tour is scrolled to bring a highlight into view. The screen a step opens has
-    // only just been laid out, so a scroll taken on this pass lands in the wrong place and is
-    // corrected a frame later, which reads as a flash behind the card. Every control a step points
-    // at sits at the top of its screen, where it is already in view.
+    // The screen a step opens has only just been laid out, so a scroll taken on this pass can land
+    // in the wrong place and be corrected a frame later, which reads as a flash behind the card.
+    // Nearly every control a step points at sits at the top of its screen, where it is already in
+    // view, and only one that is out of sight is scrolled to.
     measure();
     // The screen has not been drawn yet on this pass, and the rail is as wide as whatever it is
     // showing, so the position is taken again once the browser has drawn it. The step keeps
@@ -214,7 +222,8 @@ export function Tour() {
   const screen = screenAt(step);
   // A card that offers the data holds its Next until the button beside it has been pressed, so the
   // rest of the tour is walked with data in the app. Skip is how somebody leaves without it. The
-  // closing card's button says Done and is never held, or there would be no way out of the tour.
+  // closing card's button says Done and is never held, so the Ko-fi link it points at is an offer
+  // and not a toll.
   const waiting = current.act === true && !last && !snapshot && actedOn !== step;
   // The card that offers the tour. Its two buttons accept or decline rather than move through the
   // steps, and there is nothing behind it to go back to.

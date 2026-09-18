@@ -32,12 +32,12 @@ export interface TourStep {
   /**
    * Whether the reader may work the control this card points at. The page under the tour is dead to
    * clicks, so a card that offers an action has the blocking layer opened out around its control
-   * instead of laid over it. Only the two data cards carry it: the tour is meant to be walked with
-   * real data in the app, and pressing anything else — New army, Run — would put a dialog or a long
-   * job over the card describing it.
+   * instead of laid over it. Two cards carry it. The data card offers the fetch, because the tour is
+   * meant to be walked with real data in the app. The closing card offers the Ko-fi link. Pressing
+   * anything else, New army or Run, would put a dialog or a long job over the card describing it.
    */
   act?: true;
-  /** What the card says instead once the app has game data. A card that offers an action needs it. */
+  /** What the card says instead once the app has game data. */
   loadedBodyKey?: I18nKey;
 }
 
@@ -48,11 +48,14 @@ export interface TourStep {
  * has been drawn. It measures every frame until the control is there, and then stops. The limit is
  * for a screen that never shows it, which settles the card on the rail item instead.
  *
- * Three seconds rather than one: the closing card opens the data screen, which draws its stored
- * snapshots, its overrides and every tournament list on the device, and on a phone that took longer
- * than a second. The card settled on the rail while the button it is about was on screen beside it.
+ * Three seconds rather than one: the data screen draws its stored snapshots, its overrides and
+ * every tournament list on the device, and on a phone that took longer than a second. The card
+ * settled on the rail while the button it is about was on screen beside it.
  */
 export const TOUR_SETTLE_MS = 3000;
+
+/** A build for a phone store, which carries no Ko-fi link because the stores treat a tip as a purchase. */
+const STORE_BUILD = Boolean(import.meta.env.VITE_STORE_BUILD);
 
 /**
  * The tour in reading order: a card that offers the walk, then two cards per screen, then a card
@@ -75,8 +78,9 @@ export const TOUR_SETTLE_MS = 3000;
  * data, and the nine screens after it are then walked with something on them. A reader who would
  * rather not wait carries on and the tour runs over empty screens as before.
  *
- * It closes back on the data screen, on the same button. That is the second chance for a reader who
- * carried on, and the way to fetch again for one who did not.
+ * It closes on the About screen, on the Ko-fi link. The app is free, and the end of the tour is the
+ * one place it asks for support. A build for a phone store leaves the link out, and there the
+ * closing card sits on the About rail item and says goodbye without it.
  */
 export const TOUR_STEPS: readonly TourStep[] = [
   { id: "welcome", titleKey: "tour.welcome.title", bodyKey: "tour.welcome.body", bookend: true },
@@ -102,7 +106,9 @@ export const TOUR_STEPS: readonly TourStep[] = [
   { id: "play", route: "play", titleKey: "nav.play", bodyKey: "tour.play.body" },
   { id: "play-start", route: "play", titleKey: "play.setup.begin", bodyKey: "tour.play.start", focus: "play-start" },
   { id: "about", route: "about", titleKey: "nav.about", bodyKey: "tour.about.body" },
-  { id: "fetch", route: "data", titleKey: "data.fetchAll", bodyKey: "tour.finish.body", loadedBodyKey: "tour.finish.loaded", focus: "data-fetch", act: true, bookend: true },
+  STORE_BUILD
+    ? { id: "finish", route: "about", titleKey: "nav.about", bodyKey: "tour.finish.store", bookend: true }
+    : { id: "support", route: "about", titleKey: "about.supportLink", bodyKey: "tour.finish.body", focus: "about-support", act: true, bookend: true },
 ];
 
 /** The screens the tour walks, in the order it reaches them, numbered from 1. */

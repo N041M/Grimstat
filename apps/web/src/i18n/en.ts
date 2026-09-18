@@ -2624,6 +2624,6 @@ export const en = {
   "tour.play.body": "Keep track of a game while you play it. The round and phase, command points, both scores, the stratagems you can pay for and a log of what happened are all on this screen.",
   "tour.play.start": "Name the game and pick one of your armies, then press this to begin.",
   "tour.about.body": "What the app is, where the data comes from, and who drew the artwork. The tour can be started again from here.",
-  "tour.finish.body": "That is the tour. Every screen you have just seen is empty until the app has some game data. Press this to load it from the community sources.",
-  "tour.finish.loaded": "That is the tour. Your data is loaded, so every screen has something in it. Press this again when the community sources have been updated.",
+  "tour.finish.body": "That is the tour. Grimstat is free and stays free. If it earns a place at your table, this is where you can support the work.",
+  "tour.finish.store": "That is the tour. Grimstat is free and stays free. Enjoy your games.",
 } as const;

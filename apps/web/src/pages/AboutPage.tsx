@@ -10,8 +10,8 @@ import { PageHeader } from "../components/shell";
 
 /**
  * Where a player can support the work. The app is free and nothing changes with a donation, so
- * this is one sentence on this page and nowhere else. A build for a phone store leaves it out,
- * because the stores treat a tip inside an app as a purchase of their own.
+ * this is one sentence on this page and nowhere else. The tour closes on this link. A build for a
+ * phone store leaves it out, because the stores treat a tip inside an app as a purchase of their own.
  */
 const SUPPORT_URL = "https://ko-fi.com/grimstat";
 import { useApp } from "../state/AppContext";
@@ -143,7 +143,7 @@ export function AboutPage() {
             </h2>
             <p className="about-card-body prose">
               {t("about.support1")}{" "}
-              <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
+              <a href={SUPPORT_URL} target="_blank" rel="noreferrer" data-tour="about-support">
                 {t("about.supportLink")}
               </a>
             </p>

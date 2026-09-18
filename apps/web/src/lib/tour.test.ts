@@ -26,18 +26,18 @@ describe("TOUR_STEPS", () => {
 
   /*
    * The page under the tour is dead to clicks, so a card that offers an action opens the blocking
-   * layer out around its control. Only the data cards do it: the tour is meant to be walked with
-   * data in the app, and pressing anything else would put a dialog or a long job over the card.
+   * layer out around its control. The data card does it because the tour is meant to be walked
+   * with data in the app, and the closing card does it so the Ko-fi link can be followed. Pressing
+   * anything else would put a dialog or a long job over the card.
    */
-  it("lets the reader work the control on the two data cards and on no others", () => {
-    expect(TOUR_STEPS.filter((s) => s.act).map((s) => s.id)).toEqual(["data-fetch", "fetch"]);
+  it("lets the reader work the control on the data card and the closing card and on no others", () => {
+    expect(TOUR_STEPS.filter((s) => s.act).map((s) => s.id)).toEqual(["data-fetch", "support"]);
   });
 
-  it("gives a card that offers an action a control to point at and something to say once it is done", () => {
-    for (const step of TOUR_STEPS.filter((s) => s.act)) {
-      expect(step.focus).toBe("data-fetch");
-      expect(step.loadedBodyKey).toBeDefined();
-    }
+  it("gives the data card something to say once its button has been pressed", () => {
+    const fetch = TOUR_STEPS.find((s) => s.id === "data-fetch");
+    expect(fetch?.focus).toBe("data-fetch");
+    expect(fetch?.loadedBodyKey).toBeDefined();
   });
 
   it("walks the battle table in parts, because it holds more than the other screens do", () => {
@@ -55,11 +55,12 @@ describe("TOUR_STEPS", () => {
     expect(TOUR_STEPS.slice(1).every((s) => s.route !== undefined)).toBe(true);
   });
 
-  it("closes on the button that loads the data, which is what to do next", () => {
+  it("closes on the Ko-fi link, the one place the app asks for support", () => {
     const end = TOUR_STEPS[TOUR_STEPS.length - 1];
     expect(end?.bookend).toBe(true);
-    expect(end?.route).toBe("data");
-    expect(end?.focus).toBe("data-fetch");
+    expect(end?.route).toBe("about");
+    expect(end?.focus).toBe("about-support");
+    expect(end?.act).toBe(true);
   });
 
   it("counts only the screen stops, so the two bookends carry no number", () => {
@@ -129,7 +130,7 @@ describe("clampStep", () => {
 describe("stepAt / isLastStep", () => {
   it("answers with a step for any index", () => {
     expect(stepAt(0).id).toBe("welcome");
-    expect(stepAt(TOUR_STEPS.length - 1).id).toBe("fetch");
+    expect(stepAt(TOUR_STEPS.length - 1).id).toBe("support");
     expect(stepAt(-1).id).toBe("welcome");
     expect(stepAt(TOUR_STEPS.length + 5)).toBe(TOUR_STEPS[TOUR_STEPS.length - 1]);
   });
