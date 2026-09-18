@@ -13,4 +13,6 @@ declare const __GS_BUILD__: string;
 interface ImportMetaEnv {
   readonly VITE_MOVED_TO?: string;
   readonly VITE_CLOSES_ON?: string;
+  /** Set on a build for a phone store, which carries no donation link. */
+  readonly VITE_STORE_BUILD?: string;
 }

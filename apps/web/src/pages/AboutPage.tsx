@@ -7,6 +7,13 @@ import { gameSystem, manifest } from "@grimstat/game-40k-11e";
 import { host } from "../plugin";
 import { hrefFor } from "../router";
 import { PageHeader, REPO_URL } from "../components/shell";
+
+/**
+ * Where a player can support the work. The app is free and nothing changes with a donation, so
+ * this is one sentence on this page and nowhere else. A build for a phone store leaves it out,
+ * because the stores treat a tip inside an app as a purchase of their own.
+ */
+const SUPPORT_URL = "https://ko-fi.com/grimstat";
 import { useApp } from "../state/AppContext";
 import { t, type I18nKey } from "../i18n";
 
@@ -126,6 +133,20 @@ export function AboutPage() {
                 </li>
               ))}
             </ul>
+          </section>
+        )}
+
+        {import.meta.env.VITE_STORE_BUILD ? null : (
+          <section className="about-card" aria-labelledby="about-support-h">
+            <h2 className="t-eyebrow" id="about-support-h">
+              {t("about.supportTitle")}
+            </h2>
+            <p className="about-card-body prose">
+              {t("about.support1")}{" "}
+              <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
+                {t("about.supportLink")}
+              </a>
+            </p>
           </section>
         )}
 
