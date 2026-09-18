@@ -7,15 +7,16 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
-import { SYNC_PAGE } from "@grimstat/schema";
+import { SYNC_MAX_ACCOUNT_BYTES, SYNC_PAGE } from "@grimstat/schema";
 import { createApp, nextReset } from "./app";
 import { LIMIT_PER_DAY, LIMIT_PER_EMAIL } from "./auth";
+import { byteLength } from "./codec";
 import { sqliteDb, type Db } from "./db";
 import type { Deps } from "./deps";
 import { memoryLimiter, noLimiter, RATE_LIMITS, type RateLimiter } from "./limits";
 import { ANON_LIMIT_PER_DAY } from "./links";
 import { migrate } from "./node";
-import { purge } from "./purge";
+import { compressPlainRows, purge } from "./purge";
 import { MAX_WRITES_PER_DAY } from "./sync";
 
 const APP = "https://grimstat.test";
@@ -213,28 +214,57 @@ describe("sync", () => {
   it("refuses a record over the size limit and an account over its total", async () => {
     const big = { store: "games", id: "g", revision: 0, updatedAt: NOW, body: { id: "g", log: "x".repeat(300 * 1024) } };
     expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [big] }, token)).status).toBe(413);
-    // Two requests of about 10 MB each: the first fits, the second would take the account past 20 MB.
-    const batch = (k: number) => Array.from({ length: 45 }, (_, i) => ({ store: "games", id: `g${k}-${i}`, revision: 0, updatedAt: NOW, body: { id: `g${k}-${i}`, log: "x".repeat(240 * 1024) } }));
-    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(1) }, token)).status).toBe(200);
-    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(2) }, token)).status).toBe(507);
-    expect((await h.deps.db.all("SELECT id FROM records")).length).toBe(45);
-    // Writing the same records again replaces them and takes no more room.
-    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(1).map((c) => ({ ...c, updatedAt: "2026-09-18T12:01:00.000Z" })) }, token)).status).toBe(200);
+    // The account's total is of stored bytes. At the cap a body of any size is refused and nothing
+    // is written, a deletion still goes through, and a smaller replacement fits.
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "x".repeat(3000))] }, token)).status).toBe(200);
+    await h.deps.db.run("UPDATE users SET bytes = ?", SYNC_MAX_ACCOUNT_BYTES);
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r2")] }, token)).status).toBe(507);
+    expect((await h.deps.db.all("SELECT id FROM records")).length).toBe(1);
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "x", "2026-09-18T12:01:00.000Z")] }, token)).status).toBe(200);
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [{ store: "rosters", id: "r1", revision: 2, updatedAt: "2026-09-18T12:02:00.000Z", deletedAt: "2026-09-18T12:02:00.000Z" }] }, token)).status).toBe(200);
   });
 
   it("counts the account's size as bodies are written, replaced and deleted", async () => {
-    const stored = async () => (await h.deps.db.first<{ n: number; kept: number }>("SELECT bytes AS n, (SELECT COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM records) AS kept FROM users"))!;
-    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "Первая"), roster("r2", "x".repeat(1000))] }, token);
-    let s = await stored();
-    expect(s.n).toBe(s.kept);
-    expect(s.n).toBeGreaterThan(1000);
+    const stored = async () => (await h.deps.db.first<{ n: number; kept: number }>("SELECT bytes AS n, (SELECT COALESCE(SUM(LENGTH(body_gz)), 0) FROM records) AS kept FROM users"))!;
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "Первая"), roster("r2", Array.from({ length: 800 }, (_, i) => (i * 7919).toString(36)).join(" "))] }, token);
+    const first = await stored();
+    expect(first.n).toBe(first.kept);
+    expect(first.n).toBeGreaterThan(500);
     // A replacement counts the difference, a tombstone frees the body, and a rejected change counts nothing.
     await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r2", "short", "2026-09-18T12:01:00.000Z"), { store: "rosters", id: "r1", revision: 2, updatedAt: "2026-09-18T12:01:00.000Z", deletedAt: "2026-09-18T12:01:00.000Z" }] }, token);
-    s = await stored();
-    expect(s.n).toBe(s.kept);
-    expect(s.n).toBeLessThan(200);
+    const after = await stored();
+    expect(after.n).toBe(after.kept);
+    expect(after.n).toBeLessThan(first.n / 2);
     await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r2", "y".repeat(5000), "2026-09-18T11:00:00.000Z")] }, token);
-    expect((await stored()).n).toBe(s.n);
+    expect((await stored()).n).toBe(after.n);
+  });
+
+  it("stores bodies compressed, reads rows written before as they are, and compresses them in the purge", async () => {
+    const me = await h.json<{ session: { user: { id: string } } }>("GET", "/api/me", undefined, token);
+    const uid = me.body.session.user.id;
+    await h.json("PUT", "/api/me/handle", { handle: "bob" }, token);
+    const legacy = JSON.stringify({ id: "old", name: "Old army", shared: true, units: [] });
+    await h.deps.db.run("INSERT INTO records (user_id, store, id, seq, revision, updated_at, body, shared) VALUES (?, 'rosters', 'old', 1, 0, ?, ?, 1)", uid, NOW, legacy);
+    await h.deps.db.run("UPDATE users SET seq = 1, bytes = ? WHERE id = ?", byteLength(legacy), uid);
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("new", "New army")] }, token);
+
+    const names = async () => (await h.json<{ changes: Array<{ body: { name: string } }> }>("POST", "/api/sync", { cursor: 0, changes: [] }, token)).body.changes.map((c) => c.body.name);
+    const shown = async () => (await h.json<{ armies: Array<{ roster: { name: string } }> }>("GET", "/api/u/bob")).body.armies.map((a) => a.roster.name);
+    const rows = async () => h.deps.db.all<{ id: string; body: string | null; gz: number | null }>("SELECT id, body, LENGTH(body_gz) AS gz FROM records ORDER BY id");
+    expect(await names()).toEqual(["Old army", "New army"]);
+    expect(await shown()).toEqual(["Old army"]);
+    expect(await rows()).toEqual([
+      { id: "new", body: null, gz: expect.any(Number) as number },
+      { id: "old", body: legacy, gz: null },
+    ]);
+
+    expect(await compressPlainRows(h.deps)).toBe(1);
+    expect(await compressPlainRows(h.deps)).toBe(0);
+    expect((await rows()).map((r) => r.body)).toEqual([null, null]);
+    const sizes = await h.deps.db.first<{ counted: number; kept: number }>("SELECT bytes AS counted, (SELECT SUM(LENGTH(body_gz)) FROM records) AS kept FROM users");
+    expect(sizes!.counted).toBe(sizes!.kept);
+    expect(await names()).toEqual(["Old army", "New army"]);
+    expect(await shown()).toEqual(["Old army"]);
   });
 
   it("stops an account after its daily allowance of changes, and resumes after the reset", async () => {
@@ -257,12 +287,17 @@ describe("sync", () => {
     const sqlite = new DatabaseSync(":memory:");
     sqlite.exec(readFileSync(join(dir, "0001_init.sql"), "utf8"));
     sqlite.prepare("INSERT INTO users (id, email, created_at) VALUES ('u1', 'a@example.com', ?)").run(NOW);
-    sqlite.prepare("INSERT INTO records (user_id, store, id, seq, revision, updated_at, body) VALUES ('u1', 'rosters', 'r', 1, 0, ?, ?)").run(NOW, JSON.stringify({ id: "r", name: "Первая" }));
-    sqlite.prepare("INSERT INTO records (user_id, store, id, seq, revision, updated_at, deleted_at) VALUES ('u1', 'rosters', 'gone', 2, 0, ?, ?)").run(NOW, NOW);
+    const body = JSON.stringify({ id: "r", name: "Первая", shared: true });
+    sqlite.prepare("INSERT INTO records (user_id, store, id, seq, revision, updated_at, body) VALUES ('u1', 'rosters', 'r', 1, 0, ?, ?)").run(NOW, body);
+    sqlite.prepare("INSERT INTO records (user_id, store, id, seq, revision, updated_at, body) VALUES ('u1', 'rosters', 'p', 2, 0, ?, ?)").run(NOW, JSON.stringify({ id: "p", shared: false }));
+    sqlite.prepare("INSERT INTO records (user_id, store, id, seq, revision, updated_at, deleted_at) VALUES ('u1', 'rosters', 'gone', 3, 0, ?, ?)").run(NOW, NOW);
     sqlite.exec(readFileSync(join(dir, "0002_quotas.sql"), "utf8"));
     const user = sqlite.prepare("SELECT bytes, day_writes FROM users").get() as { bytes: number; day_writes: number };
-    expect(user.bytes).toBe(new TextEncoder().encode(JSON.stringify({ id: "r", name: "Первая" })).length);
+    expect(user.bytes).toBe(byteLength(body) + byteLength(JSON.stringify({ id: "p", shared: false })));
     expect(user.day_writes).toBe(0);
+    // The shared flag moves into its own column, since a compressed body cannot be read in SQL.
+    sqlite.exec(readFileSync(join(dir, "0003_compress.sql"), "utf8"));
+    expect(sqlite.prepare("SELECT id FROM records WHERE shared = 1").all()).toEqual([{ id: "r" }]);
   });
 
   it("pages a long pull", async () => {
@@ -444,7 +479,9 @@ describe("one account cannot reach another's rows", () => {
     expect((await h.json("GET", "/api/me", undefined, alice)).status).toBe(200);
     expect((await h.json("DELETE", "/api/me", undefined, bob)).status).toBe(200);
     expect((await h.json("GET", "/api/me", undefined, alice)).status).toBe(200);
-    expect((await h.deps.db.all<{ name: string }>("SELECT json_extract(body, '$.name') AS name FROM records")).map((r) => r.name)).toEqual(["alice's list"]);
+    const left = await h.json<{ changes: Array<{ body: { name: string } }> }>("POST", "/api/sync", { cursor: 0, changes: [] }, alice);
+    expect(left.body.changes.map((c) => c.body.name)).toEqual(["alice's list"]);
+    expect((await h.deps.db.all("SELECT id FROM records")).length).toBe(1);
 
     // A bearer token that is not a session's is nothing, however close it comes.
     for (const t of ["", "x", alice.slice(1), alice.toUpperCase(), `${alice}0`]) expect((await h.json("GET", "/api/me", undefined, t)).status).toBe(401);

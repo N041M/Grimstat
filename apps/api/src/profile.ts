@@ -8,6 +8,7 @@
  * and counts and never a datasheet.
  */
 import { AuthError } from "./auth";
+import { bodyText, type StoredBody } from "./codec";
 import type { Deps } from "./deps";
 
 const HANDLE = /^[a-z0-9](?:[a-z0-9-]{1,18}[a-z0-9])?$/;
@@ -58,14 +59,14 @@ export async function publicProfile(deps: Deps, raw: string): Promise<PublicProf
   if ("error" in checked) return undefined;
   const user = await deps.db.first<{ id: string; handle: string }>("SELECT id, handle FROM users WHERE handle = ?", checked.handle);
   if (!user) return undefined;
-  const rows = await deps.db.all<{ body: string; updated_at: string }>(
-    "SELECT body, updated_at FROM records WHERE user_id = ? AND store = 'rosters' AND deleted_at IS NULL AND json_extract(body, '$.shared') = 1 ORDER BY updated_at DESC LIMIT 100",
+  const rows = await deps.db.all<StoredBody & { updated_at: string }>(
+    "SELECT body, body_gz, updated_at FROM records WHERE user_id = ? AND store = 'rosters' AND deleted_at IS NULL AND shared = 1 ORDER BY updated_at DESC LIMIT 100",
     user.id,
   );
   const armies: PublicArmy[] = [];
   for (const r of rows) {
     try {
-      const body = JSON.parse(r.body) as Record<string, unknown>;
+      const body = JSON.parse((await bodyText(r)) ?? "") as Record<string, unknown>;
       armies.push({ roster: forPublic(body), updatedAt: r.updated_at });
     } catch {
       /* a body that does not parse is not shown */

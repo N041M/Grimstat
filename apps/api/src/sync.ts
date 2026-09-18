@@ -11,6 +11,9 @@
  * The whole push is one batch. If any statement fails, nothing is written and the device keeps its
  * outbox for next time.
  *
+ * Bodies are JSON on the wire and gzip in the database (codec.ts). The 256 KB cap on one record is
+ * on the JSON, the same number the device checks. The account's 20 MB is of stored bytes.
+ *
  * Two counters on the users row bound what one account can cost. `bytes` is the size of everything
  * stored for the account and caps it at SYNC_MAX_ACCOUNT_BYTES. `day_writes` is how many records
  * the account has written today and caps it at MAX_WRITES_PER_DAY. Both are checked and moved in
@@ -20,6 +23,7 @@
  */
 import { z } from "zod";
 import { SYNC_MAX_ACCOUNT_BYTES, SYNC_MAX_BODY_BYTES, SYNC_MAX_CHANGES, SYNC_PAGE, SYNC_STORES } from "@grimstat/schema";
+import { bodyText, byteLength, gzipText, storedLength, type StoredBody } from "./codec";
 import { iso, nextReset, type Deps } from "./deps";
 
 const SKEW = 5 * 60 * 1000;
@@ -69,28 +73,25 @@ export class SyncError extends Error {
   }
 }
 
-interface Row {
+interface Row extends StoredBody {
   store: string;
   id: string;
   seq: number;
   revision: number;
   updated_at: string;
   deleted_at: string | null;
-  body: string | null;
 }
+
+const ROW_COLUMNS = "store, id, seq, revision, updated_at, deleted_at, body, body_gz";
 
 /** A store name never holds a bar, so this joins a key the database can compare in one column. */
 const keyOf = (store: string, id: string): string => `${store}|${id}`;
 
-const toChange = (r: Row): Change => ({
-  store: r.store as Change["store"],
-  id: r.id,
-  revision: r.revision,
-  updatedAt: r.updated_at,
-  ...(r.deleted_at ? { deletedAt: r.deleted_at } : { body: JSON.parse(r.body ?? "{}") as Record<string, unknown> }),
-});
-
-const byteLength = (text: string | null | undefined): number => (text ? new TextEncoder().encode(text).length : 0);
+async function toChange(r: Row): Promise<Change> {
+  const head = { store: r.store as Change["store"], id: r.id, revision: r.revision, updatedAt: r.updated_at };
+  if (r.deleted_at) return { ...head, deletedAt: r.deleted_at };
+  return { ...head, body: JSON.parse((await bodyText(r)) ?? "{}") as Record<string, unknown> };
+}
 
 /** The rows the request names, fetched by primary key in chunks small enough for D1's parameter limit. */
 async function existingRows(deps: Deps, userId: string, changes: Change[]): Promise<Row[]> {
@@ -99,13 +100,19 @@ async function existingRows(deps: Deps, userId: string, changes: Change[]): Prom
     const part = changes.slice(i, i + LOOKUP_CHUNK);
     rows.push(
       ...(await deps.db.all<Row>(
-        `SELECT store, id, seq, revision, updated_at, deleted_at, body FROM records WHERE user_id = ? AND (${part.map(() => "(store = ? AND id = ?)").join(" OR ")})`,
+        `SELECT ${ROW_COLUMNS} FROM records WHERE user_id = ? AND (${part.map(() => "(store = ? AND id = ?)").join(" OR ")})`,
         userId,
         ...part.flatMap((c) => [c.store, c.id]),
       )),
     );
   }
   return rows;
+}
+
+/** A change that won, with its body as it will be stored. */
+interface Winner extends Change {
+  gz?: Uint8Array;
+  shared: 0 | 1;
 }
 
 export async function sync(deps: Deps, userId: string, req: SyncRequest): Promise<SyncResponse> {
@@ -120,28 +127,30 @@ export async function sync(deps: Deps, userId: string, req: SyncRequest): Promis
 
   const applied: SyncResponse["applied"] = [];
   const rejected: SyncResponse["rejected"] = [];
-  const winners: Change[] = [];
-  // How many bytes the push adds to the account, counting a replaced body as gone.
+  const winners: Winner[] = [];
+  // How many stored bytes the push adds to the account, counting a replaced body as gone.
   let added = 0;
 
   if (req.changes.length) {
     const held = new Map((await existingRows(deps, userId, req.changes)).map((r) => [keyOf(r.store, r.id), r]));
-    const sizes = new Map([...held].map(([k, r]) => [k, byteLength(r.body)]));
+    const sizes = new Map([...held].map(([k, r]) => [k, storedLength(r)]));
     for (const change of req.changes) {
       const body = change.body === undefined ? undefined : JSON.stringify(change.body);
-      const bytes = byteLength(body);
-      if (bytes > SYNC_MAX_BODY_BYTES) throw new SyncError(413, `One record is larger than ${Math.round(SYNC_MAX_BODY_BYTES / 1024)} KB and cannot be synced.`);
+      if (byteLength(body) > SYNC_MAX_BODY_BYTES) throw new SyncError(413, `One record is larger than ${Math.round(SYNC_MAX_BODY_BYTES / 1024)} KB and cannot be synced.`);
       const updatedAt = clamp(change.updatedAt);
       const deletedAt = change.deletedAt ? clamp(change.deletedAt) : undefined;
       const key = keyOf(change.store, change.id);
       const have = held.get(key);
       if (have && have.updated_at > updatedAt) {
-        rejected.push({ store: change.store, id: change.id, server: toChange(have) });
+        rejected.push({ store: change.store, id: change.id, server: await toChange(have) });
         continue;
       }
-      winners.push({ ...change, updatedAt, ...(deletedAt ? { deletedAt } : {}) });
-      added += bytes - (sizes.get(key) ?? 0);
-      sizes.set(key, bytes);
+      const gz = body === undefined ? undefined : await gzipText(body);
+      const shared = change.store === "rosters" && change.body?.shared === true ? 1 : 0;
+      winners.push({ ...change, updatedAt, ...(deletedAt ? { deletedAt } : {}), gz, shared });
+      const stored = gz?.length ?? 0;
+      added += stored - (sizes.get(key) ?? 0);
+      sizes.set(key, stored);
     }
   }
 
@@ -180,9 +189,9 @@ export async function sync(deps: Deps, userId: string, req: SyncRequest): Promis
     let seq = counter.seq - winners.length;
     await deps.db.batch(
       winners.map((w) => ({
-        sql: `INSERT INTO records (user_id, store, id, seq, revision, updated_at, deleted_at, body) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT (user_id, store, id) DO UPDATE SET seq = excluded.seq, revision = excluded.revision, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, body = excluded.body`,
-        params: [userId, w.store, w.id, ++seq, w.revision, w.updatedAt, w.deletedAt ?? null, w.body === undefined ? null : JSON.stringify(w.body)],
+        sql: `INSERT INTO records (user_id, store, id, seq, revision, updated_at, deleted_at, body, body_gz, shared) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+              ON CONFLICT (user_id, store, id) DO UPDATE SET seq = excluded.seq, revision = excluded.revision, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, body = NULL, body_gz = excluded.body_gz, shared = excluded.shared`,
+        params: [userId, w.store, w.id, ++seq, w.revision, w.updatedAt, w.deletedAt ?? null, w.gz ?? null, w.shared],
       })),
     );
     for (const w of winners) applied.push({ store: w.store, id: w.id });
@@ -190,9 +199,9 @@ export async function sync(deps: Deps, userId: string, req: SyncRequest): Promis
 
   // What the other devices sent since this one last asked. What this request just wrote comes back
   // too, and the device treats its own change as already applied.
-  const rows = await deps.db.all<Row>("SELECT store, id, seq, revision, updated_at, deleted_at, body FROM records WHERE user_id = ? AND seq > ? ORDER BY seq LIMIT ?", userId, req.cursor, SYNC_PAGE + 1);
+  const rows = await deps.db.all<Row>(`SELECT ${ROW_COLUMNS} FROM records WHERE user_id = ? AND seq > ? ORDER BY seq LIMIT ?`, userId, req.cursor, SYNC_PAGE + 1);
   const more = rows.length > SYNC_PAGE;
   const page = more ? rows.slice(0, SYNC_PAGE) : rows;
   const cursor = page.length ? page[page.length - 1]!.seq : req.cursor;
-  return { cursor, applied, rejected, changes: page.map(toChange), more };
+  return { cursor, applied, rejected, changes: await Promise.all(page.map(toChange)), more };
 }

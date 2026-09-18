@@ -10,9 +10,9 @@
 export const SYNC_STORES = ["rosters", "scenarios", "unitPresets", "collection", "games", "terrainLayouts", "overrides", "layouts", "publishedLists", "settings"] as const;
 export type SyncStore = (typeof SYNC_STORES)[number];
 
-/** The most one record's body may weigh, in bytes of JSON. A roster is 20 to 50 KB; a long game about 100 KB. */
+/** The most one record's body may weigh, in bytes of JSON. A tournament roster is about 5 KB and a long game about 100 KB. */
 export const SYNC_MAX_BODY_BYTES = 256 * 1024;
-/** The most one account may hold on the server, in bytes of JSON. */
+/** The most one account may hold on the server, in bytes as stored, which is gzip of the JSON. */
 export const SYNC_MAX_ACCOUNT_BYTES = 20 * 1024 * 1024;
 /** The most changes one sync request may carry, in either direction. */
 export const SYNC_MAX_CHANGES = 200;

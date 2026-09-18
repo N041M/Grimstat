@@ -6,11 +6,18 @@
  * without an account go when they expire. A deletion's tombstone goes after ninety days too: a
  * device that has not synced for that long has no session left to sync with, so nobody is left
  * who needs to hear of it.
+ *
+ * The same run compresses a batch of records written before bodies were stored compressed, and
+ * sets their owners' size counters to what the rows now take.
  */
+import { gzipText } from "./codec";
+import type { Stmt } from "./db";
 import { iso, type Deps } from "./deps";
 
 const DAY = 24 * 60 * 60 * 1000;
 export const SESSION_IDLE_DAYS = 90;
+/** Plain rows compressed per run. Bounds the work one run does. */
+export const COMPRESS_BATCH = 500;
 
 export async function purge(deps: Deps): Promise<void> {
   const now = deps.now();
@@ -20,4 +27,26 @@ export async function purge(deps: Deps): Promise<void> {
     { sql: "DELETE FROM links WHERE expires_at IS NOT NULL AND expires_at < ?", params: [iso(now)] },
     { sql: "DELETE FROM records WHERE deleted_at IS NOT NULL AND deleted_at < ?", params: [iso(new Date(now.getTime() - SESSION_IDLE_DAYS * DAY))] },
   ]);
+  await compressPlainRows(deps);
+}
+
+/**
+ * Rows still holding JSON in `body`, gzipped into `body_gz`, a batch at a time. Each owner's size
+ * counter is then set from the rows, in the same transaction, so the account's 20 MB is of stored
+ * bytes once every row is compressed. Returns how many rows it did.
+ */
+export async function compressPlainRows(deps: Deps, batch = COMPRESS_BATCH): Promise<number> {
+  const rows = await deps.db.all<{ user_id: string; store: string; id: string; body: string }>("SELECT user_id, store, id, body FROM records WHERE body IS NOT NULL LIMIT ?", batch);
+  if (!rows.length) return 0;
+  const stmts: Stmt[] = await Promise.all(
+    rows.map(async (r) => ({ sql: "UPDATE records SET body_gz = ?, body = NULL WHERE user_id = ? AND store = ? AND id = ?", params: [await gzipText(r.body), r.user_id, r.store, r.id] })),
+  );
+  for (const userId of new Set(rows.map((r) => r.user_id))) {
+    stmts.push({
+      sql: "UPDATE users SET bytes = (SELECT COALESCE(SUM(LENGTH(body_gz)), 0) + COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM records WHERE user_id = ?) WHERE id = ?",
+      params: [userId, userId],
+    });
+  }
+  await deps.db.batch(stmts);
+  return rows.length;
 }

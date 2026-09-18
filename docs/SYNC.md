@@ -248,8 +248,15 @@ and makes about twenty requests. Rows written is the binding limit, so the free 
 three thousand players editing on the same day, or about a hundred thousand saved changes a day in
 total. Idle accounts cost nothing.
 
-Per-account limits enforced in the Worker: 256 KB per record body, 20 MB per account, two hundred
-changes per request, and two thousand records written per account per UTC day. A request over a
+Bodies are JSON on the wire and gzip in the database. On the fifty-five tournament lists in the
+corpus a roster is about 5 KB as JSON and about 1 KB stored, so the account's 20 MB, which is of
+stored bytes, holds five times what it would as JSON. Rows written before compression are read as
+they are and compressed by the nightly purge, five hundred a night, which also sets their owners'
+size counters. Compression does nothing for the daily row limits, which count rows and not bytes.
+
+Per-account limits enforced in the Worker: 256 KB per record body as JSON, 20 MB per account as
+stored, two hundred changes per request, and two thousand records written per account per UTC
+day. A request over a
 size limit is rejected with a message the Profile page shows. A push past the daily allowance is
 answered like the pause below, with the reset time, and the device waits it out. The daily
 allowance is what keeps one account from spending the database's writes for everyone, and it is
@@ -341,8 +348,8 @@ request and the data, in the order a request meets it:
   and for fifteen minutes. A session lasts a year, ends after ninety idle days, and can be signed
   out per device. A token travels in a header, never a cookie.
 - **Every query is bound to the signed-in user** and every value is a parameter. A record's body
-  must carry the id it is stored under. Records are capped at 256 KB, accounts at 20 MB, requests
-  at 200 changes, and an account at two thousand writes a day. Anonymous links are capped at 16 KB
+  must carry the id it is stored under. Records are capped at 256 KB of JSON, accounts at 20 MB
+  stored, requests at 200 changes, and an account at two thousand writes a day. Anonymous links are capped at 16 KB
   each and five hundred a day.
 - **A nightly purge** removes used codes, expired links and idle sessions. On Node it runs hourly.
 - **A backup file never carries the session.** `exportAll` leaves out every `account.` and `sync.`
