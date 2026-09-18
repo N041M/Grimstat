@@ -476,12 +476,57 @@ code,
 .rail-nav-fill {
   flex: 1;
 }
-/*
- * Named against the rail so it outranks `.rail-stacked .rail-item`, whose margin shorthand sets all
- * four sides and would otherwise put the foot item back in the run of destinations.
- */
-.rail .rail-item-foot {
+/* The foot: the account and About, kept together against the bottom of the list. */
+.rail-foot {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* The account's mark: a circle with an initial, filled when someone is signed in. */
+.rail-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font: 600 11px/1 var(--font);
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+.rail-avatar.in {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: transparent;
+}
+.rail-item[aria-current="page"] .rail-avatar.in {
+  background: var(--btn-fg);
+  color: var(--btn-bg);
+}
+.rail-avatar .rail-dot {
+  right: -3px;
+  bottom: -3px;
+}
+.rail-dot.paused {
+  background: var(--accent);
+}
+.rail-dot.error {
+  background: var(--accent);
+}
+.rail-dot.syncing {
+  background: var(--muted);
+}
+.nav-drawer-sub {
+  margin-left: auto;
+  font: 400 11px/1 var(--mono);
+  color: var(--muted);
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rail-theme {
   position: relative;

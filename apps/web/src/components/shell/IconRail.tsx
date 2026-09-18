@@ -5,6 +5,7 @@ import { useApp } from "../../state/AppContext";
 import { Icon, Sheet, menuKeys, useDismiss } from "../ui";
 import { t, type I18nKey } from "../../i18n";
 import { MOD } from "../../lib/keys";
+import { useAuthUser, useSyncState } from "../../hooks/useAccount";
 
 export interface RailEntry {
   route: Route;
@@ -24,7 +25,7 @@ export const RAIL_ENTRIES: readonly RailEntry[] = [
   { route: "battle", glyph: "B", labelKey: "nav.battle" },
   { route: "play", glyph: "P", labelKey: "nav.play" },
   { route: "data", glyph: "D", labelKey: "nav.data" },
-  { route: "profile", glyph: "U", labelKey: "nav.profile" },
+  { route: "profile", glyph: "@", labelKey: "nav.profile" },
   { route: "about", glyph: "?", labelKey: "nav.about" },
 ];
 
@@ -93,7 +94,32 @@ function ThemeControl({ theme }: { theme: ReturnType<typeof useTheme> }) {
  *
  * Each item carries `data-route`, which is how the tour finds the one to point at (see Tour.tsx).
  */
+/**
+ * The account's mark: a circle with the signed-in person's initial, or an empty one when nobody is,
+ * with a dot for a sync that is paused, failing or running. It stands apart from the letter tiles
+ * because it is not a screen of the app so much as who is using it.
+ */
+function AccountGlyph() {
+  const user = useAuthUser();
+  const sync = useSyncState();
+  const initial = user.anonymous ? "" : (user.handle ?? user.displayName).charAt(0).toUpperCase();
+  const dot = sync.status === "paused" || sync.status === "error" || sync.status === "syncing" ? sync.status : undefined;
+  return (
+    <span className={`rail-avatar ${user.anonymous ? "out" : "in"}`} aria-hidden="true">
+      {initial}
+      {dot ? <span className={`rail-dot ${dot}`} /> : null}
+    </span>
+  );
+}
+
+/** What the account entry says on hover and in the drawer: the address when signed in. */
+function useAccountTitle(): string | undefined {
+  const user = useAuthUser();
+  return user.anonymous ? undefined : user.displayName;
+}
+
 export function IconRail({ route, theme, offline, stacked }: { route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean; stacked?: boolean }) {
+  const accountTitle = useAccountTitle();
   const { solveState, openPalette } = useApp();
   const pending = solveState === "pending";
   return (
@@ -113,16 +139,18 @@ export function IconRail({ route, theme, offline, stacked }: { route: Route; the
             </span>
           </a>
         ))}
-        {FOOT_ENTRIES.map((e) => (
-          <a key={e.route} className="rail-item rail-item-foot" data-route={e.route} href={hrefFor(e.route)} aria-label={t(e.labelKey)} aria-current={route === e.route ? "page" : undefined}>
-            <span className="rail-glyph" aria-hidden="true">
-              {e.glyph}
-            </span>
-            <span className="rail-label" aria-hidden="true">
-              {t(e.labelKey)}
-            </span>
-          </a>
-        ))}
+        <div className="rail-foot">
+          {FOOT_ENTRIES.map((e) => (
+            <a key={e.route} className="rail-item rail-item-foot" data-route={e.route} href={hrefFor(e.route)} aria-label={t(e.labelKey)} title={e.route === "profile" ? accountTitle : undefined} aria-current={route === e.route ? "page" : undefined}>
+              <span className="rail-glyph" aria-hidden="true">
+                {e.route === "profile" ? <AccountGlyph /> : e.glyph}
+              </span>
+              <span className="rail-label" aria-hidden="true">
+                {t(e.labelKey)}
+              </span>
+            </a>
+          ))}
+        </div>
       </nav>
       {offline ? (
         <span className="rail-offline" role="status" title={t("shell.offlineHint")} aria-label={t("shell.offlineHint")}>
@@ -145,6 +173,7 @@ export function IconRail({ route, theme, offline, stacked }: { route: Route; the
 export function NavDrawer({ open, onClose, route, theme, offline }: { open: boolean; onClose: () => void; route: Route; theme: ReturnType<typeof useTheme>; offline?: boolean }) {
   const { solveState, openPalette } = useApp();
   const pending = solveState === "pending";
+  const accountTitle = useAccountTitle();
   return (
     <Sheet open={open} onClose={onClose} side="left" label={t("nav.label")} className="nav-drawer">
       <div className="nav-drawer-head">
@@ -182,9 +211,10 @@ export function NavDrawer({ open, onClose, route, theme, offline }: { open: bool
         {FOOT_ENTRIES.map((e) => (
           <a key={e.route} className="nav-drawer-item" href={hrefFor(e.route)} aria-current={route === e.route ? "page" : undefined} onClick={onClose}>
             <span className="nav-drawer-glyph" aria-hidden="true">
-              {e.glyph}
+              {e.route === "profile" ? <AccountGlyph /> : e.glyph}
             </span>
             {t(e.labelKey)}
+            {e.route === "profile" && accountTitle ? <span className="nav-drawer-sub">{accountTitle}</span> : null}
           </a>
         ))}
         {offline ? (
