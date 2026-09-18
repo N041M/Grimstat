@@ -69,10 +69,14 @@ export interface Finished {
 export async function finish(deps: Deps, code: string, deviceName: string): Promise<Finished> {
   const now = deps.now();
   const codeHash = await sha256(code.trim());
-  const login = await deps.db.first<{ email: string; expires_at: string; used_at: string | null }>("SELECT email, expires_at, used_at FROM logins WHERE code_hash = ?", codeHash);
-  if (!login || login.used_at || login.expires_at < iso(now)) throw new AuthError(400, "This sign-in link has expired. Ask for a new one.");
+  // The code is spent in one statement that only succeeds while it is unspent and unexpired, so
+  // two requests carrying the same code cannot both get a session.
+  const spent = await deps.db.run("UPDATE logins SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at >= ?", iso(now), codeHash, iso(now));
+  if (spent.changes !== 1) throw new AuthError(400, "This sign-in link has expired. Ask for a new one.");
+  const login = await deps.db.first<{ email: string }>("SELECT email FROM logins WHERE code_hash = ?", codeHash);
+  if (!login) throw new AuthError(400, "This sign-in link has expired. Ask for a new one.");
   let user = await deps.db.first<User>("SELECT id, email, handle FROM users WHERE email = ?", login.email);
-  const stmts = [{ sql: "UPDATE logins SET used_at = ? WHERE code_hash = ?", params: [iso(now), codeHash] as unknown[] }];
+  const stmts: Array<{ sql: string; params: unknown[] }> = [];
   if (!user) {
     user = { id: `u_${randomToken(12)}`, email: login.email, handle: null };
     stmts.push({ sql: "INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)", params: [user.id, user.email, iso(now)] });

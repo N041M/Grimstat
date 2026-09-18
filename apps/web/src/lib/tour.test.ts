@@ -20,7 +20,7 @@ describe("TOUR_STEPS", () => {
   it("opens a screen with one card for its rail letter, then a card per control", () => {
     const withControl = new Set(TOUR_STEPS.filter((s) => !s.bookend && s.focus).map((s) => s.route));
     // Every screen but About, whose only control would be the button that starts this tour.
-    expect([...ROUTES].filter((r) => !withControl.has(r))).toEqual(["about"]);
+    expect([...ROUTES].filter((r) => !withControl.has(r))).toEqual(["profile", "about"]);
     expect(TOUR_STEPS.filter((s) => !s.bookend && !s.focus)).toHaveLength(TOUR_SCREEN_COUNT);
   });
 

@@ -673,7 +673,57 @@ export async function exportAll(): Promise<ExportBundle> {
   return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection, games, rosterVersions } };
 }
 
-export async function importAll(bundle: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number; terrainLayouts: number; publishedLists: number; unitPresets: number; collection: number; games: number; rosterVersions: number }> {
+/**
+ * A backup made before snapshot ids became the checksum alone carries dated ids, and its rosters
+ * name them. The bundle gets the same treatment the v12 upgrade gave the store: every snapshot
+ * takes its checksum id, two that held the same data become one, and everything that named an
+ * old id names the new one. A bundle with nothing to rename comes back as it was.
+ */
+export function rekeyBundle(bundle: ExportBundle): ExportBundle {
+  const renamed = new Map<string, string>();
+  for (const snap of bundle.stores.snapshots) {
+    const want = stableSnapshotId(snap.checksum);
+    if (snap.id !== want) renamed.set(snap.id, want);
+  }
+  if (!renamed.size) return bundle;
+  const next = (id: unknown): string | undefined => (typeof id === "string" ? renamed.get(id) : undefined);
+  const seen = new Set<string>();
+  const snapshots: Snapshot[] = [];
+  for (const snap of bundle.stores.snapshots) {
+    const id = next(snap.id) ?? snap.id;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    snapshots.push(id === snap.id ? snap : { ...snap, id });
+  }
+  const repoint = <T extends { snapshotId?: string }>(rows: T[] | undefined): T[] | undefined => rows?.map((r) => (next(r.snapshotId) ? { ...r, snapshotId: next(r.snapshotId) } : r));
+  const versions = bundle.stores.rosterVersions?.map((v) => {
+    if (![...renamed.keys()].some((old) => v.json.includes(old))) return v;
+    try {
+      const roster = JSON.parse(v.json) as { snapshotId?: string };
+      const to = next(roster.snapshotId);
+      return to ? { ...v, json: JSON.stringify({ ...roster, snapshotId: to }) } : v;
+    } catch {
+      return v;
+    }
+  });
+  const settings = bundle.stores.settings.map((r) => (r.key === SETTING_ACTIVE_SNAPSHOT && next(r.value) ? { ...r, value: next(r.value) } : r));
+  return {
+    ...bundle,
+    stores: {
+      ...bundle.stores,
+      snapshots,
+      settings,
+      scenarios: repoint(bundle.stores.scenarios) ?? [],
+      ...(bundle.stores.rosters ? { rosters: repoint(bundle.stores.rosters) } : {}),
+      ...(bundle.stores.games ? { games: repoint(bundle.stores.games) } : {}),
+      ...(bundle.stores.unitPresets ? { unitPresets: repoint(bundle.stores.unitPresets) } : {}),
+      ...(versions ? { rosterVersions: versions } : {}),
+    },
+  };
+}
+
+export async function importAll(raw: ExportBundle): Promise<{ snapshots: number; scenarios: number; layouts: number; settings: number; rosters: number; overrides: number; terrainLayouts: number; publishedLists: number; unitPresets: number; collection: number; games: number; rosterVersions: number }> {
+  const bundle = rekeyBundle(raw);
   const s = bundle.stores;
   const rosters = s.rosters ?? [];
   const overrides = s.overrides ?? [];

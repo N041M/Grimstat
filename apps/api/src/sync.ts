@@ -80,7 +80,12 @@ const toChange = (r: Row): Change => ({
 export async function sync(deps: Deps, userId: string, req: SyncRequest): Promise<SyncResponse> {
   const now = deps.now();
   const ceiling = iso(new Date(now.getTime() + SKEW));
-  const clamp = (t: string): string => (t > ceiling ? iso(now) : t);
+  // Every time is written the one way, so the string comparison below is a comparison of times
+  // whatever precision a device sent, and a time ahead of the server's clock is set to it.
+  const clamp = (t: string): string => {
+    const normal = iso(new Date(t));
+    return normal > ceiling ? iso(now) : normal;
+  };
 
   const applied: SyncResponse["applied"] = [];
   const rejected: SyncResponse["rejected"] = [];

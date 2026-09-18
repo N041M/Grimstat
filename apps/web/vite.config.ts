@@ -213,7 +213,7 @@ export default defineConfig({
       manifest: {
         name: "Grimstat",
         short_name: "Grimstat",
-        description: "Unofficial, local-first Warhammer 40,000 statistics dashboard. Ships no game data.",
+        description: "Unofficial, local-first Warhammer 40,000 statistics dashboard.",
         theme_color: "#15161a",
         background_color: "#15161a",
         display: "standalone",

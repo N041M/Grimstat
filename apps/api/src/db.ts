@@ -13,7 +13,8 @@ export interface Stmt {
 export interface Db {
   all<T>(sql: string, ...params: unknown[]): Promise<T[]>;
   first<T>(sql: string, ...params: unknown[]): Promise<T | undefined>;
-  run(sql: string, ...params: unknown[]): Promise<void>;
+  /** Runs a statement and says how many rows it changed. */
+  run(sql: string, ...params: unknown[]): Promise<{ changes: number }>;
   batch(stmts: Stmt[]): Promise<void>;
 }
 
@@ -26,7 +27,7 @@ export interface D1StmtLike {
   bind(...params: unknown[]): D1StmtLike;
   all<T>(): Promise<{ results: T[] }>;
   first<T>(): Promise<T | null>;
-  run(): Promise<unknown>;
+  run(): Promise<{ meta?: { changes?: number } }>;
 }
 
 export function d1Db(d1: D1Like): Db {
@@ -38,7 +39,8 @@ export function d1Db(d1: D1Like): Db {
       return (await d1.prepare(sql).bind(...params).first<T>()) ?? undefined;
     },
     async run(sql: string, ...params: unknown[]) {
-      await d1.prepare(sql).bind(...params).run();
+      const res = await d1.prepare(sql).bind(...params).run();
+      return { changes: res.meta?.changes ?? 0 };
     },
     async batch(stmts: Stmt[]) {
       if (!stmts.length) return;
@@ -49,7 +51,7 @@ export function d1Db(d1: D1Like): Db {
 
 /** The parts of `node:sqlite`'s DatabaseSync this server calls. */
 export interface SqliteLike {
-  prepare(sql: string): { all(...params: unknown[]): unknown[]; get(...params: unknown[]): unknown; run(...params: unknown[]): unknown };
+  prepare(sql: string): { all(...params: unknown[]): unknown[]; get(...params: unknown[]): unknown; run(...params: unknown[]): { changes: number | bigint } };
   exec(sql: string): void;
 }
 
@@ -63,7 +65,7 @@ export function sqliteDb(sqlite: SqliteLike): Db {
       return (sqlite.prepare(sql).get(...bind(params)) as T | undefined) ?? undefined;
     },
     async run(sql: string, ...params: unknown[]) {
-      sqlite.prepare(sql).run(...bind(params));
+      return { changes: Number(sqlite.prepare(sql).run(...bind(params)).changes) };
     },
     async batch(stmts: Stmt[]) {
       if (!stmts.length) return;

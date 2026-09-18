@@ -135,7 +135,7 @@ export function ProfilePage() {
                   <span className="t-meta">{t("profile.email")}</span>
                   <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={phase === "sending"} />
                 </label>
-                <button type="submit" className="primary" data-tour="profile-signin" disabled={phase === "sending" || !email.trim()}>
+                <button type="submit" className="primary" disabled={phase === "sending" || !email.trim()}>
                   {phase === "sending" ? t("profile.sending") : t("profile.sendLink")}
                 </button>
               </form>

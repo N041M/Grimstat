@@ -45,6 +45,15 @@ function ipOf(c: Context): string {
   return c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 }
 
+/** The request's JSON body, or a 400 when it is not one. */
+async function readJson(c: Context): Promise<unknown> {
+  try {
+    return await c.req.json();
+  } catch {
+    throw new Refused(400, "The request was not understood.");
+  }
+}
+
 function bearer(c: Context): string | undefined {
   const h = c.req.header("authorization");
   return h?.toLowerCase().startsWith("bearer ") ? h.slice(7).trim() : undefined;
@@ -113,13 +122,13 @@ export function createApp(deps: Deps): App {
   // ---- signing in ----
 
   app.post("/api/auth/start", async (c) => {
-    const { email } = StartRequest.parse(await c.req.json());
+    const { email } = StartRequest.parse(await readJson(c));
     await start(deps, email, ipOf(c));
     return c.json({ ok: true });
   });
 
   app.post("/api/auth/finish", async (c) => {
-    const { code, device } = FinishRequest.parse(await c.req.json());
+    const { code, device } = FinishRequest.parse(await readJson(c));
     const { token, session } = await finish(deps, code, device);
     return c.json({ token, session });
   });
@@ -158,7 +167,7 @@ export function createApp(deps: Deps): App {
 
   app.post("/api/sync", async (c) => {
     const session = await signedIn(c);
-    const req = SyncRequest.parse(await c.req.json());
+    const req = SyncRequest.parse(await readJson(c));
     return c.json(await sync(deps, session.user.id, req));
   });
 
@@ -166,7 +175,7 @@ export function createApp(deps: Deps): App {
 
   app.post("/api/links", async (c) => {
     const session = await sessionFor(deps, bearer(c));
-    const req = LinkRequest.parse(await c.req.json());
+    const req = LinkRequest.parse(await readJson(c));
     return c.json(await createLink(deps, req, session?.user.id, ipOf(c)));
   });
 

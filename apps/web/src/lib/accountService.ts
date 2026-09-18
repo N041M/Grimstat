@@ -11,7 +11,7 @@ import { LOCAL_USER, setAuthService, type AuthService, type DeviceInfo, type Use
 import { localSync, setSyncService } from "../services/sync";
 import { api, ApiError, CURSOR_SETTING, deviceName, readSession, userInfo, writeSession, type FetchLike, type MeResponse, type StoredSession } from "./account";
 import { createSyncScheduler } from "./syncScheduler";
-import { setSyncOwner, SYNCED_STORES, untracked } from "./syncTracking";
+import { setSyncOwner, SYNCED, SYNCED_STORES, untracked } from "./syncTracking";
 
 export interface AccountDeps {
   db?: GrimstatDb;
@@ -38,11 +38,24 @@ export async function holdsAnotherAccount(store: GrimstatDb, userId: string): Pr
   return false;
 }
 
-/** Empty every synced store, and the two tables sync keeps, without recording any of it. */
+/**
+ * Remove every record an account carries, and the two tables sync keeps, without recording any of
+ * it. Rows the account does not carry stay: device settings such as the active snapshot, and the
+ * published lists a corpus refresh put there.
+ */
 export async function clearSyncedStores(store: GrimstatDb): Promise<void> {
   const tables = [...SYNCED_STORES.map((s) => store.table(s)), store.outbox, store.tombstones, store.rosterVersions];
   await untracked(store, tables, async () => {
-    for (const t of tables) await t.clear();
+    for (const name of SYNCED_STORES) {
+      const own = SYNCED[name]!;
+      await store
+        .table(name)
+        .filter((r: Record<string, unknown>) => own(r))
+        .delete();
+    }
+    await store.outbox.clear();
+    await store.tombstones.clear();
+    await store.rosterVersions.clear();
   });
 }
 
@@ -88,8 +101,15 @@ export function createAccount({ db: store = db, fetchImpl = (input, init) => fet
           await api(fetchImpl, "POST", "/api/auth/signout", undefined, next.token).catch(() => undefined);
           throw new SignInDeclined();
         }
-        await clearSyncedStores(store);
       }
+      // Whatever the previous account's sync is doing stops here, and finishes, before the store
+      // changes hands. Its session on the server goes too.
+      const previous = session;
+      scheduler?.stop();
+      await scheduler?.idle();
+      if (previous) void api(fetchImpl, "POST", "/api/auth/signout", undefined, previous.token).catch(() => undefined);
+      if (previous && previous.user.id !== next.user.id) await clearSyncedStores(store);
+      else if (await holdsAnotherAccount(store, next.user.id)) await clearSyncedStores(store);
       await untracked(store, [store.settings], async () => {
         await store.settings.delete(CURSOR_SETTING);
       });

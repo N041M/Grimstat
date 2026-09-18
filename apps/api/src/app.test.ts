@@ -196,6 +196,16 @@ describe("sync", () => {
     expect(near.body.changes[0]!.updatedAt).toBe("2026-09-18T12:04:00.000Z");
   });
 
+  it("compares times as times, whatever precision a device wrote them with", async () => {
+    // Without fractions, "…:00Z" would sort after "…:00.999Z" as text. It is the earlier time.
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "later", "2026-09-18T11:00:00.999Z")] }, token);
+    const res = await h.json<{ rejected: unknown[]; applied: unknown[] }>("POST", "/api/sync", { cursor: 0, changes: [roster("r1", "earlier", "2026-09-18T11:00:00Z")] }, token);
+    expect(res.body.applied).toEqual([]);
+    expect(res.body.rejected).toHaveLength(1);
+    const stored = await h.json<{ changes: Array<{ updatedAt: string }> }>("POST", "/api/sync", { cursor: 0, changes: [] }, token);
+    expect(stored.body.changes[0]!.updatedAt).toBe("2026-09-18T11:00:00.999Z");
+  });
+
   it("refuses a record over the size limit and an account over its total", async () => {
     const big = { store: "games", id: "g", revision: 0, updatedAt: NOW, body: { id: "g", log: "x".repeat(300 * 1024) } };
     expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [big] }, token)).status).toBe(413);
@@ -273,6 +283,12 @@ describe("the gates in front of the routes", () => {
     expect((await h.json("POST", "/api/auth/start", { email: "z@example.com" })).status).toBe(200);
   });
 
+  it("answers a body that is not JSON with a 400 rather than a server error", async () => {
+    const h = harness();
+    const res = await h.app.request("/api/auth/start", { method: "POST", headers: { "content-type": "application/json" }, body: "{email:" });
+    expect(res.status).toBe(400);
+  });
+
   it("refuses a body that is too large before reading it", async () => {
     const h = harness();
     const res = await h.app.request("/api/auth/start", { method: "POST", headers: { "content-type": "application/json", "content-length": String(10 * 1024) }, body: JSON.stringify({ email: "x".repeat(10 * 1024) }) });
@@ -338,6 +354,19 @@ describe("the purge", () => {
     await purge(h.deps);
     expect((await h.deps.db.all<{ device_name: string }>("SELECT device_name FROM sessions")).map((r) => r.device_name)).toEqual(["live"]);
     expect((await h.deps.db.all<{ id: string }>("SELECT id FROM links")).map((r) => r.id)).toEqual([kept.body.id]);
+  });
+
+  it("lets a deletion's tombstone go after ninety days, and keeps a live record", async () => {
+    const h = harness();
+    const token = await h.signIn("a@example.com");
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [roster("gone"), roster("kept")] }, token);
+    await h.json("POST", "/api/sync", { cursor: 0, changes: [{ store: "rosters", id: "gone", updatedAt: "2026-09-18T12:01:00.000Z", deletedAt: "2026-09-18T12:01:00.000Z" }] }, token);
+    h.clock.now = new Date("2026-12-01T12:00:00.000Z");
+    await purge(h.deps);
+    expect((await h.deps.db.all<{ id: string }>("SELECT id FROM records ORDER BY id")).map((r) => r.id)).toEqual(["gone", "kept"]);
+    h.clock.now = new Date("2027-01-01T12:00:00.000Z");
+    await purge(h.deps);
+    expect((await h.deps.db.all<{ id: string }>("SELECT id FROM records")).map((r) => r.id)).toEqual(["kept"]);
   });
 });
 

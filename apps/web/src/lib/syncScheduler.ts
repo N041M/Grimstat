@@ -21,7 +21,7 @@ export interface SchedulerDeps {
   now?: () => Date;
 }
 
-export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date() }: SchedulerDeps): SyncService & { start(): void; stop(): void } {
+export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date() }: SchedulerDeps): SyncService & { start(): void; stop(): void; idle(): Promise<void> } {
   let state: SyncState = { status: "idle" };
   const listeners = new Set<(s: SyncState) => void>();
   let timer: number | undefined;
@@ -46,7 +46,8 @@ export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date
     }
     const t = token();
     if (!t) return;
-    if (state.status === "paused" && state.pausedUntil && state.pausedUntil > now().toISOString()) return;
+    // The resume timer can fire a few milliseconds before the reset it was set for.
+    if (state.status === "paused" && state.pausedUntil && new Date(state.pausedUntil).getTime() - now().getTime() > 1000) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     running = (async () => {
       set({ status: "syncing", error: undefined });
@@ -56,7 +57,7 @@ export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date
       } catch (e) {
         if (e instanceof ApiError && e.status === 503 && e.pausedUntil) {
           set({ status: "paused", pausedUntil: e.pausedUntil });
-          schedule(Math.max(1000, new Date(e.pausedUntil).getTime() - now().getTime()));
+          schedule(Math.max(1000, new Date(e.pausedUntil).getTime() - now().getTime() + 1500));
         } else if (e instanceof ApiError && e.status === 401) {
           // The session is gone. The account layer signs the device out on its next look.
           set({ status: "error", error: e.message });
@@ -86,6 +87,8 @@ export function createSyncScheduler({ db, fetchImpl, token, now = () => new Date
   return {
     state: () => state,
     syncNow: () => run(),
+    /** Resolves once no round is in flight. For whoever is about to change the store's owner. */
+    idle: () => running ?? Promise.resolve(),
     subscribe(l) {
       listeners.add(l);
       return () => listeners.delete(l);

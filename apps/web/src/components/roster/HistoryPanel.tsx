@@ -120,7 +120,7 @@ export function HistoryPanel({ roster, snapshot, onRestore, onClose }: Props) {
       ) : (
         <ul className="version-list">
           {parsed.map(({ rec, roster: r, points: pts }, i) => {
-            const current = rec.revision === roster.revision;
+            const current = rec.revision === roster.revision && !rec.note;
             return (
               <li key={rec.id} className={`version-row ${current ? "current" : ""}`.trim()}>
                 <div className="grow">

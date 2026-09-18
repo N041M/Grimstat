@@ -10,8 +10,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Roster } from "@grimstat/schema";
 import { createApp, noLimiter, sqliteDb, type Deps } from "@grimstat/api";
 import { migrate } from "@grimstat/api/node";
-import { GrimstatDb } from "../db";
-import { createAccount, holdsAnotherAccount, SignInDeclined } from "./accountService";
+import { GrimstatDb, type PublishedListRecord } from "../db";
+import { clearSyncedStores, createAccount, holdsAnotherAccount, SignInDeclined } from "./accountService";
 import { ApiError, readSession, type FetchLike } from "./account";
 import { WAHAPEDIA_MIRROR_SETTING } from "./importProgress";
 import { runSync } from "./syncEngine";
@@ -172,6 +172,26 @@ describe("sync between two devices", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(ApiError);
     }
+  });
+});
+
+describe("replacing another account's records", () => {
+  it("removes what an account carries and leaves the device's own state and the corpus", async () => {
+    const a = device();
+    await a.rosters.put({ ...roster("r1", "theirs"), ownerId: "u_other" });
+    await a.settings.put({ key: WAHAPEDIA_MIRROR_SETTING, value: "https://example.invalid/w/" });
+    await a.settings.put({ key: "activeSnapshotId", value: "snap_000000000000" });
+    await a.settings.put({ key: "tour.seen", value: true });
+    const list = { player: "p", faction: "f", text: "x", importedAt: NOW, source: { kind: "paste" } } as unknown as PublishedListRecord;
+    await a.publishedLists.put({ ...list, id: "pl-corpus", origin: "corpus" });
+    await a.publishedLists.put({ ...list, id: "pl-hand", origin: "hand" });
+    await clearSyncedStores(a);
+    expect(await a.rosters.count()).toBe(0);
+    expect(await a.settings.get(WAHAPEDIA_MIRROR_SETTING)).toBeUndefined();
+    expect((await a.settings.get("activeSnapshotId"))?.value).toBe("snap_000000000000");
+    expect((await a.settings.get("tour.seen"))?.value).toBe(true);
+    expect((await a.publishedLists.toArray()).map((l) => l.id)).toEqual(["pl-corpus"]);
+    expect(await a.outbox.count()).toBe(0);
   });
 });
 

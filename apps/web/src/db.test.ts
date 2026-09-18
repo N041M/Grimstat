@@ -8,7 +8,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORPUS_FORMAT, CORPUS_VERSION, stringifyPublishedListsFile, type StoredPublishedList } from "@grimstat/adapters";
-import { db, exportAll, importAll, putSourceFiles, readSourceFiles, type ExportBundle, type GameRecord, type RosterVersionRecord } from "./db";
+import { db, exportAll, importAll, putSourceFiles, readSourceFiles, rekeyBundle, SETTING_ACTIVE_SNAPSHOT, type ExportBundle, type GameRecord, type RosterVersionRecord } from "./db";
+import { stableSnapshotId } from "@grimstat/snapshot";
 import { importPastedList, listPublishedLists } from "./lib/publishedLists";
 import { CorpusIncomplete, fetchPublishedCorpus, type FetchText } from "./lib/corpusFetch";
 
@@ -252,6 +253,46 @@ describe("the downloaded files", () => {
 });
 
 describe("the backup bundle", () => {
+  it("gives a backup's dated snapshot ids the checksum id, and repoints what named them", async () => {
+    const checksum = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+    const want = stableSnapshotId(checksum);
+    const day1 = "snap_20260901_abcdef01";
+    const day2 = "snap_20260917_abcdef01";
+    const snap = (id: string) => ({ id, checksum, gameSystemId: "g", sources: [], conflicts: [], data: {}, ownerId: "local", createdAt: "x", updatedAt: "x", revision: 0 }) as unknown as ExportBundle["stores"]["snapshots"][number];
+    const older: ExportBundle = {
+      format: "grimstat-export",
+      version: 1,
+      exportedAt: "2026-09-17T00:00:00.000Z",
+      stores: {
+        snapshots: [snap(day1), snap(day2)],
+        scenarios: [{ id: "s1", snapshotId: day2 } as never],
+        layouts: [],
+        settings: [{ key: SETTING_ACTIVE_SNAPSHOT, value: day1 }],
+        rosters: [{ id: "r1", snapshotId: day1 } as never, { id: "r2", snapshotId: "snap_other" } as never],
+        rosterVersions: [{ id: "r1:0", rosterId: "r1", revision: 0, updatedAt: "x", json: JSON.stringify({ id: "r1", snapshotId: day2 }) }],
+        games: [{ id: "g1", snapshotId: day2 } as never],
+        unitPresets: [{ id: "p1", snapshotId: day1 } as never],
+      },
+    };
+    const out = rekeyBundle(older);
+    expect(out.stores.snapshots.map((x) => x.id)).toEqual([want]);
+    expect(out.stores.rosters!.map((r) => r.snapshotId)).toEqual([want, "snap_other"]);
+    expect(out.stores.scenarios[0]!.snapshotId).toBe(want);
+    expect(out.stores.games![0]!.snapshotId).toBe(want);
+    expect(out.stores.unitPresets![0]!.snapshotId).toBe(want);
+    expect(JSON.parse(out.stores.rosterVersions![0]!.json).snapshotId).toBe(want);
+    expect(out.stores.settings[0]!.value).toBe(want);
+
+    await importAll(older);
+    expect((await db.snapshots.toArray()).map((x) => x.id)).toEqual([want]);
+    expect((await db.rosters.get("r1"))?.snapshotId).toBe(want);
+
+    // A bundle already on checksum ids is handed back untouched.
+    const current = await exportAll();
+    expect(rekeyBundle(current)).toBe(current);
+  });
+
+
   it("never carries the device's session or its sync bookkeeping", async () => {
     await db.settings.bulkPut([
       { key: "account.session", value: { token: "secret" } },
