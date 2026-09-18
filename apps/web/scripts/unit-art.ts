@@ -15,7 +15,7 @@ const OUT = resolve(fileURLToPath(new URL(".", import.meta.url)), "../src/lib/un
 
 async function fetchPath(slug: string): Promise<string> {
   const url = `${UNIT_ART_SOURCE.url}/icons/000000/transparent/1x1/${slug}.svg`;
-  const res = await fetch(url, { headers: { "user-agent": "grimstat-unit-art (https://github.com/N041M/Grimstat)" } });
+  const res = await fetch(url, { headers: { "user-agent": "grimstat-unit-art (https://grimstat.com)" } });
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
   const svg = await res.text();
   // One icon is one path; the site's wrapper adds a background rect only when a colour is asked for.

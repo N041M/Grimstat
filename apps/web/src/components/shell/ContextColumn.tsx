@@ -13,8 +13,8 @@ import { useContextHostRef, useContextSlotFilled } from "./ContextSlot";
 import { t, type I18nKey, tn } from "../../i18n";
 
 /** Repository + documentation links shown in the About column. */
-export const REPO_URL = "https://github.com/N041M/Grimstat";
-const DOC_URL = `${REPO_URL}/blob/main/docs`;
+/** Where the app lives. The source is not published, so this is the only address the shell names. */
+export const SITE_URL = "https://grimstat.com";
 
 // ---------- the generic list-row pattern (README §2) ----------
 
@@ -330,23 +330,13 @@ const SOURCE_NAME: Record<string, I18nKey> = {
   "wahapedia-csv": "data.fetch.source.wahapedia-csv",
 };
 
-const DOCS: Array<{ key: I18nKey; file: string }> = [
-  { key: "ctxcol.doc.design", file: "DESIGN.md" },
-  { key: "ctxcol.doc.modelling", file: "MODELLING-NOTES.md" },
-  { key: "ctxcol.doc.battleSim", file: "BATTLE-SIM.md" },
-  { key: "ctxcol.doc.plugins", file: "PLUGINS.md" },
-];
-
 function AboutBody({ inSheet }: BodyProps) {
   return (
     <ContextFrame eyebrow={t("ctxcol.project")} inSheet={inSheet}>
       <ContextList>
-        {DOCS.map((d) => (
-          <ContextRow key={d.file} name={t(d.key)} value={t("ctxcol.doc.kind")} meta={d.file} href={`${DOC_URL}/${d.file}`} />
-        ))}
-        <ContextRow name={t("ctxcol.doc.licence")} value="MIT" meta="LICENSE" href={`${REPO_URL}/blob/main/LICENSE`} />
+        <ContextRow name={t("ctxcol.website")} value="grimstat.com" href={SITE_URL} />
+        <ContextRow name={t("ctxcol.doc.licence")} value={t("ctxcol.allRights")} />
       </ContextList>
-      <ContextNewRow label={t("ctxcol.openRepo")} href={REPO_URL} />
     </ContextFrame>
   );
 }

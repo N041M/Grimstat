@@ -59,7 +59,7 @@ export const en = {
   "ctxcol.addModels": "+ Add models",
   "ctxcol.addUnit": "+ Add unit",
   "ctxcol.addSource": "+ Add source",
-  "ctxcol.openRepo": "Open repository",
+  "ctxcol.website": "Website",
   "ctxcol.noCollection": "Nothing on the shelf yet.",
   "ctxcol.collModels": "{n} models",
   "ctxcol.collPainted": "{n} painted",
@@ -70,12 +70,8 @@ export const en = {
   "ctxcol.noSources": "No sources on the active snapshot.",
   "ctxcol.localOverrides": "Local overrides",
   "ctxcol.overridesMeta": "rules you have corrected yourself",
-  "ctxcol.doc.kind": "docs",
-  "ctxcol.doc.design": "Design document",
-  "ctxcol.doc.modelling": "Modelling notes",
-  "ctxcol.doc.battleSim": "Battle simulator",
-  "ctxcol.doc.plugins": "Plugin reference",
   "ctxcol.doc.licence": "Licence",
+  "ctxcol.allRights": "All rights reserved",
   "ctxcol.openSheet": "Open the context column",
 
   // shell: command palette
@@ -1983,7 +1979,6 @@ export const en = {
   "data.fetch.hint.cli": "The CLI import also works offline once the files are on disk:",
   "data.fetch.wahapedia": "Stratagems, enhancements and rules text come from a mirror of Wahapedia’s export. Set the URL below, or build a snapshot with the CLI:",
   "data.fetch.wahapediaMirrored": "Powered by Wahapedia (https://wahapedia.ru).",
-  "data.fetch.readme": "README: running the CLI import",
   "data.attribution": "Attribution",
   "data.attribution.intro": "Sources of the active snapshot. Keep these credits when you share results built on this data.",
   "data.attribution.none": "No active snapshot.",
@@ -2091,7 +2086,6 @@ export const en = {
   "about.stat.bundleTitle": "Gzipped JavaScript and CSS served to a visitor.",
   "about.stat.dataShippedTitle": "No Games Workshop data is bundled with the app.",
   "about.stat.devBuild": "dev build",
-  "about.repoLink": "Source on GitHub",
 
   // armies: arsenal tab
   "roster.tab.arsenal": "Arsenal",

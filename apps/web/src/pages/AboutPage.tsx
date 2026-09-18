@@ -6,7 +6,7 @@ import { THANKS, thanksSite } from "../lib/thanks";
 import { gameSystem, manifest } from "@grimstat/game-40k-11e";
 import { host } from "../plugin";
 import { hrefFor } from "../router";
-import { PageHeader, REPO_URL } from "../components/shell";
+import { PageHeader } from "../components/shell";
 
 /**
  * Where a player can support the work. The app is free and nothing changes with a donation, so
@@ -171,9 +171,6 @@ export function AboutPage() {
           </ul>
           <p className="about-links">
             <a href={hrefFor("data")}>{t("about.getDataLink")}</a>
-            <a href={REPO_URL} target="_blank" rel="noreferrer">
-              {t("about.repoLink")}
-            </a>
           </p>
         </section>
 

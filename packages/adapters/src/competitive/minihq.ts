@@ -21,7 +21,7 @@ export const MINIHQ = {
   /** The platform's id for Warhammer 40,000 in its game-system filter. */
   gameSystem40k: "1",
   pageSize: 48,
-  userAgent: "Grimstat/0.1 (local-first Warhammer 40,000 statistics tool; +https://github.com/N041M/Grimstat)",
+  userAgent: "Grimstat/0.1 (local-first Warhammer 40,000 statistics tool; +https://grimstat.com)",
   attribution: "Army lists published by their players and tournament organisers on MiniHeadQuarters (miniheadquarters.com)",
 } as const;
 

@@ -151,12 +151,11 @@ Checklist for that day:
 - The repository is private. Actions on a private repository get 2,000 minutes a month rather than
   unlimited. CI plus the two weekly crawls fit, and the Pages workflow is deleted.
 - `grimstat-wahapedia` and `grimstat-corpus` stay public. The app fetches raw files from them.
-- The crawler's user agent in `packages/adapters/src/competitive/minihq.ts` names the GitHub
-  repository. It names the website instead.
+- The crawler's user agent names the website (done 18 Sep 2026).
 - The README's line about running the source locally to audit it is no longer true. The site's
   privacy page says what the server holds instead, which is the list under "What syncs".
-- The About page links to the repository under "Getting data" (`REPO_URL` in the shell). That
-  link goes, or points at the website. The "version" line keeps the commit id.
+- Nothing in the app links to the repository any more (done 18 Sep 2026). The About page's context
+  column names the website and the licence. The "version" line keeps the commit id.
 - The Ko-fi line is on the About page since 18 Sep 2026, behind `VITE_STORE_BUILD`, which a phone
   store build sets to leave it out.
 

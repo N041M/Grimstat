@@ -12,7 +12,6 @@ import { PanelHead, PillChip, ProportionBar } from "../kit";
 import { t, type I18nKey } from "../../i18n";
 
 export const CLI_IMPORT_COMMAND = "pnpm cli import --system wh40k-11e --out data/snapshots";
-export const README_URL = "https://github.com/N041M/Grimstat#getting-started";
 const SETTING_KEY = "data.fetch.selection";
 const FRESHNESS_KEY = "data.fetch.freshness";
 /** A check older than this is made again when the panel opens; a fetch refreshes it for free. */
@@ -471,9 +470,6 @@ export const FetchSources = forwardRef<FetchSourcesHandle>(function FetchSources
             <button type="button" onClick={() => dispatch({ type: "reset" })}>
               {t("common.close")}
             </button>
-            <a href={README_URL} target="_blank" rel="noreferrer">
-              {t("data.fetch.readme")}
-            </a>
           </div>
           <details className="cli-details">
             <summary>{t("data.cli")}</summary>

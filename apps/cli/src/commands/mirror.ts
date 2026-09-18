@@ -17,7 +17,7 @@ import { SOURCES, WAHAPEDIA_TABLES, fetchSource, wahapediaUrlFor, type FetchLike
  * directly downloaded one. Nothing is rewritten on the way through.
  */
 
-const UA = "Grimstat/0.1 (local-first Warhammer 40,000 statistics tool; +https://github.com/N041M/Grimstat)";
+const UA = "Grimstat/0.1 (local-first Warhammer 40,000 statistics tool; +https://grimstat.com)";
 
 /** The editions Wahapedia publishes an export for. */
 export const MIRRORED_SYSTEMS: string[] = ["wh40k-11e", "wh40k-10e"];
@@ -146,7 +146,7 @@ repeated in every copy of this dataset.
 ## How it is refreshed
 
 Weekly, by a workflow that runs \`pnpm cli mirror\` from
-[Grimstat](https://github.com/N041M/Grimstat) and pushes the result here. The workflow can sit in
+[Grimstat](https://grimstat.com) and pushes the result here. The workflow can sit in
 either repository; nothing in this one is written by hand.
 `;
 }
