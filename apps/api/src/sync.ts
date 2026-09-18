@@ -118,7 +118,9 @@ export async function sync(deps: Deps, userId: string, req: SyncRequest): Promis
   if (winners.length) {
     const size = await deps.db.first<{ n: number }>("SELECT COALESCE(SUM(LENGTH(body)), 0) AS n FROM records WHERE user_id = ?", userId);
     const added = winners.reduce((n, w) => n + w.bytes, 0);
-    if ((size?.n ?? 0) + added > SYNC_MAX_ACCOUNT_BYTES) throw new SyncError(413, `This account has reached its ${Math.round(SYNC_MAX_ACCOUNT_BYTES / 1024 / 1024)} MB of synced data.`);
+    // A full account is not a record too large, and the device treats the two differently: a
+    // record too large is set aside, a full account is waited out.
+    if ((size?.n ?? 0) + added > SYNC_MAX_ACCOUNT_BYTES) throw new SyncError(507, `This account has reached its ${Math.round(SYNC_MAX_ACCOUNT_BYTES / 1024 / 1024)} MB of synced data. Delete an army or a game you no longer need, and sync again.`);
     const counter = await deps.db.first<{ seq: number }>("UPDATE users SET seq = seq + ? WHERE id = ? RETURNING seq", winners.length, userId);
     if (!counter) throw new SyncError(401, "This account no longer exists.");
     let seq = counter.seq - winners.length;

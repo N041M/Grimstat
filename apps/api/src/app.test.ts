@@ -210,7 +210,7 @@ describe("sync", () => {
     const big = { store: "games", id: "g", revision: 0, updatedAt: NOW, body: { id: "g", log: "x".repeat(300 * 1024) } };
     expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [big] }, token)).status).toBe(413);
     const changes = Array.from({ length: 90 }, (_, i) => ({ store: "games", id: `g${i}`, revision: 0, updatedAt: NOW, body: { id: `g${i}`, log: "x".repeat(240 * 1024) } }));
-    expect((await h.json("POST", "/api/sync", { cursor: 0, changes }, token)).status).toBe(413);
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes }, token)).status).toBe(507);
     expect(await h.deps.db.all("SELECT id FROM records")).toEqual([]);
   });
 

@@ -169,7 +169,9 @@ export async function runSync({ db, fetchImpl, token, now = () => new Date() }: 
       res = await api<SyncResponse>(fetchImpl, "POST", "/api/sync", { cursor, changes }, token);
     } catch (e) {
       // Too large: a batch is halved and tried again; a single record is set aside for good,
-      // because it would be refused every time and would block everything behind it.
+      // because it would be refused every time and would block everything behind it. A full
+      // account answers 507 instead and is not caught here: nothing is set aside, and the round
+      // fails and is tried again later, once something has been deleted.
       if (!(e instanceof ApiError) || e.status !== 413 || changes.length === 0) throw e;
       if (changes.length > 1) {
         limit = Math.max(1, Math.floor(changes.length / 2));
