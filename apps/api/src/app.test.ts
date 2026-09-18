@@ -209,9 +209,11 @@ describe("sync", () => {
   it("refuses a record over the size limit and an account over its total", async () => {
     const big = { store: "games", id: "g", revision: 0, updatedAt: NOW, body: { id: "g", log: "x".repeat(300 * 1024) } };
     expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [big] }, token)).status).toBe(413);
-    const changes = Array.from({ length: 90 }, (_, i) => ({ store: "games", id: `g${i}`, revision: 0, updatedAt: NOW, body: { id: `g${i}`, log: "x".repeat(240 * 1024) } }));
-    expect((await h.json("POST", "/api/sync", { cursor: 0, changes }, token)).status).toBe(507);
-    expect(await h.deps.db.all("SELECT id FROM records")).toEqual([]);
+    // Two requests of about 10 MB each: the first fits, the second would take the account past 20 MB.
+    const batch = (k: number) => Array.from({ length: 45 }, (_, i) => ({ store: "games", id: `g${k}-${i}`, revision: 0, updatedAt: NOW, body: { id: `g${k}-${i}`, log: "x".repeat(240 * 1024) } }));
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(1) }, token)).status).toBe(200);
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: batch(2) }, token)).status).toBe(507);
+    expect((await h.deps.db.all("SELECT id FROM records")).length).toBe(45);
   });
 
   it("pages a long pull", async () => {
