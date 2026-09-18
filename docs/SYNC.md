@@ -310,6 +310,37 @@ Setup before the first deploy of it, with wrangler signed in to the Cloudflare a
    Until the domain is verified, Resend only delivers to the account's own address.
 4. The deploy token needs `Account / D1 / Edit` as well as the Workers permissions.
 
+### What protects the server (18 Sep 2026)
+
+The API is reachable by anyone, as an API a browser calls has to be. What stands between a
+request and the data, in the order a request meets it:
+
+- **Headers on every answer.** No caching, no framing, no sniffing, no referrer, and a content
+  policy that allows nothing to run. `secureHeaders` in `apps/api/src/app.ts`.
+- **An origin check** on every request that changes something. A browser names the site a request
+  came from, and one from any site but the app's own is refused. Another website cannot make a
+  visitor's browser spend this server's sign-in emails or fill its tables.
+- **Rate limits per network address**, per kind of request, per minute: five sign-in requests,
+  twenty link requests, a hundred and twenty of everything else. On Cloudflare these are the
+  platform's rate-limit bindings, declared in `wrangler.jsonc`. On Node they are windows in memory.
+- **Body size limits** before anything is read: 4 KB for sign-in, 32 KB for a link, 12 MB for a
+  sync request.
+- **Sign-in limits** on top: five emails an hour per address, twenty per network address, ninety
+  a day in all. Codes and session tokens are 256 random bits stored as hashes. A code works once
+  and for fifteen minutes. A session lasts a year, ends after ninety idle days, and can be signed
+  out per device. A token travels in a header, never a cookie.
+- **Every query is bound to the signed-in user** and every value is a parameter. A record's body
+  must carry the id it is stored under. Records are capped at 256 KB, accounts at 20 MB, requests
+  at 200 changes. Anonymous links are capped at 16 KB each and five hundred a day.
+- **A nightly purge** removes used codes, expired links and idle sessions. On Node it runs hourly.
+- **A backup file never carries the session.** `exportAll` leaves out every `account.` and `sync.`
+  setting, and `importAll` drops them from a file that has them.
+- **The free tier fails closed.** Past its daily limit the database refuses work, and the server
+  answers with the time it resumes rather than a bill.
+
+Not yet in place: Turnstile on sign-in, and HSTS, which is a switch under SSL/TLS, Edge
+Certificates in the Cloudflare dashboard and belongs on once the site has run on HTTPS for a while.
+
 ## Phase 3 — profiles and share pages
 
 A handle is optional and chosen on the Profile page, three to twenty characters, letters, digits and

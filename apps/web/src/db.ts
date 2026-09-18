@@ -658,8 +658,18 @@ export interface ExportBundle {
   };
 }
 
+/**
+ * Settings that belong to this device and its account, and never to a backup file. The session
+ * token is the one that matters: a backup is something a player can hand to anybody, and it must
+ * not sign that person in. The sync cursor and last-sync time describe this device's conversation
+ * with the server and mean nothing anywhere else.
+ */
+export const DEVICE_SETTING_PREFIXES = ["account.", "sync."] as const;
+export const isDeviceSetting = (key: string): boolean => DEVICE_SETTING_PREFIXES.some((p) => key.startsWith(p));
+
 export async function exportAll(): Promise<ExportBundle> {
-  const [snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection, games, rosterVersions] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray(), db.terrainLayouts.toArray(), db.publishedLists.toArray(), db.unitPresets.toArray(), db.collection.toArray(), db.games.toArray(), db.rosterVersions.toArray()]);
+  const [snapshots, scenarios, layouts, allSettings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection, games, rosterVersions] = await Promise.all([db.snapshots.toArray(), db.scenarios.toArray(), db.layouts.toArray(), db.settings.toArray(), db.rosters.toArray(), db.overrides.toArray(), db.terrainLayouts.toArray(), db.publishedLists.toArray(), db.unitPresets.toArray(), db.collection.toArray(), db.games.toArray(), db.rosterVersions.toArray()]);
+  const settings = allSettings.filter((s) => !isDeviceSetting(s.key));
   return { format: "grimstat-export", version: 1, exportedAt: new Date().toISOString(), stores: { snapshots, scenarios, layouts, settings, rosters, overrides, terrainLayouts, publishedLists, unitPresets, collection, games, rosterVersions } };
 }
 
@@ -677,7 +687,9 @@ export async function importAll(bundle: ExportBundle): Promise<{ snapshots: numb
     if (s.snapshots.length) await db.snapshots.bulkPut(s.snapshots);
     if (s.scenarios.length) await db.scenarios.bulkPut(s.scenarios);
     if (s.layouts.length) await db.layouts.bulkPut(s.layouts);
-    if (s.settings.length) await db.settings.bulkPut(s.settings);
+    // A file made before these were left out of a backup, or edited by hand, may carry them.
+    const settings = s.settings.filter((r) => !isDeviceSetting(r.key));
+    if (settings.length) await db.settings.bulkPut(settings);
     if (rosters.length) await db.rosters.bulkPut(rosters);
     if (overrides.length) await db.overrides.bulkPut(overrides);
     if (terrainLayouts.length) await db.terrainLayouts.bulkPut(terrainLayouts);

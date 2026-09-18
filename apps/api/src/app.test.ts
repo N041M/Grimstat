@@ -9,7 +9,10 @@ import { createApp, nextReset } from "./app";
 import { LIMIT_PER_DAY, LIMIT_PER_EMAIL } from "./auth";
 import { sqliteDb, type Db } from "./db";
 import type { Deps } from "./deps";
+import { memoryLimiter, noLimiter, RATE_LIMITS, type RateLimiter } from "./limits";
+import { ANON_LIMIT_PER_DAY } from "./links";
 import { migrate } from "./node";
+import { purge } from "./purge";
 
 const APP = "https://grimstat.test";
 
@@ -22,13 +25,13 @@ interface Harness {
   signIn(email: string, device?: string): Promise<string>;
 }
 
-function harness(dbOverride?: (db: Db) => Db): Harness {
+function harness(dbOverride?: (db: Db) => Db, limiter: RateLimiter = noLimiter): Harness {
   const sqlite = new DatabaseSync(":memory:");
   migrate(sqlite);
   const mail: Harness["mail"] = [];
   const clock = { now: new Date("2026-09-18T12:00:00.000Z") };
   const base = sqliteDb(sqlite);
-  const deps: Deps = { db: dbOverride ? dbOverride(base) : base, mail: { send: async (to, _subject, text) => void mail.push({ to, text }) }, appUrl: APP, ipSalt: "salt", now: () => clock.now };
+  const deps: Deps = { db: dbOverride ? dbOverride(base) : base, mail: { send: async (to, _subject, text) => void mail.push({ to, text }) }, appUrl: APP, ipSalt: "salt", limiter, now: () => clock.now };
   const app = createApp(deps);
   const h: Harness = {
     deps,
@@ -194,16 +197,16 @@ describe("sync", () => {
   });
 
   it("refuses a record over the size limit and an account over its total", async () => {
-    const big = { store: "games", id: "g", revision: 0, updatedAt: NOW, body: { log: "x".repeat(300 * 1024) } };
+    const big = { store: "games", id: "g", revision: 0, updatedAt: NOW, body: { id: "g", log: "x".repeat(300 * 1024) } };
     expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [big] }, token)).status).toBe(413);
-    const changes = Array.from({ length: 90 }, (_, i) => ({ store: "games", id: `g${i}`, revision: 0, updatedAt: NOW, body: { log: "x".repeat(240 * 1024) } }));
+    const changes = Array.from({ length: 90 }, (_, i) => ({ store: "games", id: `g${i}`, revision: 0, updatedAt: NOW, body: { id: `g${i}`, log: "x".repeat(240 * 1024) } }));
     expect((await h.json("POST", "/api/sync", { cursor: 0, changes }, token)).status).toBe(413);
     expect(await h.deps.db.all("SELECT id FROM records")).toEqual([]);
   });
 
   it("pages a long pull", async () => {
     const changes = Array.from({ length: 200 }, (_, i) => ({ store: "collection", id: `c${i}`, revision: 0, updatedAt: NOW, body: { owned: i } }));
-    for (let k = 0; k < 3; k++) await h.json("POST", "/api/sync", { cursor: 0, changes: changes.map((c) => ({ ...c, id: `${k}-${c.id}` })) }, token);
+    for (let k = 0; k < 3; k++) await h.json("POST", "/api/sync", { cursor: 0, changes: changes.map((c) => ({ ...c, id: `${k}-${c.id}`, body: { ...c.body, id: `${k}-${c.id}` } })) }, token);
     const page = await h.json<{ cursor: number; changes: unknown[]; more: boolean }>("POST", "/api/sync", { cursor: 0, changes: [] }, token);
     expect(page.body.changes).toHaveLength(SYNC_PAGE);
     expect(page.body.more).toBe(true);
@@ -247,5 +250,93 @@ describe("short links", () => {
     const res = await h.app.request(`/l/${made.body.id}`);
     expect(res.headers.get("location")).toBe(`${APP}/#/armies?r=xyz`);
     expect((await h.app.request("/l/nothere1")).status).toBe(404);
+  });
+});
+
+describe("the gates in front of the routes", () => {
+  it("refuses a state-changing request that a browser sends from another site", async () => {
+    const h = harness();
+    expect((await h.json("POST", "/api/auth/start", { email: "a@example.com" }, undefined, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await h.json("POST", "/api/auth/start", { email: "a@example.com" }, undefined, { "sec-fetch-site": "cross-site" })).status).toBe(403);
+    expect((await h.json("POST", "/api/auth/start", { email: "a@example.com" }, undefined, { origin: APP, "sec-fetch-site": "same-origin" })).status).toBe(200);
+    // A read from anywhere is fine; it needs a token to say anything.
+    expect((await h.json("GET", "/api/health", undefined, undefined, { origin: "https://evil.example" })).status).toBe(200);
+  });
+
+  it("stops an address that asks too often, per kind of request", async () => {
+    const h = harness(undefined, memoryLimiter(() => h.clock.now.getTime()));
+    for (let i = 0; i < RATE_LIMITS.auth.limit; i++) expect((await h.json("POST", "/api/auth/start", { email: `p${i}@example.com` })).status).toBe(200);
+    expect((await h.json("POST", "/api/auth/start", { email: "z@example.com" })).status).toBe(429);
+    // Another address is not affected, and a minute later the first is free again.
+    expect((await h.json("POST", "/api/auth/start", { email: "z@example.com" }, undefined, { "cf-connecting-ip": "198.51.100.9" })).status).toBe(200);
+    h.clock.now = new Date(h.clock.now.getTime() + 61_000);
+    expect((await h.json("POST", "/api/auth/start", { email: "z@example.com" })).status).toBe(200);
+  });
+
+  it("refuses a body that is too large before reading it", async () => {
+    const h = harness();
+    const res = await h.app.request("/api/auth/start", { method: "POST", headers: { "content-type": "application/json", "content-length": String(10 * 1024) }, body: JSON.stringify({ email: "x".repeat(10 * 1024) }) });
+    expect(res.status).toBe(413);
+  });
+
+  it("answers with headers that keep a response out of caches and frames", async () => {
+    const h = harness();
+    const res = await h.app.request("/api/health");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");
+  });
+
+  it("refuses a record whose body names a different id", async () => {
+    const h = harness();
+    const token = await h.signIn("a@example.com");
+    const res = await h.json<{ issues: string[] }>("POST", "/api/sync", { cursor: 0, changes: [{ store: "rosters", id: "r1", updatedAt: NOW, body: { id: "r2", name: "x" } }] }, token);
+    expect(res.status).toBe(400);
+    const settings = await h.json("POST", "/api/sync", { cursor: 0, changes: [{ store: "settings", id: "data.fetch.wahapediaMirror", updatedAt: NOW, body: { key: "data.fetch.wahapediaMirror", value: "/w/" } }] }, token);
+    expect(settings.status).toBe(200);
+  });
+
+  it("ends a session that has not been used for ninety days", async () => {
+    const h = harness();
+    const token = await h.signIn("a@example.com");
+    h.clock.now = new Date("2026-12-10T12:00:00.000Z");
+    expect((await h.json("GET", "/api/me", undefined, token)).status).toBe(200);
+    h.clock.now = new Date("2027-03-15T12:00:00.000Z");
+    expect((await h.json("GET", "/api/me", undefined, token)).status).toBe(401);
+  });
+
+  it("caps the links strangers can make in a day", async () => {
+    const h = harness();
+    for (let i = 0; i < ANON_LIMIT_PER_DAY; i++) await h.deps.db.run("INSERT INTO links (id, user_id, ip_hash, kind, body, created_at, expires_at) VALUES (?, NULL, 'x', 'scenario', 'b', ?, ?)", `l${i}`, NOW, "2027-01-01T00:00:00.000Z");
+    expect((await h.json("POST", "/api/links", { kind: "scenario", token: "abc" })).status).toBe(503);
+    const token = await h.signIn("a@example.com");
+    expect((await h.json("POST", "/api/links", { kind: "scenario", token: "abc" }, token)).status).toBe(200);
+  });
+});
+
+describe("the purge", () => {
+  it("removes what has expired and keeps what is live", async () => {
+    const h = harness();
+    const live = await h.signIn("a@example.com", "live");
+    await h.signIn("a@example.com", "idle");
+    await h.json("POST", "/api/links", { kind: "scenario", token: "anon" });
+    const kept = await h.json<{ id: string }>("POST", "/api/links", { kind: "roster", token: "mine" }, live);
+
+    // Two days on: the codes are gone, the idle device is still within ninety days.
+    h.clock.now = new Date("2026-09-20T12:00:00.000Z");
+    await purge(h.deps);
+    expect(await h.deps.db.all("SELECT * FROM logins")).toEqual([]);
+    expect((await h.deps.db.all("SELECT * FROM sessions")).length).toBe(2);
+
+    // The live device checks in in November. By January the idle one, last seen in September, and
+    // the anonymous link, which lasted ninety days, are gone, and the live one is not.
+    h.clock.now = new Date("2026-11-15T12:00:00.000Z");
+    expect((await h.json("GET", "/api/me", undefined, live)).status).toBe(200);
+    h.clock.now = new Date("2027-01-01T12:00:00.000Z");
+    await purge(h.deps);
+    expect((await h.deps.db.all<{ device_name: string }>("SELECT device_name FROM sessions")).map((r) => r.device_name)).toEqual(["live"]);
+    expect((await h.deps.db.all<{ id: string }>("SELECT id FROM links")).map((r) => r.id)).toEqual([kept.body.id]);
   });
 });

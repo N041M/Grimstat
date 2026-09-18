@@ -252,6 +252,22 @@ describe("the downloaded files", () => {
 });
 
 describe("the backup bundle", () => {
+  it("never carries the device's session or its sync bookkeeping", async () => {
+    await db.settings.bulkPut([
+      { key: "account.session", value: { token: "secret" } },
+      { key: "sync.cursor", value: 12 },
+      { key: "data.fetch.wahapediaMirror", value: "/w/" },
+    ]);
+    const bundle = await exportAll();
+    expect(bundle.stores.settings.map((s) => s.key)).toEqual(["data.fetch.wahapediaMirror"]);
+
+    resetTables();
+    await importAll({ ...bundle, stores: { ...bundle.stores, settings: [...bundle.stores.settings, { key: "account.session", value: { token: "planted" } }] } });
+    expect(await db.settings.get("account.session")).toBeUndefined();
+    expect((await db.settings.get("data.fetch.wahapediaMirror"))?.value).toBe("/w/");
+  });
+
+
   it("carries every store but the ones the app can produce again", async () => {
     // `publishedResolved` is worked out from the lists and the snapshot. `sourceFiles` holds the
     // downloads the snapshots were built from, which are larger than everything else here. The

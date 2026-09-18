@@ -11,6 +11,7 @@
  */
 import { hashIp, randomToken, sha256 } from "./crypto";
 import { iso, plusMs, type Deps } from "./deps";
+import { SESSION_IDLE_DAYS } from "./purge";
 
 const HOUR = 60 * 60 * 1000;
 const CODE_LIFE = 15 * 60 * 1000;
@@ -96,6 +97,11 @@ export async function sessionFor(deps: Deps, token: string | undefined): Promise
     hash,
   );
   if (!row || row.expires_at < iso(now)) return undefined;
+  // A device not seen for ninety days signs in again. A token found on an old laptop is worth less.
+  if (row.last_seen_at < iso(new Date(now.getTime() - SESSION_IDLE_DAYS * 24 * HOUR))) {
+    await deps.db.run("DELETE FROM sessions WHERE token_hash = ?", hash);
+    return undefined;
+  }
   if (row.last_seen_at < iso(new Date(now.getTime() - HOUR))) await deps.db.run("UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?", iso(now), hash);
   return { id: row.id, user: { id: row.user_id, email: row.email, handle: row.handle } };
 }

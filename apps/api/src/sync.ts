@@ -17,6 +17,9 @@ import { iso, type Deps } from "./deps";
 
 const SKEW = 5 * 60 * 1000;
 
+/** The field each store is keyed by. A body stored under one id must carry that id, or a device would write it under another. */
+export const keyField = (store: string): "key" | "id" => (store === "settings" || store === "overrides" ? "key" : "id");
+
 export const Change = z
   .object({
     store: z.enum(SYNC_STORES),
@@ -26,7 +29,8 @@ export const Change = z
     deletedAt: z.string().datetime().optional(),
     body: z.record(z.unknown()).optional(),
   })
-  .refine((c) => (c.deletedAt ? c.body === undefined : c.body !== undefined), { message: "a change carries a body or a deletedAt, not both and not neither" });
+  .refine((c) => (c.deletedAt ? c.body === undefined : c.body !== undefined), { message: "a change carries a body or a deletedAt, not both and not neither" })
+  .refine((c) => !c.body || c.body[keyField(c.store)] === c.id, { message: "the body must carry the id it is stored under" });
 export type Change = z.infer<typeof Change>;
 
 export const SyncRequest = z.object({

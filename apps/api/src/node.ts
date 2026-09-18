@@ -14,7 +14,9 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { sqliteDb } from "./db";
-import type { Mailer } from "./deps";
+import type { Deps, Mailer } from "./deps";
+import { memoryLimiter } from "./limits";
+import { purge } from "./purge";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -42,12 +44,17 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const sqlite = new DatabaseSync(join(dataDir, "api.sqlite"));
   migrate(sqlite);
   const port = Number(process.env.PORT ?? 8787);
-  const app = createApp({
+  const deps: Deps = {
     db: sqliteDb(sqlite),
     mail: terminalMailer,
     appUrl: process.env.APP_URL ?? "http://localhost:5173",
+    // The dev server may sit on any port, and the browser names it as the origin.
+    extraOrigins: Array.from({ length: 20 }, (_, i) => `http://localhost:${5173 + i}`),
     ipSalt: "local",
+    limiter: memoryLimiter(),
     now: () => new Date(),
-  });
+  };
+  const app = createApp(deps);
+  setInterval(() => void purge(deps), 60 * 60 * 1000).unref();
   serve({ fetch: app.fetch, port }, () => process.stdout.write(`grimstat api on http://localhost:${port}\n`));
 }

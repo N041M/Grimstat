@@ -8,7 +8,7 @@ import "fake-indexeddb/auto";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Roster } from "@grimstat/schema";
-import { createApp, sqliteDb, type Deps } from "@grimstat/api";
+import { createApp, noLimiter, sqliteDb, type Deps } from "@grimstat/api";
 import { migrate } from "@grimstat/api/node";
 import { GrimstatDb } from "../db";
 import { createAccount, holdsAnotherAccount, SignInDeclined } from "./accountService";
@@ -35,7 +35,7 @@ function server() {
   const sqlite = new DatabaseSync(":memory:");
   migrate(sqlite);
   const mail: string[] = [];
-  const deps: Deps = { db: sqliteDb(sqlite), mail: { send: async (_to, _s, text) => void mail.push(text) }, appUrl: "https://grimstat.test", ipSalt: "salt", now: () => new Date() };
+  const deps: Deps = { db: sqliteDb(sqlite), mail: { send: async (_to, _s, text) => void mail.push(text) }, appUrl: "https://grimstat.test", ipSalt: "salt", limiter: noLimiter, now: () => new Date() };
   const app = createApp(deps);
   const fetchImpl: FetchLike = async (input, init) => app.request(input, init);
   const signIn = async (email: string): Promise<string> => {
