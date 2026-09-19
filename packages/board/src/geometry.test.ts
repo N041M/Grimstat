@@ -213,15 +213,18 @@ describe("coherency", () => {
     expect(report.split).toBe(true);
   });
 
-  it("asks for two neighbours once the unit is six strong", () => {
-    // A chain of six at 2.5" centres: adjacent bases are 1.24" apart, the next one along 3.74",
-    // so the two end models have exactly one neighbour each.
-    const chain = [0, 2.5, 5, 7.5, 10, 12.5].map((x) => trooper(x, 0));
-    const report = coherency(chain);
-    expect(report.required).toBe(2);
-    expect(report.lonely).toEqual([0, 5]);
+  it("asks for two neighbours once the unit is seven strong", () => {
+    // A chain at 2.5" centres: adjacent bases are 1.24" apart, the next one along 3.74", so the two
+    // end models have exactly one neighbour each. Six of them is a coherent unit; seven is not.
+    const chain = (n: number) => Array.from({ length: n }, (_, i) => trooper(i * 2.5, 0));
+    const six = coherency(chain(6));
+    expect(six.required).toBe(1);
+    expect(six.ok).toBe(true);
+    const seven = coherency(chain(7));
+    expect(seven.required).toBe(2);
+    expect(seven.lonely).toEqual([0, 6]);
     // Closed into a ring, everyone has two.
-    const ring = [0, 60, 120, 180, 240, 300].map((deg) => trooper(2 * Math.cos((deg * Math.PI) / 180), 2 * Math.sin((deg * Math.PI) / 180)));
+    const ring = [0, 51, 103, 154, 206, 257, 309].map((deg) => trooper(2.2 * Math.cos((deg * Math.PI) / 180), 2.2 * Math.sin((deg * Math.PI) / 180)));
     expect(coherency(ring).ok).toBe(true);
   });
 

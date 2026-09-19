@@ -82,6 +82,17 @@ export function sqliteDb(sqlite: SqliteLike): Db {
 }
 
 /**
+ * Sets an account's `bytes` to what its rows actually hold. Takes the user id twice.
+ *
+ * The counter is kept up to date by the sync endpoint so a push reads one row instead of every
+ * record, which means it can drift when a write fails after the counter has moved. This puts it
+ * back. The nightly purge runs it too, as it compresses the last of the uncompressed bodies.
+ */
+export const RECOUNT_BYTES = `UPDATE users
+     SET bytes = (SELECT COALESCE(SUM(LENGTH(body_gz)), 0) + COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM records WHERE user_id = ?)
+   WHERE id = ?`;
+
+/**
  * Whether an error is the database refusing work for the day rather than something broken.
  * Cloudflare's free tier answers a query past its daily limit with an error, and the server turns
  * that into the pause the app knows how to wait out.

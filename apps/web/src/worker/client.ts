@@ -54,6 +54,8 @@ function failureDetail(e: Event): string {
 interface Interrupt {
   supersede(): void;
   reject(e: Error): void;
+  /** When the call went out, so the watchdog below can find the oldest one still waiting. */
+  readonly startedAt: number;
 }
 
 /** What the race in `call` yields when the worker under it was replaced. */
@@ -68,7 +70,6 @@ export class SimClient {
   private worker: Worker | undefined;
   private proxy: Comlink.Remote<SimWorkerApi> | undefined;
   private seq = 0;
-  private busySince: number | undefined;
   /** The snapshot keys the worker reported holding after the last hand-over. */
   private cachedSnapshots = new Set<string>();
   /** The calls in flight, so `cancel()`, a respawn and a worker failure can settle them. */
@@ -100,7 +101,6 @@ export class SimClient {
     this.proxy?.[Comlink.releaseProxy]();
     this.worker = undefined;
     this.proxy = undefined;
-    this.busySince = undefined;
     this.cachedSnapshots.clear();
     for (const p of waiting) p.supersede();
   }
@@ -125,13 +125,18 @@ export class SimClient {
    */
   private async call<T>(snapshot: Snapshot | undefined, fn: (proxy: Comlink.Remote<SimWorkerApi>, ref: SnapshotRef) => Promise<T>): Promise<Sequenced<T>> {
     const seq = ++this.seq;
-    if (this.busySince !== undefined && performance.now() - this.busySince > STALE_KILL_MS) this.respawn();
+    // The oldest call still waiting, not the most recent one to start. Timing the most recent meant
+    // that any later call finishing cleared the clock, so a worker wedged on one run was never
+    // replaced as long as the player kept editing.
+    const now = performance.now();
+    let oldest = Infinity;
+    for (const p of this.pending) oldest = Math.min(oldest, p.startedAt);
+    if (oldest !== Infinity && now - oldest > STALE_KILL_MS) this.respawn();
     const proxy = this.ensure();
     const worker = this.worker;
-    this.busySince = performance.now();
-    let interrupt: Interrupt = { supersede: () => undefined, reject: () => undefined };
+    let interrupt: Interrupt = { supersede: () => undefined, reject: () => undefined, startedAt: now };
     const interrupted = new Promise<typeof SUPERSEDED>((resolve, reject) => {
-      interrupt = { supersede: () => resolve(SUPERSEDED), reject };
+      interrupt = { supersede: () => resolve(SUPERSEDED), reject, startedAt: now };
     });
     this.pending.add(interrupt);
     try {
@@ -152,7 +157,6 @@ export class SimClient {
       return { seq, outcome: seq === this.seq ? outcome : undefined };
     } finally {
       this.pending.delete(interrupt);
-      if (this.worker === worker) this.busySince = undefined;
     }
   }
 

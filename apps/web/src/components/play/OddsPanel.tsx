@@ -97,12 +97,16 @@ export function OddsPanel({ ctx }: { ctx: PlayContext }) {
   const fresh = !!scenario && task.ran?.[0] === scenario;
   const result = fresh ? task.result : undefined;
 
-  // The apply field starts at the expected damage rounded to a whole wound; the player overwrites it
-  // with what the dice actually did.
+  // The apply field starts at the expected damage rounded to a whole wound, and the player
+  // overwrites it with what the dice actually did. The estimate is filled in once per attack, so a
+  // solve that lands while the player is typing does not take the number back off them.
   const [applyText, setApplyText] = useState("");
+  const filledFor = useRef<Scenario | undefined>(undefined);
   useEffect(() => {
-    if (result) setApplyText(String(Math.max(0, Math.round(result.expectedDamage))));
-  }, [result]);
+    if (!result || filledFor.current === scenario) return;
+    filledFor.current = scenario;
+    setApplyText(String(Math.max(0, Math.round(result.expectedDamage))));
+  }, [result, scenario]);
   const applyWounds = Math.max(0, Math.floor(Number(applyText) || 0));
 
   const left = foe?.woundsLeft ?? 0;
@@ -193,7 +197,16 @@ export function OddsPanel({ ctx }: { ctx: PlayContext }) {
       <div className="odds-apply">
         <label className="odds-field">
           <span className="odds-label">{t("odds.applyLabel")}</span>
-          <input type="number" inputMode="numeric" min={0} value={applyText} onChange={(e) => setApplyText(e.target.value)} />
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={applyText}
+            onChange={(e) => {
+              filledFor.current = scenario;
+              setApplyText(e.target.value);
+            }}
+          />
         </label>
         <button type="button" className="primary" disabled={!foe || applyWounds <= 0} onClick={apply}>
           {t("odds.apply", { name: foe?.foe.name ?? "" })}

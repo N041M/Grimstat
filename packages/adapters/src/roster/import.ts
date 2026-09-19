@@ -4,6 +4,10 @@ import { normaliseName } from "@grimstat/snapshot";
 import { companionsOf, compositionBounds, profileBounds } from "@grimstat/resolver";
 import {
   MAX_COPIES,
+  MAX_MODELS,
+  beforeTrailingGroup,
+  modelCount,
+  trimEndOf,
   POINTS_BY_SIZE,
   RosterImportContext,
   SIZE_BY_LABEL,
@@ -32,7 +36,14 @@ import {
  */
 
 const SECTION_NAMES = new Set(["characters", "battleline", "dedicated transports", "other datasheets", "allied units", "epic heroes", "infantry", "mounted", "vehicles", "monsters", "fortifications", "swarms", "beasts", "aircraft"]);
-const SIZES = "Combat Patrol|Incursion|Strike Force|Onslaught";
+/**
+ * The battle sizes, in the spellings the app writes them in.
+ *
+ * Only the French names are here beside the English ones, because those are the two the lists seen
+ * so far are written in and a name guessed wrong would be a battle size read as something it is
+ * not. A size that is not listed falls back to the default, as it always did.
+ */
+const SIZES = "Combat Patrol|Patrouille de Combat|Incursion|Strike Force|Force de Frappe|Onslaught";
 /** Points as `(2,000 points)`, `[2000pts]` or nothing at all. */
 const LIMIT = String.raw`(?:[([]\s*(\d[\d,]*)\s*(?:points?|pts?)\s*[)\]]?)?`;
 /** `Strike Force (2,000 points)`, the GW app's battle-size line. */
@@ -130,6 +141,8 @@ interface TextUnit {
   ignored?: string[];
   /** The unit took its part in an attached-unit block, as the host or as a rider. */
   inBlock?: boolean;
+  /** What the unit said it was attached as, whether or not a heading put it in a block. */
+  declaredRole?: "leader" | "support" | "bodyguard";
   /** New Recruit's `Char1:` prefix, used by the `+ WARLORD:` header line. */
   ref?: string;
   headerCount?: number;
@@ -298,9 +311,9 @@ export function parseUnitHeader(text: string): UnitHeader | undefined {
     const memo = costs.get(j);
     if (memo !== undefined) return memo;
     const read = (): { points: string; rest?: string } | null => {
-      const opener = text[j]!;
       const digit = (i: number): boolean => i < n && text[i]! >= "0" && text[i]! <= "9";
-      const from = opener === "(" || opener === "[" ? j + 1 : skipWs(j + 1);
+      // A space inside the bracket is allowed wherever else a cost is read, so it is allowed here.
+      const from = skipWs(j + 1);
       if (!digit(from)) return null;
       let digits = from + 1;
       while (digits < n && (digit(digits) || text[digits] === ",")) digits++;
@@ -543,6 +556,30 @@ export function parseDetSpec(text: string): DetSpec | undefined {
   return start > nameLimit ? undefined : { name: text.slice(0, start).trim() };
 }
 
+/** A trailing note that is a count of Detachment Points rather than a variant label. */
+const DP_NOTE = /\d[^)]*\bd[\u00e9e]tach/i;
+
+/** The words the exports write between two detachments on one line. */
+const DETACHMENT_JOINS = new Set(["and", "et", "und", "y", "e"]);
+
+/**
+ * Two detachment names written as one, split apart, or nothing when the text is not a pair.
+ *
+ * The parts kept are the ones the game data knows, and at least one has to be. A name that
+ * resolves as a whole never reaches here, so a detachment genuinely called "Penitents and
+ * Pilgrims" is never taken apart. A pair the app wrote half in one language and half in another
+ * gives up the half this snapshot can name rather than both of them.
+ */
+function pairedDetachments(ctx: RosterImportContext, name: string): string[] | undefined {
+  const parts = splitAtWord(name, (w) => DETACHMENT_JOINS.has(w))
+    .flatMap((p) => p.split(","))
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return undefined;
+  const known = parts.filter((p) => ctx.findDetachment(p));
+  return known.length ? known : undefined;
+}
+
 /** `Attached Unit 1` opens a block; `Attached Units` is the section heading above the blocks. */
 /**
  * The heading that introduces a block of units attached to one another, numbered once per block. The
@@ -552,12 +589,44 @@ export function parseDetSpec(text: string): DetSpec | undefined {
 const ATTACH_BLOCK = /^(?:attached\s+units?(?:\s+\d+)?|unit[ée]s?(?:\s+\d+)?\s+attach[ée]es?(?:\s+\d+)?)$/i;
 
 /**
+ * A unit's line saying which unit it joined, in the spellings the exports use.
+ *
+ * The official app writes "Leading Incubi[2]" and "Attached to Archon[1]" with no colon at all,
+ * where Grimstat's own export writes "Leads: Incubi". The `.rosz` importer already read both
+ * (`LEADER_SIDE_RE`); this one required the colon, so five of the corpus's lists came out with
+ * every leader unattached.
+ *
+ * Which words may stand without a colon is the whole difficulty. A bare "Support" opens the name
+ * of a weapon two T'au sheets carry — "Support turret" — so the words that can start a weapon's
+ * name are read as a flag only when a colon follows them.
+ */
+/** The label of an attachment declaration. English and French share the root; the role says the rest. */
+const ATTACH_AS = /^attach\w*\b/i;
+/** The role an attachment declaration names, in the spellings the app writes it in. */
+const ATTACH_ROLE = /^(?:leader|meneur|anf[\u00fcu]hrer|bodyguard|gardes?\s+du\s+corps|leibwache|support|appui|unterst[\u00fcu]tzung)\b/i;
+/** Which of the three an attachment declaration's role word is. */
+function attachRoleOf(word: string): "leader" | "support" | "bodyguard" {
+  const w = word.toLowerCase();
+  if (/^(?:bodyguard|garde|leibwache)/.test(w)) return "bodyguard";
+  if (/^(?:support|appui|unterst)/.test(w)) return "support";
+  return "leader";
+}
+
+/** The warlord flag, in the spellings the app writes it in. */
+const WARLORD = /^(?:warlord|seigneur\s+de\s+guerre|kriegsherr|se\u00f1or\s+de\s+la\s+guerra|signore\s+della\s+guerra|senhor\s+da\s+guerra)$/i;
+
+const ATTACH_FLAG = /^(?:(leads|leader\s+of|attached\s+to|supports|support\s+of|joins|joined\s+to)\s*[:\-\u2013\u2014]\s*|(leading|supporting|attached\s+to|joined\s+to)\s+)(.+)$/i;
+
+/**
  * A section heading the parser does not have the word for. The app writes the sections it lays a list
  * out in — characters, battleline, the rest — in capitals, whatever language it is set to, so a line in
  * capitals that is none of the things read before this one is one of those headings. It is only read as
  * one once the list has started, because the name of a list can be written in capitals too.
  */
-const CAPITALS = /^[^a-z]*[A-Z\u00C0-\u00DE][^a-z]*$/;
+// Written as "no lower case, and at least one upper case" rather than as two runs around a letter:
+// the two runs both matched that letter, so every capital in the line was another place to restart
+// from and a long line of capitals took seconds.
+const CAPITALS = /^(?![\s\S]*[a-z])[\s\S]*[A-Z\u00C0-\u00DE]/;
 
 /** `<label> : <value>`, the shape the app writes a unit's flags in, whatever its language calls them. */
 const LABELLED_FLAG = /^[^:0-9]{2,40}\s*:\s*(.+)$/;
@@ -569,12 +638,77 @@ export function splitList(text: string): string[] {
     .filter(Boolean);
 }
 
-/** Splits on commas that are not inside brackets, so `Foo (2 DP, X), Bar` is two parts. */
+/**
+ * Splits on commas that are not inside brackets, so `Foo (2 DP, X), Bar` is two parts.
+ *
+ * One pass with a count of how deep the brackets go. The lookahead this replaced rescanned to the
+ * end of the line at every comma, so a line of a few thousand of them took seconds.
+ */
 function splitOutsideParens(text: string): string[] {
-  return text
-    .split(/,\s*(?![^()[\]]*[)\]])/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+    else if (ch === "," && depth === 0) {
+      out.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(text.slice(start));
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * The words of a line, as the places they start and end.
+ *
+ * Every splitter below wants a fixed word with space on either side. Written as a pattern, the runs
+ * of space grow and shrink against every position they cover, which on a padded line costs the best
+ * part of a second. One pass over the line costs the line.
+ */
+function wordsOf(text: string): Array<{ from: number; to: number }> {
+  const out: Array<{ from: number; to: number }> = [];
+  let at = 0;
+  while (at < text.length) {
+    while (at < text.length && WS.test(text[at]!)) at++;
+    const from = at;
+    while (at < text.length && !WS.test(text[at]!)) at++;
+    if (at > from) out.push({ from, to: at });
+  }
+  return out;
+}
+
+/** The parts of `text` either side of every standalone `word`, with the word itself dropped. */
+function splitAtWord(text: string, word: (w: string) => boolean): string[] {
+  const out: string[] = [];
+  let start = 0;
+  for (const w of wordsOf(text)) {
+    if (w.from === 0 || !word(text.slice(w.from, w.to).toLowerCase())) continue;
+    out.push(text.slice(start, w.from));
+    start = w.to;
+  }
+  out.push(text.slice(start));
+  return out;
+}
+
+/** The parts of `text` either side of every dash standing on its own with space around it. */
+function splitAtDashes(text: string): string[] {
+  const out: string[] = [];
+  let start = 0;
+  for (let i = 1; i + 1 < text.length; i++) {
+    if (!DASHES.has(text[i]!) || !WS.test(text[i - 1]!) || !WS.test(text[i + 1]!)) continue;
+    let end = i;
+    while (end > start && WS.test(text[end - 1]!)) end--;
+    out.push(text.slice(start, end));
+    let from = i + 1;
+    while (from < text.length && WS.test(text[from]!)) from++;
+    start = from;
+    i = from;
+  }
+  out.push(text.slice(start));
+  return out;
 }
 
 /** Where one `N with …` group ends and the next begins, and the count that opens one. */
@@ -599,13 +733,15 @@ function withGroupModels(text: string): number {
  */
 export function parseWargearItems(text: string): WargearItem[] {
   const out: WargearItem[] = [];
-  for (const seg of text.trim().split(WITH_SPLIT)) {
+  for (const [at, seg] of text.trim().split(WITH_SPLIT).entries()) {
     const withCount = WITH_COUNT.exec(seg.trim());
     const n = withCount ? Number(withCount[1]) : 0;
+    // The segment is recorded so that the models carrying one of its items carry all of them.
+    const from = withCount ? { seg: at } : {};
     for (const item of splitList(seg.trim().replace(/^\d+\s+with\s+/i, ""))) {
       const m = COUNT_ITEM.exec(item);
-      if (m) out.push({ name: m[2]!.trim(), n, copies: Math.max(1, Math.min(MAX_COPIES, Number(m[1]))) });
-      else out.push({ name: item, n, copies: 1 });
+      if (m) out.push({ name: m[2]!.trim(), n, copies: Math.max(1, Math.min(MAX_COPIES, Number(m[1]))), ...from });
+      else out.push({ name: item, n, copies: 1, ...from });
     }
   }
   return out;
@@ -644,7 +780,7 @@ export function parseWargearList(text: string): string[] {
 /** A count written without the `x` that would separate it from the item: "2 Shieldbreaker missile launchers". */
 const BARE_COUNT = /^(\d+)\s+(.+)$/;
 /** The "and" a list writes between the last two entries of a wargear list. */
-const AND_JOIN = /\s+and\s+/i;
+const isAnd = (w: string): boolean => w === "and";
 /** The plural `s` a count puts on a weapon name, with three letters in front of it so short names keep theirs. */
 const SINGULAR = /(\w{3,})s$/;
 
@@ -662,7 +798,10 @@ interface ReadWeapon {
 function readWeapon(ds: Datasheet, text: string): ReadWeapon | undefined {
   const name = text.trim();
   if (!name) return undefined;
-  if (isWeaponOf(ds, normaliseName(name))) return { name, copies: 1 };
+  // Through `isWargearOf`, which is what `finishUnit` warns by. Asking only for a weapon profile
+  // left a misericordia, which the sheet prints in its loadout and gives no profile, unsplittable
+  // and then reported as unknown wargear on the same line.
+  if (isWargearOf(ds, name)) return { name, copies: 1 };
   const m = BARE_COUNT.exec(name);
   if (!m) return undefined;
   const copies = Math.max(1, Math.min(MAX_COPIES, Number(m[1])));
@@ -680,9 +819,9 @@ function readWeapon(ds: Datasheet, text: string): ReadWeapon | undefined {
  * the whole of it is not a weapon of the datasheet and each piece is.
  */
 function readWargearEntry(ds: Datasheet, text: string): ReadWeapon[] | undefined {
-  if (isWeaponOf(ds, normaliseName(text))) return undefined;
+  if (isWargearOf(ds, text)) return undefined;
   const out: ReadWeapon[] = [];
-  for (const part of text.split(AND_JOIN)) {
+  for (const part of splitAtWord(text, isAnd)) {
     const w = readWeapon(ds, part);
     if (!w) return undefined;
     out.push(w);
@@ -699,9 +838,26 @@ function readWargearEntry(ds: Datasheet, text: string): ReadWeapon[] | undefined
 function readWargear(ds: Datasheet, items: WargearItem[]): WargearItem[] {
   return items.flatMap((item) => {
     const read = readWargearEntry(ds, item.name);
-    if (!read) return [item];
-    return read.map((w) => ({ ...item, name: w.name, copies: Math.min(MAX_COPIES, (item.copies ?? 1) * w.copies) }));
+    if (read) return read.map((w) => ({ ...item, name: w.name, copies: Math.min(MAX_COPIES, (item.copies ?? 1) * w.copies) }));
+    // "Nullstone Field Generator (Aura)" — the app puts a word about the rule in brackets after the
+    // name, and the sheet names the thing without it.
+    const bare = beforeTrailingGroup(item.name, "(")?.head;
+    if (bare && isWargearOf(ds, bare)) return [{ ...item, name: bare }];
+    return [item];
   });
+}
+
+/**
+ * Adds a line's items to a group, keeping that line's `N with` segments apart from earlier lines'.
+ *
+ * `parseWargearItems` numbers the segments of the one line it was given, so two lines under one
+ * unit both start at zero. Appended as they are, "6 with Hekatarii blade, Splinter pistol" and
+ * "3 with Gladiatorial weapons" read as one segment and every model carried all three.
+ */
+function pushInto(g: RawGroup, items: readonly WargearItem[]): void {
+  let next = 0;
+  for (const held of g.items) if (held.seg !== undefined) next = Math.max(next, held.seg + 1);
+  for (const item of items) g.items.push(item.seg === undefined ? item : { ...item, seg: item.seg + next });
 }
 
 /** Points as written with thousands separators: "1,000 points". */
@@ -758,6 +914,35 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     }
   };
 
+  /**
+   * Units that said what they were attached as while standing under no heading.
+   *
+   * The app numbers its blocks from "Attached Unit 2" and writes nothing at all above the first
+   * one, so a list's first attached unit had only its own declaration to go on and came out
+   * unattached. A run of units that each declared a role is one block, and the bodyguard in it is
+   * the unit the others joined.
+   */
+  const groupDeclared = () => {
+    let run: TextUnit[] = [];
+    const settle = () => {
+      const host = run.find((t) => t.declaredRole === "bodyguard");
+      if (host && run.length > 1) {
+        host.inBlock = true;
+        for (const r of run) {
+          if (r === host) continue;
+          r.u.attachHost = { unitId: host.u.id, role: r.declaredRole === "support" ? "support" : "leader" };
+          r.inBlock = true;
+        }
+      }
+      run = [];
+    };
+    for (const t of units) {
+      if (t.declaredRole && !t.inBlock && !t.u.attachHost && !t.u.attach) run.push(t);
+      else settle();
+    }
+    settle();
+  };
+
   const closeAttachBlock = () => {
     const host = block?.host;
     if (host) {
@@ -773,7 +958,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
 
   const setFaction = (label: string): boolean => {
     // "Imperium - Ashen Wardens": the most specific keyword is the last one
-    for (const c of [label, ...label.split(/\s+[-–—]\s+/).reverse()]) {
+    for (const c of [label, ...splitAtDashes(label).reverse()]) {
       const f = ctx.findFaction(c);
       if (f) {
         ctx.factionId = f.id;
@@ -791,22 +976,39 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
    * permits it. That keeps the five dispositions out of the parser: they are rules text, and rules
    * text lives in the snapshot.
    */
-  let lastDetachment: { entry: RosterDetachment; allowed: readonly string[] } | undefined;
+  let lastDetachment: { entries: RosterDetachment[]; allowed: string[] } | undefined;
 
   /** One entry of a `Detachment:` line or header value, with its optional DP count and force disposition. */
   const addDetachmentSpec = (spec: string) => {
-    const m = parseDetSpec(spec.trim().replace(/\s*\+*$/, ""));
+    const m = parseDetSpec(trimEndOf(spec.trim(), (ch) => ch === "+" || WS.test(ch)));
     if (!m) return;
     // a trailing "(…)" is a disposition only next to a DP count; otherwise it is a variant label the snapshot ignores
     const disposition = m.dpNote || (m.dp ? m.note : undefined) || forceDisposition;
-    const label = m.name;
-    const entry = ctx.addDetachment(label, disposition);
-    const det = ctx.findDetachment(label);
-    lastDetachment = entry && det ? { entry, allowed: det.forceDispositions } : undefined;
+    // A list may take two detachments between them, and the app writes both on one line: "Cabal of
+    // Chaos and Soulforged Warpack (3 Detachment Points)". The whole line is tried first, because
+    // three detachments are themselves named "X and Y", and the halves are taken only when both of
+    // them are detachments in their own right.
+    const names = ctx.findDetachment(m.name) ? [m.name] : (pairedDetachments(ctx, m.name) ?? [m.name]);
+    // One line can name two detachments, and the disposition written under it belongs to the line
+    // rather than to whichever of them was added last. Both are kept, with the dispositions either
+    // of them allows, so the line underneath is recognised whichever it belongs to.
+    const added: RosterDetachment[] = [];
+    const allowed: string[] = [];
+    for (const label of names) {
+      const entry = ctx.addDetachment(label, disposition);
+      const det = ctx.findDetachment(label);
+      if (!entry || !det) continue;
+      added.push(entry);
+      allowed.push(...det.forceDispositions);
+    }
+    lastDetachment = added.length ? { entries: added, allowed } : undefined;
   };
 
   const applyFlag = (t: TextUnit, f: string): boolean => {
-    if (/^warlord$/i.test(f.trim())) {
+    // The app writes this in the language it is set to, and a list may put it on a line with other
+    // flags. Read only in English and only alone, it became a weapon on the model instead: sixteen
+    // of the corpus's lists carry "Seigneur de Guerre" and none of them imported a warlord.
+    if (WARLORD.test(f.trim())) {
       t.u.warlord = true;
       return true;
     }
@@ -815,18 +1017,33 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       t.u.enhancementName = enhancement.trim();
       return true;
     }
-    let m = /^(leads|leader of|attached to|supports|support of):\s*(.+)$/i.exec(f);
+    // The colon is optional, because the exports write both "Leads: Incubi" and "Leading Incubi[2]".
+    // Bare "Attached" still needs one, so that the "Attached Unit 1" heading is not read as a flag.
+    const m = ATTACH_FLAG.exec(f);
     if (m) {
-      t.u.attach = { hostName: m[2]!.trim(), role: /^support/i.test(m[1]!) ? "support" : "leader" };
+      const word = m[1] ?? m[2]!;
+      t.u.attach = { hostName: m[3]!.trim(), role: /^support/i.test(word) ? "support" : "leader" };
       return true;
     }
-    // "Attached as: Leader (Character)" — a declaration, not wargear, so it is consumed whether or
-    // not a block is open; left unconsumed it lands in the unit's weapons.
-    m = /^attached\s+as:\s*(leader|bodyguard|support)\b/i.exec(f);
-    if (m) {
-      const kind = m[1]!.toLowerCase();
+    // "Attached as: Leader (Character)", and "Attachée en tant que : Meneur (Personnage)" where the
+    // app is set to French. Both the label and the role are written in the app's language, and the
+    // role is the part that says what the line means, so the label is only asked to start with the
+    // root the languages share. A declaration is not wargear, so it is consumed whether or not a
+    // block is open; left unconsumed it lands in the unit's weapons.
+    const labelled = ATTACH_AS.test(f) ? LABELLED_FLAG.exec(f) : null;
+    const declared = labelled && ATTACH_ROLE.exec(labelled[1]!.trim());
+    if (declared) {
+      const kind = attachRoleOf(declared[0]!);
+      t.declaredRole = kind;
       if (block && kind === "bodyguard") block.host = t;
       else if (block) block.riders.push({ t, role: kind === "support" ? "support" : "leader" });
+      return true;
+    }
+    // An enhancement the app wrote with no label at all: "• Steel Font (+15 pts)". Read as wargear
+    // it lands on the model as a weapon and the army is short its points.
+    const bare = beforeTrailingGroup(f.trim(), "(") ?? beforeTrailingGroup(f.trim(), "[");
+    if (bare && /^\+?\s*\d+\s*(?:pts?|points?)$/i.test(bare.inner) && bare.head && ctx.findEnhancement(bare.head)) {
+      t.u.enhancementName = bare.head;
       return true;
     }
     return false;
@@ -872,7 +1089,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     // Thirty-two enhancements are printed with a word in brackets after the name, and the app adds one of
     // its own to say that the line is an enhancement at all, so both spellings are tried.
     const raw = m[1]!.trim();
-    const value = [raw, raw.replace(/\s*\([^)]*\)\s*$/, "").trim()].find((v) => v && ctx.findEnhancement(v));
+    const value = [raw, beforeTrailingGroup(raw, "(")?.head.trim() ?? ""].find((v) => v && ctx.findEnhancement(v));
     if (value) {
       t.u.enhancementName = value;
       return true;
@@ -885,10 +1102,11 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
    * A line that names a model: one of the unit's own, or a model carrying a datasheet of its own.
    * Returns false when the line names neither, so that the caller reads it as wargear as before.
    */
-  const addModelLine = (t: TextUnit, label: string, count: number, items: WargearItem[]): boolean => {
+  const addModelLine = (t: TextUnit, label: string, asked: number, items: WargearItem[]): boolean => {
+    const count = boundedCount(asked);
     // "4x Custodian Warden (Guardian Spear)": the brackets hold the loadout, which the dialects that
     // write it this way also list on the lines underneath, so the name in front of them is all that is read
-    const bare = label.replace(/\s*\([^()]*\)\s*$/, "").trim();
+    const bare = beforeTrailingGroup(label, "(")?.head.trim() ?? label.trim();
     const prof = ctx.modelFor(t.u.ds, label) ?? (bare === label ? undefined : ctx.modelFor(t.u.ds, bare));
     if (prof) {
       t.groups.push({ modelProfileId: prof.id, count, items });
@@ -937,6 +1155,13 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     for (const g of t.groups) if (g.implied && g.count > t.headerCount) g.count = t.headerCount;
   };
 
+  /** A model count as the line writes it, bounded, saying so when the line asked for more. */
+  const boundedCount = (raw: string | number): number => {
+    const n = modelCount(raw);
+    if (Number(raw) > MAX_MODELS) warnings.push(`Kept ${MAX_MODELS} models where the list asks for ${raw}.`);
+    return n;
+  };
+
   const startUnit = (ref: string | undefined, count: number | undefined, label: string, rest: string | undefined) => {
     const ds = ctx.matchDatasheet(label);
     if (!ds) {
@@ -964,10 +1189,10 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
         const prof = ctx.modelFor(ds, spec!.name);
         const companion = prof ? undefined : ctx.companionDatasheet(ds, spec!.name);
         if (companion) {
-          startCompanion(companion, Number(spec!.count), items);
+          startCompanion(companion, boundedCount(spec!.count), items);
           continue;
         }
-        const g: RawGroup = { count: Number(spec!.count), items };
+        const g: RawGroup = { count: boundedCount(spec!.count), items };
         if (prof) g.modelProfileId = prof.id;
         t.groups.push(g);
       }
@@ -985,7 +1210,10 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     for (const f of flagParts.join(" ").split(/;\s*/)) applyFlag(t, f.trim());
   };
 
-  const rawLines = text.split(/\r?\n/);
+  // Every separator a text file can carry. A lone carriage return, as a classic Mac editor writes,
+  // used to leave the whole list on one line, which came back as a list with a very long name, no
+  // units, and not one warning to say so.
+  const rawLines = text.split(/\r\n|[\n\r\u2028\u2029]/);
   let lastHeaderKey = "";
   for (const raw of rawLines) {
     const trimmed = raw.trim();
@@ -1049,7 +1277,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       continue;
     }
     // "Detachment: X", "Detachment: X [2 DP] (TAKE AND HOLD)", "Detachments: X (2 DP), Y" — the DP suffix is optional
-    m = /^Detachments?:\s*(.+)$/i.exec(line);
+    m = /^D[ée]tach[eé]?ments?:\s*(.+)$/i.exec(line);
     if (m) {
       for (const part of splitOutsideParens(m[1]!)) addDetachmentSpec(part);
       continue;
@@ -1070,10 +1298,12 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     // A bare force disposition on the line after its detachment, as the app lays it out. It is recognised
     // by asking that detachment which dispositions it allows rather than by a list of names in here.
     if (!isBullet && lastDetachment?.allowed.some((d) => normaliseName(d) === normaliseName(line))) {
-      lastDetachment.entry.forceDisposition = line;
+      for (const entry of lastDetachment.entries) entry.forceDisposition = line;
       continue;
     }
-    if (!isBullet && (SECTION_NAMES.has(normaliseName(line)) || (headerSeen && CAPITALS.test(line)))) {
+    // A section heading never carries a points cost, and a unit header written in capitals used to
+    // be swallowed here as one, with no warning to say a unit had gone.
+    if (!isBullet && (SECTION_NAMES.has(normaliseName(line)) || (headerSeen && CAPITALS.test(line) && !parseUnitHeader(line)))) {
       closeAttachBlock();
       st.cur = null;
       st.sub = null;
@@ -1082,10 +1312,13 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     // A bare detachment name, wherever it appears: GW-app exports put it under the faction, others
     // after the units. The app suffixes it with its Detachment Points, so the lookup has to be by the
     // name alone — a suffix that is a points cost belongs to a unit, so only a DP count counts here.
+    // `DP_NOTE` is that same suffix written in another language, which `parseDetSpec` reads as a
+    // note rather than as a count: "Invasion Fleet (3 Points de Détachement)".
     if (!isBullet) {
       const spec = parseDetSpec(line);
       const detName = spec?.name;
-      if (detName && (spec.dp || detName === line) && ctx.findDetachment(detName)) {
+      const counted = spec && (spec.dp !== undefined || detName === line || DP_NOTE.test(spec.note ?? ""));
+      if (detName && counted && (ctx.findDetachment(detName) || pairedDetachments(ctx, detName))) {
         addDetachmentSpec(line);
         continue;
       }
@@ -1105,11 +1338,22 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
         continue;
       }
       headerSeen = true;
-      startUnit(ref, count ? Number(count) : undefined, label.trim(), rest);
+      startUnit(ref, count ? boundedCount(count) : undefined, label.trim(), rest);
       continue;
     }
 
     if (!st.cur) {
+      // "• 1x Tempestor Prime: Command rod, Tempestus dagger", which one list opens with. A unit
+      // header is normally told from a wargear line by the points cost it carries, and this one
+      // carries none, so the name has to be a datasheet the game data knows by that exact name.
+      const counted = COUNT_ITEM.exec(line);
+      const colon = counted ? counted[2]!.indexOf(":") : -1;
+      const named = colon > 0 ? counted![2]!.slice(0, colon).trim() : "";
+      if (named && ctx.findDatasheet(named)) {
+        headerSeen = true;
+        startUnit(undefined, boundedCount(counted![1]!), named, counted![2]!.slice(colon + 1).trim());
+        continue;
+      }
       if (!headerSeen && !isBullet) {
         name = name || line;
         headerSeen = true;
@@ -1142,7 +1386,11 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
         const withCut = firstWith(body);
         if (withCut && addModelLine(st.cur, withCut.label, count, parseWargearItems(withCut.wargear))) continue;
       }
-      addWargear(st.sub ?? st.cur, body, count);
+      // "2x Crisis Sunforge: Gun Drone, 2x Shield Drone" — the part after the colon is a list, and
+      // handed over whole it was stored as one item nothing could name.
+      const target = st.sub ?? st.cur;
+      if (isWargearOf(target.u.ds, body)) addWargear(target, body, count);
+      else for (const item of splitList(body)) addWargear(target, item, count);
       continue;
     }
     // "1 Custodian Guard with guardian spear" — a model and its loadout on one line, without the `x`.
@@ -1150,6 +1398,14 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     const counted = MODEL_COUNT.exec(line);
     const cut = counted && firstWith(line.slice(counted[0]!.length));
     if (cut && addModelLine(st.cur, cut.label, Number(counted![1]), parseWargearItems(cut.wargear))) continue;
+    // "1 with Flux carbine, Power fist" on a line of its own: part of the unit carries this and no
+    // model is named. The same words after a unit header are already read this way, but on its own
+    // the line matched nothing and the unit kept its default loadout without a word.
+    if (WITH_COUNT.test(line)) {
+      const target = st.sub ?? st.cur;
+      pushInto(wargearTarget(target), parseWargearItems(line));
+      continue;
+    }
     if (isBullet) {
       // "• Bolt pistol", or a line holding several items: "• Guardian Drone, Gun Drone". Exactly one
       // weapon name in the game data has a comma in it, so a line the datasheet knows whole is left as
@@ -1157,8 +1413,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
       const target = st.sub ?? st.cur;
       if (isWeaponOf(target.u.ds, normaliseName(line))) addWargear(target, line, 0);
       else {
-        const g = wargearTarget(target);
-        for (const item of parseWargearItems(line)) g.items.push(item);
+        pushInto(wargearTarget(target), parseWargearItems(line));
       }
       continue;
     }
@@ -1167,6 +1422,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
 
   // The last block has no heading after it to close it.
   closeAttachBlock();
+  groupDeclared();
   for (const t of [...units]) claimCompanions(t);
   for (const t of units) finishUnit(t, warnings);
   // A flag whose label this parser has no word for is worth reporting only when nothing else answered it.
@@ -1235,7 +1491,7 @@ function finishUnit(t: TextUnit, warnings: string[]): void {
   if (named.length && invented.length) {
     const size = (gs: RawGroup[]) => gs.reduce((s, g) => s + g.count, 0);
     const whole = size(invented);
-    for (const g of invented) named[0]!.items.push(...g.items);
+    for (const g of invented) pushInto(named[0]!, g.items);
     t.groups = whole > size(named) ? [...named, ...missingModels(ds, named, whole)] : named;
   }
   // no groups and no unit size: leave it to `defaultGroups` in the context's build step

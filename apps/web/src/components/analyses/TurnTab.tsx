@@ -14,7 +14,7 @@ import { download } from "../../lib/download";
 import { UnitSetPicker } from "./UnitSetPicker";
 import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunActions, RunStatus, WarningList, parseAnalysisContext, useAnalysisHeader, type AnalysisContext } from "./shared";
 import { BarChart } from "../charts/BarChart";
-import { Badge, Field, Spinner } from "../ui";
+import { Badge, Field, NumberInput, num, Spinner } from "../ui";
 import { t } from "../../i18n";
 
 interface TurnOptions {
@@ -97,7 +97,7 @@ function stepsOf(result: TurnPlanResult): TurnPlanStep[] {
   return [...result.assignments].sort((a, b) => a.order - b.order).map((a) => ({ attackerId: a.attackerId, targetId: a.targetId, ...(a.optionId ? { optionId: a.optionId } : {}) }));
 }
 
-export function TurnPlanTable({ result, view, onChange }: { result: TurnPlanResult; view: TurnPlanView; onChange?: (index: number, patch: Partial<TurnPlanStep>) => void }) {
+export function TurnPlanTable({ result, view, onChange }: { result: TurnPlanResult; view: TurnPlanView; onChange?: (attackerId: string, patch: Partial<TurnPlanStep>) => void }) {
   const rows = useMemo(() => [...result.assignments].sort((a, b) => a.order - b.order), [result]);
   const name = (list: Array<{ id: string; name: string }>, id: string) => list.find((x) => x.id === id)?.name ?? id;
   if (!rows.length) return <div className="empty">{t("analyses.turn.noPlan")}</div>;
@@ -122,7 +122,7 @@ export function TurnPlanTable({ result, view, onChange }: { result: TurnPlanResu
               <td>{name(view.attackers, a.attackerId)}</td>
               <td>
                 {onChange ? (
-                  <select value={a.targetId} aria-label={t("analyses.turn.targetFor", { name: name(view.attackers, a.attackerId) })} onChange={(e) => onChange(i, { targetId: e.target.value })}>
+                  <select value={a.targetId} aria-label={t("analyses.turn.targetFor", { name: name(view.attackers, a.attackerId) })} onChange={(e) => onChange(a.attackerId, { targetId: e.target.value })}>
                     {view.targets.map((tg) => (
                       <option key={tg.id} value={tg.id}>
                         {tg.name}
@@ -135,7 +135,7 @@ export function TurnPlanTable({ result, view, onChange }: { result: TurnPlanResu
               </td>
               <td>
                 {onChange ? (
-                  <select value={a.optionId ?? "none"} aria-label={t("analyses.turn.stratagemFor", { name: name(view.attackers, a.attackerId) })} onChange={(e) => onChange(i, { optionId: e.target.value })}>
+                  <select value={a.optionId ?? "none"} aria-label={t("analyses.turn.stratagemFor", { name: name(view.attackers, a.attackerId) })} onChange={(e) => onChange(a.attackerId, { optionId: e.target.value })}>
                     {view.options.map((o) => (
                       <option key={o.id} value={o.id}>
                         {optionDisplay(o)}
@@ -261,9 +261,12 @@ export function TurnTab() {
   const current = overridden && evaluate.result ? evaluate.result : baseline;
   const delta = overridden && evaluate.result && baseline ? evaluate.result.score - baseline.score : undefined;
 
-  const changeStep = (index: number, patch: Partial<TurnPlanStep>) => {
+  // The table shows the evaluated plan, which the optimiser groups by target, so a row's place in
+  // the table is not the step's place in `plan`. The step is found by its attacker, which the plan
+  // names once.
+  const changeStep = (attackerId: string, patch: Partial<TurnPlanStep>) => {
     if (!plan || !ran) return;
-    const next = plan.map((s, i) => (i === index ? { ...s, ...patch } : s));
+    const next = plan.map((s) => (s.attackerId === attackerId ? { ...s, ...patch } : s));
     setPlan(next);
     evaluate.run(ran.evaluate, next, snapshot);
   };
@@ -332,7 +335,7 @@ export function TurnTab() {
             renderExtra={(e, update) => (
               <label className="inline small">
                 <span className="muted">{t("analyses.turn.weight")}</span>
-                <input type="number" min={0.5} max={3} step={0.1} value={e.weight ?? 1} aria-label={t("analyses.turn.weightFor", { name: e.unit.name })} onChange={(ev) => update({ weight: Math.max(0.5, Math.min(3, Number(ev.target.value) || 1)) })} />
+                <NumberInput min={0.5} max={3} step={0.1} value={e.weight ?? 1} aria-label={t("analyses.turn.weightFor", { name: e.unit.name })} onChange={(text) => update({ weight: Math.max(0.5, Math.min(3, num(text, e.weight ?? 1))) })} />
               </label>
             )}
           />

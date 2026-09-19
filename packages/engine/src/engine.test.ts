@@ -808,7 +808,9 @@ describe("saves resolved lowest first", () => {
       close(mc.expectedSlain, ex.expectedSlain, 0.05);
       close(ex.damagePMF.reduce((s, v) => s + v, 0), 1);
     }
-  });
+    // Four cases against a two-hundred-thousand-iteration reference is a slow test rather than a
+    // hanging one, and it sat near enough the default five seconds to fail on a busy machine.
+  }, 60_000);
 
   it("changes the answer for a led unit in the direction the rule implies", () => {
     // A 4++ character behind 3+ bodyguards against AP-2: the bodyguards eat the 1s to 4s and the

@@ -12,7 +12,7 @@ import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { Datasheet, ModelProfile, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import { normaliseName } from "@grimstat/snapshot";
 import { catalogueFactionName } from "../bsdata-json/index";
-import { cleanLabel, defaultGroups, isWeaponOf, MAX_COPIES, mergeGroup, POINTS_BY_SIZE, RosterImportContext, SIZE_BY_LABEL, splitByWargear, type AttachRole, type PendingUnit, type WargearItem } from "./import-common";
+import { cleanLabel, defaultGroups, isWeaponOf, MAX_COPIES, mergeGroup, modelCount, POINTS_BY_SIZE, RosterImportContext, SIZE_BY_LABEL, splitByWargear, type AttachRole, type PendingUnit, type WargearItem } from "./import-common";
 
 export interface RoszImportOptions {
   /** Roster name; defaults to the `name` attribute of the roster element, then "Imported army". */
@@ -212,7 +212,7 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
           importUnit(c, ctx, bySelectionId, links);
           continue;
         }
-        const g: RawGroup = { label: name, profile, count: num(c.number, 1), items: [] };
+        const g: RawGroup = { label: name, profile, count: modelCount(num(c.number, 1)), items: [] };
         groups.push(g);
         walk(c, g);
         continue;
@@ -253,7 +253,7 @@ function importUnit(s: XmlSelection, ctx: RosterImportContext, bySelectionId: Ma
   walk(s, null);
 
   if (!groups.length) {
-    if (selType(s) === "model") groups.push({ label, profile: ctx.modelFor(ds, label) ?? ds.models[0], count: num(s.number, 1), items: unitItems.splice(0) });
+    if (selType(s) === "model") groups.push({ label, profile: ctx.modelFor(ds, label) ?? ds.models[0], count: modelCount(num(s.number, 1)), items: unitItems.splice(0) });
     else for (const g of defaultGroups(ds)) groups.push({ label: "", profile: ds.models.find((m) => m.id === g.modelProfileId), count: g.count, items: [] });
   }
   // unit-level upgrades: every model when the number covers the unit, otherwise the first group
@@ -381,6 +381,12 @@ function isZip(bytes: Uint8Array): boolean {
  */
 const MAX_ENTRY_BYTES = 32 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
+/**
+ * Entries one archive may hold. A `.rosz` holds the roster and a handful of files beside it. A
+ * couple of megabytes of one-byte entries is not an army list, and reading one used to take a
+ * minute.
+ */
+const MAX_ENTRIES = 1024;
 
 const megabytes = (n: number): string => `${Math.max(1, Math.round(n / (1024 * 1024)))} MB`;
 
@@ -408,6 +414,9 @@ function extractRosterXml(bytes: Uint8Array): string {
     if (!name.endsWith("/")) listed.push({ name, size });
     return false;
   });
+  if (listed.length > MAX_ENTRIES) {
+    throw new Error(`The .rosz archive holds ${listed.length} files. An army list is a handful, so the file was not read.`);
+  }
   const ordered = [...listed].sort((a, b) => entryRank(a.name) - entryRank(b.name));
   const first = ordered[0];
   if (first && entryRank(first.name) < 2 && first.size > MAX_ENTRY_BYTES) {
@@ -415,11 +424,28 @@ function extractRosterXml(bytes: Uint8Array): string {
   }
 
   let budget = MAX_TOTAL_BYTES;
+  const wanted: { name: string; rank: number }[] = [];
   for (const e of ordered) {
     if (e.size > MAX_ENTRY_BYTES) continue;
     if (e.size > budget) throw new Error(`The .rosz archive unpacks to more than ${megabytes(MAX_TOTAL_BYTES)}. An army list is never that large, so the file was not read.`);
     budget -= e.size;
-    const data = unzip((name) => name === e.name)[e.name];
+    wanted.push({ name: e.name, rank: entryRank(e.name) });
+  }
+  // Two passes at most, rather than one per entry. The named documents come first, and an archive
+  // that holds one — every real one does — never unpacks anything beside it. The rest are only
+  // reached when none of them was a roster, and they are unpacked together, because reading the
+  // archive again for each of them cost time in the square of how many it held.
+  const named = new Set(wanted.filter((e) => e.rank < 2).map((e) => e.name));
+  const rest = new Set(wanted.filter((e) => e.rank >= 2).map((e) => e.name));
+  const unpacked: Record<string, Uint8Array> = {};
+  if (named.size) Object.assign(unpacked, unzip((name) => named.has(name)));
+  let unpackedRest = false;
+  for (const e of ordered) {
+    if (!unpacked[e.name] && !unpackedRest && rest.has(e.name)) {
+      Object.assign(unpacked, rest.size ? unzip((name) => rest.has(name)) : {});
+      unpackedRest = true;
+    }
+    const data = unpacked[e.name];
     if (!data) continue;
     // the listing is written by whoever made the archive, so the entry is checked again once it is unpacked
     if (data.length > MAX_ENTRY_BYTES) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, useLayoutEffect } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type InputHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, useLayoutEffect } from "react";
 import { t } from "../i18n";
 
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
@@ -205,6 +205,33 @@ export function numOrNull(v: string): number | null {
   if (v.trim() === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * A number field that can be cleared while it is being typed into.
+ *
+ * A controlled number input re-rendered from the value it parses cannot be typed into: emptying it
+ * parses as nothing and the value comes straight back under the caret, and "0." parses to 0 and
+ * re-renders as "0" before the decimal can be finished. So the field shows its own text until it
+ * loses focus, and hands every keystroke to `onChange` for the caller to take what it can use.
+ */
+export function NumberInput({ value, onChange, onBlur, ...rest }: { value: number | string; onChange: (text: string) => void } & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type">) {
+  const [draft, setDraft] = useState<string | undefined>(undefined);
+  return (
+    <input
+      {...rest}
+      type="number"
+      value={draft ?? String(value)}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        onChange(e.target.value);
+      }}
+      onBlur={(e) => {
+        setDraft(undefined);
+        onBlur?.(e);
+      }}
+    />
+  );
 }
 
 // ---------- icons (16px line icons, currentColor) ----------

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -39,8 +39,16 @@ export function useHover(): {
   const raf = useRef<number | undefined>(undefined);
 
   const place = useCallback((content: HoverContent, x: number, y: number) => {
-    if (raf.current) cancelAnimationFrame(raf.current);
+    if (raf.current !== undefined) cancelAnimationFrame(raf.current);
     raf.current = requestAnimationFrame(() => setHovered({ content, x, y }));
+  }, []);
+
+  // A chart can be unmounted with a frame still queued, by a run that replaces the results while
+  // the pointer is over a bar.
+  useEffect(() => {
+    return () => {
+      if (raf.current !== undefined) cancelAnimationFrame(raf.current);
+    };
   }, []);
 
   const bind = useCallback(

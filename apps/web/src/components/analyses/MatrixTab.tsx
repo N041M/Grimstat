@@ -78,7 +78,7 @@ function DurabilityCard({ rows, running }: { rows: DurabilityIndexRow[] | undefi
       {running ? <p className="mx-card-empty">{t("results.running")}</p> : null}
       {!running && !sorted.length ? <p className="mx-card-empty">{t("analyses.matrix.durabilityNone")}</p> : null}
       {sorted.map((r, i) => (
-        <div key={r.unit} className="mx-dur-row">
+        <div key={`${i}-${r.unit}`} className="mx-dur-row">
           <span className="mx-dur-name" title={r.unit}>
             {r.unit}
           </span>

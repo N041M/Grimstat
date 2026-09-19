@@ -46,4 +46,24 @@ describe("pruneFactionsWithoutDatasheets", () => {
     const base = loadSyntheticSnapshot().data;
     expect(pruneFactionsWithoutDatasheets(base).removedFactions).toEqual([]);
   });
+
+  it("drops the datasheet links to the stratagems it removed", () => {
+    // A datasheet of the faction that stays can name a stratagem of the faction that goes: in the
+    // real data every chapter's detachment stratagems name the shared Space Marines datasheets.
+    const base = loadSyntheticSnapshot().data;
+    const alien = base.stratagems.find((s) => s.id.startsWith("strat:verdant-swarm"))!;
+    const kept = base.datasheets.filter((d) => d.factionId === "faction:ashen-wardens");
+    const data = { ...base, datasheets: kept.map((d, i) => (i === 0 ? { ...d, stratagemIds: [...d.stratagemIds, alien.id] } : d)) };
+    const { data: out } = pruneFactionsWithoutDatasheets(data);
+    expect(out.stratagems.some((s) => s.id === alien.id)).toBe(false);
+    const ids = new Set(out.stratagems.map((s) => s.id));
+    expect(out.datasheets.every((d) => d.stratagemIds.every((x) => ids.has(x)))).toBe(true);
+  });
+
+  it("returns a new object when nothing is removed", () => {
+    const base = loadSyntheticSnapshot().data;
+    const { data: out } = pruneFactionsWithoutDatasheets(base);
+    expect(out).not.toBe(base);
+    expect(out).toEqual(base);
+  });
 });

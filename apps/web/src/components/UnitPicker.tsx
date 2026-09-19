@@ -210,15 +210,26 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
   const existing = findPresetByName(presets, presetName);
   const canSave = presetName.trim().length > 0 && unit.models.length > 0;
 
+  // Saving takes a write and a reload of the list, and until both have happened the name still
+  // reads as unused. A second press in that gap made a second preset under the same name, so the
+  // button is held until the first one is done.
+  const [saving, setSaving] = useState(false);
   const savePreset = async () => {
-    if (!canSave) return;
-    const record = existing ? replacePresetUnit(existing, unit, snapshot) : newPreset(presetName, unit, snapshot);
-    await saveUnitPreset(record);
-    // The field keeps the name it was saved under, so pressing save again updates that preset
-    // rather than quietly making a second one beside it.
-    setNameTouched(true);
-    setPresetName(record.name);
-    notify(t(existing ? "picker.preset.updated" : "picker.preset.saved", { name: record.name }), "success");
+    if (!canSave || saving) return;
+    setSaving(true);
+    try {
+      const record = existing ? replacePresetUnit(existing, unit, snapshot) : newPreset(presetName, unit, snapshot);
+      await saveUnitPreset(record);
+      // The field keeps the name it was saved under, so pressing save again updates that preset
+      // rather than quietly making a second one beside it.
+      setNameTouched(true);
+      setPresetName(record.name);
+      notify(t(existing ? "picker.preset.updated" : "picker.preset.saved", { name: record.name }), "success");
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const removePreset = async (preset: UnitPresetRecord) => {
@@ -424,7 +435,7 @@ export function UnitPicker({ side, unit, snapshot, loadKey, onChange }: Props) {
             }}
           />
         </Field>
-        <button type="button" disabled={!canSave} onClick={() => void savePreset()}>
+        <button type="button" disabled={!canSave || saving} onClick={() => void savePreset()}>
           {existing ? t("picker.preset.update") : t("picker.preset.save")}
         </button>
       </div>

@@ -11,11 +11,24 @@ const ANON_LIFE = 90 * 24 * 60 * 60 * 1000;
 const LIMIT_PER_IP_HOUR = 30;
 /** Links made without an account, per day, in all. Bounds what strangers can make the server keep. */
 export const ANON_LIMIT_PER_DAY = 500;
+/**
+ * Links one account may make in a day. A link made from an account is kept for as long as the
+ * account, so without this an account could fill the database a link at a time and nothing would
+ * ever remove any of it. Sharing an army a few times a day sits well inside it.
+ */
+export const ACCOUNT_LIMIT_PER_DAY = 100;
 export const LinkKinds = ["scenario", "roster"] as const;
+
+/**
+ * The characters a token is made of. Both kinds are lz-string's URI-safe output, which is letters,
+ * digits, `+`, `-` and `$`. Anything else is not a link this app made, and a line break in one
+ * would go on to break the redirect for good.
+ */
+const TOKEN = /^[A-Za-z0-9+$-]+$/;
 
 export const LinkRequest = z.object({
   kind: z.enum(LinkKinds),
-  token: z.string().min(1).max(16 * 1024),
+  token: z.string().min(1).max(16 * 1024).regex(TOKEN),
 });
 
 export class LinkError extends Error {
@@ -32,8 +45,12 @@ export async function createLink(deps: Deps, req: z.infer<typeof LinkRequest>, u
   const ipHash = await hashIp(ip, deps.ipSalt);
   const recent = await deps.db.first<{ n: number }>("SELECT COUNT(*) AS n FROM links WHERE ip_hash = ? AND created_at > ?", ipHash, iso(new Date(now.getTime() - 60 * 60 * 1000)));
   if ((recent?.n ?? 0) >= LIMIT_PER_IP_HOUR) throw new LinkError(429, "Too many links made in the last hour. Try again later.");
-  if (!userId) {
-    const today = await deps.db.first<{ n: number }>("SELECT COUNT(*) AS n FROM links WHERE user_id IS NULL AND created_at > ?", iso(new Date(now.getTime() - 24 * 60 * 60 * 1000)));
+  const dayAgo = iso(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  if (userId) {
+    const today = await deps.db.first<{ n: number }>("SELECT COUNT(*) AS n FROM links WHERE user_id = ? AND created_at > ?", userId, dayAgo);
+    if ((today?.n ?? 0) >= ACCOUNT_LIMIT_PER_DAY) throw new LinkError(429, `This account has made ${ACCOUNT_LIMIT_PER_DAY} links today, which is its daily allowance. Try again tomorrow.`);
+  } else {
+    const today = await deps.db.first<{ n: number }>("SELECT COUNT(*) AS n FROM links WHERE user_id IS NULL AND created_at > ?", dayAgo);
     if ((today?.n ?? 0) >= ANON_LIMIT_PER_DAY) throw new LinkError(503, "No more links can be made today without an account.");
   }
   const id = shortId();

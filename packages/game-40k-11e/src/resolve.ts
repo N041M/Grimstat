@@ -428,13 +428,17 @@ function applyWargearSelection(ds: Datasheet, weapons: ScenarioWeapon[], groups:
   const anyMatch = weapons.filter(mine).some((w) => selected.has(baseWeaponName(w.name.slice(prefix.length)).toLowerCase()));
   if (!anyMatch) return weapons;
   for (const [base, count] of omittedDefaults(ds, groups)) selected.set(base, (selected.get(base) ?? 0) + count);
+  // Only the first profile of a weapon is live, and a weapon that both shoots and fights has one
+  // profile of each kind. The two are counted apart, as `unitFromDatasheet` does, so that picking a
+  // guardian spear off a wargear list does not leave the Custodian with nothing to fight with.
   const enabledBase = new Set<string>();
   return weapons.map((w) => {
     if (!mine(w)) return w;
     const base = baseWeaponName(w.name.slice(prefix.length)).toLowerCase();
+    const group = `${base}\u0000${w.kind}`;
     const n = selected.get(base) ?? 0;
-    const first = n > 0 && !enabledBase.has(base);
-    if (first) enabledBase.add(base);
+    const first = n > 0 && !enabledBase.has(group);
+    if (first) enabledBase.add(group);
     return { ...w, count: n, enabled: first };
   });
 }

@@ -295,6 +295,30 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     wargearByPart.set(adapterOf(part), w);
   }
 
+  /**
+   * The member that carries the profiles of a unit name within one faction family.
+   *
+   * A chapter publishes its own points for units it shares with its parent codex, and the sources
+   * that carry profiles file those units under the parent alone, so the chapter's datasheet reaches
+   * the merge with a points table and nothing else. Dropping it as a stub leaves a chapter army
+   * buying the parent's datasheet at the parent's points.
+   */
+  const familyProfiles = new Map<string, Member<PartialDatasheet>>();
+  for (const c of dsClusters.clusters) {
+    const m = sortMembers(c.members, T).find((x) => nonEmpty(x.item.models));
+    if (!m) continue;
+    const key = `${familyOf(m.item.factionId)}|${normaliseName(m.item.name)}`;
+    if (!familyProfiles.has(key)) familyProfiles.set(key, m);
+  }
+  /** The donor's profiles under the adopting datasheet's own id, so that profile ids stay unique. */
+  const adoptProfiles = (donor: Member<PartialDatasheet>, id: string): Member<PartialDatasheet> => {
+    const from = donor.item.id.replace(/^ds:/, "");
+    const to = id.replace(/^ds:/, "");
+    const under = <X extends { id: string }>(kind: "mp" | "wp", x: X): X => ({ ...x, id: x.id.includes(from) ? x.id.replace(from, to) : `${kind}:${to}:${x.id}` });
+    const item = copy(donor.item);
+    return { adapter: donor.adapter, item: { ...item, models: (item.models ?? []).map((m) => under("mp", m)), weapons: (item.weapons ?? []).map((w) => under("wp", w)) } };
+  };
+
   // ---- abilities: union with id re-keying ----------------------------------------------------
   const abilityById = new Map<string, { adapter: string; ability: Ability }>();
   const rekeyPrefix = (adapter: string, id: string, kind: "ab" | "mp" | "wp"): string => {
@@ -346,7 +370,9 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     const id = c.id;
     const members = c.members as unknown as Member<Record<string, unknown>>[];
     const withModels = sortMembers(c.members, T).filter((m) => nonEmpty(m.item.models));
-    const stats = withModels[0];
+    const donor = withModels.length ? undefined : familyProfiles.get(`${familyOf(c.members[0]!.item.factionId)}|${normaliseName(c.members[0]!.item.name)}`);
+    if (donor) warnings.push(`datasheet ${id} ("${c.members[0]!.item.name}") has no model profile in any source; it took the profiles of ${donor.item.id}, so the points it publishes apply.`);
+    const stats = withModels[0] ?? (donor ? adoptProfiles(donor, id) : undefined);
     if (!stats) {
       if (policy.dropStubs !== false) {
         for (const m of c.members) unmatched.push({ adapter: m.adapter, entity: "datasheet", id: m.item.id, name: m.item.name, reason: "no model profile in any source" });
@@ -409,7 +435,7 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
       composition: copy((firstDefined(primary, (i) => i["composition"]) as Datasheet["composition"] | undefined) ?? []),
       wargearOptions: copy((firstDefined(primary, (i) => i["wargearOptions"]) as string[] | undefined) ?? []),
     };
-    dsStratRefs.set(id, [...new Set(c.members.flatMap((m) => (m.item["stratagemIds"] as string[] | undefined) ?? []))]);
+    dsStratRefs.set(id, [...new Set(primary.flatMap((m) => (m.item["stratagemIds"] as string[] | undefined) ?? []))]);
     for (const ref of [...(leaderTo ?? []), ...(supportTo ?? [])]) {
       if (!resolveDsRef(ref)) warnings.push(`datasheet ${id}: leader/support reference "${ref}" does not resolve to a known datasheet`);
     }
@@ -558,6 +584,18 @@ export function mergeSources(parts: MergePart[], policyIn: Partial<MergePolicy> 
     if (s.detachmentId) s.detachmentId = detIdMap.get(s.detachmentId) ?? s.detachmentId;
     if (s.abilityId) s.abilityId = rekey("", s.abilityId, "ab");
     stratagems.push(s);
+  }
+
+  // A cluster dropped for want of a model profile can still be named by another datasheet's leader
+  // or support list, so those lists are filtered once every kept datasheet is known. This is the
+  // same second pass the stratagem links below use.
+  const keptDatasheets = new Set(datasheets.map((d) => d.id));
+  for (const d of datasheets) {
+    for (const ref of [...d.leaderTo, ...d.supportTo]) {
+      if (!keptDatasheets.has(ref)) warnings.push(`datasheet ${d.id}: leader/support reference "${ref}" names a datasheet no source describes, so it was dropped.`);
+    }
+    d.leaderTo = d.leaderTo.filter((x) => keptDatasheets.has(x));
+    d.supportTo = d.supportTo.filter((x) => keptDatasheets.has(x));
   }
 
   // Datasheet -> stratagem links, now that the merged stratagem ids are known.

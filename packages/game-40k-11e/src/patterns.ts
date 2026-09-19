@@ -87,10 +87,10 @@ export function coreAbilityEffects(ability: Ability): AbilityEffects | null {
     case "FEEL NO PAIN":
       return { tier: "tier1", effects: [rec("fnp", "defender", "set", CH.fnp, Number.isFinite(v) ? v : 6, ability.name)], fnp: Number.isFinite(v) ? v : 6 };
     case "STEALTH":
-      // Stealth subtracts 1 from the Hit roll of ranged attacks against the unit. Reading it as the
-      // Benefit of Cover instead left it doing nothing at all wherever cover is a save bonus the
-      // target's armour was already good enough to do without.
-      return { tier: "tier1", effects: [rec("hit", "defender", "add", CH.hitRoll, -1, ability.name, { weaponKind: "ranged" })] };
+      // What Stealth does depends on the edition, and this function does not know which one is being
+      // played. The flag records that the unit has the ability; `scenario.ts` reads the edition and
+      // turns it into the benefit of cover or into a Hit-roll penalty.
+      return { tier: "tier1", effects: [rec("hit", "defender", "flag", CH.stealthAbility, true, ability.name)] };
     case "INVULNERABLE SAVE":
       return { tier: "tier1", effects: [rec("save", "defender", "cap", CH.invuln, Number.isFinite(v) ? v : 6, ability.name)] };
     case "DEEP STRIKE":
@@ -230,9 +230,7 @@ const PATTERNS: Pattern[] = [
   { re: /unmodified (?:successful )?hit roll of (\d)\+?[^.]{0,30}?scores a critical hit/i, build: (m, t, n) => [rec("hit", "attacker", "cap", CH.critHit, num(m[1], 6), n, attackerConds(t))] },
   { re: /unmodified (?:successful )?wound roll of (\d)\+?[^.]{0,30}?scores a critical wound/i, build: (m, t, n) => [rec("wound", "attacker", "cap", CH.critWound, num(m[1], 6), n, attackerConds(t))] },
   { re: /benefit of cover/i, build: (_m, _t, n) => [rec("hit", "defender", "flag", CH.stealth, true, n)] },
-  // Stealth is a Hit-roll penalty rather than cover, so it keeps working against a target whose
-  // armour is already too good for a cover bonus to improve.
-  { re: /\bstealth\b/i, build: (_m, _t, n) => [rec("hit", "defender", "add", CH.hitRoll, -1, n, { weaponKind: "ranged" })] },
+  { re: /\bstealth\b/i, build: (_m, _t, n) => [rec("hit", "defender", "flag", CH.stealthAbility, true, n)] },
   // "Ignore any or all modifiers" names the channels it covers, and the two are not the same thing:
   // in this edition cover is a Ballistic Skill penalty, so an ability that only names the Hit roll
   // leaves it standing.

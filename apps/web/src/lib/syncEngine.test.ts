@@ -127,6 +127,47 @@ describe("sync between two devices", () => {
     expect((await a.rosters.get("r1"))?.name).toBe("edited on B");
   });
 
+  it("does not overwrite a change made while a losing push was in flight", async () => {
+    // The same promise as the test below, on the path where the server refuses the push. B's copy
+    // loses to A's, and the server sends A's back — but the player on B has typed again since, so
+    // B now holds the newest copy of all three and it must survive, outbox row and all.
+    const s = server();
+    const token = await s.signIn("a@example.com");
+    const a = device();
+    const b = device();
+    await a.rosters.put(roster("r1", "edited on A", at(-10), 1));
+    await runSync({ db: a, fetchImpl: s.fetchImpl, token });
+    await b.rosters.put(roster("r1", "stale on B", at(-20), 1));
+    const slow: FetchLike = async (input, init) => {
+      const res = await s.fetchImpl(input, init);
+      await b.rosters.put(roster("r1", "typed just now on B", at(-1), 2));
+      return res;
+    };
+    await runSync({ db: b, fetchImpl: slow, token });
+    expect((await b.rosters.get("r1"))?.name).toBe("typed just now on B");
+    expect(await b.outbox.count()).toBe(1);
+    await runSync({ db: b, fetchImpl: s.fetchImpl, token });
+    await runSync({ db: a, fetchImpl: s.fetchImpl, token });
+    expect((await a.rosters.get("r1"))?.name).toBe("typed just now on B");
+  });
+
+  it("sets aside a record the server will not read rather than blocking the ones behind it", async () => {
+    const s = server();
+    const token = await s.signIn("a@example.com");
+    const a = device();
+    // A backup import writes a date the server's schema refuses. Before, the whole batch was
+    // refused with it, every round, and nothing on the device ever synced again.
+    await a.rosters.put(roster("good", "readable", at(-2)));
+    await a.rosters.put({ ...roster("bad", "unreadable", at(-2)), updatedAt: "2026-09-01" } as never);
+    const round = await runSync({ db: a, fetchImpl: s.fetchImpl, token });
+    expect(round.skipped).toBe(1);
+    expect(await a.outbox.count()).toBe(0);
+    const b = device();
+    await runSync({ db: b, fetchImpl: s.fetchImpl, token });
+    expect((await b.rosters.get("good"))?.name).toBe("readable");
+    expect(await b.rosters.get("bad")).toBeUndefined();
+  });
+
   it("does not overwrite a change made while the request was in flight", async () => {
     const s = server();
     const token = await s.signIn("a@example.com");

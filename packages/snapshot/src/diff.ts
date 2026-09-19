@@ -2,7 +2,7 @@ import type { Datasheet, PriceRule, Snapshot, SnapshotData } from "@grimstat/sch
 import { canonicalJson } from "./checksum";
 import { normaliseName } from "./normalise";
 
-export type DiffEntity = "faction" | "publication" | "datasheet" | "ability" | "detachment" | "enhancement" | "stratagem" | "wargearPrice";
+export type DiffEntity = "faction" | "publication" | "datasheet" | "ability" | "detachment" | "enhancement" | "stratagem" | "wargearPrice" | "glossary" | "gameSystem";
 
 export interface FieldChange {
   field: string;
@@ -47,6 +47,7 @@ const COLLECTIONS: { entity: DiffEntity; key: keyof SnapshotData }[] = [
   { entity: "detachment", key: "detachments" },
   { entity: "enhancement", key: "enhancements" },
   { entity: "stratagem", key: "stratagems" },
+  { entity: "glossary", key: "glossary" },
 ];
 
 function same(a: unknown, b: unknown): boolean {
@@ -136,8 +137,9 @@ export function diffSnapshots(a: Snapshot, b: Snapshot): SnapshotDiff {
   const removed: EntityRef[] = [];
   const changed: EntityChange[] = [];
   for (const { entity, key } of COLLECTIONS) {
-    const la = a.data[key] as { id: string; name: string }[];
-    const lb = b.data[key] as { id: string; name: string }[];
+    // A snapshot built before any source supplied a glossary carries none at all.
+    const la = (a.data[key] ?? []) as { id: string; name: string }[];
+    const lb = (b.data[key] ?? []) as { id: string; name: string }[];
     const ma = new Map(la.map((x) => [x.id, x]));
     const mb = new Map(lb.map((x) => [x.id, x]));
     for (const [id, x] of ma) if (!mb.has(id)) removed.push({ entity, id, name: x.name });
@@ -152,6 +154,10 @@ export function diffSnapshots(a: Snapshot, b: Snapshot): SnapshotDiff {
       if (changes.length) changed.push({ entity, id, name: y.name, changes });
     }
   }
+  // The game system is one record rather than a collection, so it is compared on its own.
+  const systemChanges = fieldChanges(a.data.gameSystem as unknown as Record<string, unknown>, b.data.gameSystem as unknown as Record<string, unknown>);
+  if (systemChanges.length) changed.push({ entity: "gameSystem", id: b.data.gameSystem.id, name: b.data.gameSystem.name, changes: systemChanges });
+
   // wargear prices keyed by datasheet + item
   const wa = new Map(a.data.wargearPrices.map((w) => [`${w.datasheetId}|${w.item}`, w]));
   const wb = new Map(b.data.wargearPrices.map((w) => [`${w.datasheetId}|${w.item}`, w]));

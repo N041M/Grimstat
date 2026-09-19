@@ -112,6 +112,20 @@ function indexOf(snapshot: Snapshot): SnapshotIndex {
 /** The context of the last army that asked, so the units of one army share one. */
 const CONTEXTS = new WeakMap<Roster, { snapshot: Snapshot; ctx: RosterContext }>();
 
+/**
+ * One spelling of a wargear name, for comparing a price row with what a model carries.
+ *
+ * The sources write an apostrophe two ways and the price table and the datasheet do not always
+ * agree on which. A T'au flamer went unpriced for that alone, which cost a real list thirty points.
+ */
+const sameItem = (a: string, b: string): boolean => fold(a) === fold(b);
+const fold = (s: string): string =>
+  s
+    .replace(/[\u2018\u2019\u02bc]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 export function createContext(roster: Roster, snapshot: Snapshot): RosterContext {
   const held = CONTEXTS.get(roster);
   if (held && held.snapshot === snapshot) return held.ctx;
@@ -170,7 +184,7 @@ function buildContext(roster: Roster, snapshot: Snapshot): RosterContext {
     let wargear = 0;
     const prices = snapshot.data.wargearPrices.filter((w) => w.datasheetId === unit.datasheetId);
     for (const m of models) for (const item of m.wargear) {
-      const p = prices.find((w) => w.item.toLowerCase() === item.toLowerCase());
+      const p = prices.find((w) => sameItem(w.item, item));
       if (p) wargear += p.points * m.count;
     }
     let enhancement = 0;

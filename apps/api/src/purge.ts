@@ -11,7 +11,7 @@
  * sets their owners' size counters to what the rows now take.
  */
 import { gzipText } from "./codec";
-import type { Stmt } from "./db";
+import { RECOUNT_BYTES, type Stmt } from "./db";
 import { iso, type Deps } from "./deps";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -42,10 +42,7 @@ export async function compressPlainRows(deps: Deps, batch = COMPRESS_BATCH): Pro
     rows.map(async (r) => ({ sql: "UPDATE records SET body_gz = ?, body = NULL WHERE user_id = ? AND store = ? AND id = ?", params: [await gzipText(r.body), r.user_id, r.store, r.id] })),
   );
   for (const userId of new Set(rows.map((r) => r.user_id))) {
-    stmts.push({
-      sql: "UPDATE users SET bytes = (SELECT COALESCE(SUM(LENGTH(body_gz)), 0) + COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM records WHERE user_id = ?) WHERE id = ?",
-      params: [userId, userId],
-    });
+    stmts.push({ sql: RECOUNT_BYTES, params: [userId, userId] });
   }
   await deps.db.batch(stmts);
   return rows.length;

@@ -449,10 +449,12 @@ describe("text import edge cases", () => {
   });
 
   it("parses wargear with per-model counts and per-model copies", () => {
+    // `seg` says which "N with" segment the item was written in, so the models that carry one of a
+    // segment's items carry all of them.
     expect(parseWargearItems("1 with Flux carbine, Power fist, 9 with Flux carbine")).toEqual([
-      { name: "Flux carbine", n: 1, copies: 1 },
-      { name: "Power fist", n: 1, copies: 1 },
-      { name: "Flux carbine", n: 9, copies: 1 },
+      { name: "Flux carbine", n: 1, copies: 1, seg: 0 },
+      { name: "Power fist", n: 1, copies: 1, seg: 0 },
+      { name: "Flux carbine", n: 9, copies: 1, seg: 1 },
     ]);
     expect(parseWargearList("Vortex cannon, 2x Twin hail gun")).toEqual(["Vortex cannon", "Twin hail gun", "Twin hail gun"]);
   });
@@ -841,5 +843,91 @@ describe("enhancement flags", () => {
       parseEnhancement(`Enhancement: "Ember Blade"${" ".repeat(pad)}(`);
       expect(performance.now() - started).toBeLessThan(50);
     }
+  });
+});
+
+/**
+ * Lines the exports write that this importer used to read as something else, or not at all. Each of
+ * these cost real lists real data: a weapon, an attachment, a detachment, an enhancement, or the
+ * pairing of a loadout with the models carrying it.
+ */
+describe("lines the exports write", () => {
+  const importLines = (...lines: string[]) => importRosterText(lines.join("\n"), snapshot);
+  const gearOf = (r: Roster, at = 0) => r.units[at]!.models.flatMap((g) => g.wargear);
+
+  it("reads the warlord flag in the language the app was set to", () => {
+    const en = importLines("Ashen Wardens", "Warden Captain (80 points)", "• Warlord");
+    const fr = importLines("Ashen Wardens", "Warden Captain (80 points)", "• Seigneur de Guerre");
+    expect(en.roster.units[0]!.isWarlord).toBe(true);
+    expect(fr.roster.units[0]!.isWarlord).toBe(true);
+    // Read only in English it became a weapon on the model.
+    expect(gearOf(fr.roster)).toEqual([]);
+    expect(fr.warnings).toEqual([]);
+  });
+
+  it("reads an attachment declaration whatever language its label is in", () => {
+    const lines = (leader: string, host: string) => importLines("Ashen Wardens", "Warden Captain (80 points)", `• ${leader}`, "", "Warden Squad (100 points)", `• ${host}`);
+    const en = lines("Attached as: Leader (Character)", "Attached as: Bodyguard");
+    const fr = lines("Attachée en tant que : Meneur (Personnage)", "Attachée en tant que : Gardes du Corps");
+    for (const out of [en, fr]) {
+      expect(out.warnings).toEqual([]);
+      expect(out.roster.units[0]!.attachedTo).toEqual({ unitId: out.roster.units[1]!.id, role: "leader" });
+    }
+  });
+
+  it("reads a block the app wrote with no heading above it", () => {
+    // The app numbers from "Attached Unit 2" and writes nothing above the first block, so its
+    // first attached unit had only its own declaration to go on.
+    const { roster, warnings } = importLines("Ashen Wardens", "Warden Captain (80 points)", "• Attached as: Leader (Character)", "", "Warden Squad (100 points)", "• Attached as: Bodyguard");
+    expect(warnings).toEqual([]);
+    expect(roster.units[0]!.attachedTo?.role).toBe("leader");
+    expect(roster.units[0]!.attachedTo?.unitId).toBe(roster.units[1]!.id);
+  });
+
+  it("reads the battle size in the language the app was set to", () => {
+    expect(importLines("Ashen Wardens", "Strike Force (2000 points)").roster.battleSize).toBe("strike-force");
+    const fr = importLines("Ashen Wardens", "Force de Frappe (2000 points)");
+    expect(fr.roster.battleSize).toBe("strike-force");
+    expect(fr.warnings).toEqual([]);
+  });
+
+  it("reads an enhancement the app wrote with no label at all", () => {
+    const { roster, warnings } = importLines("Ashen Wardens", "Ember Vanguard", "Warden Captain (80 points)", "• Ember Blade (+15 pts)");
+    expect(warnings).toEqual([]);
+    expect(roster.units[0]!.enhancementId).toBeDefined();
+    // Read as wargear it landed on the model as a weapon and the army was short its points.
+    expect(gearOf(roster)).toEqual([]);
+  });
+
+  it("reads a detachment whose points suffix is written in another language", () => {
+    const { roster, warnings } = importLines("Ashen Wardens", "Ember Vanguard (3 Points de Détachement)");
+    expect(warnings).toEqual([]);
+    expect(roster.detachments.length).toBe(1);
+  });
+
+  it("gives the force disposition under two detachments to both of them", () => {
+    const { roster } = importLines("Ashen Wardens", "Ember Vanguard and Thorn Tide (3 Detachment Points)", "SEIZE THE GROVE");
+    expect(roster.detachments.length).toBe(2);
+    expect(roster.detachments.map((d) => d.forceDisposition)).toEqual(["SEIZE THE GROVE", "SEIZE THE GROVE"]);
+  });
+
+  it("keeps the models of one loadout segment together", () => {
+    // Placed one item at a time, this gave three models a blade with no pistol and three a pistol
+    // with no blade. The totals were right and no model carried what the list said it did.
+    const { roster, warnings } = importLines("Ashen Wardens", "10x Warden Squad (100 points)", "• 10x Warden", "6 with Flux carbine, Shock maul", "4 with Power fist");
+    expect(warnings).toEqual([]);
+    expect(roster.units[0]!.models.map((g) => [g.count, g.wargear.join("+")])).toEqual([
+      [6, "Flux carbine+Shock maul"],
+      [4, "Power fist"],
+    ]);
+  });
+
+  it("reads a counted unit header that carries no points cost", () => {
+    // One list opens with "• 1x Tempestor Prime: Command rod". A header is normally told from a
+    // wargear line by its cost, so the name has to be one the game data knows.
+    const { roster, warnings } = importLines("Ashen Wardens", "• 1x Warden Captain: Flux pistol");
+    expect(warnings).toEqual([]);
+    expect(roster.units.length).toBe(1);
+    expect(gearOf(roster)).toEqual(["Flux pistol"]);
   });
 });

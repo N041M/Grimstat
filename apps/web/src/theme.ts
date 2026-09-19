@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export type ThemePreference = "dark" | "light" | "system";
 export type ResolvedTheme = "dark" | "light";
@@ -48,6 +48,9 @@ export function useTheme(): { preference: ThemePreference; resolved: ResolvedThe
     return () => m.removeEventListener("change", onChange);
   }, [preference]);
 
-  const cycle = () => setPref((p) => (p === "dark" ? "light" : p === "light" ? "system" : "dark"));
-  return { preference, resolved, setPreference: setPref, cycle };
+  const cycle = useCallback(() => setPref((p) => (p === "dark" ? "light" : p === "light" ? "system" : "dark")), []);
+  // The same object until the theme itself changes. A fresh one on every render of the shell made
+  // everything that holds the theme rebuild, including the command palette's list of every
+  // datasheet in the snapshot.
+  return useMemo(() => ({ preference, resolved, setPreference: setPref, cycle }), [preference, resolved, cycle]);
 }

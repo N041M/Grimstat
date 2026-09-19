@@ -199,7 +199,7 @@ export function createApp(deps: Deps): App {
 
   app.delete("/api/me", async (c) => {
     const session = await signedIn(c);
-    await deleteAccount(deps, session.user.id);
+    await deleteAccount(deps, session.user);
     return c.json({ ok: true });
   });
 
@@ -230,6 +230,9 @@ export function createApp(deps: Deps): App {
   app.get("/api/u/:handle", async (c) => {
     const page = await publicProfile(deps, c.req.param("handle"));
     if (!page) return c.json({ error: "There is no page by that name." }, 404);
+    // A public page holds nothing private and costs an unpacking of every army on it, so a minute
+    // in a cache is a minute the server does not spend answering the same request again.
+    c.header("Cache-Control", "public, max-age=60");
     return c.json(page);
   });
 

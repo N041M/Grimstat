@@ -108,7 +108,7 @@ apps/web
   blocks only where its prism is, which is true line of sight.
 - `coverFrom(target, attacker, terrain)` — benefit of cover derived from the same ray casts, plus the
   footprint rule, plus per-trait overrides.
-- `coherent(unit)` — 2" to another model (6+ models: two others), the standard check.
+- `coherent(unit)` — 2" to another model (7+ models: two others), the standard check.
 - `inZone(model, zone)` / `controls(objective, models)` — deployment zones as prisms, objective
   control by OC sum inside a 3" cylinder.
 - `reachable(model, move, terrain)` — where a model can end its move: a horizontal sampling grid with

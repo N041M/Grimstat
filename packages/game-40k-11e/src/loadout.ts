@@ -433,7 +433,12 @@ export function omittedDefaults(ds: Datasheet, groups: readonly RosterModelGroup
   const displacedModels = new Map<string, number>();
   // What counts as a surplus copy is what the datasheet prints: a Ravager listed with three dark
   // lances is holding the three it came with, not one it swapped for.
-  const printed = (base: string): number => parsed.copies[base] ?? 1;
+  //
+  // The two sides of every count below come from different places and spell an apostrophe
+  // differently, so they are compared through `key`. The names this returns are not: the caller
+  // matches them against its own weapon list, which spells them as the datasheet does.
+  const copiesByKey = new Map(Object.entries(parsed.copies).map(([name, n]) => [key(name), n]));
+  const printed = (base: string): number => copiesByKey.get(key(base)) ?? 1;
   for (const g of groups) {
     const profile = ds.models.find((m) => m.id === g.modelProfileId)?.name.toLowerCase();
     const defaults = [...new Set([...parsed.all, ...(profile ? parsed.byProfile[profile] ?? [] : [])])];
@@ -446,7 +451,9 @@ export function omittedDefaults(ds: Datasheet, groups: readonly RosterModelGroup
     const byDefault = new Set(defaults.map(key));
     const displaced = (base: string): boolean =>
       reading.options.some((o) => o.replaces.includes(base) && o.grants.some((granted) => (held.get(granted) ?? 0) > (byDefault.has(granted) ? printed(granted) : 0)));
-    for (const base of Object.keys(parsed.carriers)) if (displaced(base)) displacedModels.set(base, (displacedModels.get(base) ?? 0) + g.count);
+    // `parsed.carriers` is keyed by the name as printed and `o.replaces` by the tidied one, so the
+    // test goes through `key` while the tally stays under the printed name the caller reads back.
+    for (const base of Object.keys(parsed.carriers)) if (displaced(key(base))) displacedModels.set(base, (displacedModels.get(base) ?? 0) + g.count);
     for (const d of defaults) {
       const k = key(d);
       if (held.has(k) || displaced(k)) continue;
@@ -462,7 +469,7 @@ export function omittedDefaults(ds: Datasheet, groups: readonly RosterModelGroup
    */
   for (const [base, carriers] of Object.entries(parsed.carriers)) {
     const want = carriers * printed(base) - (displacedModels.get(base) ?? 0);
-    const missing = want - (heldByUnit.get(base) ?? 0);
+    const missing = want - (heldByUnit.get(key(base)) ?? 0);
     if (missing > 0) out.set(base, (out.get(base) ?? 0) + missing);
   }
   return out;

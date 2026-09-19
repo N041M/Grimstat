@@ -3,7 +3,14 @@ import { normaliseName } from "@grimstat/snapshot";
 import { compositionBranches, profileBounds, isOwnFaction } from "@grimstat/resolver";
 
 /** Battle-size labels as written by the GW app, New Recruit and BattleScribe. */
-export const SIZE_BY_LABEL: Record<string, Roster["battleSize"]> = { "combat patrol": "combat-patrol", incursion: "incursion", "strike force": "strike-force", onslaught: "onslaught" };
+export const SIZE_BY_LABEL: Record<string, Roster["battleSize"]> = {
+  "combat patrol": "combat-patrol",
+  "patrouille de combat": "combat-patrol",
+  incursion: "incursion",
+  "strike force": "strike-force",
+  "force de frappe": "strike-force",
+  onslaught: "onslaught",
+};
 /** Default points limit of each battle size. */
 export const POINTS_BY_SIZE: Record<Roster["battleSize"], number> = { "combat-patrol": 500, incursion: 1000, "strike-force": 2000, onslaught: 3000, custom: 2000 };
 
@@ -24,13 +31,43 @@ export interface PendingUnit {
   attachHost?: { unitId: string; role: AttachRole };
 }
 
+/**
+ * The text before a trailing "(…)" or "[…]", or the whole string when there is none.
+ *
+ * Written as a scan rather than as `/\s*\(...\)\s*$/`, because a variable run of space in front of
+ * a bracket that never arrives is retried from every position in that run, and a name padded with
+ * a few thousand spaces took seconds.
+ */
+export function beforeTrailingGroup(text: string, open: "(" | "["): { head: string; inner: string } | undefined {
+  const close = open === "(" ? ")" : "]";
+  const end = text.trimEnd().length;
+  if (end === 0 || text[end - 1] !== close) return undefined;
+  const from = text.lastIndexOf(open, end - 1);
+  if (from < 0) return undefined;
+  // The patterns this replaced could not match a bracket of either kind inside the group, nor one
+  // left open in front of it, and left such a name whole. "Warden [a[b]" keeps its brackets.
+  const head = text.slice(0, from);
+  const inner = text.slice(from + 1, end - 1);
+  if (inner.includes(open) || inner.includes(close)) return undefined;
+  if (head.includes(open) !== head.includes(close)) return undefined;
+  return { head: head.trimEnd(), inner: inner.trim() };
+}
+
+/** Strips a run of trailing characters without a regex, so a long run costs one pass. */
+export const trimEndOf = (text: string, drop: (ch: string) => boolean): string => {
+  let end = text.length;
+  while (end > 0 && drop(text[end - 1]!)) end--;
+  return text.slice(0, end);
+};
+
 /** Strips list-export decorations that leak into names: "4x Warden", "Warden [10 pts]", "Warden (10 points)". */
 export function cleanLabel(name: string): string {
-  return name
-    .replace(/^\s*\d+\s*[x×]\s+/i, "")
-    .replace(/\s*\[[^\]]*\]\s*$/, "")
-    .replace(/\s*\(\s*\d+\s*(?:pts?|points?)\s*\)\s*$/i, "")
-    .trim();
+  let out = name.replace(/^\s*\d+\s*[x\u00d7]\s+/i, "");
+  const square = beforeTrailingGroup(out, "[");
+  if (square) out = square.head;
+  const round = beforeTrailingGroup(out, "(");
+  if (round && /^\d+\s*(?:pts?|points?)$/i.test(round.inner)) out = round.head;
+  return out.trim();
 }
 
 /** Significant words of a name: case, punctuation and the joiners that dialects drop ("of", "the") are noise. */
@@ -141,6 +178,8 @@ export interface NameIndex {
   readonly dsByKey: ReadonlyMap<string, readonly Datasheet[]>;
   /** Every datasheet with its normalised name and token key, for the looser matches. */
   readonly names: readonly { ds: Datasheet; key: string; tokenKey: string }[];
+  readonly detachmentsByKey: ReadonlyMap<string, readonly Detachment[]>;
+  readonly enhancementsByKey: ReadonlyMap<string, readonly Enhancement[]>;
 }
 
 const INDEXES = new WeakMap<Snapshot, NameIndex>();
@@ -158,10 +197,29 @@ export function nameIndexOf(snapshot: Snapshot): NameIndex {
   const names: { ds: Datasheet; key: string; tokenKey: string }[] = [];
   for (const ds of snapshot.data.datasheets) {
     const key = normaliseName(ds.name);
-    dsByKey.set(key, [...(dsByKey.get(key) ?? []), ds]);
+    const held = dsByKey.get(key);
+    if (held) held.push(ds);
+    else dsByKey.set(key, [ds]);
     names.push({ ds, key, tokenKey: tokenKey(ds.name) });
   }
-  const index: NameIndex = { factionByKey, dsByKey, names };
+  // Detachments and enhancements were the last two lookups that read every row and normalised every
+  // name on each call. A BattleScribe roster asks about an enhancement once per selection, which
+  // put nearly all of a .rosz import's time in that one scan.
+  const detachmentsByKey = new Map<string, Detachment[]>();
+  for (const d of snapshot.data.detachments) {
+    const key = normaliseName(d.name);
+    const held = detachmentsByKey.get(key);
+    if (held) held.push(d);
+    else detachmentsByKey.set(key, [d]);
+  }
+  const enhancementsByKey = new Map<string, Enhancement[]>();
+  for (const e of snapshot.data.enhancements) {
+    const key = normaliseName(e.name);
+    const held = enhancementsByKey.get(key);
+    if (held) held.push(e);
+    else enhancementsByKey.set(key, [e]);
+  }
+  const index: NameIndex = { factionByKey, dsByKey, names, detachmentsByKey, enhancementsByKey };
   INDEXES.set(snapshot, index);
   return index;
 }
@@ -228,9 +286,8 @@ export class RosterImportContext {
 
   /** Detachment by name; prefers the roster's faction, falls back to any faction. */
   findDetachment(label: string): Detachment | undefined {
-    const key = normaliseName(label);
-    const dets = this.snapshot.data.detachments;
-    return dets.find((d) => normaliseName(d.name) === key && (!this.factionId || d.factionId === this.factionId)) ?? dets.find((d) => normaliseName(d.name) === key);
+    const dets = this.index.detachmentsByKey.get(normaliseName(label)) ?? [];
+    return dets.find((d) => !this.factionId || d.factionId === this.factionId) ?? dets[0];
   }
 
   /**
@@ -351,9 +408,8 @@ export class RosterImportContext {
 
   /** Enhancement by name; prefers one that belongs to a detachment already in the roster. */
   findEnhancement(label: string): Enhancement | undefined {
-    const key = normaliseName(label);
-    const enhs = this.snapshot.data.enhancements;
-    return enhs.find((e) => normaliseName(e.name) === key && this.detachments.some((d) => d.detachmentId === e.detachmentId)) ?? enhs.find((e) => normaliseName(e.name) === key);
+    const enhs = this.index.enhancementsByKey.get(normaliseName(label)) ?? [];
+    return enhs.find((e) => this.detachments.some((d) => d.detachmentId === e.detachmentId)) ?? enhs[0];
   }
 
   /**
@@ -483,6 +539,22 @@ function spreadByComposition(ds: Datasheet, size: number): RosterUnit["models"] 
  */
 export const MAX_COPIES = 20;
 
+/**
+ * Models one line may put in one group.
+ *
+ * The same reasoning as `MAX_COPIES`, one level up: a count straight out of the file decides how
+ * much memory the import takes, and `999999999999x Warden Squad` used to pass through to a model
+ * group and on into storage. No unit in the game fields two hundred models.
+ */
+export const MAX_MODELS = 200;
+
+/** A model count from a list, bounded and whole. Anything unreadable counts as one model. */
+export function modelCount(raw: string | number | undefined): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(MAX_MODELS, Math.floor(n));
+}
+
 /** A wargear entry as a list dialect writes it: how many models carry it and how many copies each carrier has. */
 export interface WargearItem {
   name: string;
@@ -490,6 +562,11 @@ export interface WargearItem {
   n: number;
   /** Copies per carrying model ("2x Twin hail gun" on a single-model unit); defaults to 1. */
   copies?: number;
+  /**
+   * Which `N with …` segment of the line the item came from. Items of one segment are carried by
+   * the same models, so they are put on the same models. An item with no segment stands alone.
+   */
+  seg?: number;
 }
 
 /**
@@ -502,18 +579,40 @@ export function splitByWargear(count: number, items: WargearItem[]): { count: nu
     if (!w.includes(name)) w.push(name);
   };
   for (const it of items) if (it.n === 0 || it.n >= count) add(subs[0]!.wargear, it.name);
+  // The items of one `N with …` segment are carried by the same models, so they are peeled off
+  // together. Placed one at a time, "6 with Hekatarii blade, Splinter pistol" over "3 with
+  // Gladiatorial weapons" gave three models a blade with no pistol and three a pistol with no
+  // blade. The totals were right and no model carried what the list said it did.
+  const segments: WargearItem[][] = [];
+  const bySeg = new Map<number, WargearItem[]>();
   for (const it of items) {
     if (it.n === 0 || it.n >= count) continue;
-    let remaining = it.n;
+    if (it.seg === undefined) {
+      segments.push([it]);
+      continue;
+    }
+    const held = bySeg.get(it.seg);
+    if (held) held.push(it);
+    else {
+      const made = [it];
+      bySeg.set(it.seg, made);
+      segments.push(made);
+    }
+  }
+  for (const seg of segments) {
+    const names = seg.map((x) => x.name);
+    let remaining = Math.max(...seg.map((x) => x.n));
     for (const sub of [...subs]) {
       if (remaining <= 0) break;
-      if (sub.wargear.includes(it.name)) continue;
+      if (names.every((nm) => sub.wargear.includes(nm))) continue;
       if (sub.count <= remaining) {
-        add(sub.wargear, it.name);
+        for (const nm of names) add(sub.wargear, nm);
         remaining -= sub.count;
       } else {
         sub.count -= remaining;
-        subs.push({ count: remaining, wargear: [...sub.wargear, it.name] });
+        const gained = [...sub.wargear];
+        for (const nm of names) add(gained, nm);
+        subs.push({ count: remaining, wargear: gained });
         remaining = 0;
       }
     }
@@ -530,14 +629,14 @@ export function wargearGroups(count: number, items: WargearItem[]): { count: num
   const size = Math.max(1, count);
   // one bucket per (name, n): entries that repeat inside a bucket are extra copies, while separate `N with`
   // segments describe disjoint models, so their counts add — "1 with Carbine, 9 with Carbine" is all ten models
-  const buckets = new Map<string, { name: string; n: number; copies: number }>();
+  const buckets = new Map<string, { name: string; n: number; copies: number; seg?: number }>();
   const order: string[] = [];
   for (const it of items) {
     const key = `${it.name}|${it.n}`;
     const b = buckets.get(key);
     if (b) b.copies += Math.max(1, it.copies ?? 1);
     else {
-      buckets.set(key, { name: it.name, n: it.n, copies: Math.max(1, it.copies ?? 1) });
+      buckets.set(key, { name: it.name, n: it.n, copies: Math.max(1, it.copies ?? 1), ...(it.seg === undefined ? {} : { seg: it.seg }) });
       order.push(key);
     }
   }
@@ -547,9 +646,13 @@ export function wargearGroups(count: number, items: WargearItem[]): { count: num
     const b = buckets.get(key)!;
     copies.set(b.name, Math.max(copies.get(b.name) ?? 0, b.copies));
     const seen = unique.find((u) => u.name === b.name);
-    if (!seen) unique.push({ name: b.name, n: b.n });
-    else if (seen.n === 0 || b.n === 0 || seen.n + b.n >= size) seen.n = 0;
-    else seen.n += b.n;
+    if (!seen) unique.push({ name: b.name, n: b.n, ...(b.seg === undefined ? {} : { seg: b.seg }) });
+    else {
+      if (seen.n === 0 || b.n === 0 || seen.n + b.n >= size) seen.n = 0;
+      else seen.n += b.n;
+      // The name was written in more than one segment, so it belongs to no single one of them.
+      delete seen.seg;
+    }
   }
   const subs = splitByWargear(size, unique);
   const ordered = subs.length > 1 ? [...subs.slice(1), subs[0]!] : subs;

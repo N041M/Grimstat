@@ -99,14 +99,25 @@ export function CollectionPage() {
     [confirm],
   );
 
-  /** Add a datasheet's models to the shelf; a second box adds to the first. */
+  /**
+   * Add a datasheet's models to the shelf; a second box adds to the first.
+   *
+   * The count is read and written in one transaction, so a second press adds to what the first one
+   * wrote instead of to the count it had read, and a write that fails says so.
+   */
   const add = useCallback(
     async (ds: Datasheet, models: number) => {
-      const had = await db.collection.get(ds.id);
-      await db.collection.put(addModels(had, ds, factionName(ds.factionId), models, nowIso()));
-      notifyStoreChanged("collection");
+      try {
+        await db.transaction("rw", db.collection, async () => {
+          const had = await db.collection.get(ds.id);
+          await db.collection.put(addModels(had, ds, factionName(ds.factionId), models, nowIso()));
+        });
+        notifyStoreChanged("collection");
+      } catch (e) {
+        notify(e instanceof Error ? e.message : String(e), "error");
+      }
     },
-    [factionName],
+    [factionName, notify],
   );
 
   /**

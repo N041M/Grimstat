@@ -11,7 +11,7 @@ import { AuthError } from "./auth";
 import { bodyText, type StoredBody } from "./codec";
 import type { Deps } from "./deps";
 
-const HANDLE = /^[a-z0-9](?:[a-z0-9-]{1,18}[a-z0-9])?$/;
+const HANDLE = /^[a-z0-9][a-z0-9-]{1,18}[a-z0-9]$/;
 /**
  * Names nobody gets. Paths of the site, names that read as the site's own or as staff, test names,
  * and words a page address should not be.
@@ -44,7 +44,15 @@ export async function setHandle(deps: Deps, userId: string, raw: string): Promis
   if ("error" in checked) throw new AuthError(400, checked.error);
   const taken = await deps.db.first<{ id: string }>("SELECT id FROM users WHERE handle = ?", checked.handle);
   if (taken && taken.id !== userId) throw new AuthError(409, "That handle is taken.");
-  await deps.db.run("UPDATE users SET handle = ? WHERE id = ?", checked.handle, userId);
+  try {
+    await deps.db.run("UPDATE users SET handle = ? WHERE id = ?", checked.handle, userId);
+  } catch (err) {
+    // Two accounts claiming the same handle at the same moment both read it as free. The one that
+    // writes second is refused by the unique index, and hears the same thing as if it had been
+    // slower still.
+    if (/unique/i.test(err instanceof Error ? err.message : String(err))) throw new AuthError(409, "That handle is taken.");
+    throw err;
+  }
   return checked.handle;
 }
 

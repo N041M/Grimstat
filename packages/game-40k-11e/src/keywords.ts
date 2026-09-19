@@ -20,8 +20,9 @@ export function create11eKeywordRegistry(rules: RulesParams = RULES): KeywordReg
   r.register("RAPID FIRE", (kw, c) => {
     if (c.rangeBand === "half") c.mods.add({ channel: CH.attacks, op: "add", value: numVal(kw.value), source: "Rapid Fire" });
   }, { sample: "Rapid Fire 1" });
-  r.register("BLAST", (_kw, c) => {
-    const bonus = Math.floor(c.targetModelCount / rules.blastPerModels);
+  r.register("BLAST", (kw, c) => {
+    // Printed bare it is one extra attack die per five models. Printed [BLAST X] it is X of them.
+    const bonus = Math.floor(c.targetModelCount / rules.blastPerModels) * numVal(kw.value);
     if (bonus > 0) c.mods.add({ channel: CH.attacks, op: "add", value: bonus, source: "Blast" });
   });
   r.register("CLEAVE", (kw, c) => {

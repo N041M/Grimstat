@@ -44,13 +44,22 @@ export function useGame(id: string | undefined): GameHandle {
   const [depth, setDepth] = useState(0);
   const timer = useRef<number | undefined>(undefined);
   const pending = useRef<GameRecord | undefined>(undefined);
+  /** The game the hook is showing, so the read below can tell its own record from another. */
+  const shown = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     let alive = true;
     past.current = [];
     setDepth(0);
     if (!id) {
+      shown.current = undefined;
       setGame(undefined);
+      setLoaded(true);
+      return;
+    }
+    // The game already on screen is the newest copy of it, so a read cannot improve on it, and a
+    // read that lands before its first write does would undo it.
+    if (shown.current === id) {
       setLoaded(true);
       return;
     }
@@ -59,6 +68,7 @@ export function useGame(id: string | undefined): GameHandle {
       .get(id)
       .then((rec) => {
         if (!alive) return;
+        shown.current = rec?.id;
         setGame(rec);
         setLoaded(true);
       })
@@ -136,16 +146,24 @@ export function useGame(id: string | undefined): GameHandle {
 
   const rename = useCallback((name: string) => write((rec) => ({ ...rec, name })), [write]);
 
-  const open = useCallback(
-    (next: GameRecord) => {
-      past.current = [];
-      setDepth(0);
-      setGame(next);
-      setLoaded(true);
-      queue(next);
-    },
-    [queue],
-  );
+  /**
+   * Takes a game as the one on screen and writes it at once.
+   *
+   * The write cannot wait for the debounce: the caller navigates to the new game in the same tick,
+   * which sends the effect above to read a record that is not in the store yet, and a game started
+   * from the setup screen came straight back to the setup screen.
+   */
+  const open = useCallback((next: GameRecord) => {
+    past.current = [];
+    setDepth(0);
+    shown.current = next.id;
+    setGame(next);
+    setLoaded(true);
+    pending.current = undefined;
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = undefined;
+    void saveGame(next);
+  }, []);
 
   return { game, loaded, state: game?.state ?? newGameState(), log: game?.log ?? [], canUndo: depth > 0, dispatch, batch, undo, rename, open };
 }

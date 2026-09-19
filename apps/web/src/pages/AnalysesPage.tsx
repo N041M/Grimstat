@@ -52,6 +52,9 @@ export function AnalysesPage() {
   }, []);
 
   const select = (next: AnalysisTab) => {
+    // The tab already on screen published the header. Clearing it here would take Run and Export
+    // away until something else made that tab publish again.
+    if (next === tab) return;
     setTab(next);
     setHeader({});
     void setSetting(TAB_KEY, next);

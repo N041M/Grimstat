@@ -12,7 +12,7 @@
 
 import { createRequire } from "node:module";
 import { createWriteStream } from "node:fs";
-import { copyFile, mkdir, stat } from "node:fs/promises";
+import { copyFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
@@ -64,18 +64,36 @@ const exists = async (path) => {
   }
 };
 
+/**
+ * Puts a file in place only once it is whole.
+ *
+ * Every check here is "is it there and not empty", so a download or a copy cut short — a dropped
+ * connection, a Ctrl-C during `pnpm dev` — used to leave a piece of a file that every later run
+ * accepted. The recogniser then failed at runtime on a broken model and no rebuild repaired it.
+ */
+const intoPlace = async (path, write) => {
+  const partial = `${path}.part`;
+  try {
+    await write(partial);
+    await rename(partial, path);
+  } catch (e) {
+    await rm(partial, { force: true });
+    throw e;
+  }
+};
+
 await mkdir(out, { recursive: true });
 
 for (const name of COPY) {
   const to = join(out, name);
   if (await exists(to)) continue;
-  await copyFile(join(core, name), to);
+  await intoPlace(to, (partial) => copyFile(join(core, name), partial));
   console.log(`ocr: copied ${name}`);
 }
 
 const worker = join(out, "worker.min.js");
 if (!(await exists(worker))) {
-  await copyFile(join(dist, "worker.min.js"), worker);
+  await intoPlace(worker, (partial) => copyFile(join(dist, "worker.min.js"), partial));
   console.log("ocr: copied worker.min.js");
 }
 
@@ -83,8 +101,8 @@ const model = join(out, "eng.traineddata.gz");
 if (!(await exists(model))) {
   console.log("ocr: downloading the English model, about 2 MB");
   const response = await fetch(MODEL);
-  if (!response.ok || !response.body) throw new Error(`ocr: the model could not be downloaded (${response.status}). Text import still works; pictures need this file.`);
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(model));
+  if (!response.ok || !response.body) throw new Error(`ocr: the model could not be downloaded (${response.status}). Text import still works without it. Pictures need it.`);
+  await intoPlace(model, (partial) => pipeline(Readable.fromWeb(response.body), createWriteStream(partial)));
   console.log("ocr: downloaded eng.traineddata.gz");
 }
 

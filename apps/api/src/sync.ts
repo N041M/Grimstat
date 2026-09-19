@@ -8,8 +8,9 @@
  * the same rule. Client clocks are clamped: a time more than five minutes ahead of the server's is
  * set to the server's before the comparison.
  *
- * The whole push is one batch. If any statement fails, nothing is written and the device keeps its
- * outbox for next time.
+ * The records of one push are written in one batch. If any statement fails, none of them is written
+ * and the device keeps its outbox for next time. The counters below are moved in a statement of
+ * their own before that batch, so a failed batch puts them back.
  *
  * Bodies are JSON on the wire and gzip in the database (codec.ts). The 256 KB cap on one record is
  * on the JSON, the same number the device checks. The account's 20 MB is of stored bytes.
@@ -24,6 +25,7 @@
 import { z } from "zod";
 import { SYNC_MAX_ACCOUNT_BYTES, SYNC_MAX_BODY_BYTES, SYNC_MAX_CHANGES, SYNC_PAGE, SYNC_STORES } from "@grimstat/schema";
 import { bodyText, byteLength, gzipText, storedLength, type StoredBody } from "./codec";
+import { RECOUNT_BYTES } from "./db";
 import { iso, nextReset, type Deps } from "./deps";
 
 const SKEW = 5 * 60 * 1000;
@@ -87,10 +89,21 @@ const ROW_COLUMNS = "store, id, seq, revision, updated_at, deleted_at, body, bod
 /** A store name never holds a bar, so this joins a key the database can compare in one column. */
 const keyOf = (store: string, id: string): string => `${store}|${id}`;
 
-async function toChange(r: Row): Promise<Change> {
+/**
+ * A stored row as the change a device receives, or nothing when its body cannot be read.
+ *
+ * A body that will not ungzip or will not parse is a broken row rather than a record. Throwing
+ * here would take the whole request with it and leave the account unable to sync at all, so the
+ * row is left out of the page instead, and a push that names it is allowed to overwrite it.
+ */
+async function toChange(r: Row): Promise<Change | undefined> {
   const head = { store: r.store as Change["store"], id: r.id, revision: r.revision, updatedAt: r.updated_at };
   if (r.deleted_at) return { ...head, deletedAt: r.deleted_at };
-  return { ...head, body: JSON.parse((await bodyText(r)) ?? "{}") as Record<string, unknown> };
+  try {
+    return { ...head, body: JSON.parse((await bodyText(r)) ?? "{}") as Record<string, unknown> };
+  } catch {
+    return undefined;
+  }
 }
 
 /** The rows the request names, fetched by primary key in chunks small enough for D1's parameter limit. */
@@ -113,6 +126,23 @@ async function existingRows(deps: Deps, userId: string, changes: Change[]): Prom
 interface Winner extends Change {
   gz?: Uint8Array;
   shared: 0 | 1;
+}
+
+/**
+ * Puts an account's counters back after a push reserved room and then failed to write.
+ *
+ * Its own failure is swallowed: the caller is already throwing the error the device needs to see,
+ * and the nightly purge sets the size from the rows again.
+ */
+async function restoreCounters(deps: Deps, userId: string, writes: number): Promise<void> {
+  try {
+    await deps.db.batch([
+      { sql: RECOUNT_BYTES, params: [userId, userId] },
+      { sql: "UPDATE users SET day_writes = MAX(0, day_writes - ?) WHERE id = ?", params: [writes, userId] },
+    ]);
+  } catch {
+    /* the counters stay as they are until the next purge */
+  }
 }
 
 export async function sync(deps: Deps, userId: string, req: SyncRequest): Promise<SyncResponse> {
@@ -142,8 +172,13 @@ export async function sync(deps: Deps, userId: string, req: SyncRequest): Promis
       const key = keyOf(change.store, change.id);
       const have = held.get(key);
       if (have && have.updated_at > updatedAt) {
-        rejected.push({ store: change.store, id: change.id, server: await toChange(have) });
-        continue;
+        const server = await toChange(have);
+        if (server) {
+          rejected.push({ store: change.store, id: change.id, server });
+          continue;
+        }
+        // The server's copy is newer but unreadable, so there is nothing to send back and nothing
+        // worth keeping. The device's copy takes its place.
       }
       const gz = body === undefined ? undefined : await gzipText(body);
       const shared = change.store === "rosters" && change.body?.shared === true ? 1 : 0;
@@ -187,13 +222,22 @@ export async function sync(deps: Deps, userId: string, req: SyncRequest): Promis
       throw new SyncError(507, `This account has reached its ${Math.round(SYNC_MAX_ACCOUNT_BYTES / 1024 / 1024)} MB of synced data. Delete an army or a game you no longer need, and sync again.`);
     }
     let seq = counter.seq - winners.length;
-    await deps.db.batch(
-      winners.map((w) => ({
-        sql: `INSERT INTO records (user_id, store, id, seq, revision, updated_at, deleted_at, body, body_gz, shared) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-              ON CONFLICT (user_id, store, id) DO UPDATE SET seq = excluded.seq, revision = excluded.revision, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, body = NULL, body_gz = excluded.body_gz, shared = excluded.shared`,
-        params: [userId, w.store, w.id, ++seq, w.revision, w.updatedAt, w.deletedAt ?? null, w.gz ?? null, w.shared],
-      })),
-    );
+    try {
+      await deps.db.batch(
+        winners.map((w) => ({
+          sql: `INSERT INTO records (user_id, store, id, seq, revision, updated_at, deleted_at, body, body_gz, shared) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                ON CONFLICT (user_id, store, id) DO UPDATE SET seq = excluded.seq, revision = excluded.revision, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, body = NULL, body_gz = excluded.body_gz, shared = excluded.shared`,
+          params: [userId, w.store, w.id, ++seq, w.revision, w.updatedAt, w.deletedAt ?? null, w.gz ?? null, w.shared],
+        })),
+      );
+    } catch (err) {
+      // The counters moved in the statement above and the records did not, so the account now
+      // looks larger and busier than it is. Left alone, a run of failed pushes would fill the
+      // account's allowance with data it does not hold. The size is set from the rows and the
+      // day's writes are given back. A sequence number that nothing used is simply skipped.
+      await restoreCounters(deps, userId, winners.length);
+      throw err;
+    }
     for (const w of winners) applied.push({ store: w.store, id: w.id });
   }
 
@@ -203,5 +247,6 @@ export async function sync(deps: Deps, userId: string, req: SyncRequest): Promis
   const more = rows.length > SYNC_PAGE;
   const page = more ? rows.slice(0, SYNC_PAGE) : rows;
   const cursor = page.length ? page[page.length - 1]!.seq : req.cursor;
-  return { cursor, applied, rejected, changes: await Promise.all(page.map(toChange)), more };
+  const changes = (await Promise.all(page.map(toChange))).filter((c): c is Change => c !== undefined);
+  return { cursor, applied, rejected, changes, more };
 }

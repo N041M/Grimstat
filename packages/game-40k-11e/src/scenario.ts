@@ -205,7 +205,11 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
     const indirectUnseen = mods.flag(CH.indirect) && ec.flags.has("target-not-visible");
     const indirectPenalty = indirectUnseen && !rules.indirectNotVisibleSnap;
     if (indirectPenalty) mods.add({ channel: CH.hitRoll, op: "add", value: -1, source: "Indirect Fire" });
-    const cover = mods.flag(CH.stealth) || indirectPenalty;
+    // Stealth. In 11e the unit has the benefit of cover, which an IGNORES COVER weapon cancels. In
+    // 10e it subtracts 1 from the Hit roll of ranged attacks and nothing cancels it.
+    const stealth = mods.flag(CH.stealthAbility);
+    if (stealth && !rules.stealthAsCover && w.kind === "ranged") mods.add({ channel: CH.hitRoll, op: "add", value: -1, source: "Stealth" });
+    const cover = mods.flag(CH.stealth) || indirectPenalty || (stealth && rules.stealthAsCover);
     const inCover = (ctx.inCover || cover) && w.kind === "ranged" && !ignoresCover;
     // PSYCHIC ignores penalties by rule. "You can ignore any or all modifiers" is the player's
     // choice rather than a rule, and a player drops the ones that hurt and keeps the ones that
@@ -260,8 +264,12 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
       const coverBonus = inCover && rules.coverAsSaveBonus && !(m.Sv <= 3 && ap === 0) ? 1 : 0;
       const armourTarget = mods.num(CH.save, m.Sv) + ap - coverBonus;
       let inv: number | null = m.InvSv ?? null;
-      if (mods.has(CH.invuln)) {
-        const v = mods.num(CH.invuln, inv ?? 7, POLICY[CH.critWound]);
+      // A rule that names a target can grant an invulnerable save. One that only shifts a target
+      // says nothing about a model that has none, and must not make one out of the 7 that stands
+      // for having none.
+      const namesInvuln = mods.list(CH.invuln).some((x) => x.op === "set" || x.op === "cap");
+      if (mods.has(CH.invuln) && (namesInvuln || inv !== null)) {
+        const v = mods.num(CH.invuln, inv ?? 7, POLICY[CH.invuln]);
         inv = v >= 7 ? inv : inv === null ? v : Math.min(inv, v);
       }
       const so: SaveOpts = { armourTarget, invulnTarget: inv, rollMod: saveMod, reroll: mods.reroll(CH.rerollSave), sixAlwaysSaves: rules.sixAlwaysSaves };
@@ -292,12 +300,11 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
       }
     }
 
-    const attackBonus = mods.rawAdd(CH.attacks);
     const hazardous = mods.flag(CH.hazardous);
     weapons.push({
       name: w.name,
       count: w.count,
-      attacks: attacksPMF(w.A, attackBonus),
+      attacks: attacksPMF(w.A, mods),
       hit,
       autoHit,
       sustained,

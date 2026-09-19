@@ -14,7 +14,8 @@ import { byteLength } from "./codec";
 import { sqliteDb, type Db } from "./db";
 import type { Deps } from "./deps";
 import { memoryLimiter, noLimiter, RATE_LIMITS, type RateLimiter } from "./limits";
-import { ANON_LIMIT_PER_DAY } from "./links";
+import { shortId } from "./crypto";
+import { ACCOUNT_LIMIT_PER_DAY, ANON_LIMIT_PER_DAY } from "./links";
 import { migrate } from "./node";
 import { compressPlainRows, purge } from "./purge";
 import { MAX_WRITES_PER_DAY } from "./sync";
@@ -564,5 +565,89 @@ describe("handles and public pages", () => {
     const redirect = await h.app.request("/u/Alice");
     expect(redirect.status).toBe(302);
     expect(redirect.headers.get("location")).toBe(`${APP}/#/u/alice`);
+  });
+
+  it("counts nothing against the sign-in allowances when the email does not send", async () => {
+    const h = harness();
+    h.deps.mail = {
+      send: async () => {
+        throw new Error("the mail host is down");
+      },
+    };
+    for (let i = 0; i < LIMIT_PER_EMAIL + 2; i++) expect((await h.json("POST", "/api/auth/start", { email: "alice@example.com" })).status).toBe(500);
+    h.deps.mail = { send: async (to, _subject, text) => void h.mail.push({ to, text }) };
+    // The failures left nothing behind, so the address still has its whole hour's allowance.
+    const token = await h.signIn("alice@example.com");
+    expect((await h.json("GET", "/api/me", undefined, token)).status).toBe(200);
+  });
+
+  it("puts the account's size back when the records fail to write", async () => {
+    let failing = false;
+    const h = harness((db) => ({
+      ...db,
+      batch: async (stmts) => {
+        if (failing && stmts.some((st) => st.sql.includes("INSERT INTO records"))) throw new Error("the database dropped the write");
+        return db.batch(stmts);
+      },
+    }));
+    const alice = await h.signIn("alice@example.com");
+    const army = (id: string, at: string) => ({ store: "rosters" as const, id, revision: 1, updatedAt: at, body: { id, name: "A".repeat(2000), units: [] } });
+    expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [army("r1", NOW)] }, alice)).status).toBe(200);
+    const size = async () => (await h.deps.db.first<{ bytes: number; day_writes: number }>("SELECT bytes, day_writes FROM users"))!;
+    const settled = await size();
+
+    failing = true;
+    for (let i = 0; i < 5; i++) expect((await h.json("POST", "/api/sync", { cursor: 0, changes: [army("r2", NOW)] }, alice)).status).toBe(500);
+    const after = await size();
+    expect(after.bytes).toBe(settled.bytes);
+    expect(after.day_writes).toBe(settled.day_writes);
+  });
+
+  it("refuses a handle shorter than the rule it states", async () => {
+    const h = harness();
+    const alice = await h.signIn("alice@example.com");
+    for (const handle of ["a", "ab", "-abc", "abc-"]) expect((await h.json("PUT", "/api/me/handle", { handle }, alice)).status).toBe(400);
+    expect((await h.json("PUT", "/api/me/handle", { handle: "abc" }, alice)).status).toBe(200);
+  });
+
+  it("takes only a token the app could have made, and caps an account's links for the day", async () => {
+    const h = harness();
+    const alice = await h.signIn("alice@example.com");
+    expect((await h.json("POST", "/api/links", { kind: "roster", token: "a\r\nX-Injected: 1" }, alice)).status).toBe(400);
+    expect((await h.json("POST", "/api/links", { kind: "roster", token: "a b" }, alice)).status).toBe(400);
+    const made = await h.json<{ id: string }>("POST", "/api/links", { kind: "roster", token: "NoBnA+g-$" }, alice);
+    expect(made.status).toBe(200);
+    const opened = await h.app.request(`/l/${made.body.id}`);
+    expect(opened.status).toBe(302);
+    expect(opened.headers.get("location")).toBe(`${APP}/#/armies?r=NoBnA+g-$`);
+
+    // The hourly cap is on the address, so one account spread over several addresses passes it.
+    // The account's own day is what stops it.
+    const from = (i: number) => ({ "cf-connecting-ip": `203.0.113.${10 + Math.floor(i / 25)}` });
+    for (let i = 1; i < ACCOUNT_LIMIT_PER_DAY; i++) expect((await h.json("POST", "/api/links", { kind: "scenario", token: `t${i}` }, alice, from(i))).status).toBe(200);
+    expect((await h.json("POST", "/api/links", { kind: "scenario", token: "one-too-many" }, alice, from(200))).status).toBe(429);
+  });
+
+  it("keeps the address's sign-in count when the account is deleted", async () => {
+    // The rows are what the hourly and daily limits count. Deleting them with the account would
+    // hand the address a fresh allowance for the price of making an account and deleting it.
+    const h = harness();
+    const alice = await h.signIn("alice@example.com");
+    expect((await h.json("DELETE", "/api/me", undefined, alice)).status).toBe(200);
+    expect((await h.deps.db.first<{ n: number }>("SELECT COUNT(*) AS n FROM logins"))!.n).toBe(1);
+    expect((await h.deps.db.first<{ n: number }>("SELECT COUNT(*) AS n FROM users"))!.n).toBe(0);
+  });
+});
+
+describe("the typable alphabet", () => {
+  it("draws every character about as often as every other", () => {
+    const counts = new Map<string, number>();
+    for (let i = 0; i < 20000; i++) for (const ch of shortId()) counts.set(ch, (counts.get(ch) ?? 0) + 1);
+    const drawn = [...counts.values()];
+    expect(counts.size).toBe(31);
+    const even = (20000 * 8) / 31;
+    // Folding a byte into thirty-one would make the first eight characters an eighth more likely.
+    expect(Math.max(...drawn)).toBeLessThan(even * 1.07);
+    expect(Math.min(...drawn)).toBeGreaterThan(even * 0.93);
   });
 });

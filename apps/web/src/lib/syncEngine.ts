@@ -59,16 +59,26 @@ const isFetchable = (value: unknown): boolean => typeof value === "string" && (/
  * What the outbox and the tombstones hold, as changes, oldest first, at most one request's worth
  * by count (`limit`) and by size. A batch always holds at least one change when there is one.
  */
-export async function collectChanges(db: GrimstatDb, limit = SYNC_MAX_CHANGES): Promise<{ changes: Change[]; outbox: OutboxRecord[]; tombstones: TombstoneRecord[] }> {
+export async function collectChanges(db: GrimstatDb, limit = SYNC_MAX_CHANGES): Promise<{ changes: Change[]; outbox: OutboxRecord[]; tombstones: TombstoneRecord[]; unsendable: OutboxRecord[] }> {
   const queued = (await db.outbox.orderBy("changedAt").limit(limit).toArray()) as OutboxRecord[];
   const changes: Change[] = [];
   const outbox: OutboxRecord[] = [];
+  const unsendable: OutboxRecord[] = [];
   let bytes = 0;
   for (const o of queued) {
     const row = (await db.table(o.store).get(o.id)) as Row | undefined;
     // Deleted since it was queued: the tombstone carries it.
     if (!row) {
       outbox.push(o);
+      continue;
+    }
+    // The server reads a whole request or none of it, so one record it will not accept would fail
+    // every request that carried it and nothing behind it would ever be sent. A record written by
+    // something other than the app — an imported backup with a date of its own — is the way one
+    // gets here, and it is set aside now rather than after a round trip that cannot say which
+    // record it was about.
+    if (!sendable(o, row)) {
+      unsendable.push(o);
       continue;
     }
     const size = JSON.stringify(row).length;
@@ -79,7 +89,17 @@ export async function collectChanges(db: GrimstatDb, limit = SYNC_MAX_CHANGES): 
   }
   const tombstones = (await db.tombstones.orderBy("deletedAt").limit(Math.max(0, limit - changes.length)).toArray()) as TombstoneRecord[];
   for (const t of tombstones) changes.push({ store: t.store as SyncStore, id: t.id, revision: 0, updatedAt: t.deletedAt, deletedAt: t.deletedAt });
-  return { changes, outbox, tombstones };
+  return { changes, outbox, tombstones, unsendable };
+}
+
+/** A time written the one way every record in the store carries, which is what the server takes. */
+const isTimestamp = (v: unknown): v is string => typeof v === "string" && !Number.isNaN(Date.parse(v)) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(v);
+
+/** Whether the server would take this record, checked here so a batch is never refused whole. */
+function sendable(o: OutboxRecord, row: Row): boolean {
+  if (o.id.length > 200) return false;
+  if (!isTimestamp(row.updatedAt ?? o.changedAt)) return false;
+  return true;
 }
 
 /**
@@ -101,7 +121,11 @@ export async function applyChanges(db: GrimstatDb, changes: Change[], conflict =
       const table = db.table(change.store);
       const pending = (await db.outbox.get([change.store, change.id])) as OutboxRecord | undefined;
       const mine = (await table.get(change.id)) as Row | undefined;
-      if (!conflict && mine?.updatedAt && mine.updatedAt > change.updatedAt) continue;
+      // Newest wins, on the rejected path too. A push that loses comes back with the server's copy,
+      // and if the player kept typing while the request was in flight their record is now newer
+      // than both — writing the server's copy over it would throw that edit away, outbox row and
+      // all, and nothing would ever send it.
+      if (mine?.updatedAt && mine.updatedAt > change.updatedAt) continue;
       if (pending && !conflict && pending.changedAt > change.updatedAt && !mine?.updatedAt) continue;
       const gone = (await db.tombstones.get([change.store, change.id])) as TombstoneRecord | undefined;
       if (gone && !conflict && gone.deletedAt > change.updatedAt) continue;
@@ -163,7 +187,14 @@ export async function runSync({ db, fetchImpl, token, now = () => new Date() }: 
   let cursor: number = typeof stored === "number" ? stored : 0;
   let limit = SYNC_MAX_CHANGES;
   for (let rounds = 0; rounds < 100; rounds++) {
-    const { changes, outbox, tombstones } = await collectChanges(db, limit);
+    const { changes, outbox, tombstones, unsendable } = await collectChanges(db, limit);
+    if (unsendable.length) {
+      await untracked(db, [db.outbox], async () => {
+        for (const o of unsendable) await db.outbox.delete([o.store, o.id]);
+      });
+      result.skipped += unsendable.length;
+      if (!changes.length) continue;
+    }
     let res: SyncResponse;
     try {
       res = await api<SyncResponse>(fetchImpl, "POST", "/api/sync", { cursor, changes }, token);
@@ -171,7 +202,10 @@ export async function runSync({ db, fetchImpl, token, now = () => new Date() }: 
       // Too large: a batch is halved and tried again; a single record is set aside for good,
       // because it would be refused every time and would block everything behind it. A full
       // account answers 507 instead and is not caught here: nothing is set aside, and the round
-      // fails and is tried again later, once something has been deleted.
+      // fails and is tried again later, once something has been deleted. A 400 is not caught here
+      // either: the server answers it for a request it could not read as a whole as much as for a
+      // record it could not read, and a record must never be dropped over the wrong one. What the
+      // server would refuse is found before the request instead, in `collectChanges`.
       if (!(e instanceof ApiError) || e.status !== 413 || changes.length === 0) throw e;
       if (changes.length > 1) {
         limit = Math.max(1, Math.floor(changes.length / 2));

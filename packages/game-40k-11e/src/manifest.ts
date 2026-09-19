@@ -35,6 +35,8 @@ export interface RulesParams {
    */
   savesResolvedLowestFirst: boolean;
   coverAsSkillPenalty: boolean;
+  /** STEALTH gives the target the benefit of cover (11e), or subtracts 1 from the Hit roll (10e). */
+  stealthAsCover: boolean;
   /** 10e-style cover: +1 to the armour save against ranged attacks, except for a 3+ or better save against AP0. */
   coverAsSaveBonus: boolean;
   /** Lethal Hits is a choice (11e) or automatic (10e). */
@@ -67,6 +69,8 @@ export const RULES: RulesParams = {
   /** Cover: -1 to the attacker's BS/WS *stat* (uncapped channel), not +1 to the save. */
   coverAsSkillPenalty: true,
   coverAsSaveBonus: false,
+  /** STEALTH: the target has the benefit of cover against ranged attacks. */
+  stealthAsCover: true,
   lethalOptional: true,
   /** Indirect Fire at a target that cannot be seen: only unmodified 6s hit. */
   indirectNotVisibleSnap: true,
@@ -90,6 +94,8 @@ export const RULES_10E: RulesParams = {
   savesResolvedLowestFirst: false,
   coverAsSkillPenalty: false,
   coverAsSaveBonus: true,
+  /** STEALTH: subtract 1 from the Hit roll of ranged attacks against the unit. */
+  stealthAsCover: false,
   lethalOptional: false,
   /** Indirect Fire at a target that cannot be seen: -1 to the Hit roll, and the target has the Benefit of Cover. */
   indirectNotVisibleSnap: false,

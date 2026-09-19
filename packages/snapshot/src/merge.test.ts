@@ -298,9 +298,10 @@ describe("a chapter that pays different points from its parent", () => {
     expect(points).toEqual({ "ds:space-marines:jump": 85, "ds:blood-angels:jump": 95 });
   });
 
-  it("falls back to the parent's price when the structure source has no chapter datasheet", () => {
-    // A filtered import, or a source that ships only the parent catalogue. The chapter datasheet has
-    // no model profile from anywhere, so it is dropped and reported rather than kept as a stub.
+  it("keeps the chapter's price by copying the parent's profiles", () => {
+    // A filtered import, or a source that ships only the parent catalogue. No source describes the
+    // chapter's datasheet, so it takes the profiles of the same unit in the parent faction and the
+    // points the chapter publishes stay on it.
     const merged = mergeSources([
       part("mfm-yaml", {
         factions,
@@ -309,9 +310,35 @@ describe("a chapter that pays different points from its parent", () => {
       }),
       part("bsdata-json", { factions: [factions[0]!], datasheets: [sheet("ds:space-marines:jump", "faction:space-marines", true)] }),
     ]);
-    expect(merged.data.datasheets.map((d) => d.id)).toEqual(["ds:space-marines:jump"]);
-    expect(merged.data.priceRules.map((r) => r.tiers[0]!.points)).toEqual([85]);
-    expect(merged.unmatched.some((u) => u.entity === "datasheet" && u.id === "ds:blood-angels:jump")).toBe(true);
+    expect(merged.data.datasheets.map((d) => d.id).sort()).toEqual(["ds:blood-angels:jump", "ds:space-marines:jump"]);
+    const points = Object.fromEntries(merged.data.priceRules.map((r) => [r.datasheetId, r.tiers[0]!.points]));
+    expect(points).toEqual({ "ds:space-marines:jump": 85, "ds:blood-angels:jump": 95 });
+    const chapter = merged.data.datasheets.find((d) => d.id === "ds:blood-angels:jump")!;
+    expect(chapter.factionId).toBe("faction:blood-angels");
+    expect(chapter.models.map((m) => m.name)).toEqual(["Trooper"]);
+    // its own profile ids, so two datasheets never share one
+    expect(chapter.models.map((m) => m.id)).toEqual(["ds:blood-angels:jump:m"]);
+    expect(merged.unmatched).toEqual([]);
+  });
+});
+
+describe("mergeSources: leader and support lists", () => {
+  it("drops a reference to a datasheet no source describes", () => {
+    const merged = mergeSources([
+      part("mfm-yaml", {
+        datasheets: [
+          datasheet({ id: "ds:f:captain", name: "Captain", leaderTo: ["ds:f:squad", "ds:f:ghosts"] }),
+          datasheet({}),
+          datasheet({ id: "ds:f:ghosts", name: "Ghosts" }),
+        ],
+      }),
+      part("wahapedia-csv", {
+        datasheets: [datasheet({ id: "ds:f:captain", name: "Captain", models: [{ ...MODEL, id: "mp:f:captain:captain" }] }), datasheet({ models: [MODEL] })],
+      }),
+    ]);
+    expect(merged.data.datasheets.map((d) => d.id).sort()).toEqual(["ds:f:captain", "ds:f:squad"]);
+    expect(merged.data.datasheets.find((d) => d.id === "ds:f:captain")!.leaderTo).toEqual(["ds:f:squad"]);
+    expect(merged.warnings).toContain('datasheet ds:f:captain: leader/support reference "ds:f:ghosts" names a datasheet no source describes, so it was dropped.');
   });
 });
 

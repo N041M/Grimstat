@@ -65,7 +65,8 @@ export function unitsEngaged(a: readonly ModelHull[], b: readonly ModelHull[]): 
 
 /** Coherency distance, and the size at which a unit needs two neighbours rather than one. */
 export const COHERENCY_RANGE = 2;
-export const COHERENCY_TWO_AT = 6;
+/** "If that unit contains 7 or more models" — a unit of six needs one neighbour per model. */
+export const COHERENCY_TWO_AT = 7;
 
 export interface CoherencyReport {
   readonly ok: boolean;

@@ -58,11 +58,19 @@ export async function start(deps: Deps, email: string, ip: string): Promise<void
   if ((byEmail?.n ?? 0) >= LIMIT_PER_EMAIL || (byIp?.n ?? 0) >= LIMIT_PER_IP) throw new AuthError(429, "Too many sign-in emails in the last hour. Try again later.");
   if ((today?.n ?? 0) >= LIMIT_PER_DAY) throw new AuthError(503, "Sign-in is paused for today. Everything else keeps working.");
   const code = signInCode();
-  await deps.db.run("INSERT INTO logins (code_hash, email, ip_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)", await sha256(code), address, ipHash, iso(now), plusMs(now, CODE_LIFE));
+  const codeHash = await sha256(code);
+  await deps.db.run("INSERT INTO logins (code_hash, email, ip_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)", codeHash, address, ipHash, iso(now), plusMs(now, CODE_LIFE));
   const shown = `${code.slice(0, 4)}-${code.slice(4)}`;
   const link = `${deps.appUrl}/#/profile?code=${shown}`;
   const mail = signInEmail(link, shown);
-  await deps.mail.send(address, mail.subject, mail.text, mail.html);
+  try {
+    await deps.mail.send(address, mail.subject, mail.text, mail.html);
+  } catch (err) {
+    // The row is what the three limits count, and no email went out for it. Left behind, a spell
+    // of failed sends would spend the day's allowance for everyone without a single email sent.
+    await deps.db.run("DELETE FROM logins WHERE code_hash = ?", codeHash).catch(() => undefined);
+    throw err;
+  }
 }
 
 export interface Finished {
@@ -80,18 +88,26 @@ export async function finish(deps: Deps, code: string, deviceName: string): Prom
   const login = await deps.db.first<{ email: string }>("SELECT email FROM logins WHERE code_hash = ?", codeHash);
   if (!login) throw new AuthError(400, "This sign-in link has expired. Ask for a new one.");
   let user = await deps.db.first<User>("SELECT id, email, handle FROM users WHERE email = ?", login.email);
-  const stmts: Array<{ sql: string; params: unknown[] }> = [];
   if (!user) {
-    user = { id: `u_${randomToken(12)}`, email: login.email, handle: null };
-    stmts.push({ sql: "INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)", params: [user.id, user.email, iso(now)] });
+    // Two codes for an address with no account yet, used at the same moment, both find no user.
+    // The second insert does nothing rather than failing on the address, and both read back the
+    // row that was made, so the loser signs in to the same account instead of losing its code.
+    await deps.db.run("INSERT INTO users (id, email, created_at) VALUES (?, ?, ?) ON CONFLICT (email) DO NOTHING", `u_${randomToken(12)}`, login.email, iso(now));
+    user = await deps.db.first<User>("SELECT id, email, handle FROM users WHERE email = ?", login.email);
+    if (!user) throw new AuthError(500, "The account could not be made. Ask for a new sign-in link.");
   }
   const token = randomToken(32);
   const id = `s_${randomToken(8)}`;
-  stmts.push({
-    sql: "INSERT INTO sessions (token_hash, id, user_id, device_name, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    params: [await sha256(token), id, user.id, deviceName.slice(0, 120) || "Unnamed device", iso(now), iso(now), plusMs(now, SESSION_LIFE)],
-  });
-  await deps.db.batch(stmts);
+  await deps.db.run(
+    "INSERT INTO sessions (token_hash, id, user_id, device_name, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    await sha256(token),
+    id,
+    user.id,
+    deviceName.slice(0, 120) || "Unnamed device",
+    iso(now),
+    iso(now),
+    plusMs(now, SESSION_LIFE),
+  );
   return { token, session: { id, user } };
 }
 
@@ -130,12 +146,19 @@ export async function signOut(deps: Deps, userId: string, sessionId: string): Pr
   await deps.db.run("DELETE FROM sessions WHERE user_id = ? AND id = ?", userId, sessionId);
 }
 
-/** Everything the server holds for the user, gone. */
-export async function deleteAccount(deps: Deps, userId: string): Promise<void> {
+/**
+ * Everything the server holds for the user, gone.
+ *
+ * The sign-in rows for the address are left where they are. They hold a hash of a spent code and
+ * the address, and they are what the hourly and daily sign-in limits count, so deleting them would
+ * hand the address a fresh allowance every time an account was made and deleted. The nightly purge
+ * takes them within the day.
+ */
+export async function deleteAccount(deps: Deps, user: Pick<User, "id" | "email">): Promise<void> {
   await deps.db.batch([
-    { sql: "DELETE FROM records WHERE user_id = ?", params: [userId] },
-    { sql: "DELETE FROM links WHERE user_id = ?", params: [userId] },
-    { sql: "DELETE FROM sessions WHERE user_id = ?", params: [userId] },
-    { sql: "DELETE FROM users WHERE id = ?", params: [userId] },
+    { sql: "DELETE FROM records WHERE user_id = ?", params: [user.id] },
+    { sql: "DELETE FROM links WHERE user_id = ?", params: [user.id] },
+    { sql: "DELETE FROM sessions WHERE user_id = ?", params: [user.id] },
+    { sql: "DELETE FROM users WHERE id = ?", params: [user.id] },
   ]);
 }

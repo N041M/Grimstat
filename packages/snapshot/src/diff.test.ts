@@ -38,6 +38,21 @@ describe("diffSnapshots", () => {
     expect(seer.after).toBeUndefined();
   });
 
+  it("reports a keyword rule and a game system field that changed", async () => {
+    const base = loadSyntheticSnapshot().data;
+    const before = { ...structuredClone(base), gameSystem: { ...base.gameSystem, version: "r14" }, glossary: [{ id: "gl:sustained-hits", name: "Sustained Hits", key: "SUSTAINED HITS", text: "before" }] };
+    const a = await buildSnapshot({ data: before, now: "2026-02-01T00:00:00.000Z" });
+    const data = structuredClone(before);
+    data.glossary[0]!.text = "after";
+    data.gameSystem.version = "r15";
+    const b = await buildSnapshot({ data, now: "2026-02-02T00:00:00.000Z" });
+    expect(a.checksum).not.toBe(b.checksum);
+    const d = diffSnapshots(a, b);
+    expect(d.summary).toEqual({ added: 0, removed: 0, changed: 2, pointsChanged: 0 });
+    expect(d.changed.find((c) => c.entity === "glossary")!.changes).toEqual([{ field: "text", before: "before", after: "after" }]);
+    expect(d.changed.find((c) => c.entity === "gameSystem")!.changes).toEqual([{ field: "version", before: "r14", after: "r15" }]);
+  });
+
   it("is empty for identical snapshots", () => {
     const a = loadSyntheticSnapshot();
     const d = diffSnapshots(a, a);

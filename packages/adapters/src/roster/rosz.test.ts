@@ -137,6 +137,17 @@ describe("oversized rosz archives", () => {
     expect(roster.units.length).toBe(5);
   });
 
+  it("refuses an archive holding more files than an army list ever does", () => {
+    // A two-megabyte archive of twenty thousand one-byte entries used to take the best part of a
+    // minute before the import gave up on it. It is refused on the count now, before any of it is
+    // unpacked, and the unpacking itself reads the archive once rather than once per entry.
+    const files: Record<string, Uint8Array> = {};
+    for (let i = 0; i < 20000; i++) files[`j${i}.bin`] = strToU8("a");
+    const started = Date.now();
+    expect(() => importRosz(zipSync(files), snapshot)).toThrow(/holds 20000 files/);
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+
   it("refuses an archive whose entries add up to more than an army list", () => {
     let zip: Uint8Array = zipSync({ "a.bin": strToU8("a"), "b.bin": strToU8("b"), "c.bin": strToU8("c") });
     for (const name of ["a.bin", "b.bin", "c.bin"]) zip = claimUnpackedSize(zip, name, 25 * MB);

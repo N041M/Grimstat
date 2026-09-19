@@ -35,6 +35,12 @@ export const CH = {
   hazardous: "hazardous",
   stealth: "stealth",
   /**
+   * The STEALTH ability, which the two editions answer differently: in 11e it gives the target the
+   * benefit of cover, in 10e it subtracts 1 from the Hit roll. The flag says the unit has it and
+   * `scenario.ts`, which knows the edition, decides what it does.
+   */
+  stealthAbility: "stealth-ability",
+  /**
    * A weapon keyword an ability hands to the weapon ("this unit's melee weapons have the [LANCE]
    * ability"). The value is the keyword as it is printed, and the registry reads it at resolution
    * time, so an ability that grants a keyword and a datasheet that prints it come out the same.
@@ -52,8 +58,14 @@ export const POLICY: Record<string, ChannelPolicy> = {
   [CH.saveRoll]: { capAdd: RULES.saveRollCap },
   [CH.critHit]: { min: 2, max: 6 },
   [CH.critWound]: { min: 2, max: 6 },
+  // An invulnerable target of 7 or more is no invulnerable save at all, so this channel has no
+  // ceiling. Capping it at 6, as the critical-wound channel is capped, handed a 6+ invulnerable
+  // save to every model that had none.
+  [CH.invuln]: { min: 2 },
   [CH.damage]: { min: 1 },
   [CH.ap]: { min: 0 },
-  [CH.attacks]: { min: 0 },
+  // The ceiling is what stops a rule written by hand from building a table of a million entries.
+  // No weapon in the game makes anything near two hundred attacks.
+  [CH.attacks]: { min: 0, max: 200 },
   [CH.fnp]: { min: 0, max: 7 },
 };

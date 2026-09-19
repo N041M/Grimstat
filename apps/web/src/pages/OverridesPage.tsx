@@ -55,9 +55,18 @@ export function OverridesPage() {
     setRawEdit(undefined);
   }
 
+  // The record is read and written in one transaction, so two presses of Save cannot both write
+  // over the same stored override, and a write that fails says so.
   const persist = async (o: Override, label: string) => {
-    const existing = await db.overrides.get(overrideKey(o.entity, o.id));
-    await db.overrides.put(toRecord(o, nowIso(), existing));
+    try {
+      await db.transaction("rw", db.overrides, async () => {
+        const existing = await db.overrides.get(overrideKey(o.entity, o.id));
+        await db.overrides.put(toRecord(o, nowIso(), existing));
+      });
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), "error");
+      return;
+    }
     await refreshOverrides();
     notify(t("overrides.saved", { name: label }), "success");
   };

@@ -19,3 +19,7 @@ apps/web/public/ocr/
 
 # Wrangler's local state
 .wrangler/
+
+# Wrangler keeps local secrets here
+.dev.vars
+.dev.vars.*

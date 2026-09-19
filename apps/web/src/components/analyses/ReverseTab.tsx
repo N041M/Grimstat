@@ -15,7 +15,7 @@ import { reverseToCsv } from "../../lib/matrixCsv";
 import { rankLabel, tieRanks } from "./EfficiencyTab";
 import { UnitSetPicker } from "./UnitSetPicker";
 import { AnalysisContextControls, DEFAULT_ANALYSIS_CONTEXT, RunActions, RunStatus, WarningList, parseAnalysisContext, useAnalysisHeader, type AnalysisContext } from "./shared";
-import { Badge, Field } from "../ui";
+import { Badge, Field, NumberInput, numOrNull } from "../ui";
 import { t } from "../../i18n";
 
 type Metric = ReverseInput["metric"];
@@ -267,7 +267,7 @@ export function ReverseTab() {
             </Field>
             <Field label={t("analyses.reverse.threshold")} hint={thresholdHint}>
               <span className="row" style={{ gap: "0.3rem" }}>
-                <input type="number" min={0} step={opts.metric === "pKill" ? 0.05 : 1} max={opts.metric === "pKill" ? 1 : undefined} value={threshold} onChange={(e) => setOpts((o) => ({ ...o, threshold: e.target.value.trim() === "" || !Number.isFinite(Number(e.target.value)) ? null : Number(e.target.value) }))} />
+                <NumberInput min={0} step={opts.metric === "pKill" ? 0.05 : 1} max={opts.metric === "pKill" ? 1 : undefined} value={threshold} onChange={(text) => setOpts((o) => ({ ...o, threshold: numOrNull(text) }))} />
                 {opts.threshold !== null ? (
                   <button type="button" className="ghost sm" onClick={() => setOpts((o) => ({ ...o, threshold: null }))}>
                     {t("analyses.reverse.thresholdReset")}

@@ -32,9 +32,25 @@ function parseOptions(raw: unknown): EfficiencyOptions | undefined {
   return { targetIds: ids, rangeBand: r.rangeBand === "full" ? "full" : "half" };
 }
 
-const runEfficiency = (attackers: ScenarioUnit[], targetIds: string[], rangeBand: "half" | "full", snapshot: Snapshot | undefined) => simClient().efficiency(attackers, { targetIds, context: { rangeBand } }, snapshot);
+// The task takes the entries themselves, so `task.ran` holds what a result was computed for.
+const runEfficiency = (attackers: UnitEntry[], targetIds: string[], rangeBand: "half" | "full", snapshot: Snapshot | undefined) => simClient().efficiency(units(attackers), { targetIds, context: { rangeBand } }, snapshot);
+
+const units = (entries: UnitEntry[]): ScenarioUnit[] => entries.map((e) => e.unit);
 
 const fingerprint = (a: UnitEntry[], o: EfficiencyOptions) => JSON.stringify([a.map((e) => e.id), o]);
+
+/**
+ * What a stored result was computed from, read back from the arguments the run was made with.
+ *
+ * The store keeps a result for as long as the app is open, so it outlives this tab. Holding the
+ * same fingerprint in component state instead lost it on the way out, and the tab then came back
+ * with a ranking that no longer matched the controls and nothing saying so.
+ */
+export function efficiencyRan(ran: Parameters<typeof runEfficiency> | undefined): string | undefined {
+  if (!ran) return undefined;
+  const [attackers, targetIds, rangeBand] = ran;
+  return fingerprint(attackers, { targetIds, rangeBand });
+}
 
 type SortCol = "rank" | "unit" | "points" | "per100" | `t:${string}`;
 
@@ -200,19 +216,13 @@ export function EfficiencyTab() {
   const attackers = useUnitSet("analyses.efficiency.attackers");
   const [opts, setOpts] = usePersistedSetting<EfficiencyOptions>("analyses.efficiency.options", DEFAULT_OPTIONS, parseOptions);
   const task = useWorkerTask(runEfficiency, "analyses.efficiency");
-  const [ran, setRan] = useState<string | undefined>(undefined);
+  const ran = useMemo(() => efficiencyRan(task.ran), [task.ran]);
   const canRun = attackers.entries.length > 0 && opts.targetIds.length > 0;
   const dirty = !!ran && ran !== fingerprint(attackers.entries, opts);
 
   const run = () => {
     if (!canRun) return;
-    setRan(fingerprint(attackers.entries, opts));
-    task.run(
-      attackers.entries.map((e) => e.unit),
-      opts.targetIds,
-      opts.rangeBand,
-      snapshot,
-    );
+    task.run(attackers.entries, opts.targetIds, opts.rangeBand, snapshot);
   };
   const toggleId = (id: string, on: boolean) => setOpts((o) => ({ ...o, targetIds: on ? [...o.targetIds.filter((x) => x !== id), id] : o.targetIds.filter((x) => x !== id) }));
 

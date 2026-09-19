@@ -47,9 +47,18 @@ export const OVAL_BASES_MM = [
 
 export const circleBase = (diameterMm: number): Footprint => ({ kind: "circle", r: inches(diameterMm) / 2 });
 
+/**
+ * An oval base or hull from its two measurements, in either order.
+ *
+ * A capsule's radius is half its shorter side. Given a kit wider than it is long — a Manta is 630
+ * by 860 — taking the second measurement as the width collapsed the whole footprint to a disc, and
+ * a Manta so sized could not be placed in a deployment zone at all.
+ */
 export function ovalBase(lengthMm: number, widthMm: number): Footprint {
-  const r = inches(widthMm) / 2;
-  return { kind: "capsule", r, half: Math.max(0, inches(lengthMm) / 2 - r) };
+  const long = Math.max(lengthMm, widthMm);
+  const short = Math.min(lengthMm, widthMm);
+  const r = inches(short) / 2;
+  return { kind: "capsule", r, half: Math.max(0, inches(long) / 2 - r) };
 }
 
 /**

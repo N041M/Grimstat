@@ -1,5 +1,5 @@
 import { type ModifierSet, type RerollPolicy } from "@grimstat/effects";
-import { type HitGate, type WoundGate, type PMF, dicePMF, mapPMF, thin, delta } from "@grimstat/engine";
+import { type HitGate, type WoundGate, type PMF, convolve, dicePMF, mapPMF, thin, delta } from "@grimstat/engine";
 import { CH, POLICY } from "./channels";
 
 const SIX = [1, 2, 3, 4, 5, 6] as const;
@@ -146,10 +146,29 @@ export function damagePMF(D: string | number, mods: ModifierSet, fnp: number | n
   return modded;
 }
 
-export function attacksPMF(A: string | number, bonus: number): PMF {
+/**
+ * The number of attacks one weapon makes, after everything that changes it.
+ *
+ * A rule that sets or multiplies the characteristic is applied to each outcome of the printed
+ * dice, the way damage modifiers are. A rule that adds dice ("+D3 attacks") is another roll rather
+ * than a number, so it is rolled alongside rather than added in.
+ */
+export function attacksPMF(A: string | number, mods: ModifierSet): PMF {
   const base = dicePMF(A);
-  if (!bonus) return base;
-  return mapPMF(base, (k) => Math.max(0, k + bonus));
+  let out = mods.has(CH.attacks) ? mapPMF(base, (k) => mods.num(CH.attacks, k, POLICY[CH.attacks])) : base;
+  for (const m of mods.list(CH.attacks)) {
+    if (m.op !== "add" || typeof m.value !== "string") continue;
+    // A value the dice parser does not know is left out rather than thrown, because an override
+    // pack is written by hand and one bad line should not take the whole answer down with it.
+    let rolled: PMF;
+    try {
+      rolled = dicePMF(m.value);
+    } catch {
+      continue;
+    }
+    out = convolve(out, rolled);
+  }
+  return out;
 }
 
 export function sustainedPMF(v: number | string | boolean | null): PMF | null {

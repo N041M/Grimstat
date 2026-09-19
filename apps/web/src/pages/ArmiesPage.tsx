@@ -144,8 +144,11 @@ export function ArmiesPage() {
     return [...new Set(snapshot.data.datasheets.map((d) => d.factionId))].map((id) => ({ id, name: id }));
   }, [snapshot]);
 
+  // The active snapshot can change while this page is open, and a faction it does not have would
+  // otherwise be stored on a new army and read back as an id.
   useEffect(() => {
-    if (!factionId && factions.length) setFactionId(factions[0]!.id);
+    if (factions.some((f) => f.id === factionId)) return;
+    setFactionId(factions[0]?.id ?? "");
   }, [factions, factionId]);
 
   const rows = useMemo(
