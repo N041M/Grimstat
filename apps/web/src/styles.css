@@ -5447,8 +5447,13 @@ a.btn:hover {
   text-decoration-style: solid;
 }
 .ut-status-pop .popover {
-  /* The cell is right-aligned; the checks inside the layer are not. */
+  /* The layer is rendered inside the status cell and inherits the cell's type: right-aligned, one
+     line that never wraps, mono, and the accent colour of a failing check. A long message ran off
+     the right edge of the layer. */
   text-align: left;
+  white-space: normal;
+  font: 400 12px/1.4 var(--font);
+  color: var(--ink);
 }
 @media (min-width: 900px) {
   .ut-status-pop .popover {

@@ -13,6 +13,7 @@
 import { hashIp, normaliseCode, randomToken, sha256, signInCode } from "./crypto";
 import { iso, plusMs, type Deps } from "./deps";
 import { SESSION_IDLE_DAYS } from "./purge";
+import { signInEmail } from "./signInEmail";
 
 const HOUR = 60 * 60 * 1000;
 const CODE_LIFE = 15 * 60 * 1000;
@@ -60,7 +61,8 @@ export async function start(deps: Deps, email: string, ip: string): Promise<void
   await deps.db.run("INSERT INTO logins (code_hash, email, ip_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)", await sha256(code), address, ipHash, iso(now), plusMs(now, CODE_LIFE));
   const shown = `${code.slice(0, 4)}-${code.slice(4)}`;
   const link = `${deps.appUrl}/#/profile?code=${shown}`;
-  await deps.mail.send(address, "Sign in to Grimstat", `Open this link to sign in. It works once and for fifteen minutes.\n\n${link}\n\nIf you use Grimstat from your home screen, type this code on its Profile page instead: ${shown}\n\nIf you did not ask for it, ignore this message and nothing happens.`);
+  const mail = signInEmail(link, shown);
+  await deps.mail.send(address, mail.subject, mail.text, mail.html);
 }
 
 export interface Finished {

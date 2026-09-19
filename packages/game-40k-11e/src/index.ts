@@ -22,6 +22,8 @@ export { compositionBounds } from "./composition";
 export type { BattleSizeRules } from "./constraints";
 export { parseTransportCapacity, unitFitsKeywords, hasKeywordPhrase } from "./transport";
 export type { TransportCapacity } from "./transport";
+export { parseSplitRule, splitRulesOf, splittersOf, canSplitUnit, ruleNamesSheet } from "./split";
+export type { SplitRule } from "./split";
 export { readWargearOptions, wargearItems, checkLoadout, omittedDefaults, UNLIMITED } from "./loadout";
 export type { WargearOption, WargearReading, LoadoutProblem, LoadoutCheck, CheckLoadoutOptions } from "./loadout";
 export { makeScenario, phaseFor, runMatrix, durabilityProfile, durabilityIndex, efficiencyRanking, incomingFire, effectiveWounds, pReferenceSticks, removalChain, editionOf, combineSampling, REFERENCE_ATTACK, DEFAULT_GAME_SYSTEM_ID } from "./analysis";

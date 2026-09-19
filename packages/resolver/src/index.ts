@@ -1,5 +1,6 @@
 import type { Datasheet, Detachment, Diagnostic, Enhancement, PriceRule, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import { companionHostOf } from "./factions";
+import { halvesOf, isHalf, wholeModelsOf } from "./halves";
 
 /**
  * Roster legality and costing. ONE module shared by UI, CLI and tests.
@@ -10,6 +11,7 @@ import { companionHostOf } from "./factions";
 export { compositionSegments, compositionPart, compositionParts, compositionLineBounds, compositionBranches, compositionBounds, profileBounds } from "./composition";
 export type { CompositionPart, CompositionLineLike, ProfileBounds } from "./composition";
 export { factionKeywordsOf, isOwnFaction, companionHostOf, companionsOf } from "./factions";
+export { isHalf, isSplit, headOf, halvesOf, wholeModelsOf, mergeModelGroups } from "./halves";
 
 export interface RosterContext {
   roster: Roster;
@@ -17,9 +19,12 @@ export interface RosterContext {
   datasheet(id: string): Datasheet | undefined;
   detachment(id: string): Detachment | undefined;
   enhancement(id: string): Enhancement | undefined;
-  /** Units grouped by datasheet id in roster order. */
+  /** Units grouped by datasheet id in roster order. The second half of a split unit is not a copy. */
   copies(datasheetId: string): RosterUnit[];
-  /** Cost breakdown per unit (points), computed once. */
+  /**
+   * Cost breakdown per unit (points), computed once. The first half of a split unit pays for the
+   * whole and reports the whole's model count; the second half costs nothing.
+   */
   unitCost(unit: RosterUnit): UnitCost;
   totalPoints(): number;
 }
@@ -118,17 +123,27 @@ export function createContext(roster: Roster, snapshot: Snapshot): RosterContext
 function buildContext(roster: Roster, snapshot: Snapshot): RosterContext {
   const { ds, det, enh, pricesByDatasheet } = indexOf(snapshot);
   const byDatasheet = new Map<string, RosterUnit[]>();
-  for (const u of roster.units) byDatasheet.set(u.datasheetId, [...(byDatasheet.get(u.datasheetId) ?? []), u]);
+  for (const u of roster.units) if (!isHalf(u)) byDatasheet.set(u.datasheetId, [...(byDatasheet.get(u.datasheetId) ?? []), u]);
   const costCache = new Map<string, UnitCost>();
 
   const unitCost = (unit: RosterUnit): UnitCost => {
     const cached = costCache.get(unit.id);
     if (cached) return cached;
+    if (isHalf(unit)) {
+      // The first half pays for both. The copy index is the whole unit's, so a note on either half
+      // names the same tier.
+      const head = roster.units.find((u) => u.id === unit.halfOf);
+      const enhancement = unit.enhancementId ? (enh.get(unit.enhancementId)?.cost ?? 0) : 0;
+      const cost: UnitCost = { base: 0, wargear: 0, enhancement, total: enhancement, copyIndex: head ? unitCost(head).copyIndex : 1, modelCount: modelCountOf(unit), notes: [] };
+      costCache.set(unit.id, cost);
+      return cost;
+    }
     const notes: string[] = [];
     const sheet = ds.get(unit.datasheetId);
     const copies = byDatasheet.get(unit.datasheetId) ?? [];
     const copyIndex = Math.max(1, copies.findIndex((u) => u.id === unit.id) + 1);
-    const modelCount = modelCountOf(unit);
+    const models = halvesOf(roster, unit).length ? wholeModelsOf(roster, unit) : unit.models;
+    const modelCount = models.reduce((s, g) => s + g.count, 0);
     let base = 0;
     const rules = pricesByDatasheet.get(unit.datasheetId) ?? [];
     let rule = rules.filter((r) => covers(r, copyIndex)).sort(bySpecificity)[0];
@@ -154,7 +169,7 @@ function buildContext(roster: Roster, snapshot: Snapshot): RosterContext {
     // A model that comes with another unit is paid for in that unit's points.
     let wargear = 0;
     const prices = snapshot.data.wargearPrices.filter((w) => w.datasheetId === unit.datasheetId);
-    for (const m of unit.models) for (const item of m.wargear) {
+    for (const m of models) for (const item of m.wargear) {
       const p = prices.find((w) => w.item.toLowerCase() === item.toLowerCase());
       if (p) wargear += p.points * m.count;
     }

@@ -3,11 +3,11 @@ import type { Mailer } from "./deps";
 /** Sends through Resend's HTTP API. No SDK, one request. */
 export function resendMailer(apiKey: string, from: string, fetchImpl: typeof fetch = fetch): Mailer {
   return {
-    async send(to, subject, text) {
+    async send(to, subject, text, html) {
       const res = await fetchImpl("https://api.resend.com/emails", {
         method: "POST",
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify({ from, to: [to], subject, text }),
+        body: JSON.stringify({ from, to: [to], subject, text, ...(html ? { html } : {}) }),
       });
       if (!res.ok) throw new Error(`mail: ${res.status} ${await res.text()}`);
     },

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
-import type { UnitCost } from "@grimstat/resolver";
+import { headOf, isSplit, type UnitCost } from "@grimstat/resolver";
 import { groupBounds, hasWargear, isCharacterSheet, mergeGroup, modelCountOf, printedCopies, splitGroup, toggleWargear, unitDisplayName, wargearChoices, type ModelGroup } from "../../lib/roster";
 import { canEmbark, loadsByTransport, transportCandidates } from "../../lib/transport";
 import { fmtInt } from "../../lib/format";
@@ -278,6 +278,7 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
           {owned > 0 ? <span className={owned < modelCountOf(unit) ? "insp-owned short" : "insp-owned"}>{` · ${t("roster.inspector.owned", { n: owned })}`}</span> : null}
           {cost && cost.copyIndex > 1 ? ` · ${t("roster.inspector.copy", { n: cost.copyIndex })}` : ""}
         </div>
+        {isSplit(roster, unit) ? <p className="small muted insp-note">{unit.halfOf ? `${t("roster.badge.halfOf", { name: unitDisplayName(headOf(roster, unit), datasheets.get(headOf(roster, unit).datasheetId)) })}. ` : ""}{t("roster.inspector.splitNote")}</p> : null}
         {cost ? (
           <div className="insp-cost">
             <strong className="tabular">{t("unit.points", { v: fmtInt(cost.total) })}</strong>
@@ -300,7 +301,7 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
         <section className="insp-section">
           <h4 className="inspector-h">{t("roster.inspector.modelsWargear")}</h4>
           {unit.models.map((g, i) => (
-            <GroupEditor key={`${g.modelProfileId}-${i}`} group={g} profileName={ds?.models.find((m) => m.id === g.modelProfileId)?.name ?? ds?.name ?? g.modelProfileId} bounds={groupBounds(ds, unit.models, i)} items={items} onChange={(ng) => setGroup(i, ng)} onSplit={(n) => split(i, n)} canMerge={canMerge(i)} onMerge={() => merge(i)} />
+            <GroupEditor key={`${g.modelProfileId}-${i}`} group={g} profileName={ds?.models.find((m) => m.id === g.modelProfileId)?.name ?? ds?.name ?? g.modelProfileId} bounds={isSplit(roster, unit) ? { min: g.count, max: g.count } : groupBounds(ds, unit.models, i)} items={items} onChange={(ng) => setGroup(i, ng)} onSplit={(n) => split(i, n)} canMerge={canMerge(i)} onMerge={() => merge(i)} />
           ))}
           <p className="small muted insp-note">{t("roster.inspector.splitHint")}</p>
         </section>

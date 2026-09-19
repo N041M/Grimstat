@@ -31,6 +31,23 @@ const roster: Roster = {
   ],
 };
 
+describe("a unit split in two for deployment", () => {
+  const halves: Roster = {
+    ...roster,
+    units: [
+      { ...roster.units[0]!, models: [{ modelProfileId: "mp:ashen-wardens:warden-squad:warden-sergeant", count: 1, wargear: ["Flux carbine", "Power fist"] }, { modelProfileId: "mp:ashen-wardens:warden-squad:warden", count: 2, wargear: ["Flux carbine", "Shock maul"] }] },
+      { id: "u1b", datasheetId: "ds:ashen-wardens:warden-squad", models: [{ modelProfileId: "mp:ashen-wardens:warden-squad:warden", count: 2, wargear: ["Flux carbine", "Shock maul"] }], halfOf: "u1", isWarlord: false },
+      ...roster.units.slice(1),
+    ],
+  };
+  it("is written as the one unit it was bought as", () => {
+    for (const dialect of ["gw-app", "nr-tournament"] as const) {
+      expect(exportRosterText(halves, snapshot, dialect)).toBe(exportRosterText(roster, snapshot, dialect));
+    }
+    expect(exportRosterPrintHtml(halves, snapshot)).toBe(exportRosterPrintHtml(roster, snapshot));
+  });
+});
+
 describe("roster text export/import", () => {
   it("gw-app dialect round-trips units, counts, wargear, leader, enhancement and warlord", () => {
     const text = exportRosterText(roster, snapshot, "gw-app");

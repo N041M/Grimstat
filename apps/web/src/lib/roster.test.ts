@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
-import { canAddCopy, compositionBounds, duplicateUnit, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, factionLineage, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, printedCopies, toggleWargear, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearChoices, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
+import { canAddCopy, compositionBounds, duplicateUnit, describeRevisionChange, diagnosticsForUnit, diffRosters, distributeModelCount, duplicateCap, factionLineage, groupBounds, groupsFromDatasheet, loadoutWargear, moveUnit, printedCopies, rejoinUnit, splitUnit, toggleWargear, newRoster, newRosterUnit, pickerGroupOf, pointsTone, removeUnits, restoreUnits, sectionOf, unitDisplayName, unitIndexFromPath, wargearChoices, wargearSummary, wargearSummaryItems, weaponBaseNames, type ModelGroup } from "./roster";
 import { decodeRosterPermalink, encodeRosterPermalink, rosterPermalinkUrl, rosterTokenFromHash } from "./rosterPermalink";
 
 const NOW = "2026-09-09T10:00:00.000Z";
@@ -559,5 +559,49 @@ describe("factionLineage", () => {
 
   it("keeps the faction even when the snapshot does not list it", () => {
     expect(factionLineage(snap([]), "faction:ghost")).toEqual(["faction:ghost"]);
+  });
+});
+
+describe("splitting a unit in two for deployment", () => {
+  const army = (units: RosterUnit[]): Roster => ({ id: "r", ownerId: "local", createdAt: NOW, updatedAt: NOW, revision: 0, name: "t", gameSystemId: "g", snapshotId: "s", factionId: "f", battleSize: "incursion", pointsLimit: 1000, detachments: [], units });
+  const squad: RosterUnit = { id: "a", datasheetId: "squad", models: [{ modelProfileId: "sgt", count: 1, wargear: ["Power fist"] }, { modelProfileId: "m", count: 9, wargear: [] }], isWarlord: false, embarkedIn: "t" };
+  it("gives the second half the smaller share from the end, and each model its wargear", () => {
+    const r = splitUnit(army([squad]), "a");
+    expect(r.units.map((u) => [u.id === "a" ? "a" : "half", u.halfOf, u.models.map((g) => [g.modelProfileId, g.count])])).toEqual([
+      ["a", undefined, [["sgt", 1], ["m", 4]]],
+      ["half", "a", [["m", 5]]],
+    ]);
+    // The half rides nowhere yet; the first half keeps its transport.
+    expect(r.units[0]!.embarkedIn).toBe("t");
+    expect(r.units[1]!.embarkedIn).toBeUndefined();
+    const odd = splitUnit(army([{ ...squad, models: [{ modelProfileId: "m", count: 7, wargear: [] }] }]), "a");
+    expect(odd.units.map((u) => u.models[0]!.count)).toEqual([4, 3]);
+  });
+  it("does nothing to a lone model or a unit already split", () => {
+    const lone = army([{ ...squad, models: [{ modelProfileId: "m", count: 1, wargear: [] }] }]);
+    expect(splitUnit(lone, "a")).toBe(lone);
+    const once = splitUnit(army([squad]), "a");
+    expect(splitUnit(once, "a")).toBe(once);
+    expect(splitUnit(once, once.units[1]!.id)).toBe(once);
+  });
+  it("rejoins from either half, moving an attached character and dropping the half's ride", () => {
+    const once = splitUnit(army([squad, { id: "tr", datasheetId: "rhino", models: [{ modelProfileId: "r", count: 1, wargear: [] }], isWarlord: false }]), "a");
+    const halfId = once.units[1]!.id;
+    const withRider = { ...once, units: once.units.map((u) => (u.id === halfId ? { ...u, embarkedIn: "tr" } : u)).concat([{ id: "c", datasheetId: "cap", models: [{ modelProfileId: "c", count: 1, wargear: [] }], attachedTo: { unitId: halfId, role: "leader" as const }, isWarlord: false }]) };
+    for (const id of ["a", halfId]) {
+      const back = rejoinUnit(withRider, id);
+      expect(back.units.map((u) => u.id)).toEqual(["a", "tr", "c"]);
+      expect(back.units[0]!.models).toEqual([{ modelProfileId: "sgt", count: 1, wargear: ["Power fist"] }, { modelProfileId: "m", count: 9, wargear: [] }]);
+      expect(back.units[2]!.attachedTo).toEqual({ unitId: "a", role: "leader" });
+    }
+    expect(rejoinUnit(withRider, "tr")).toBe(withRider);
+  });
+  it("duplicates a split unit whole, from either half", () => {
+    const once = splitUnit(army([squad]), "a");
+    for (const u of once.units) {
+      const copy = duplicateUnit(u, once);
+      expect(copy.halfOf).toBeUndefined();
+      expect(copy.models).toEqual([{ modelProfileId: "sgt", count: 1, wargear: ["Power fist"] }, { modelProfileId: "m", count: 9, wargear: [] }]);
+    }
   });
 });

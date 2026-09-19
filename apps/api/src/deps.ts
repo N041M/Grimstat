@@ -3,7 +3,8 @@ import type { RateLimiter } from "./limits";
 
 /** What the server sends a sign-in email through. */
 export interface Mailer {
-  send(to: string, subject: string, text: string): Promise<void>;
+  /** `html` is the same message set for a mail client that shows it; the text form is the fallback. */
+  send(to: string, subject: string, text: string, html?: string): Promise<void>;
 }
 
 /** Everything the routes need that differs between hosts and tests. */

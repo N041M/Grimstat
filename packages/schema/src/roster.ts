@@ -24,6 +24,13 @@ export const RosterUnit = z.object({
   embarkedIn: Id.optional(),
   /** Starts the battle in Reserves (Strategic Reserves, Deep Strike, etc.). */
   inReserves: z.boolean().optional(),
+  /**
+   * Id of the roster unit this one is the second half of. A rule such as an Immolator's lets one
+   * unit be split into two at Declare Battle Formations. The first half keeps the unit's id, its
+   * points and its place in the list; the second half is a roster unit of its own, so it can
+   * embark, deploy and fight on its own, and it costs nothing because the first half pays for both.
+   */
+  halfOf: Id.optional(),
   enhancementId: Id.optional(),
   isWarlord: z.boolean().default(false),
   notes: z.string().optional(),

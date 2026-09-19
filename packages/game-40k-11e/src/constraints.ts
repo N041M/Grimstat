@@ -1,5 +1,6 @@
-import { modelCountOf } from "@grimstat/resolver";
+import { halvesOf, isHalf, modelCountOf, wholeModelsOf } from "@grimstat/resolver";
 import type { ConstraintSet, RosterContext } from "@grimstat/resolver";
+import { splitRulesOf, splittersOf } from "./split";
 import { compositionBounds, profileBounds } from "./composition";
 import { checkAllies, checkCompanions } from "./allies";
 import { checkLoadout } from "./loadout";
@@ -142,7 +143,8 @@ export const constraints11e: ConstraintSet = {
         const out: Diagnostic[] = [];
         for (const u of ctx.roster.units) {
           const ds = ctx.datasheet(u.datasheetId);
-          if (!ds) continue;
+          // The two halves of a split unit are one unit here, read from the first half.
+          if (!ds || isHalf(u)) continue;
           const n = ctx.unitCost(u).modelCount;
           const { min, max } = compositionBounds(ds);
           if (min !== undefined && n < min) out.push({ severity: "error", code: "units.size", message: `${ds.name} has ${n} models; minimum is ${min}.`, path: path(ctx, u) });
@@ -164,16 +166,17 @@ export const constraints11e: ConstraintSet = {
         const out: Diagnostic[] = [];
         for (const u of ctx.roster.units) {
           const ds = ctx.datasheet(u.datasheetId);
-          if (!ds) continue;
+          if (!ds || isHalf(u)) continue;
           const ways = profileBounds(ds);
           if (!ways.length) continue;
           // A unit of the wrong size is already reported as one, and saying which models it is short
           // of adds nothing to that.
-          const models = modelCountOf(u);
+          const groups = wholeModelsOf(ctx.roster, u);
+          const models = groups.reduce((s, g) => s + g.count, 0);
           const size = compositionBounds(ds);
           if ((size.min !== undefined && models < size.min) || (size.max !== undefined && models > size.max)) continue;
           const have = new Map<string, number>();
-          for (const g of u.models) have.set(g.modelProfileId, (have.get(g.modelProfileId) ?? 0) + g.count);
+          for (const g of groups) have.set(g.modelProfileId, (have.get(g.modelProfileId) ?? 0) + g.count);
           // A group standing on no profile of this datasheet is somebody else's problem to report.
           if ([...have.keys()].some((id) => !ds.models.some((m) => m.id === id))) continue;
           const missed = ways.map((way) => way.filter((p) => (have.get(p.profileId) ?? 0) < p.min || (have.get(p.profileId) ?? 0) > p.max));
@@ -200,9 +203,11 @@ export const constraints11e: ConstraintSet = {
         const out: Diagnostic[] = [];
         for (const u of ctx.roster.units) {
           const ds = ctx.datasheet(u.datasheetId);
-          if (!ds) continue;
-          const models = modelCountOf(u);
-          const check = checkLoadout(ds, unitFromRosterUnit(u, ctx.roster, ctx.snapshot), { baseline: unitFromDatasheet(ds, ctx.snapshot, { modelCount: models, modelGroups: u.models }) });
+          if (!ds || isHalf(u)) continue;
+          // The options are printed for the whole unit, so a split unit is checked as one.
+          const whole = halvesOf(ctx.roster, u).length ? { ...u, models: wholeModelsOf(ctx.roster, u) } : u;
+          const models = modelCountOf(whole);
+          const check = checkLoadout(ds, unitFromRosterUnit(whole, ctx.roster, ctx.snapshot), { baseline: unitFromDatasheet(ds, ctx.snapshot, { modelCount: models, modelGroups: whole.models }) });
           for (const p of check.problems) {
             if (p.code.startsWith("models.")) continue;
             out.push({ severity: p.severity, code: `units.wargear`, message: `${unitName(ctx, u)}: ${p.message}`, path: path(ctx, u), fix: p.rule ?? "Check the unit's wargear against its datasheet." });
@@ -330,6 +335,52 @@ export const constraints11e: ConstraintSet = {
           }
           if (occupancy > cap.capacity) out.push({ severity: "error", code: "transport.capacity", message: `${tName} carries ${occupancy} models; its transport capacity is ${cap.capacity}.`, path: path(ctx, t), fix: "Disembark a unit." });
           else out.push({ severity: "info", code: "transport.capacity", message: `${tName} carries ${occupancy} / ${cap.capacity}.`, path: path(ctx, t) });
+        }
+        return out;
+      },
+    },
+    {
+      /**
+       * A unit split in two for deployment. Each rule that splits a unit splits one, so the army
+       * needs as many such rules as it has split units of the kinds they name. A transport's rule
+       * also wants one half aboard that transport.
+       */
+      code: "units.split",
+      run: (ctx) => {
+        const out: Diagnostic[] = [];
+        const rules = splitRulesOf(ctx.snapshot);
+        const byId = unitById(ctx);
+        /** Rule-carrying units still free to split one unit each, in roster order. */
+        const free = new Set(ctx.roster.units.filter((u) => !isHalf(u) && rules.has(u.datasheetId)).map((u) => u.id));
+        for (const u of ctx.roster.units) {
+          if (isHalf(u)) {
+            const head = byId.get(u.halfOf!);
+            if (!head || head.id === u.id) out.push({ severity: "error", code: "units.split.orphan", message: `${unitName(ctx, u)} is the second half of a unit that is not in the army.`, path: path(ctx, u), fix: "Remove it." });
+            continue;
+          }
+          const halves = halvesOf(ctx.roster, u);
+          if (!halves.length) continue;
+          const name = unitName(ctx, u);
+          if (halves.length > 1) out.push({ severity: "error", code: "units.split.count", message: `${name} is split into ${halves.length + 1} units; a unit splits into two.`, path: path(ctx, u), fix: "Rejoin the halves." });
+          const half = halves[0]!;
+          const a = modelCountOf(u);
+          const b = modelCountOf(half);
+          if (Math.abs(a - b) > 1) out.push({ severity: "error", code: "units.split.equal", message: `${name} is split ${a} and ${b}; the halves must be as equal as possible.`, path: path(ctx, half), fix: "Rejoin the halves and split the unit again." });
+          const splitters = splittersOf(ctx.roster, ctx.snapshot, u);
+          if (!splitters.length) {
+            out.push({ severity: "error", code: "units.split.rule", message: `${name} is split in two, but nothing in the army can split it.`, path: path(ctx, u), fix: "Rejoin the halves." });
+            continue;
+          }
+          const splitter = splitters.find((s) => free.has(s.id));
+          if (!splitter) {
+            out.push({ severity: "error", code: "units.split.rule", message: `${name} is split in two, but every unit that could split it has split another.`, path: path(ctx, u), fix: "Rejoin the halves." });
+            continue;
+          }
+          free.delete(splitter.id);
+          const rule = rules.get(splitter.datasheetId)!;
+          if (rule.embark && ![u, ...halves].some((h) => h.embarkedIn === splitter.id)) {
+            out.push({ severity: "warn", code: "units.split.embark", message: `One half of ${name} must start the battle embarked in ${unitName(ctx, splitter)}, which splits it.`, path: path(ctx, u), fix: "Embark a half in it." });
+          }
         }
         return out;
       },

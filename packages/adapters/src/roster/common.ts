@@ -1,5 +1,5 @@
 import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
-import { companionHostOf, createContext, isOwnFaction, type RosterContext } from "@grimstat/resolver";
+import { companionHostOf, createContext, isHalf, isOwnFaction, mergeModelGroups, type RosterContext } from "@grimstat/resolver";
 
 export const SIZE_LABEL: Record<Roster["battleSize"], string> = {
   "combat-patrol": "Combat Patrol",
@@ -42,7 +42,10 @@ export interface UnitView {
   modelCount: number;
   host?: UnitView;
   attached: UnitView[];
-  /** The unit this one's model comes with, when it comes with one: Sir Hekhtur's is Canis Rex. */
+  /**
+   * The entry this unit is written inside, when it has none of its own: Sir Hekhtur's is Canis
+   * Rex's, and the second half of a split unit's is the first half's.
+   */
   partOf?: UnitView;
   /** Units whose models come with this one. They are written inside its entry. */
   companions: UnitView[];
@@ -86,6 +89,17 @@ export function rosterView(roster: Roster, snapshot: Snapshot): RosterView {
     if (!host) continue;
     v.partOf = host;
     host.companions.push(v);
+  }
+  // A unit split in two for deployment is one entry in a list, the way it was bought. The second
+  // half's models go back into the first half's groups here, and the half itself is written nowhere.
+  for (const v of byId.values()) {
+    if (!isHalf(v.unit)) continue;
+    const head = byId.get(v.unit.halfOf!);
+    if (!head || head === v) continue;
+    v.partOf = head;
+    const merged = mergeModelGroups([...head.unit.models, ...v.unit.models]);
+    head.groups = merged.map((g) => ({ profileName: head.ds?.models.find((m) => m.id === g.modelProfileId)?.name ?? head.ds?.name ?? "Model", count: g.count, wargear: g.wargear }));
+    head.modelCount = merged.reduce((s, g) => s + g.count, 0);
   }
   const sections = SECTION_ORDER.map((section) => ({ section, units: [...byId.values()].filter((v) => !v.partOf && sectionOf(v.ds, roster, snapshot) === section) })).filter((s) => s.units.length);
   const faction = snapshot.data.factions.find((f) => f.id === roster.factionId);

@@ -1,7 +1,7 @@
 import type { Datasheet, Roster, RosterDetachment, Snapshot } from "@grimstat/schema";
 import type { AttachRole } from "./import-common";
 import { normaliseName } from "@grimstat/snapshot";
-import { compositionBounds, profileBounds } from "@grimstat/resolver";
+import { companionsOf, compositionBounds, profileBounds } from "@grimstat/resolver";
 import {
   MAX_COPIES,
   POINTS_BY_SIZE,
@@ -915,6 +915,28 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     if (st.cur?.headerCount) st.cur.headerCount = Math.max(1, st.cur.headerCount - Math.max(1, count));
   };
 
+  /**
+   * A header that counts more models than the datasheet can hold, with nothing written under it
+   * to say what they are: "2x Canis Rex (415 pts)" is the Knight and Sir Hekhtur. Read as two
+   * Knights the unit was over its size and priced off the wrong tier. The models the composition
+   * has no room for are the ones that come with the unit, one unit each, in the order the snapshot
+   * lists them. A companion line under the header has already taken its model off the count.
+   */
+  const claimCompanions = (t: TextUnit) => {
+    const max = compositionBounds(t.u.ds).max;
+    if (!t.headerCount || max === undefined || t.headerCount <= max) return;
+    let spare = t.headerCount - max;
+    for (const c of companionsOf(ctx.snapshot, t.u.ds)) {
+      if (spare <= 0) break;
+      // No groups: the build step gives a unit with none its datasheet's default models and wargear.
+      units.push({ u: ctx.newUnit(c), groups: [] });
+      spare--;
+      t.headerCount--;
+    }
+    // The header's count also stood up an implied group when a wargear line came before any model line.
+    for (const g of t.groups) if (g.implied && g.count > t.headerCount) g.count = t.headerCount;
+  };
+
   const startUnit = (ref: string | undefined, count: number | undefined, label: string, rest: string | undefined) => {
     const ds = ctx.matchDatasheet(label);
     if (!ds) {
@@ -1145,6 +1167,7 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
 
   // The last block has no heading after it to close it.
   closeAttachBlock();
+  for (const t of [...units]) claimCompanions(t);
   for (const t of units) finishUnit(t, warnings);
   // A flag whose label this parser has no word for is worth reporting only when nothing else answered it.
   // The blocks those lines mark out are resolved from the datasheets, so a unit that came out attached has

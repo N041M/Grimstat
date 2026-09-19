@@ -52,6 +52,17 @@ Every item here is a candidate for a plugin-level option or a future exact treat
 - **Removing a transport disembarks its passengers** rather than leaving them pointing at a unit
   that is gone, which the rules would otherwise report as an error nobody made. Undo puts them back
   aboard. A duplicated unit does not inherit the original's transport.
+- **A unit can be split in two for deployment.** Some datasheets carry a rule that splits one unit
+  into two at Declare Battle Formations: an Immolator's capacity text names the Sisters of Battle
+  Squad, a Raider's names Kabalite Warriors, and a Space Wolves ability names Grey Hunters. The
+  plugin reads those rules from the prose (`split.ts`). The roster keeps the first half as the unit
+  itself and the second half as a roster unit of its own that points back with `halfOf`, so each
+  half has its own transport and its own place in Reserves and the battle table gets two units. The
+  list still holds one purchase: the resolver prices the first half from the whole unit's model
+  count and the second half at nothing, the composition and wargear checks read the halves
+  together, the duplicate limit counts the whole once, and exports write one entry. The plugin
+  checks that something in the army can split the unit, that each such rule splits one unit, that
+  the halves are as equal as possible, and that one half rides in the transport whose rule split it.
 
 ## Units a list writes as several models
 
@@ -71,9 +82,12 @@ wargear and the unit arrived at the size of its minimum composition. A ten-model
   characteristics and its weapons everywhere the app resolves the unit. Such a model costs nothing, so
   the list total is the same either way. Only an exact name in the unit's own faction is treated this
   way. Any other unknown model name stays with the unit it was written under, and is reported.
-- **The army builder does not add the second datasheet for you.** Adding Canis Rex adds only Canis Rex,
-  and Sir Hekhtur has to be added beside it. Nothing in the snapshot says the two belong together.
-  Wahapedia links them only in the ability text, so the app cannot know which pairs to offer.
+- **The army builder adds the second datasheet with the first.** Adding Canis Rex adds Sir Hekhtur
+  under him, and removing the Knight removes the rider. The snapshot links the two only through the
+  rider's ability text, which names "your Canis Rex", so the resolver reads that text to find the
+  pairs (`companionHostOf`). A list header that counts the rider among the unit's models, such as
+  "2x Canis Rex", is read the same way: the models the composition has no room for are the ones that
+  come with the unit.
 - **A composition line counts every kind of model it names.** "1 Runtherd and 10 Gretchin" is eleven
   models, which is what the builder starts a new unit at and what an importer falls back to when a list
   gives no size. Text in brackets breaks one model into its pieces rather than naming more models, so

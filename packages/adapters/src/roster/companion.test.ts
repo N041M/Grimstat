@@ -62,6 +62,23 @@ describe("a model that comes with another unit", () => {
     expect(back.roster.units.map((u) => u.datasheetId)).toEqual(["knight", "rider"]);
     expect(exportRosterText(back.roster, snapshot, "nr-tournament")).toContain("1x Sir Hekhtur (Hekhtur’s pistol)");
   });
+  it("is read from a header that counts it with nothing written underneath", () => {
+    const { roster, warnings } = importRosterText(["Knights", "Imperial Knights", "", "CHARACTERS", "", "2x Canis Rex (415 pts): Warlord", ""].join("\n"), snapshot);
+    expect(warnings).toEqual([]);
+    expect(roster.units.map((u) => [u.datasheetId, u.models.map((g) => g.count), u.isWarlord])).toEqual([
+      ["knight", [1], true],
+      ["rider", [1], false],
+    ]);
+  });
+  it("is read from a counted header whose lines give only wargear", () => {
+    const { roster, warnings } = importRosterText(["Knights", "Imperial Knights", "", "CHARACTERS", "", "2x Canis Rex (415 pts)", "  • Freedom’s Hand", ""].join("\n"), snapshot);
+    expect(warnings).toEqual([]);
+    // A unit a list gives no wargear for keeps its datasheet's default loadout, which is written nowhere.
+    expect(roster.units.map((u) => [u.datasheetId, u.models.map((g) => [g.count, g.wargear])])).toEqual([
+      ["knight", [[1, ["Freedom’s Hand"]]]],
+      ["rider", [[1, []]]],
+    ]);
+  });
   it("keeps a list name that only loosely matches a datasheet as the name", () => {
     const { roster } = importRosterText(["Rex (415 points)", "", "Imperial Knights", "", "CHARACTERS", "", "Canis Rex (415 points)", "  • 1x Canis Rex", ""].join("\n"), snapshot);
     expect(roster.name).toBe("Rex");

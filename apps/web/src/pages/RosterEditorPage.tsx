@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BattleSize, Datasheet, Roster, RosterUnit } from "@grimstat/schema";
 import { constraints11e, unitFromRosterUnit } from "@grimstat/game-40k-11e";
-import { companionsOf, rosterSummary, validateRoster } from "@grimstat/resolver";
+import { companionsOf, halvesOf, headOf, isHalf, rosterSummary, validateRoster } from "@grimstat/resolver";
 import { useApp } from "../state/AppContext";
 import { useRosterEditor, useRosterSnapshot } from "../hooks/useRosterEditor";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
 import { hrefFor, navigate } from "../router";
-import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, enhancementsFor, moveUnit, newRosterUnit, pointsLimitFor, removeUnits, restoreUnits, sectionOf, unitDisplayName, type RemovedUnit } from "../lib/roster";
+import { detachmentPointsFor, diagnosticsForUnit, duplicateUnit, enhancementsFor, moveUnit, newRosterUnit, pointsLimitFor, rejoinUnit, removeUnits, restoreUnits, sectionOf, splitUnit, unitDisplayName, type RemovedUnit } from "../lib/roster";
 import { pointsBarModel } from "../lib/pointsBar";
 import { RosterHeader, parseEditorTab, type EditorMode, type EditorTab } from "../components/roster/RosterHeader";
 import { DetachmentStrip } from "../components/roster/DetachmentsBlock";
@@ -128,14 +128,29 @@ export function RosterEditorPage({ id }: { id: string }) {
   };
   const changeUnit = (unit: RosterUnit) => update((r) => ({ ...r, units: r.units.map((u) => (u.id === unit.id ? unit : u)) }));
   const duplicate = (unit: RosterUnit) => {
-    const copy = duplicateUnit(unit);
+    if (!roster) return;
+    const copy = duplicateUnit(unit, roster);
     update((r) => {
-      const i = r.units.findIndex((u) => u.id === unit.id);
+      // The copy of a split unit goes after the whole of it, not between its halves.
+      const head = headOf(r, unit);
+      const last = [head, ...halvesOf(r, head)].reduce((m, u) => Math.max(m, r.units.indexOf(u)), -1);
       const units = [...r.units];
-      units.splice(i < 0 ? units.length : i + 1, 0, copy);
+      units.splice(last < 0 ? units.length : last + 1, 0, copy);
       return { ...r, units };
     });
     selectUnit(copy.id);
+  };
+  /** Split a unit in two for deployment, or put it back together. Either half can ask to rejoin. */
+  const split = (unit: RosterUnit) => {
+    update((r) => splitUnit(r, unit.id));
+    notify(t("roster.units.splitDone", { name: unitDisplayName(unit, datasheets.get(unit.datasheetId)) }), "success");
+  };
+  const rejoin = (unit: RosterUnit) => {
+    if (!roster) return;
+    const head = headOf(roster, unit);
+    if (selectedId && isHalf(unit) && selectedId === unit.id) setSelectedId(head.id);
+    update((r) => rejoinUnit(r, unit.id));
+    notify(t("roster.units.rejoined", { name: unitDisplayName(head, datasheets.get(head.datasheetId)) }), "success");
   };
   /**
    * Removing a unit also detaches whatever was attached to it and puts whatever was riding in it
@@ -150,7 +165,16 @@ export function RosterEditorPage({ id }: { id: string }) {
    */
   const removeMany = (units: RosterUnit[]) => {
     if (!roster || units.length === 0) return;
+    // The second half of a split unit is not a purchase of its own: removing it alone puts the
+    // unit back together, and removing the first half takes the second with it.
+    const lone = units.filter((u) => isHalf(u) && !units.some((o) => o.id === u.halfOf));
+    if (lone.length === units.length) {
+      for (const u of lone) rejoin(u);
+      return;
+    }
+    units = units.filter((u) => !lone.includes(u));
     const ids = new Set(units.map((u) => u.id));
+    for (const u of units) for (const h of halvesOf(roster, u)) ids.add(h.id);
     // A model that came with a unit goes with it, unless another copy of the unit stays to keep it.
     for (const u of units) {
       const ds = datasheets.get(u.datasheetId);
@@ -313,6 +337,8 @@ export function RosterEditorPage({ id }: { id: string }) {
               onDuplicate={duplicate}
               onRemove={remove}
               onRemoveMany={removeMany}
+              onSplit={split}
+              onRejoin={rejoin}
               onMove={move}
               onOpenInCalculator={(u, side) => void openInCalculator(u, side)}
               onOpenDetachmentPicker={() => setDetPicker(true)}

@@ -1,6 +1,6 @@
 import { Roster, type BattleSize, type Datasheet, type RosterUnit, type Snapshot } from "@grimstat/schema";
 import { BATTLE_SIZES, baseWeaponName, parseLoadout, wargearItems } from "@grimstat/game-40k-11e";
-import { compositionBranches, isOwnFaction, rosterSummary } from "@grimstat/resolver";
+import { compositionBranches, halvesOf, headOf, isOwnFaction, rosterSummary, wholeModelsOf } from "@grimstat/resolver";
 import { newId, nowIso } from "./ids";
 
 /** Pure roster helpers shared by the Armies pages. No DOM, no storage. */
@@ -260,10 +260,68 @@ export function newRosterUnit(ds: Datasheet): RosterUnit {
  * The copy starts free for the same reason the attachment does not come along: a second squad
  * riding in the original's transport is a decision, not something to inherit silently from a
  * duplicate that was probably made to go somewhere else.
+ *
+ * A unit split in two is copied whole, from either half: the split is how this one deploys, and
+ * the copy is a new purchase that has not been split yet.
  */
-export function duplicateUnit(u: RosterUnit): RosterUnit {
-  const { attachedTo: _a, embarkedIn: _t, enhancementId: _e, ...rest } = JSON.parse(JSON.stringify(u)) as RosterUnit;
+export function duplicateUnit(u: RosterUnit, roster?: Pick<Roster, "units">): RosterUnit {
+  const source = roster ? { ...headOf(roster, u), models: wholeModelsOf(roster, u) } : u;
+  const { attachedTo: _a, embarkedIn: _t, enhancementId: _e, halfOf: _h, ...rest } = JSON.parse(JSON.stringify(source)) as RosterUnit;
   return { ...rest, id: newId("u"), isWarlord: false };
+}
+
+/**
+ * Split a unit into two for deployment, as an Immolator's rule allows. The second half is a roster
+ * unit of its own, placed right after the first and pointing back at it with `halfOf`. The halves
+ * are as equal as the rule asks: the second takes the smaller share, from the end of the model
+ * groups, so a sergeant written first stays with the first half. Each model keeps its wargear.
+ * The same roster comes back when the unit cannot be split.
+ */
+export function splitUnit(roster: Roster, id: string): Roster {
+  const unit = roster.units.find((u) => u.id === id);
+  if (!unit || unit.halfOf || halvesOf(roster, unit).length) return roster;
+  const total = modelCountOf(unit);
+  let take = Math.floor(total / 2);
+  if (take < 1) return roster;
+  const first: ModelGroup[] = [];
+  const second: ModelGroup[] = [];
+  for (const g of [...unit.models].reverse()) {
+    const n = Math.min(take, g.count);
+    if (n > 0) second.unshift({ ...g, count: n, wargear: [...g.wargear] });
+    if (g.count - n > 0) first.unshift({ ...g, count: g.count - n, wargear: [...g.wargear] });
+    take -= n;
+  }
+  const half: RosterUnit = { id: newId("u"), datasheetId: unit.datasheetId, models: second, halfOf: unit.id, isWarlord: false };
+  const i = roster.units.indexOf(unit);
+  const units = [...roster.units];
+  units.splice(i, 1, { ...unit, models: first }, half);
+  return { ...roster, units };
+}
+
+/**
+ * Put a split unit back together. Either half can be named. The second half's models return to
+ * the first, a character attached to the second half is attached to the first instead, and the
+ * second half's own transport and Reserves are dropped with it.
+ */
+export function rejoinUnit(roster: Roster, id: string): Roster {
+  const named = roster.units.find((u) => u.id === id);
+  if (!named) return roster;
+  const head = headOf(roster, named);
+  const halves = halvesOf(roster, head);
+  if (!halves.length) return roster;
+  const gone = new Set(halves.map((h) => h.id));
+  const units = roster.units
+    .filter((u) => !gone.has(u.id))
+    .map((u) => {
+      if (u.id === head.id) return { ...u, models: wholeModelsOf(roster, head) };
+      if (u.attachedTo && gone.has(u.attachedTo.unitId)) return { ...u, attachedTo: { ...u.attachedTo, unitId: head.id } };
+      if (u.embarkedIn && gone.has(u.embarkedIn)) {
+        const { embarkedIn: _t, ...rest } = u;
+        return rest;
+      }
+      return u;
+    });
+  return { ...roster, units };
 }
 
 /**

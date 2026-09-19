@@ -30,6 +30,7 @@ const snapshot: Snapshot = {
       { id: "termies", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Terminators", isLegends: false, isCharacter: false, isEpicHero: false, isBattleline: false, isSupport: false, keywords: ["INFANTRY", "TERMINATOR"], factionKeywords: [], models: [{ ...model, id: "t", name: "Terminator", W: 3 }], weapons: [], abilityIds: [], stratagemIds: [], leaderTo: [], supportTo: [], composition: [{ description: "5-10 models", min: 5, max: 10 }], wargearOptions: [] },
       { id: "jumpers", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Assault Squad", isLegends: false, isCharacter: false, isEpicHero: false, isBattleline: false, isSupport: false, keywords: ["INFANTRY", "JUMP PACK", "FLY"], factionKeywords: [], models: [{ ...model, id: "j", name: "Jumper" }], weapons: [], abilityIds: [], stratagemIds: [], leaderTo: [], supportTo: [], composition: [{ description: "5-10 models", min: 5, max: 10 }], wargearOptions: [] },
       { id: "tank", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Tank", isLegends: false, isCharacter: false, isEpicHero: false, isBattleline: false, isSupport: false, keywords: ["VEHICLE"], factionKeywords: [], models: [{ ...model, id: "tk", name: "Tank", T: 11, W: 14 }], weapons: [], abilityIds: [], stratagemIds: [], leaderTo: [], supportTo: [], composition: [{ description: "1 model", min: 1, max: 1 }], wargearOptions: [] },
+      { id: "immolator", gameSystemId: "wh40k-11e", factionId: "f1", name: "Test Immolator", isLegends: false, isCharacter: false, isEpicHero: false, isBattleline: false, isSupport: false, transportCapacity: "This model has a transport capacity of 6 INFANTRY models. At the start of the Declare Battle Formations step, you can select one TEST SQUAD from your army. If you do, that unit is split into two units, each containing as equal a number of models as possible. One of these units must start the battle embarked within this TRANSPORT; the other can start the battle embarked within another TRANSPORT, or it can be deployed as a separate unit.", keywords: ["VEHICLE", "TRANSPORT", "DEDICATED TRANSPORT"], factionKeywords: [], models: [{ ...model, id: "im", name: "Immolator", T: 10, W: 11 }], weapons: [], abilityIds: [], stratagemIds: [], leaderTo: [], supportTo: [], composition: [{ description: "1 model", min: 1, max: 1 }], wargearOptions: [] },
     ],
     abilities: [],
     detachments: [
@@ -53,6 +54,7 @@ const snapshot: Snapshot = {
       { datasheetId: "termies", copyRange: { min: 1 }, tiers: [{ models: 5, points: 170 }, { models: 10, points: 340 }] },
       { datasheetId: "jumpers", copyRange: { min: 1 }, tiers: [{ models: 5, points: 90 }, { models: 10, points: 180 }] },
       { datasheetId: "tank", copyRange: { min: 1 }, tiers: [{ models: 1, points: 150 }] },
+      { datasheetId: "immolator", copyRange: { min: 1 }, tiers: [{ models: 1, points: 90 }] },
     ],
     wargearPrices: [{ datasheetId: "squad", item: "Big gun", points: 10 }],
   },
@@ -292,5 +294,52 @@ describe("transports and reserves", () => {
     expect(over.find((x) => x.code === "reserves.limit")).toMatchObject({ severity: "error", message: "305 points start in Reserves; the limit is 250 (assumed)." });
     // A transport embarked in a reserved transport does not recurse forever.
     expect(() => all(roster({ units: [rhino({ embarkedIn: "rh2" }), unit("rh2", "rhino", 1, { embarkedIn: "rh1" }), captain()] }))).not.toThrow();
+  });
+});
+
+describe("a unit split in two for deployment", () => {
+  const squad = (id: string, count: number, over: Partial<Roster["units"][number]> = {}): Roster["units"][number] => ({ id, datasheetId: "squad", models: [{ modelProfileId: "m", count, wargear: [] }], isWarlord: false, ...over });
+  const immolator = (id: string): Roster["units"][number] => ({ id, datasheetId: "immolator", models: [{ modelProfileId: "im", count: 1, wargear: [] }], isWarlord: false });
+  const all = (r: Roster) => validateRoster(r, snapshot, [constraints11e]);
+  const withCode = (r: Roster, code: string) => all(r).filter((d) => d.code === code);
+
+  it("is priced and sized as one unit, with the second half free", () => {
+    const r = roster({ units: [immolator("t"), squad("a", 5, { embarkedIn: "t" }), squad("b", 5, { halfOf: "a" })] });
+    const ctx = createContext(r, snapshot);
+    expect(ctx.unitCost(r.units[1]!)).toMatchObject({ base: 160, total: 160, modelCount: 10, copyIndex: 1, notes: [] });
+    expect(ctx.unitCost(r.units[2]!)).toMatchObject({ base: 0, total: 0, modelCount: 5, copyIndex: 1 });
+    expect(ctx.copies("squad").map((u) => u.id)).toEqual(["a"]);
+    expect(codes(r)).not.toContain("units.size");
+    expect(codes(r)).not.toContain("units.split.rule");
+    expect(withCode(r, "transport.capacity").map((d) => d.severity)).toEqual(["info"]);
+  });
+  it("counts the whole unit once against the duplicate limit", () => {
+    const r = roster({ battleSize: "incursion", pointsLimit: 1000, units: [immolator("t"), squad("a", 5), squad("b", 5, { halfOf: "a" }), squad("c", 5), squad("d", 5, { halfOf: "c" })] });
+    expect(codes(r)).not.toContain("units.duplicates");
+  });
+  it("wants a rule in the army that can split it", () => {
+    const r = roster({ units: [squad("a", 5), squad("b", 5, { halfOf: "a" })] });
+    expect(withCode(r, "units.split.rule").map((d) => d.message)).toEqual(["Test Squad is split in two, but nothing in the army can split it."]);
+  });
+  it("lets each rule split one unit", () => {
+    const r = roster({ units: [immolator("t"), squad("a", 5, { embarkedIn: "t" }), squad("b", 5, { halfOf: "a" }), squad("c", 5), squad("d", 5, { halfOf: "c" })] });
+    expect(withCode(r, "units.split.rule").map((d) => d.path)).toEqual(["/units/3"]);
+    const two = roster({ units: [immolator("t"), immolator("t2"), squad("a", 5, { embarkedIn: "t" }), squad("b", 5, { halfOf: "a" }), squad("c", 5, { embarkedIn: "t2" }), squad("d", 5, { halfOf: "c" })] });
+    expect(withCode(two, "units.split.rule")).toEqual([]);
+  });
+  it("wants one half aboard the transport whose rule split it", () => {
+    const r = roster({ units: [immolator("t"), squad("a", 5), squad("b", 5, { halfOf: "a" })] });
+    expect(withCode(r, "units.split.embark").map((d) => [d.severity, d.message])).toEqual([["warn", "One half of Test Squad must start the battle embarked in Test Immolator, which splits it."]]);
+    const aboard = roster({ units: [immolator("t"), squad("a", 5), squad("b", 5, { halfOf: "a", embarkedIn: "t" })] });
+    expect(withCode(aboard, "units.split.embark")).toEqual([]);
+  });
+  it("wants the halves as equal as possible", () => {
+    const r = roster({ units: [immolator("t"), squad("a", 7, { embarkedIn: "t" }), squad("b", 3, { halfOf: "a" })] });
+    expect(withCode(r, "units.split.equal").map((d) => d.message)).toEqual(["Test Squad is split 7 and 3; the halves must be as equal as possible."]);
+    expect(withCode(r, "transport.capacity").map((d) => d.severity)).toEqual(["error"]);
+  });
+  it("reports a second half whose unit is gone", () => {
+    const r = roster({ units: [squad("b", 5, { halfOf: "zz" })] });
+    expect(codes(r)).toContain("units.split.orphan");
   });
 });

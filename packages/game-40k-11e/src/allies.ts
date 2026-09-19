@@ -1,6 +1,6 @@
 import type { Datasheet, Diagnostic, RosterUnit } from "@grimstat/schema";
 import type { RosterContext } from "@grimstat/resolver";
-import { companionHostOf, factionKeywordsOf, isOwnFaction } from "@grimstat/resolver";
+import { companionHostOf, factionKeywordsOf, isHalf, isOwnFaction } from "@grimstat/resolver";
 
 /**
  * Which units from another faction an army may include, from the 11th-edition faction rules.
@@ -84,7 +84,8 @@ export function checkAllies(ctx: RosterContext): Diagnostic[] {
   const known: Entry[] = [];
   for (const unit of roster.units) {
     const ds = ctx.datasheet(unit.datasheetId);
-    if (ds) known.push({ unit, ds });
+    // The second half of a split unit is the same purchase as the first, so it counts nowhere here.
+    if (ds && !isHalf(unit)) known.push({ unit, ds });
   }
   const core = factionKeywordsOf(snapshot, roster.factionId);
   const own = known.filter((e) => isOwnFaction(e.ds, roster, snapshot));

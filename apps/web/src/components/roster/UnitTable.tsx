@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { UnitArt } from "../UnitArt";
 import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
-import { companionHostOf, type UnitCost } from "@grimstat/resolver";
+import { companionHostOf, halvesOf, isHalf, type UnitCost } from "@grimstat/resolver";
+import { canSplitUnit } from "@grimstat/game-40k-11e";
 import type { PointsBarModel } from "../../lib/pointsBar";
 import { diagnosticsForUnit, modelCountOf, sectionOf, unitDisplayName, wargearSummary, type UnitSection } from "../../lib/roster";
 import { loadsByTransport } from "../../lib/transport";
@@ -24,10 +25,13 @@ export type CalcSide = "attacker" | "defender";
  * clicked while the pointer was on the row. The room for them comes from the numeric columns, which
  * were sized for the words in the header rather than for the one or two digits underneath them.
  *
- * Their column is `min-content` rather than `auto` because a table squeezed narrower than its
- * columns want shrinks an `auto` track to nothing, which put the buttons back over the status.
+ * Their column is a fixed width. The header and every row lay out their own copy of the grid, so a
+ * content-sized track came out at nothing in the header, whose actions cell holds only a hidden
+ * label, and at the width of two buttons in the rows. Every header label then stood that much to
+ * the right of the column it named. An `auto` track had the other problem: a table squeezed
+ * narrower than its columns want shrinks it to nothing, which put the buttons back over the status.
  */
-const COLUMNS = "minmax(150px,2.2fr) 120px 60px 64px 78px min-content";
+const COLUMNS = "minmax(150px,2.2fr) 120px 60px 64px 78px 60px";
 /** The same with a checkbox column in front, in selection mode. */
 const SELECT_COLUMNS = `28px ${COLUMNS}`;
 
@@ -55,6 +59,10 @@ interface Props {
   onDuplicate: (unit: RosterUnit) => void;
   onRemove: (unit: RosterUnit) => void;
   onRemoveMany: (units: RosterUnit[]) => void;
+  /** Split the unit into two for deployment, as an Immolator's rule allows. */
+  onSplit: (unit: RosterUnit) => void;
+  /** Put a split unit back together; either half may be given. */
+  onRejoin: (unit: RosterUnit) => void;
   /** Move a unit `delta` places in `roster.units`. */
   onMove: (unit: RosterUnit, delta: number) => void;
   onOpenInCalculator: (unit: RosterUnit, side: CalcSide) => void;
@@ -71,9 +79,13 @@ interface RowMenuProps {
   onDuplicate: () => void;
   onRemove: () => void;
   onCalc: (side: CalcSide) => void;
+  /** Offered when a rule in the army can split this unit in two. */
+  onSplit?: () => void;
+  /** Offered on either half of a split unit. */
+  onRejoin?: () => void;
 }
 
-function RowMenu({ name, canUp, canDown, onMove, onDuplicate, onRemove, onCalc }: RowMenuProps) {
+function RowMenu({ name, canUp, canDown, onMove, onDuplicate, onRemove, onCalc, onSplit, onRejoin }: RowMenuProps) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const run = (fn: () => void) => () => {
@@ -117,6 +129,22 @@ function RowMenu({ name, canUp, canDown, onMove, onDuplicate, onRemove, onCalc }
           <Icon name="copy" />
           {t("armies.duplicate")}
         </button>
+        {onSplit ? (
+          <button type="button" role="menuitem" onClick={run(onSplit)}>
+            <span className="ut-menu-glyph" aria-hidden="true">
+              ⑂
+            </span>
+            {t("roster.units.split")}
+          </button>
+        ) : null}
+        {onRejoin ? (
+          <button type="button" role="menuitem" onClick={run(onRejoin)}>
+            <span className="ut-menu-glyph" aria-hidden="true">
+              ⑃
+            </span>
+            {t("roster.units.rejoin")}
+          </button>
+        ) : null}
         <button type="button" role="menuitem" className="danger" onClick={run(onRemove)}>
           <Icon name="trash" />
           {t("roster.inspector.removeUnit")}
@@ -229,24 +257,33 @@ interface DisplayRow {
  * remove one. A filter box narrows the rows by name, role or wargear; selection mode adds
  * checkboxes and a "Remove selected" action.
  */
-export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics, points, selectedId, adding, onAdding, onSelect, onAdd, onDuplicate, onRemove, onRemoveMany, onMove, onOpenInCalculator, onOpenDetachmentPicker, onExport }: Props) {
+export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics, points, selectedId, adding, onAdding, onSelect, onAdd, onDuplicate, onRemove, onRemoveMany, onSplit, onRejoin, onMove, onOpenInCalculator, onOpenDetachmentPicker, onExport }: Props) {
   const enhancements = useMemo(() => new Map(snapshot.data.enhancements.map((e) => [e.id, e] as const)), [snapshot]);
   const [query, setQuery] = useState("");
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
 
   /**
-   * Top-level units in section order, each followed by the characters attached to it and by the
-   * models that come with it. Sir Hekhtur has a datasheet of his own and comes with Canis Rex, so
-   * his row sits under the Knight's the way an attached character's does.
+   * Top-level units in section order, each followed by the second half of it when it is split, by
+   * the characters attached to it and by the models that come with it. Sir Hekhtur has a datasheet
+   * of his own and comes with Canis Rex, so his row sits under the Knight's the way an attached
+   * character's does.
    */
-  const { rows, attachedNames, partOf } = useMemo(() => {
+  const { rows, attachedNames, partOf, halfOf } = useMemo(() => {
     const byId = new Map(roster.units.map((u) => [u.id, u] as const));
     const attachedByHost = new Map<string, RosterUnit[]>();
     const companionsByHost = new Map<string, RosterUnit[]>();
+    const halvesByHead = new Map<string, RosterUnit[]>();
     const hostOf = new Map<string, RosterUnit>();
+    const headOfHalf = new Map<string, RosterUnit>();
     const top: RosterUnit[] = [];
     for (const u of roster.units) {
+      const headId = u.halfOf;
+      if (headId && byId.has(headId) && headId !== u.id) {
+        halvesByHead.set(headId, [...(halvesByHead.get(headId) ?? []), u]);
+        headOfHalf.set(u.id, byId.get(headId)!);
+        continue;
+      }
       const hostId = u.attachedTo?.unitId;
       if (hostId && byId.has(hostId) && hostId !== u.id) {
         attachedByHost.set(hostId, [...(attachedByHost.get(hostId) ?? []), u]);
@@ -268,6 +305,10 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
       for (const u of top) {
         if (sectionOf(datasheets.get(u.datasheetId), roster, snapshot) !== section) continue;
         out.push({ unit: u, nested: false, group: section });
+        for (const h of halvesByHead.get(u.id) ?? []) {
+          out.push({ unit: h, nested: true, group: u.id });
+          for (const c of attachedByHost.get(h.id) ?? []) out.push({ unit: c, nested: true, group: h.id });
+        }
         for (const c of companionsByHost.get(u.id) ?? []) out.push({ unit: c, nested: true, group: u.id });
         for (const c of attachedByHost.get(u.id) ?? []) out.push({ unit: c, nested: true, group: u.id });
       }
@@ -277,8 +318,12 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
     // have someone in them without reading the line below each one.
     const names = new Map<string, string[]>();
     for (const [hostId, list] of attachedByHost) names.set(hostId, list.map((c) => unitDisplayName(c, datasheets.get(c.datasheetId))));
-    return { rows: out, attachedNames: names, partOf: hostOf };
+    return { rows: out, attachedNames: names, partOf: hostOf, halfOf: headOfHalf };
   }, [roster, datasheets, snapshot]);
+
+  /** Units a rule in the army can split in two, and units already split (either half). */
+  const splittable = useMemo(() => new Set(roster.units.filter((u) => canSplitUnit(roster, snapshot, u)).map((u) => u.id)), [roster, snapshot]);
+  const split = useMemo(() => new Set(roster.units.filter((u) => isHalf(u) || halvesOf(roster, u).length).map((u) => u.id)), [roster]);
 
   /**
    * Who is riding in what, both ways round.
@@ -317,10 +362,15 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
     return t("roster.badge.carrying", { names: carrying.join(", ") });
   };
 
-  /** Sub-line: what the unit is attached to or comes with, or its wargear. */
+  /** Sub-line: what the unit is attached to, comes with or is the second half of, or its wargear. */
   const subOf = (u: RosterUnit): string => {
     const host = partOf.get(u.id);
     if (host) return t("roster.badge.partOf", { name: unitDisplayName(host, datasheets.get(host.datasheetId)) });
+    const head = halfOf.get(u.id);
+    if (head) {
+      const gear = wargearSummary(u, datasheets.get(u.datasheetId));
+      return [t("roster.badge.halfOf", { name: unitDisplayName(head, datasheets.get(head.datasheetId)) }), gear].filter(Boolean).join(" · ");
+    }
     if (u.attachedTo) {
       const host = roster.units.find((h) => h.id === u.attachedTo?.unitId);
       const hostName = host ? unitDisplayName(host, datasheets.get(host.datasheetId)) : t("roster.badge.attached");
@@ -342,7 +392,7 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
     const kept = rows.filter((r) => hit(r.unit));
     const shown = new Set(kept.map((r) => r.unit.id));
     // An attached character whose host is filtered out is shown flush, not indented under nothing.
-    return kept.map((r) => (r.nested && !shown.has(r.unit.attachedTo?.unitId ?? "") ? { ...r, nested: false } : r));
+    return kept.map((r) => (r.nested && !shown.has(r.unit.attachedTo?.unitId ?? r.unit.halfOf ?? "") ? { ...r, nested: false } : r));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, q, datasheets, enhancements, roster]);
 
@@ -483,6 +533,7 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                 const badges: ReactNode = (
                   <>
                     {unit.isWarlord ? <span className="ut-badge">{t("roster.badge.warlord")}</span> : null}
+                    {split.has(unit.id) && !isHalf(unit) ? <span className="ut-badge">{t("roster.badge.split")}</span> : null}
                     {attached?.length ? (
                       <span className="ut-badge ut-attached" title={t("roster.badge.hasAttached", { names: attached.join(", ") })}>
                         <UnitArt id="character" className="ut-attached-mark" />
@@ -569,6 +620,8 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                           onDuplicate={() => onDuplicate(unit)}
                           onRemove={() => onRemove(unit)}
                           onCalc={(side) => onOpenInCalculator(unit, side)}
+                          {...(splittable.has(unit.id) ? { onSplit: () => onSplit(unit) } : {})}
+                          {...(split.has(unit.id) ? { onRejoin: () => onRejoin(unit) } : {})}
                         />
                       </span>
                     </GridCell>
