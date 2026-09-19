@@ -3,6 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { MOUSE, OrthographicCamera, PerspectiveCamera, TOUCH, Vector3 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Aabb2, BoardSize } from "@grimstat/board";
+import { PAN_KEYS, panStep, tableForward } from "../../lib/cameraPan";
 
 /**
  * `orbit` is the immersive view; `top` is a true orthographic camera looking straight down.
@@ -51,6 +52,18 @@ export const viewScale = { pxPerInch: 0 };
  * amount on every screen. It only ever slows the turn down: a canvas taller than this keeps 1.
  */
 const ROTATE_REFERENCE = 800;
+
+/** Is the key meant for a field rather than the table? */
+const inField = (target: EventTarget | null): boolean => {
+  const el = target as HTMLElement | null;
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+};
+
+/** Is something open over the table? Keys typed under it belong to it. */
+const underOverlay = (target: EventTarget | null): boolean => {
+  if (document.querySelector("dialog[open], [role='dialog'][aria-modal='true']")) return true;
+  return target instanceof Element && !!target.closest("[role='dialog']");
+};
 
 /** Where a camera is, what it is pointed at, and how far it is zoomed in. */
 interface View {
@@ -265,11 +278,59 @@ export function Cameras({ mode, size, frame, recentre }: { mode: CameraMode; siz
     return () => cancelAnimationFrame(frame);
   }, [recentre, invalidate]);
 
-  useFrame(() => {
+  /**
+   * W, A, S and D carry the view across the table while they are held.
+   *
+   * They move the camera and the point it turns about together, so the view slides without
+   * tilting. "Forward" is the way the camera is looking, flattened onto the table, which in the
+   * top-down view is up the screen. The speed is a share of the table in shot per second, so a key
+   * crosses a zoomed-in view as quickly as a zoomed-out one. The keys are read on the window, since
+   * the canvas never has focus, and left alone whenever a field or a dialog has them.
+   */
+  const held = useRef(new Set<string>());
+  useEffect(() => {
+    const keys = held.current;
+    const down = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || inField(e.target) || underOverlay(e.target)) return;
+      const key = e.key.toLowerCase();
+      if (!(key in PAN_KEYS)) return;
+      e.preventDefault();
+      keys.add(key);
+      invalidate();
+    };
+    const up = (e: KeyboardEvent) => {
+      keys.delete(e.key.toLowerCase());
+    };
+    // A key released while the window is not listening would carry the view for ever.
+    const release = () => keys.clear();
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", release);
+      keys.clear();
+    };
+  }, [invalidate]);
+
+  const look = useMemo(() => new Vector3(), []);
+  useFrame((_, delta) => {
     const next = controls.current;
     if (!next) return;
-    next.update();
     const camera = next.object as PerspectiveCamera | OrthographicCamera;
+    if (held.current.size && next.enabled) {
+      const inShot = camera instanceof OrthographicCamera ? (camera.top - camera.bottom) / camera.zoom : 2 * camera.position.distanceTo(next.target) * Math.tan(((camera.fov * Math.PI) / 180) / 2);
+      const step = panStep(held.current, tableForward(camera.getWorldDirection(look), camera.up), inShot, delta);
+      if (step) {
+        camera.position.x += step.x;
+        camera.position.z += step.z;
+        next.target.x += step.x;
+        next.target.z += step.z;
+      }
+      invalidate();
+    }
+    next.update();
     if (camera instanceof OrthographicCamera) viewScale.pxPerInch = (viewportHeight / Math.max(0.001, camera.top - camera.bottom)) * camera.zoom;
     else viewScale.pxPerInch = viewportHeight / 2 / (Math.max(0.001, camera.position.distanceTo(next.target)) * Math.tan(((camera.fov * Math.PI) / 180) / 2));
   });

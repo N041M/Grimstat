@@ -16,6 +16,7 @@
 import type { Aabb2, BoardSize, CoherencyReport, Footprint, ModelHull, ReachNode, ReachOptions, ReachResult, TerrainLayout, TerrainPiece, Vec2, Vec3, Zone } from "@grimstat/board";
 import { COHERENCY_RANGE, LAYOUTS, MM_PER_INCH, MOVE_RULES, TOUCH, TerrainIndex, bounds, canStand, chargeGeometry, circleBase, coherency, coreSegment, coverFor, distance, edgeZones, footReach, heightForKeywords, horizontalGap, inBox, inEngagementRange, inZone, onBoard, ovalBase, pointInPolygon, reachable, segPolygonDistance, sight, unitDistance } from "@grimstat/board";
 import type { ModelProfile, Roster, Snapshot } from "@grimstat/schema";
+import { hullSizeOfModel } from "./hullSizes";
 import { unitClassFor, type UnitClassId } from "./unitArt";
 
 export type Side = "attacker" | "defender";
@@ -1180,12 +1181,15 @@ export function hullFromWounds(keywords: readonly string[], wounds: number): Foo
 }
 
 /**
- * What a model stands on. The base its datasheet names comes first. A vehicle or monster with no
- * named base gets a hull sized from its Wounds. Anything else gets the base its class usually has.
+ * What a model stands on. The base its datasheet names comes first. A kit whose size is on record
+ * gets that footprint. A vehicle or monster with neither gets a hull sized from its Wounds. Anything
+ * else gets the base its class usually has.
  */
-export function footprintFor(keywords: readonly string[], profile: ModelProfile | undefined): Footprint {
+export function footprintFor(keywords: readonly string[], profile: ModelProfile | undefined, datasheetName?: string): Footprint {
   const named = footprintFromBaseSize(profile?.baseSize);
   if (named) return named;
+  const kit = datasheetName ? hullSizeOfModel(datasheetName, profile?.name) : undefined;
+  if (kit) return kit.round ? circleBase(kit.width) : ovalBase(kit.length, kit.width);
   const cls = unitClassFor(keywords);
   if (profile && HULL_CLASSES.has(cls)) return hullFromWounds(keywords, profile.W);
   return CLASS_BASES[cls]();
@@ -1199,8 +1203,10 @@ const profileMove = (p: ModelProfile | undefined): number | undefined => (p === 
  * The units of an army as battle units for one side, from the snapshot the army was built against.
  *
  * Model counts come from the army; base sizes and Move from each model's profile on the datasheet.
- * Where the datasheet names no base, a vehicle or monster gets a hull sized from its Wounds and
- * anything else the base its class usually has. See `footprintFor`.
+ * Where the datasheet names no base, a kit on record gets its measured footprint, a vehicle or
+ * monster gets a hull sized from its Wounds and anything else the base its class usually has. See
+ * `footprintFor`. A kit on record also gets its measured height in place of the keyword default.
+ * Both are looked up per model, by the model's own profile name before the datasheet's.
  * A unit whose datasheet is not in the snapshot is left out. Everything arrives off the board, to
  * be deployed from the muster table; a unit embarked in a transport or held in reserves is listed
  * like any other, since the table plans deployment rather than enforcing it.
@@ -1213,12 +1219,14 @@ export function unitsFromRoster(roster: Roster, snapshot: Snapshot, side: Side):
     if (!sheet) continue;
     const lead = sheet.models[0];
     const keywords = [...sheet.keywords];
-    const height = heightForKeywords(keywords);
+    const unitHeight = heightForKeywords(keywords);
     const unitMove = profileMove(lead) ?? DEFAULT_MOVE;
     const models: BattleModel[] = [];
     for (const group of entry.models) {
       const profile = sheet.models.find((m) => m.id === group.modelProfileId) ?? lead;
-      const foot = footprintFor(keywords, profile);
+      const foot = footprintFor(keywords, profile, sheet.name);
+      const kit = hullSizeOfModel(sheet.name, profile?.name);
+      const height = kit ? kit.height / MM_PER_INCH : unitHeight;
       const move = profileMove(profile);
       for (let i = 0; i < group.count; i++) {
         models.push({ id: `${side}-${entry.id}-${models.length}`, hull: { pos: { x: 0, y: 0, z: 0 }, facing: 0, foot, height }, ...(move !== undefined && move !== unitMove ? { move } : {}) });
