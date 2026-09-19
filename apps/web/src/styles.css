@@ -5476,7 +5476,10 @@ a.btn:hover {
 .gtable-row:focus-within .ut-actions {
   visibility: visible;
 }
-.ut-actions button,
+/* The cell's own two controls. Written as `.ut-actions button` this reached the row menu's items
+   as well, which are inside the cell, and drew a border and a panel around each of them, so the
+   menu read as a stack of buttons rather than a list. */
+.ut-actions > button,
 .ut-menu-btn {
   display: inline-flex;
   align-items: center;
@@ -5487,7 +5490,7 @@ a.btn:hover {
   color: var(--ink-2);
   cursor: pointer;
 }
-.ut-actions button:hover:not(:disabled),
+.ut-actions > button:hover:not(:disabled),
 .ut-menu-btn:hover:not(:disabled) {
   border-color: var(--ink);
   color: var(--ink);
@@ -10807,6 +10810,12 @@ body.play-focused .shell.compact {
        The basis is wider than the longest label so no button is squeezed under its own text, which
        is what leaves a phone stacking them one to a line. */
     flex: 1 1 200px;
+  }
+  /* A menu opened from one of these actions is written inside them, so the sizing above reaches its
+     items too. A menu is a column, where a basis is height, and every item came out 200 pixels
+     tall. The items keep the touch height and the padding; they size themselves. */
+  .shell.compact .page-header-actions .menu button {
+    flex: none;
   }
   /*
    * The Data page has four actions, one more than a narrow line holds. Fetching everything is what
