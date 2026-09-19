@@ -60,7 +60,7 @@ const pathLength = (path: readonly Vec3[]): number => path.reduce((s, p, i) => (
 const BASE_H = 0.16;
 
 /** Gunmetal, for the parts of a figure that are not armour: tracks, weapons, visors, claws. */
-const ACCENT_COLOUR = "#3b3e46";
+const ACCENT_COLOUR = "#4a4e58";
 
 const materials = new Map<string, MeshStandardMaterial>();
 const figureMaterials = new Map<string, Material[]>();
@@ -68,26 +68,28 @@ const figureMaterials = new Map<string, Material[]>();
 /**
  * One material per colour and finish, shared by every token drawn in it.
  *
- * A table holds a hundred tokens in two colours; a material each would be a hundred GPU programs
- * to switch between for nothing. The handful made here are never disposed: they are the page's.
- * Figures are drawn double-sided: a cape or a mudguard is an open surface with a back.
+ * A table holds a hundred tokens in two colours. A material each would be a hundred GPU programs
+ * to switch between for nothing. The handful made here are never disposed. They are the page's.
+ * Figures are drawn double-sided, since a cape or a mudguard is an open surface with a back. The
+ * figure materials read the tone each part of a figure carries as a vertex colour, which is how
+ * one material draws a helmet lighter than the chest under it and a knee joint darker.
  */
 function material(colour: string, finish: "base" | "armour" | "accent" | "ghost"): MeshStandardMaterial {
   const key = `${finish}:${colour}`;
   let m = materials.get(key);
   if (!m) {
     const ghost = finish === "ghost";
-    // The base is darkened well below the figure's own colour. Seen from straight down — the view
-    // people plan in — a model is mostly base, and a base in nearly the side's colour makes the
-    // whole thing one blue disc with a blue lump on it.
+    // The base is darkened well below the figure's own colour. Seen from straight down, which is
+    // the view people plan in, a model is mostly base, and a base in nearly the side's colour makes
+    // the whole thing one blue disc with a blue lump on it.
     const tint = finish === "base" ? `#${new Color(colour).multiplyScalar(0.42).getHexString()}` : colour;
     m = new MeshStandardMaterial({
       color: tint,
-      roughness: finish === "accent" ? 0.5 : 0.65,
-      metalness: finish === "accent" ? 0.4 : 0.08,
+      roughness: finish === "accent" ? 0.42 : 0.58,
+      metalness: finish === "accent" ? 0.5 : 0.08,
       transparent: ghost,
       opacity: ghost ? 0.4 : 1,
-      ...(finish === "base" ? {} : { side: DoubleSide }),
+      ...(finish === "base" ? {} : { side: DoubleSide, vertexColors: true }),
     });
     materials.set(key, m);
   }
@@ -124,8 +126,9 @@ function TokenBody({ hull, kind, pose = 0, colour, ghost, selected, warn }: { hu
   return (
     <group rotation={facingRotation(hull.facing)}>
       <group scale={[stretch, 1, 1]}>
+        {/* The base's edge is bevelled a little, as a miniature's is. The figure fits inside the top. */}
         <mesh castShadow receiveShadow position={[0, BASE_H / 2, 0]} material={material(colour, ghost ? "ghost" : "base")}>
-          <cylinderGeometry args={[r, r, BASE_H, 22]} />
+          <cylinderGeometry args={[r * 0.96, r, BASE_H, 22]} />
         </mesh>
         {selected || warn ? (
           <mesh position={[0, 0.19, 0]} rotation={[-Math.PI / 2, 0, 0]}>

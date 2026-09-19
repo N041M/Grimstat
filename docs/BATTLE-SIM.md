@@ -176,10 +176,13 @@ apps/web
 - **Renderer**: `three` + `@react-three/fiber` with three's own `OrbitControls`, lazily loaded so the
   calculator's bundle is untouched by anyone who never opens the Battle page.
 - **Look**: abstract, legally clean, readable from above — a matt table, terrain as extruded solids
-  with faces tinted by trait, models as base discs with a stylised, posed figure standing on them —
-  one per unit class (trooper, tank, walker, monster, swarm…), built in code from primitives in
-  armour colour and gunmetal (`apps/web/src/lib/silhouettes.ts`), drawn to the exact height the
-  kernel measures with and never a sculpt — wound pips and unit labels as billboards that stay
+  with faces tinted by trait, models as base discs with a stylised, posed figure standing on them.
+  There is one figure per unit class (trooper, tank, walker, monster, swarm…), built in code from
+  chamfered primitives in armour colour and gunmetal (`apps/web/src/lib/silhouettes.ts`). Each part
+  carries a tone as a vertex colour, so helmets and pauldrons come out lighter than the chest,
+  joints and cloth darker, tracks darker than guns, and visors red. The classes that come several
+  models to a unit have two or three poses each. Every figure is drawn to the exact height the
+  kernel measures with and none is a sculpt. Wound pips and unit labels are billboards that stay
   upright and scale with distance.
 - **Cameras**: an orbit camera for the immersive view and an orthographic top-down camera one key
   away — the top-down camera *is* the old 2D planning view, so nothing is lost by going 3D.
