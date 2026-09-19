@@ -1536,7 +1536,7 @@ export const en = {
   "battle.actions.view": "View",
   "battle.actions.board": "The board",
   "battle.view.camera": "Camera",
-  "battle.view.cameraTitle": "Which way the view looks at the table, and putting it back",
+  "battle.view.cameraTitle": "Which way the view looks at the table, and putting it back. W, A, S and D slide the view.",
   "battle.focus.on": "Focus",
   "battle.focus.off": "Leave focus",
   "battle.focus.onTitle": "Give the table the whole screen",

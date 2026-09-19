@@ -1033,6 +1033,23 @@ describe("what a model stands on", () => {
     expect(hullFromWounds(["VEHICLE", "WALKER"], 10)).toEqual(circleBase(4.5 * 0.65 * 25.4));
   });
 
+  it("takes a kit's measured hull when the datasheet names no base, and the base when it does", () => {
+    const russ = footprintFor(["VEHICLE"], profile("Use model", 13), "Leman Russ Demolisher");
+    expect(russ.kind).toBe("capsule");
+    expect(2 * footReach(russ)).toBeCloseTo(120 / 25.4, 2);
+    expect(2 * russ.r).toBeCloseTo(110 / 25.4, 2);
+    expect(footprintFor(["VEHICLE"], profile("Use model", 8), "Drop Pod")).toEqual(circleBase(115));
+    // The marine Stalker and the Necron Triarch Stalker are different kits.
+    expect(2 * footReach(footprintFor(["VEHICLE"], profile("Use model", 11), "Stalker"))).toBeCloseTo(100 / 25.4, 2);
+    expect(2 * footReach(footprintFor(["VEHICLE", "WALKER"], profile("Use model", 12), "Triarch Stalker"))).toBeCloseTo(140 / 25.4, 2);
+    // A named base beats the record.
+    expect(footprintFor(["VEHICLE", "WALKER"], profile("60mm", 10), "Contemptor Dreadnought")).toEqual(circleBase(60));
+    // A model is tied to its own profile's kit before its squad's.
+    expect(footprintFor(["MOUNTED"], { ...profile("Use model", 5), name: "Attack Bike" }, "Bike Squad")).toEqual(ovalBase(90, 52));
+    // A kit not on record still gets the wounds estimate.
+    expect(footprintFor(["VEHICLE"], profile("Use model", 13), "Unheard-of Tank")).toEqual(hullFromWounds(["VEHICLE"], 13));
+  });
+
   it("falls back on the class's usual base for anything else without one", () => {
     expect(footprintFor(["INFANTRY"], profile("Use model", 4))).toEqual(circleBase(32));
     expect(footprintFor(["INFANTRY", "CHARACTER"], undefined)).toEqual(circleBase(40));
