@@ -98,28 +98,43 @@ export interface SaveOpts {
   invulnTarget: number | null;
   rollMod: number; // capped save-roll modifier
   reroll: RerollPolicy | null;
-  /** Unmodified 6 always saves (11e). Default true. */
+  /** Unmodified 6 always saves. Default false, since neither edition's core rules grant it. */
   sixAlwaysSaves?: boolean;
+}
+
+/** Whether an unmodified save result `r` saves under `o`. A 1 never does. */
+export function saveSucceeds(r: number, o: SaveOpts): boolean {
+  if (r === 1) return false;
+  if (r === 6 && (o.sixAlwaysSaves ?? false)) return true;
+  if (r + o.rollMod >= o.armourTarget) return true;
+  if (o.invulnTarget !== null && r >= o.invulnTarget) return true;
+  return false;
+}
+
+/** Which unmodified results inflict damage, indexed by die face (index 0 is a roll of 1). */
+export function damageFaces(o: SaveOpts): boolean[] {
+  return SIX.map((r) => !saveSucceeds(r, o));
+}
+
+/**
+ * The distribution of the final unmodified save result under `o`'s re-roll policy, indexed by die
+ * face. A re-rolled die is replaced by a fresh one, so its mass spreads evenly over the six faces.
+ */
+export function saveFaceProbs(o: SaveOpts): PMF {
+  const out = new Array<number>(6).fill(0);
+  for (const r of SIX) {
+    const rerolled = o.reroll ? (o.reroll === "ones" ? r === 1 : !saveSucceeds(r, o)) : false;
+    if (rerolled) for (const f of SIX) out[f - 1]! += 1 / 36;
+    else out[r - 1]! += 1 / 6;
+  }
+  return out;
 }
 
 /** Probability that a save FAILS. */
 export function pUnsaved(o: SaveOpts): number {
-  const success = (r: number): boolean => {
-    if (r === 1) return false;
-    if (r === 6 && (o.sixAlwaysSaves ?? true)) return true;
-    if (r + o.rollMod >= o.armourTarget) return true;
-    if (o.invulnTarget !== null && r >= o.invulnTarget) return true;
-    return false;
-  };
-  let pBase = 0;
-  for (const r of SIX) if (success(r)) pBase += 1 / 6;
-  if (!o.reroll) return 1 - pBase;
+  const faces = saveFaceProbs(o);
   let p = 0;
-  for (const r of SIX) {
-    const ok = success(r);
-    const rerolled = o.reroll === "ones" ? r === 1 : !ok;
-    p += rerolled ? pBase / 6 : ok ? 1 / 6 : 0;
-  }
+  for (const r of SIX) if (saveSucceeds(r, o)) p += faces[r - 1] ?? 0;
   return 1 - p;
 }
 

@@ -1,5 +1,5 @@
 import { type BPMF, baddScaled, bcompound, bcompoundOneReroll, bcompoundOneRerollTable, bconvolve, bdelta, bmean, btrim } from "./bivariate";
-import { type PMF, convolvePow, delta, mean } from "./pmf";
+import { EPS, type PMF, convolvePow, delta, mean } from "./pmf";
 import {
   type StateDist,
   type StateSpace,
@@ -10,6 +10,8 @@ import {
   initialDist,
   makeStateSpace,
   mixDists,
+  saveClasses,
+  type SaveClasses,
   summarize,
 } from "./allocation";
 import type { EngineInput, EngineOutput, WeaponParams, WeaponTrace } from "./types";
@@ -114,6 +116,67 @@ function expectedDamage(space: StateSpace, dist: StateDist): number {
   return e;
 }
 
+function choose(n: number, k: number): number {
+  let r = 1;
+  for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i;
+  return r;
+}
+
+/** State visits the lowest-first save order adds for a profile of up to `wsMax` saves in `K` classes. */
+function pooledVisits(wsMax: number, K: number): number {
+  // One chain state per vector of class counts, and one mixture term per (save count, vector) pair.
+  return choose(wsMax + K, K) + choose(wsMax + K + 1, K + 1);
+}
+
+/**
+ * The defender after `ws` saves resolved lowest first. With the results sorted, every result of the
+ * first class lands before any of the second, so a run of `ws` saves is a multinomial draw of class
+ * counts, and the classes are applied in order, each result to whichever group is current when it is
+ * reached. The chain states are shared across the save counts, so they are built once and kept.
+ */
+function pooledStates(space: StateSpace, start: StateDist, order: number[], dmg: PMF[], classes: SaveClasses, wsMax: number): (ws: number) => StateDist {
+  const K = classes.probs.length;
+  const rest = Math.max(0, 1 - classes.probs.reduce((s, p) => s + p, 0));
+  const logQ = classes.probs.map((p) => Math.log(p));
+  const logRest = rest > EPS ? Math.log(rest) : Number.NEGATIVE_INFINITY;
+  const logFact: number[] = [0];
+  for (let n = 1; n <= wsMax; n++) logFact.push(logFact[n - 1]! + Math.log(n));
+  const memo = new Map<string, StateDist>([[new Array<number>(K).fill(0).join(","), start]]);
+  const stateFor = (n: number[]): StateDist => {
+    const key = n.join(",");
+    const known = memo.get(key);
+    if (known) return known;
+    let k = K - 1;
+    while ((n[k] ?? 0) === 0) k--;
+    const parent = n.slice();
+    parent[k]! -= 1;
+    const s = applyEvent(space, stateFor(parent), order, classes.fails[k]!, dmg, true);
+    memo.set(key, s);
+    return s;
+  };
+  return (ws: number): StateDist => {
+    const parts: Array<{ w: number; d: StateDist }> = [];
+    const n = new Array<number>(K).fill(0);
+    const walk = (k: number, used: number, logW: number): void => {
+      if (k === K) {
+        const left = ws - used;
+        if (left > 0 && rest <= EPS) return;
+        const lw = logW + logFact[ws]! - logFact[left]! + (left > 0 ? left * logRest : 0);
+        parts.push({ w: Math.exp(lw), d: stateFor(n.slice()) });
+        return;
+      }
+      for (let c = 0; c + used <= ws; c++) {
+        if (c > 0 && (classes.probs[k] ?? 0) < EPS) break;
+        n[k] = c;
+        walk(k + 1, used + c, logW - logFact[c]! + (c > 0 ? c * logQ[k]! : 0));
+      }
+      n[k] = 0;
+    };
+    walk(0, 0, 0);
+    return mixDists(parts, space);
+  };
+}
+
 /** Returns null when the target is too large for the exact path, by state count or by DP work. */
 export function runExact(input: EngineInput): EngineOutput | null {
   const space = makeStateSpace(input.groups);
@@ -165,9 +228,12 @@ export function runExact(input: EngineInput): EngineOutput | null {
         for (const r of WT[rh]!) mtMax = Math.max(mtMax, r.length - 1);
       }
     }
+    const order = groupOrder(input.groups, input.allocation, w.precision);
+    const classes = input.saveOrder === "ascending" ? saveClasses(w) : null;
     // How many state visits this weapon's DP will cost, now that the two event counts are known.
     // Weapons add up, so a unit with many profiles reaches the budget sooner than one profile does.
     work += space.total * (wsMax + 1) * (mtMax + 1);
+    if (classes) work += space.total * pooledVisits(wsMax, classes.probs.length);
     if (work > maxWork) return null;
     const J: number[][] = [];
     for (let i = 0; i <= wsMax; i++) J.push(new Array<number>(mtMax + 1).fill(0));
@@ -188,22 +254,24 @@ export function runExact(input: EngineInput): EngineOutput | null {
       }
     }
     // DP over the joint
-    const order = groupOrder(input.groups, input.allocation, w.precision);
     const pUnsaved = w.groups.map((g) => g.pUnsaved);
     const dmg = w.groups.map((g) => g.damage);
     const mortal = w.groups.map((g) => g.mortalDamage);
     const ones = w.groups.map(() => 1);
     const parts: Array<{ w: number; d: StateDist }> = [];
+    const pooled = classes ? pooledStates(space, dist, order, dmg, classes, wsMax) : null;
     let S1 = dist;
     for (let ws = 0; ws <= wsMax; ws++) {
       const jr = J[ws]!;
-      let S2 = S1;
-      for (let mt = 0; mt <= mtMax; mt++) {
-        const pj = jr[mt] ?? 0;
-        if (pj > 0) parts.push({ w: pj, d: S2 });
-        if (mt < mtMax) S2 = applyEvent(space, S2, order, ones, mortal, false);
+      if (jr.some((v) => v > 0)) {
+        let S2 = pooled ? pooled(ws) : S1;
+        for (let mt = 0; mt <= mtMax; mt++) {
+          const pj = jr[mt] ?? 0;
+          if (pj > 0) parts.push({ w: pj, d: S2 });
+          if (mt < mtMax) S2 = applyEvent(space, S2, order, ones, mortal, false);
+        }
       }
-      if (ws < wsMax) S1 = applyEvent(space, S1, order, pUnsaved, dmg, true);
+      if (!pooled && ws < wsMax) S1 = applyEvent(space, S1, order, pUnsaved, dmg, true);
     }
     const next = mixDists(parts, space);
     const hm = bmean(H);

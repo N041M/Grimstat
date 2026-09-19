@@ -54,6 +54,9 @@ export const SimResult = z.object({
   weapons: z.array(WeaponResult),
   attackerPoints: z.number().optional(),
   defenderPoints: z.number().optional(),
+  /** How many models the defender fielded, and how many wounds they had between them. */
+  defenderModels: z.number().int().optional(),
+  defenderWounds: z.number().int().optional(),
   damagePerPoint: z.number().optional(),
   pointsSlain: z.number().optional(),
   coverage: CoverageReport,

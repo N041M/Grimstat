@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Scenario, Snapshot } from "@grimstat/schema";
 import { simClient } from "../worker/client";
 import type { RowMetrics } from "../lib/scenarioTable";
+import { matchupOf } from "../lib/matchup";
 
 /** Stored scenarios carry no cached result, so the table's numbers are solved on demand. */
 export interface ScenarioMetricsState {
@@ -21,9 +22,9 @@ function keyOf(s: Scenario): string {
   return `${s.id}:${s.revision}:${s.updatedAt}`;
 }
 
-function metricsFrom(r: { expectedDamage: number; pKill: number; damagePerPoint?: number | undefined; attackerPoints?: number | undefined }): RowMetrics {
+function metricsFrom(r: { expectedDamage: number; pKill: number; expectedSlain: number; damagePerPoint?: number | undefined; attackerPoints?: number | undefined; defenderWounds?: number | undefined }): RowMetrics {
   const perPoint = r.damagePerPoint ?? (r.attackerPoints ? r.expectedDamage / r.attackerPoints : undefined);
-  return { expectedDamage: r.expectedDamage, pKill: r.pKill, per100: perPoint === undefined ? undefined : perPoint * 100 };
+  return { expectedDamage: r.expectedDamage, pKill: r.pKill, expectedSlain: r.expectedSlain, per100: perPoint === undefined ? undefined : perPoint * 100, matchup: matchupOf(r) };
 }
 
 /** Give the table a frame to paint before the first solve starts. */

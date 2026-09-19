@@ -11,16 +11,18 @@ import { fmt, fmtRelative, pct } from "../lib/format";
 import { filterScenarios, nextSort, sortScenarios, type ScenarioSortKey, type Sort } from "../lib/scenarioTable";
 import { useScenarioMetrics } from "../hooks/useScenarioMetrics";
 import { Empty, Icon, useConfirm } from "../components/ui";
+import { MatchupMark } from "../components/MatchupMark";
 import { GridCell, GridHead, GridHeadCell, GridRow, GridTable } from "../components/kit";
 import { PageHeader, useContextNewAction } from "../components/shell";
 import { mayReplaceScenario } from "../components/shell/ContextColumn";
 import { t, type I18nKey } from "../i18n";
 
-/** Scenario | Attacker | Defender | Expected damage | Kill chance | Dmg / 100 pts | Edited. */
-const COLUMNS = "minmax(180px,2fr) minmax(150px,1.4fr) minmax(150px,1.4fr) 90px 90px 100px 110px";
-
-/** Kill chance at or above this is drawn in the accent. */
-const KILL_HIGHLIGHT = 0.5;
+/**
+ * Scenario | Attacker | Defender | Expected damage | Kill chance | Models slain | Dmg / 100 pts | Edited.
+ * The minimums add up to what a 1280px window leaves the page beside the context column, so the
+ * last column is not pushed out of view there.
+ */
+const COLUMNS = "minmax(160px,2fr) minmax(130px,1.4fr) minmax(130px,1.4fr) 80px 80px 80px 92px 100px";
 
 const HEADS: Array<{ key: ScenarioSortKey; label: I18nKey; title?: I18nKey; align: "start" | "end" }> = [
   { key: "name", label: "scenarios.col.name", align: "start" },
@@ -28,6 +30,7 @@ const HEADS: Array<{ key: ScenarioSortKey; label: I18nKey; title?: I18nKey; alig
   { key: "defender", label: "scenarios.col.defender", align: "start" },
   { key: "dmg", label: "scenarios.col.dmg", title: "scenarios.col.dmg.title", align: "end" },
   { key: "kill", label: "scenarios.col.kill", title: "scenarios.col.kill.title", align: "end" },
+  { key: "slain", label: "scenarios.col.slain", title: "scenarios.col.slain.title", align: "end" },
   { key: "per100", label: "scenarios.col.per100", title: "scenarios.col.per100.title", align: "end" },
   { key: "edited", label: "scenarios.col.edited", align: "end" },
 ];
@@ -109,7 +112,6 @@ export function ScenariosPage() {
   };
 
   const subtitle = items === undefined ? t("scenarios.loading") : metrics.pending > 0 ? t("page.sub.scenariosSolving", { n: items.length, p: metrics.pending }) : t("page.sub.scenarios", { n: items.length });
-  const highlight = pct(KILL_HIGHLIGHT, 0);
 
   return (
     <>
@@ -154,7 +156,7 @@ export function ScenariosPage() {
               <GridHead>
                 {HEADS.map((h) => (
                   <GridHeadCell key={h.key} align={h.align} sort={sort.key === h.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"} onSort={() => setSort((s) => nextSort(s, h.key))}>
-                    <span title={h.title ? t(h.title, { p: highlight }) : undefined}>{t(h.label)}</span>
+                    <span title={h.title ? t(h.title) : undefined}>{t(h.label)}</span>
                   </GridHeadCell>
                 ))}
               </GridHead>
@@ -171,6 +173,7 @@ export function ScenariosPage() {
                 return (
                   <GridRow key={s.id} className={s.id === scenario.id ? "current" : ""} onClick={() => void load(s)} title={t("scenarios.rowTitle", { name: s.name })}>
                     <GridCell>
+                      {m?.matchup ? <MatchupMark grade={m.matchup} className="scn-mark" /> : null}
                       <button
                         type="button"
                         className="scn-name"
@@ -187,8 +190,11 @@ export function ScenariosPage() {
                     <GridCell align="end" mono>
                       {failed ?? (m ? fmt(m.expectedDamage, 1) : DASH)}
                     </GridCell>
-                    <GridCell align="end" mono tone={m && m.pKill >= KILL_HIGHLIGHT ? "accent" : undefined}>
+                    <GridCell align="end" mono>
                       {m ? pct(m.pKill, 0) : DASH}
+                    </GridCell>
+                    <GridCell align="end" mono>
+                      {m ? fmt(m.expectedSlain, 1) : DASH}
                     </GridCell>
                     <GridCell align="end" mono>
                       {m?.per100 === undefined ? DASH : fmt(m.per100, 1)}
@@ -230,7 +236,7 @@ export function ScenariosPage() {
                 );
               })}
             </GridTable>
-            {rows.length === 0 ? <p className="scn-none">{t("scenarios.noMatch", { q: query })}</p> : <p className="scn-legend">{t("scenarios.legend", { p: highlight })}</p>}
+            {rows.length === 0 ? <p className="scn-none">{t("scenarios.noMatch", { q: query })}</p> : <p className="scn-legend">{t("scenarios.legend")}</p>}
           </>
         )}
       </div>

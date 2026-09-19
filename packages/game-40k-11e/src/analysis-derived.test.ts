@@ -26,10 +26,10 @@ describe("points needed to remove a unit", () => {
    * One attack, resolved by hand.
    *
    * BS 4+ hits half the time. Strength 8 against Toughness 4 wounds on a 2+, which is five rolls in
-   * six. Save 7+ leaves only the unmodified 6 that always saves, so five unsaved wounds in six get
-   * through. One attack strips a wound with probability 1/2 × 5/6 × 5/6 = 25/72.
+   * six. A save of 7+ cannot be made, so every wound gets through. One attack strips a wound with
+   * probability 1/2 × 5/6 = 5/12.
    */
-  const pStick = (1 / 2) * (5 / 6) * (5 / 6);
+  const pStick = (1 / 2) * (5 / 6);
   const probe: ScenarioUnit = {
     name: "One shot",
     keywords: [],
@@ -47,13 +47,13 @@ describe("points needed to remove a unit", () => {
     expect(chain.exact).toBe(true);
     expect(chain.first.expectedDamage).toBeCloseTo(2 * pStick, 9);
     // The model dies on the second attack that sticks, and the attacks are independent, so the
-    // number of activations is the sum of two geometric waits: 2 / pStick = 5.76.
+    // number of activations is the sum of two geometric waits: 2 / pStick = 4.8.
     expect(chain.activations).toBeCloseTo(2 / pStick, 5);
-    expect(2 / pStick).toBeCloseTo(5.76, 9);
-    // Scaling the first activation up to the wound count instead gives 3 / (2 × pStick) = 4.32,
+    expect(2 / pStick).toBeCloseTo(4.8, 9);
+    // Scaling the first activation up to the wound count instead gives 3 / (2 × pStick) = 3.6,
     // because it counts the second hit's wasted point of damage as if it had landed.
     const extrapolated = 3 / chain.first.expectedDamage;
-    expect(extrapolated).toBeCloseTo(4.32, 9);
+    expect(extrapolated).toBeCloseTo(3.6, 9);
     expect(chain.activations / extrapolated).toBeCloseTo(4 / 3, 5);
   });
 
@@ -237,9 +237,10 @@ describe("effective wounds and the save the engine takes", () => {
     const bare = effectiveWounds(defender([model]));
     const onProfile = effectiveWounds(defender([{ ...model, InvSv: 5 }]));
     const fromAbility = effectiveWounds(defender([model], { effects: [invulnFromAbility] }));
-    // 20 raw wounds. Without a save worth the name only the unmodified 6 saves, and a 5+
-    // invulnerable save raises the unit's effective wounds by a quarter.
-    expect(bare).toBeCloseTo(72, 6);
+    // 20 raw wounds. The reference attack hits on 2/3 and wounds on 1/2, and a save of 7+ cannot
+    // be made, so the bare unit is worth 60. A 5+ invulnerable save lets a third of the wounds
+    // through no further and raises that by half.
+    expect(bare).toBeCloseTo(60, 6);
     expect(onProfile).toBeCloseTo(90, 6);
     expect(fromAbility).toBeCloseTo(onProfile, 6);
   });

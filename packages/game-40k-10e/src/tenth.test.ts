@@ -34,11 +34,12 @@ describe("10th edition plugin", () => {
     const always11 = run11(makeScenario(unit([], [w]), tank, { lethalChoice: "always" }));
     const tenth = run10(makeScenario(unit([], [w]), tank, { lethalChoice: "never" }));
     expect(never11.expectedDamage).toBeGreaterThan(always11.expectedDamage);
-    // 10e ignores the "never" choice: lethal is mandatory, so the result matches 11e "always"
-    // (save maths differ only on unmodified 6s, which do not matter for a 6+ save here)
+    // 10e ignores the "never" choice. Lethal Hits is mandatory there, so the result matches 11e
+    // "always". A single-group target saves the same way under both editions.
     close(tenth.expectedDamage, always11.expectedDamage, 1e-9);
+    // 10e fails a Hazardous test on a 1 only, and every failed test costs three mortal wounds.
     const haz = run10(makeScenario(unit([], [gun({ count: 3, keywords: [{ name: "HAZARDOUS" }] })]), target(4)));
-    close(haz.expectedSelfMortals, 3 * (1 / 6));
+    close(haz.expectedSelfMortals, 3 * (1 / 6) * 3);
   });
   it("the app's path through the 11e package resolves 10e keywords the same way this plugin does", () => {
     // Cleave 2 against a target of 10 models is +4 attacks in 11e and nothing at all in 10e.

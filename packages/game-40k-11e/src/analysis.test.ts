@@ -43,7 +43,7 @@ describe("effective wounds", () => {
     const naked = { name: "Naked", count: 3, T: 1, Sv: 7, W: 2, isCharacter: false, keywords: [] };
     const p = pReferenceSticks({ ...naked, Sv: 7 });
     expect(p).toBeGreaterThan(0);
-    // With Sv 7 the only save is the 11e "unmodified 6 always saves", so effective wounds sit above raw.
+    // A save of 7+ cannot be made, but the hit and wound rolls can still fail, so effective wounds sit above raw.
     expect(effectiveWounds({ name: "u", keywords: [], models: [naked], weapons: [], attached: [], effects: [] })).toBeGreaterThan(6);
   });
   it("an invulnerable save and Feel No Pain both raise it above raw wounds", () => {

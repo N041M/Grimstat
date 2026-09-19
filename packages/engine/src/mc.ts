@@ -1,5 +1,5 @@
 import { makeSampler, mulberry32 } from "./rng";
-import { decode, groupOrder, makeStateSpace } from "./allocation";
+import { decode, groupOrder, makeStateSpace, saveClasses } from "./allocation";
 import type { EngineInput, EngineOutput, WeaponParams, WeaponTrace } from "./types";
 import { mean, pmfFromHistogram } from "./pmf";
 import { survivalFromPMF } from "./stats";
@@ -11,6 +11,10 @@ interface Prepared {
   damage: Array<() => number>;
   mortal: Array<() => number>;
   order: number[];
+  /** Sampler over the unmodified save result when saves are resolved lowest first, or null when they are taken one at a time. */
+  saveFace: (() => number) | null;
+  /** Per group, which save results inflict damage, indexed by die face. Empty when `saveFace` is null. */
+  damageOn: boolean[][];
 }
 
 export function runMonteCarlo(input: EngineInput): EngineOutput {
@@ -30,6 +34,10 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
       damage: w.groups.map((g) => makeSampler(g.damage, rand)),
       mortal: w.groups.map((g) => makeSampler(g.mortalDamage, rand)),
       order: groupOrder(groups, input.allocation, w.precision),
+      // Only a defender whose groups differ in which results save them needs the pooled order; for
+      // any other the one-at-a-time draw is the same distribution, and the exact backend does the same.
+      saveFace: input.saveOrder === "ascending" && w.saveFaces && saveClasses(w) ? makeSampler(w.saveFaces, rand) : null,
+      damageOn: w.groups.map((g) => g.damageOn ?? []),
     }));
 
   const totalModels = groups.reduce((s, g) => s + g.models, 0);
@@ -106,6 +114,8 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
       let rerollWound = w.singleRerollWound;
       let fixedHitLeft = !!w.fixedHit && !w.autoHit;
       let fixedWoundLeft = !!w.fixedWound;
+      // The save results of the whole profile, when they are rolled up front and resolved lowest first.
+      const faces: number[] = [];
       for (let c = 0; c < w.count; c++) {
         const n = P.attacks();
         t.attacks += n;
@@ -154,6 +164,10 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
             else woundsNeedingSave++;
           }
           t.wounds += woundsNeedingSave;
+          if (P.saveFace) {
+            for (let k = 0; k < woundsNeedingSave; k++) faces.push(P.saveFace());
+            continue;
+          }
           for (let k = 0; k < woundsNeedingSave; k++) {
             const g = pickGroup(P.order);
             if (g < 0) {
@@ -172,6 +186,26 @@ export function runMonteCarlo(input: EngineInput): EngineOutput {
               t.damage += r.dealt;
             }
           }
+        }
+      }
+      if (P.saveFace) {
+        // Each result goes to whichever group is current when it is reached, lowest results first.
+        faces.sort((a, b) => a - b);
+        for (const f of faces) {
+          const g = pickGroup(P.order);
+          if (g < 0) {
+            const gi = P.order[0] ?? 0;
+            const gp = w.groups[gi];
+            if (gp && P.damageOn[gi]?.[f]) wasted += mean(gp.damage);
+            continue;
+          }
+          if (!P.damageOn[g]?.[f]) continue;
+          t.unsaved += 1;
+          const d = P.damage[g]!();
+          const r = applyDamage(g, d);
+          dealt += r.dealt;
+          wasted += r.wasted;
+          t.damage += r.dealt;
         }
       }
       t.wounds += mortalEvents;

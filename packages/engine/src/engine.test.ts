@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
-import { bcompoundOneReroll, bcompoundOneRerollTable, binomial, compound, convolve, delta, dicePMF, diceMean, makeStateSpace, mapPMF, mean, percentile, percentiles, thin, variance, run, runExact, runMonteCarlo, type EngineInput, type PMF, type TargetGroup, type WeaponParams } from "./index";
+import { bcompoundOneReroll, bcompoundOneRerollTable, binomial, compound, convolve, delta, dicePMF, diceMean, makeStateSpace, mapPMF, mean, mulberry32, percentile, percentiles, thin, variance, run, runExact, runMonteCarlo, type EngineInput, type PMF, type TargetGroup, type WeaponParams } from "./index";
 
 const close = (a: number, b: number, tol = 1e-9) => expect(Math.abs(a - b)).toBeLessThanOrEqual(tol);
 
@@ -717,5 +717,164 @@ describe("inputs the engine should not be broken by", () => {
     // and the caller was handed a distribution summing to less than one, with no error raised.
     expect(() => mapPMF(dicePMF("D6"), (k) => k * NaN)).toThrow(/mapPMF/);
     close(mapPMF(dicePMF("D6"), (k) => k - 1).reduce((s, v) => s + v, 0), 1, 1e-12);
+  });
+});
+
+/**
+ * The 11th edition takes one profile's save rolls together and resolves them from the lowest result
+ * up, each against whichever allocation group is current when it is reached. That only differs from
+ * allocating one wound at a time when the groups differ in which results save them, and then it can
+ * differ a lot: a bodyguard group that dies to the low results leaves only the high ones for the
+ * character behind it.
+ */
+describe("saves resolved lowest first", () => {
+  /** Faces 1..6 that inflict damage on a model saving on `need`+; a 1 never saves. */
+  const damageOn = (need: number): boolean[] => [1, 2, 3, 4, 5, 6].map((r) => r === 1 || r < need);
+  const uniform = [1, 1, 1, 1, 1, 1].map((v) => v / 6);
+  /** Every attack hits and wounds, so a profile of `n` attacks is exactly `n` saves. */
+  const volley = (n: number, needs: number[], dmg: number): WeaponParams =>
+    weapon({
+      attacks: delta(n),
+      hit: { pMiss: 0, pHit: 1, pCrit: 0 },
+      autoHit: true,
+      wound: { pFail: 0, pWound: 1, pCrit: 0 },
+      saveFaces: uniform,
+      groups: needs.map((need) => ({ pUnsaved: damageOn(need).filter(Boolean).length / 6, damageOn: damageOn(need), damage: delta(dmg), mortalDamage: delta(1) })),
+    });
+  const unit = (spec: Array<[models: number, wounds: number, character: boolean]>): TargetGroup[] => spec.map(([models, wounds, isCharacter], i) => ({ id: `${i}`, name: `g${i}`, models, wounds, isCharacter }));
+  const input = (weapons: WeaponParams[], groups: TargetGroup[], saveOrder: "each" | "ascending"): EngineInput => ({ weapons, groups, allocation: "protect-character", backend: "auto", saveOrder, mcIterations: 60000, seed: 11, maxExactStates: 1e6, maxExactWork: 1e12 });
+
+  /** The rule played out directly: sort the results, walk them against the current group. */
+  function played(needs: number[], groups: TargetGroup[], n: number, dmg: number, iters: number): { pKill: number; slain: number } {
+    const next = mulberry32(2024);
+    let kills = 0;
+    let slain = 0;
+    for (let it = 0; it < iters; it++) {
+      const left = groups.map((g) => g.models);
+      const cur = groups.map((g) => g.wounds);
+      const rolls = Array.from({ length: n }, () => 1 + Math.floor(next() * 6)).sort((a, b) => a - b);
+      for (const r of rolls) {
+        const gi = left.findIndex((m) => m > 0);
+        if (gi < 0) break;
+        if (r !== 1 && r >= needs[gi]!) continue;
+        const d = Math.min(dmg, cur[gi]!);
+        cur[gi]! -= d;
+        if (cur[gi]! <= 0) {
+          left[gi]!--;
+          cur[gi] = groups[gi]!.wounds;
+        }
+      }
+      slain += groups.reduce((s, g, i) => s + g.models - left[i]!, 0);
+      if (left.every((m) => m === 0)) kills++;
+    }
+    return { pKill: kills / iters, slain: slain / iters };
+  }
+
+  it("is the same as one wound at a time when every group saves on the same results", () => {
+    // Five bodyguards and a character, all saving on 4+ against this profile.
+    const groups = unit([[5, 2, false], [1, 5, true]]);
+    const w = volley(14, [4, 4], 2);
+    const a = runExact(input([w], groups, "ascending"))!;
+    const b = runExact(input([w], groups, "each"))!;
+    close(a.pKill, b.pKill, 1e-12);
+    close(a.expectedDamage, b.expectedDamage, 1e-12);
+    a.slainPMF.forEach((v, i) => close(v, b.slainPMF[i] ?? 0, 1e-12));
+    // The sampler takes the same shortcut, so its draws are the ones the one-at-a-time run makes.
+    const m = runMonteCarlo(input([w], groups, "ascending"));
+    const n = runMonteCarlo(input([w], groups, "each"));
+    close(m.pKill, n.pKill, 1e-12);
+    close(m.expectedDamage, n.expectedDamage, 1e-12);
+  });
+
+  it("matches the rule played out directly", () => {
+    // Five bodyguards saving on 5+ in front of a character saving on 4+, fourteen 2-damage wounds.
+    const cases: Array<{ needs: number[]; groups: TargetGroup[]; n: number; dmg: number }> = [
+      { needs: [5, 4], groups: unit([[5, 2, false], [1, 5, true]]), n: 14, dmg: 2 },
+      // Ten bodies saving on 6+ in front of a 4+ character: the character all but never dies.
+      { needs: [6, 4], groups: unit([[10, 1, false], [1, 4, true]]), n: 16, dmg: 1 },
+      // Bodyguards with the better save: the low results they would have saved go to the character.
+      { needs: [3, 4], groups: unit([[5, 3, false], [1, 5, true]]), n: 18, dmg: 2 },
+      // Three groups.
+      { needs: [2, 5, 4], groups: unit([[3, 1, false], [2, 2, false], [1, 3, true]]), n: 12, dmg: 1 },
+    ];
+    for (const c of cases) {
+      const w = volley(c.n, c.needs, c.dmg);
+      const ex = runExact(input([w], c.groups, "ascending"))!;
+      const mc = runMonteCarlo(input([w], c.groups, "ascending"));
+      const ref = played(c.needs, c.groups, c.n, c.dmg, 200000);
+      close(ex.pKill, ref.pKill, 0.006);
+      close(ex.expectedSlain, ref.slain, 0.03);
+      close(mc.pKill, ex.pKill, 0.01);
+      close(mc.expectedSlain, ex.expectedSlain, 0.05);
+      close(ex.damagePMF.reduce((s, v) => s + v, 0), 1);
+    }
+  });
+
+  it("changes the answer for a led unit in the direction the rule implies", () => {
+    // A 4++ character behind 3+ bodyguards against AP-2: the bodyguards eat the 1s to 4s and the
+    // character sees mostly 5s and 6s, which save it. One at a time it faced fresh dice.
+    const led = unit([[5, 2, false], [1, 5, true]]);
+    const w = volley(14, [5, 4], 2);
+    const asc = runExact(input([w], led, "ascending"))!;
+    const each = runExact(input([w], led, "each"))!;
+    expect(asc.pKill).toBeLessThan(each.pKill * 0.7);
+    expect(asc.expectedDamage).toBeLessThan(each.expectedDamage);
+    // Bodyguards with the better save are the other way round: every low result that would have
+    // been wasted on their 3+ now lands on the character's 4+.
+    const shielded = unit([[5, 3, false], [1, 5, true]]);
+    const v = volley(18, [3, 4], 2);
+    expect(runExact(input([v], shielded, "ascending"))!.pKill).toBeGreaterThan(runExact(input([v], shielded, "each"))!.pKill * 5);
+  });
+
+  it("holds the engine's identities on random profiles against mixed groups", () => {
+    const faceProb = fc.constantFrom(uniform, [1 / 36, 7 / 36, 7 / 36, 7 / 36, 7 / 36, 7 / 36]);
+    const arbWeapon = (nGroups: number) =>
+      fc
+        .record({
+          count: fc.integer({ min: 1, max: 3 }),
+          attacks: fc.constantFrom(delta(1), delta(3), dicePMF("D6")),
+          pMiss: fc.double({ min: 0, max: 0.6, noNaN: true }),
+          pCrit: fc.double({ min: 0, max: 0.3, noNaN: true }),
+          pFail: fc.double({ min: 0, max: 0.6, noNaN: true }),
+          lethal: fc.boolean(),
+          devastating: fc.boolean(),
+          needs: fc.array(fc.integer({ min: 2, max: 7 }), { minLength: nGroups, maxLength: nGroups }),
+          faces: faceProb,
+          dmg: fc.constantFrom(delta(1), delta(2), dicePMF("D3")),
+        })
+        .map((r): WeaponParams => {
+          const faces = r.faces;
+          return weapon({
+            count: r.count,
+            attacks: r.attacks,
+            hit: { pMiss: r.pMiss, pHit: 1 - r.pMiss - r.pCrit, pCrit: r.pCrit },
+            lethal: r.lethal,
+            devastating: r.devastating,
+            wound: { pFail: r.pFail, pWound: 1 - r.pFail - 1 / 6, pCrit: 1 / 6 },
+            saveFaces: faces,
+            groups: r.needs.map((need) => ({ pUnsaved: damageOn(need).reduce((s, x, i) => s + (x ? faces[i]! : 0), 0), damageOn: damageOn(need), damage: r.dmg, mortalDamage: delta(1) })),
+          });
+        });
+    const arbCase = fc.integer({ min: 1, max: 3 }).chain((nGroups) =>
+      fc.record({
+        groups: fc.array(fc.tuple(fc.integer({ min: 1, max: 4 }), fc.integer({ min: 1, max: 3 })), { minLength: nGroups, maxLength: nGroups }).map((xs) => xs.map(([m, w], i): TargetGroup => ({ id: `${i}`, name: `g${i}`, models: m, wounds: w, isCharacter: i === nGroups - 1 }))),
+        weapons: fc.array(arbWeapon(nGroups), { minLength: 1, maxLength: 2 }),
+      }),
+    );
+    fc.assert(
+      fc.property(arbCase, ({ groups, weapons }) => {
+        const ex = runExact({ weapons, groups, allocation: "protect-character", backend: "exact", saveOrder: "ascending", mcIterations: 0, maxExactStates: 1e6, maxExactWork: 1e12 })!;
+        const totalWounds = groups.reduce((s, g) => s + g.models * g.wounds, 0);
+        close(ex.damagePMF.reduce((s, v) => s + v, 0), 1, 1e-9);
+        close(ex.slainPMF.reduce((s, v) => s + v, 0), 1, 1e-9);
+        expect(ex.expectedDamage).toBeGreaterThanOrEqual(-1e-12);
+        expect(ex.expectedDamage).toBeLessThanOrEqual(totalWounds + 1e-9);
+        expect(ex.pKill).toBeGreaterThanOrEqual(-1e-12);
+        expect(ex.pKill).toBeLessThanOrEqual(1 + 1e-9);
+        // The kill chance is the mass on every model slain, whichever order the saves were taken in.
+        close(ex.pKill, ex.slainPMF[ex.slainPMF.length - 1] ?? 0, 1e-9);
+      }),
+      { numRuns: 40 },
+    );
   });
 });

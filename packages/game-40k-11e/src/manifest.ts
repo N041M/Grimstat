@@ -26,7 +26,14 @@ export interface RulesParams {
   hitRollCap: number;
   woundRollCap: number;
   saveRollCap: number;
+  /** An unmodified save roll of 6 saves whatever the armour and AP say. Neither edition's core rules grant it. */
   sixAlwaysSaves: boolean;
+  /**
+   * One profile's save rolls are all made first and resolved from the lowest result up, each against
+   * whichever allocation group is current when it is reached (11e). 10e allocates one wound at a
+   * time and rolls its save against the model it landed on.
+   */
+  savesResolvedLowestFirst: boolean;
   coverAsSkillPenalty: boolean;
   /** 10e-style cover: +1 to the armour save against ranged attacks, except for a 3+ or better save against AP0. */
   coverAsSaveBonus: boolean;
@@ -54,8 +61,9 @@ export const RULES: RulesParams = {
   hitRollCap: 1,
   woundRollCap: 1,
   saveRollCap: 1,
-  /** Unmodified 6 always saves (11e). */
-  sixAlwaysSaves: true,
+  /** The 11e save table names one unmodified result, a 1, which inflicts damage. A 6 saves only when the armour or invulnerable save reaches it. */
+  sixAlwaysSaves: false,
+  savesResolvedLowestFirst: true,
   /** Cover: -1 to the attacker's BS/WS *stat* (uncapped channel), not +1 to the save. */
   coverAsSkillPenalty: true,
   coverAsSaveBonus: false,
@@ -79,13 +87,15 @@ export const RULES: RulesParams = {
 export const RULES_10E: RulesParams = {
   ...RULES,
   sixAlwaysSaves: false,
+  savesResolvedLowestFirst: false,
   coverAsSkillPenalty: false,
   coverAsSaveBonus: true,
   lethalOptional: false,
   /** Indirect Fire at a target that cannot be seen: -1 to the Hit roll, and the target has the Benefit of Cover. */
   indirectNotVisibleSnap: false,
   hazardousFailProb: 1 / 6,
-  /** 10e gives the three mortal wounds to a CHARACTER as well as to a MONSTER or VEHICLE. */
+  /** In 10e a failed test costs the bearer three mortal wounds whatever kind of model it is. */
+  hazardousMortals: 3,
   hazardousBigModelKeywords: ["CHARACTER", "MONSTER", "VEHICLE"],
   cleave: false,
 };

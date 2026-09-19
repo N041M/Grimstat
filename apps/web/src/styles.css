@@ -58,6 +58,7 @@
   --accent: #c8352b;
   --accent-hover: #96251d;
   --good: #3f9e6c;
+  --warn: #b45309;
   --mid: #4a4b4f; /* third-rank chart series */
 
   --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -77,6 +78,7 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --warn: #e0a24a;
   --bg: #131417;
   --panel: #191a1e;
   --rail: #0f1013;
@@ -1660,6 +1662,39 @@ label.inline {
 .badge.brass {
   color: var(--mid);
   border-color: var(--mid);
+}
+
+/* The match-up mark: one glyph and one colour for how the attack fares against the unit. */
+.matchup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
+}
+.matchup .icon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+.matchup-good {
+  color: var(--good);
+}
+.matchup-fair {
+  color: var(--warn);
+}
+.matchup-poor {
+  color: var(--accent);
+}
+.matchup-label {
+  font: 500 11px/1 var(--font);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.hero-eyebrow .matchup {
+  margin-left: 10px;
+}
+.scn-mark {
+  margin-right: 6px;
 }
 
 /* Icons, text tones, small helpers */

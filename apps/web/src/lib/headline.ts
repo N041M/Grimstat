@@ -1,12 +1,14 @@
 import type { SimResult } from "@grimstat/schema";
 
 /**
- * The five numbers the Calculator's hero reads out. Pinning keeps one of these so the tiles can show
+ * The six numbers the Calculator's hero reads out. Pinning keeps one of these so the tiles can show
  * how far the current result has moved from it.
  */
 export interface Headline {
   expectedDamage: number;
   pKill: number;
+  /** Expected number of defending models destroyed. */
+  slain: number;
   median: number;
   p95: number;
   /** Expected damage per 100 attacker points; absent when the attacker has no points value. */
@@ -19,7 +21,7 @@ export function per100Of(result: SimResult): number | undefined {
 }
 
 export function headlineOf(result: SimResult): Headline {
-  return { expectedDamage: result.expectedDamage, pKill: result.pKill, median: result.damagePercentiles.p50, p95: result.damagePercentiles.p95, per100: per100Of(result) };
+  return { expectedDamage: result.expectedDamage, pKill: result.pKill, slain: result.expectedSlain, median: result.damagePercentiles.p50, p95: result.damagePercentiles.p95, per100: per100Of(result) };
 }
 
 /** "+1.20", "-0.40", "0.00": a difference with its sign always written. */

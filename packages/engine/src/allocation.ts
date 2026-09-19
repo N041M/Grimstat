@@ -1,6 +1,6 @@
 import type { PMF } from "./pmf";
 import { EPS } from "./pmf";
-import type { AllocationOrder, TargetGroup } from "./types";
+import type { AllocationOrder, GroupParams, TargetGroup, WeaponParams } from "./types";
 
 /**
  * Mixed-radix encoding of the defender's state.
@@ -213,4 +213,40 @@ export function summarize(space: StateSpace, dist: StateDist): FinalStats {
     if (allDead) pKill += ps;
   }
   return { slainPMF: slain, damagePMF: dmg, pKill, expectedPointsSlain: pts };
+}
+
+/** Save results grouped by which groups they inflict damage on, lowest results first. */
+export interface SaveClasses {
+  /** Per class, 1 for each group the result damages and 0 for each group it is saved against. */
+  fails: number[][];
+  /** Probability that one save result falls in each class. The rest of the mass saves against every group. */
+  probs: number[];
+}
+
+/**
+ * The classes a profile's save results fall into, or null when one class covers every damaging
+ * result, in which case allocating one wound at a time gives the same answer and costs less.
+ *
+ * Consecutive faces that damage the same groups are one class. A 1 fails against everyone and each
+ * group's saving results are the faces from its threshold up, so the classes come out in ascending
+ * order of the faces they hold, which is the order the results are resolved in.
+ */
+export function saveClasses(w: WeaponParams): SaveClasses | null {
+  const faces = w.saveFaces;
+  if (!faces || w.groups.some((g) => !g.damageOn)) return null;
+  const fails: number[][] = [];
+  const probs: number[] = [];
+  for (let f = 0; f < faces.length; f++) {
+    const p = faces[f] ?? 0;
+    if (p < EPS) continue;
+    const vec = w.groups.map((g: GroupParams) => (g.damageOn![f] ? 1 : 0));
+    if (!vec.some((v) => v === 1)) continue;
+    const last = fails.length - 1;
+    if (last >= 0 && fails[last]!.every((v, i) => v === vec[i])) probs[last]! += p;
+    else {
+      fails.push(vec);
+      probs.push(p);
+    }
+  }
+  return fails.length < 2 ? null : { fails, probs };
 }

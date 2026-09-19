@@ -65,16 +65,19 @@ describe("analyses are scored under the edition of the data they are given", () 
   });
 
   it("incomingFire takes the edition from the snapshot", () => {
-    // A single model with no armour save at all. 11e still saves it on an unmodified 6 and 10e does
-    // not, so one reference attack sticks with probability 2/3 × 1/2 × 5/6 under 11e and 2/3 × 1/2
-    // under 10e. Forty wounds is more than one activation can take off, so no damage is ever wasted.
-    const slab = unit("Slab", [{ name: "Slab", count: 1, T: 4, Sv: 7, W: 40, isCharacter: false, keywords: [] }], [], [], 100);
-    const row = (snapshot: Snapshot) => incomingFire([slab], { snapshot, attackerIds: ["bolter-squad"] })[0]!;
-    close(row(tenth).effectiveWounds, 40 / ((2 / 3) * (1 / 2)));
-    close(row(eleventh).effectiveWounds, 40 / ((2 / 3) * (1 / 2) * (5 / 6)));
+    // A single model with a 4+ save, in cover. 10e reads the cover as +1 to the save, so a bolt
+    // rifle hits on 3+, wounds on 4+ and gets through a 3+ save: 2/3 × 1/2 × 1/3. 11e reads it as
+    // one worse to hit, so 1/2 × 1/2 × 1/2. Forty wounds is more than one activation can take off,
+    // so no damage is ever wasted.
+    const slab = unit("Slab", [{ name: "Slab", count: 1, T: 4, Sv: 4, W: 40, isCharacter: false, keywords: [] }], [], [], 100);
+    const row = (snapshot: Snapshot) => incomingFire([slab], { snapshot, attackerIds: ["bolter-squad"], context: { rangeBand: "half", inCover: true } })[0]!;
     // Twenty bolt-rifle shots at half range, which is what the archetype fires.
-    close(row(tenth).entries[0]!.expectedDamage, 20 * (2 / 3) * (1 / 2));
-    close(row(eleventh).entries[0]!.expectedDamage, 20 * (2 / 3) * (1 / 2) * (5 / 6));
+    close(row(tenth).entries[0]!.expectedDamage, 20 * (2 / 3) * (1 / 2) * (1 / 3));
+    close(row(eleventh).entries[0]!.expectedDamage, 20 * (1 / 2) * (1 / 2) * (1 / 2));
+    // Effective wounds are measured by the reference attack, which is never in cover, so the two
+    // editions agree on them: 2/3 × 1/2 × 1/2 of the reference shots take a wound off.
+    close(row(tenth).effectiveWounds, 40 / ((2 / 3) * (1 / 2) * (1 / 2)));
+    close(row(eleventh).effectiveWounds, row(tenth).effectiveWounds);
   });
 });
 
@@ -90,9 +93,28 @@ describe("10th-edition rules", () => {
     const mob = unit("Mob ×10", [{ name: "Boy", count: 10, T: 4, Sv: 7, W: 2, isCharacter: false, keywords: [] }]);
     const fight = { phase: "fight" as const };
     close(damage(cleaver, mob, fight, "wh40k-10e"), 2 * (2 / 3) * (1 / 2));
-    close(damage(cleaver, mob, fight, "wh40k-11e"), 6 * (2 / 3) * (1 / 2) * (5 / 6));
+    close(damage(cleaver, mob, fight, "wh40k-11e"), 6 * (2 / 3) * (1 / 2));
     expect(runScenario(makeScenario(cleaver, mob, fight, [], "wh40k-10e")).warnings).toContain("CLEAVE is not an ability in this edition.");
     expect(runScenario(makeScenario(cleaver, mob, fight, [], "wh40k-11e")).warnings).toEqual([]);
+  });
+
+  it("resolves one profile's saves lowest first in 11e and one wound at a time in 10e", () => {
+    // Twenty AP-2 D2 shots that hit on 2+ and wound on 2+, into five 3+ bodyguards led by a 4++
+    // character. Under 11e the sorted results reach the character only after the bodyguards have
+    // absorbed the low ones, so the unit is wiped out far less often than a fresh die per wound says.
+    const guns = unit("Heavy bolt rifles", [], [gun({ count: 20, skill: 2, S: 8, AP: 2, D: "2" })]);
+    const led = unit("Led squad", [
+      { name: "Bodyguard", count: 5, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] },
+      { name: "Captain", count: 1, T: 4, Sv: 3, InvSv: 4, W: 5, isCharacter: true, keywords: [] },
+    ]);
+    const pKill = (gameSystemId: string) => runScenario(makeScenario(guns, led, {}, [], gameSystemId)).pKill;
+    expect(pKill("wh40k-11e")).toBeLessThan(pKill("wh40k-10e") * 0.7);
+    // With no invulnerable save the two groups save on the same results and the order changes nothing.
+    const plain = unit("Led squad", [
+      { name: "Bodyguard", count: 5, T: 4, Sv: 3, W: 2, isCharacter: false, keywords: [] },
+      { name: "Captain", count: 1, T: 4, Sv: 3, W: 5, isCharacter: true, keywords: [] },
+    ]);
+    close(runScenario(makeScenario(guns, plain, {}, [], "wh40k-11e")).pKill, runScenario(makeScenario(guns, plain, {}, [], "wh40k-10e")).pKill);
   });
 
   it("STEALTH subtracts 1 from the Hit roll of ranged attacks", () => {
@@ -121,13 +143,13 @@ describe("10th-edition rules", () => {
     close(damage(mortars, lightly, {}, "wh40k-10e"), 10 * (2 / 3) * (1 / 2) * (3 / 6));
   });
 
-  it("Hazardous costs a CHARACTER three mortal wounds as well as a MONSTER or VEHICLE", () => {
+  it("Hazardous costs every model three mortal wounds in 10e", () => {
     const hazardous = (keywords: string[]) => unit("Gunner", [], [gun({ count: 1, keywords: [{ name: "HAZARDOUS" }] })], keywords);
     const selfMortals = (keywords: string[], gameSystemId: string) => runScenario(makeScenario(hazardous(keywords), armoured, {}, [], gameSystemId)).expectedSelfMortals;
-    // 10e fails the test on a 1 only.
+    // 10e fails the test on a 1 only, and the bearer suffers three mortal wounds whatever it is.
     close(selfMortals(["CHARACTER"], "wh40k-10e"), (1 / 6) * 3);
     close(selfMortals(["VEHICLE"], "wh40k-10e"), (1 / 6) * 3);
-    close(selfMortals(["INFANTRY"], "wh40k-10e"), (1 / 6) * 1);
+    close(selfMortals(["INFANTRY"], "wh40k-10e"), (1 / 6) * 3);
     // 11e fails on a 1 or a 2, and names only MONSTER and VEHICLE.
     close(selfMortals(["CHARACTER"], "wh40k-11e"), (2 / 6) * 1);
     close(selfMortals(["VEHICLE"], "wh40k-11e"), (2 / 6) * 3);

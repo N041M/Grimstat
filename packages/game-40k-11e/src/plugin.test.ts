@@ -71,7 +71,7 @@ describe("gates", () => {
     close(g.pWound, 0); // 4,5,6 are crits; 3-1=2 < 4 fails
     close(g.pFail, 3 / 6);
   });
-  it("save: 3+ vs AP-2 with 4++ → best of; six always saves", () => {
+  it("save: 3+ vs AP-2 with 4++ → best of; nothing saves a 7+", () => {
     close(pUnsaved({ armourTarget: 5, invulnTarget: 4, rollMod: 0, reroll: null }), 3 / 6);
     close(pUnsaved({ armourTarget: 8, invulnTarget: null, rollMod: 0, reroll: null }), RULES.sixAlwaysSaves ? 5 / 6 : 1);
     close(pUnsaved({ armourTarget: 4, invulnTarget: null, rollMod: 0, reroll: "failed" }), (3 / 6) * (3 / 6));
@@ -81,7 +81,7 @@ describe("gates", () => {
 /**
  * A save modifier moves the armour save. An invulnerable save is taken on the unmodified roll and
  * the modifier never reaches it. A model takes whichever of its two saves comes out better. An
- * unmodified 6 always saves and an unmodified 1 always fails.
+ * unmodified 1 always fails, and a 6 saves only when one of the two saves reaches it.
  *
  * `armourTarget` is the model's save plus the weapon's AP, so each row's AP is already folded into
  * that number. A 3+ save against AP-2 arrives here as `armourTarget: 5`. `saves` lists the
@@ -93,8 +93,8 @@ describe("save maths", () => {
     { name: "3+ save, AP-2, 4++ invulnerable, no modifier", opts: { armourTarget: 5, invulnTarget: 4, rollMod: 0, reroll: null }, saves: [4, 5, 6] },
     // The armour save is at 5+ and -2 puts it out of reach, so the unmodified 4++ carries the model.
     { name: "2+ save, AP-3, 4++ invulnerable, -2 to save", opts: { armourTarget: 5, invulnTarget: 4, rollMod: -2, reroll: null }, saves: [4, 5, 6] },
-    // The same model without an invulnerable save is left with the automatic 6.
-    { name: "2+ save, AP-3, no invulnerable, -2 to save", opts: { armourTarget: 5, invulnTarget: null, rollMod: -2, reroll: null }, saves: [6] },
+    // The same model without an invulnerable save has nothing left.
+    { name: "2+ save, AP-3, no invulnerable, -2 to save", opts: { armourTarget: 5, invulnTarget: null, rollMod: -2, reroll: null }, saves: [] },
     // A 3+ save, then the same save one worse and one better.
     { name: "3+ save, no modifier", opts: { armourTarget: 3, invulnTarget: null, rollMod: 0, reroll: null }, saves: [3, 4, 5, 6] },
     { name: "3+ save, -1 to save", opts: { armourTarget: 3, invulnTarget: null, rollMod: -1, reroll: null }, saves: [4, 5, 6] },
@@ -103,8 +103,8 @@ describe("save maths", () => {
     // armour save keeps its own 3s and 4s alongside it.
     { name: "6+ armour with a 5++ invulnerable", opts: { armourTarget: 6, invulnTarget: 5, rollMod: 0, reroll: null }, saves: [5, 6] },
     { name: "3+ armour with a 5++ invulnerable", opts: { armourTarget: 3, invulnTarget: 5, rollMod: 0, reroll: null }, saves: [3, 4, 5, 6] },
-    // An armour save of 7+ cannot be made at all, and the 6 still saves.
-    { name: "3+ save, AP-4, -1 to save", opts: { armourTarget: 7, invulnTarget: null, rollMod: -1, reroll: null }, saves: [6] },
+    // An armour save of 7+ cannot be made at all.
+    { name: "3+ save, AP-4, -1 to save", opts: { armourTarget: 7, invulnTarget: null, rollMod: -1, reroll: null }, saves: [] },
     // A 1 fails however generous the modifier or the invulnerable save is.
     { name: "2+ save, +3 to save", opts: { armourTarget: 2, invulnTarget: null, rollMod: 3, reroll: null }, saves: [2, 3, 4, 5, 6] },
     { name: "no armour save, 2++ invulnerable", opts: { armourTarget: 8, invulnTarget: 2, rollMod: 0, reroll: null }, saves: [2, 3, 4, 5, 6] },
@@ -121,7 +121,7 @@ describe("save maths", () => {
     });
   }
 
-  it("loses the automatic 6 when the rules do not grant one", () => {
+  it("grants the automatic 6 only when an edition asks for it", () => {
     // A 5+ armour save under -2 is out of reach, so without the automatic 6 nothing saves at all.
     close(pUnsaved({ armourTarget: 5, invulnTarget: null, rollMod: -2, reroll: null, sixAlwaysSaves: false }), 1);
     close(pUnsaved({ armourTarget: 5, invulnTarget: null, rollMod: -2, reroll: null, sixAlwaysSaves: true }), 5 / 6);
@@ -217,8 +217,8 @@ describe("runScenario", () => {
     const haz = runScenario(scenario(unit([], [gun({ count: 3, keywords: [{ name: "HAZARDOUS" }] })]), horde));
     close(haz.expectedSelfMortals, 3 * (2 / 6));
     const melta = runScenario(scenario(unit([], [gun({ count: 1, S: 9, AP: 4, D: "D6", keywords: [{ name: "MELTA", value: 2 }] })]), unit([{ name: "t", count: 1, T: 9, Sv: 3, W: 20, isCharacter: false, keywords: [] }]), { rangeBand: "half" }));
-    // hit 2/3, wound (S9 vs T9) 4+ → 1/2, save 3+4 = 7 → only 6 saves (5/6 unsaved), damage D6+2 mean 5.5
-    close(melta.expectedDamage, (2 / 3) * (1 / 2) * (5 / 6) * 5.5, 1e-9);
+    // hit 2/3, wound (S9 vs T9) 4+ → 1/2, save 3+4 = 7 → nothing saves, damage D6+2 mean 5.5
+    close(melta.expectedDamage, (2 / 3) * (1 / 2) * 5.5, 1e-9);
     const tl = runScenario(scenario(unit([], [gun({ keywords: [{ name: "TWIN-LINKED" }] })]), marines()));
     close(tl.expectedDamage, 10 * (2 / 3) * (1 / 2 + (1 / 2) * (1 / 2)) * (1 / 3));
   });

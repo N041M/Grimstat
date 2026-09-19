@@ -34,6 +34,11 @@ export interface TargetGroup {
 export interface GroupParams {
   /** P(save fails) for a non-mortal wound allocated to this group. */
   pUnsaved: number;
+  /**
+   * Which unmodified save results inflict damage on this group, indexed by die face (index 0 is a
+   * roll of 1). Read when the run resolves saves lowest first; `pUnsaved` stands for it otherwise.
+   */
+  damageOn?: boolean[];
   /** Damage per unsaved wound, after the group's damage modifiers and Feel No Pain thinning. */
   damage: PMF;
   /** Damage per mortal-wound event (e.g. Devastating Wounds), after modifiers and FNP thinning. */
@@ -61,6 +66,11 @@ export interface WeaponParams {
   /** One failed wound roll among all this weapon's hits may be re-rolled once. */
   singleRerollWound: boolean;
   groups: GroupParams[];
+  /**
+   * Probability of each unmodified save result after any re-roll, indexed by die face (index 0 is a
+   * roll of 1). Read with `damageOn` when the run resolves saves lowest first.
+   */
+  saveFaces?: PMF;
   /** One attack die per weapon profile is not rolled but set to this outcome (Miracle/Fate dice). */
   fixedHit?: "miss" | "hit" | "crit";
   /** One wound roll per weapon profile is set to this outcome instead of being rolled. */
@@ -79,6 +89,13 @@ export interface EngineInput {
   allocation: AllocationOrder;
   backend: "auto" | "exact" | "mc";
   mcIterations: number;
+  /**
+   * How one weapon profile's saves are taken. "each" allocates a wound and rolls its save one at a
+   * time. "ascending" rolls every save of the profile first and resolves the results from the lowest
+   * up, each against whichever group is current when it is reached, which is how the 11th edition
+   * sequence reads. The two agree unless the groups differ in which results save them. Default "each".
+   */
+  saveOrder?: "each" | "ascending";
   seed?: number;
   /** Exact backend falls back to MC above this many DP states. */
   maxExactStates?: number;

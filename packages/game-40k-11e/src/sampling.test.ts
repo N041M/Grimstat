@@ -79,12 +79,12 @@ describe("the efficiency ranking's interval", () => {
       expect(r.backend).toBe("mc");
       return (r.ciHalfWidth! / 110) * 100;
     });
-    expect(halves[0]).toBeCloseTo(0.0881929714, 9);
+    expect(halves[0]).toBeCloseTo(0.0898080201, 9);
     expect(halves[1]).toBeCloseTo(0.1798598332, 9);
     expect(row.ciHalfWidth).toBeCloseTo((halves[0]! + halves[1]!) / 2, 12);
-    expect(row.ciHalfWidth).toBeCloseTo(0.1340264023, 9);
+    expect(row.ciHalfWidth).toBeCloseTo(0.1348339266, 9);
     // The interval is on the same scale as the figure, which is damage per 100 points here.
-    expect(row.damagePer100).toBeCloseTo(4.2663636364, 9);
+    expect(row.damagePer100).toBeCloseTo(4.6813636364, 9);
   });
 
   it("stays on raw damage when the column does", () => {
@@ -93,8 +93,8 @@ describe("the efficiency ranking's interval", () => {
     expect(rows.every((r) => r.perPoints === false)).toBe(true);
     // Undenominated, the row's interval is the plain mean of the two runs' half-widths, which is the
     // per-100 reading above scaled back by 110 / 100.
-    for (const r of rows) expect(r.ciHalfWidth).toBeCloseTo(0.1474290425, 9);
-    expect(rows[0]!.ciHalfWidth).toBeCloseTo((0.1340264023 * 110) / 100, 6);
+    for (const r of rows) expect(r.ciHalfWidth).toBeCloseTo(0.1483173193, 9);
+    expect(rows[0]!.ciHalfWidth).toBeCloseTo((0.1348339266 * 110) / 100, 6);
   });
 
   it("is absent on a row every target was solved exactly for", () => {
@@ -140,10 +140,10 @@ describe("incoming fire's interval", () => {
     }
     const scaled = row.entries.map((e) => (e.ciHalfWidth! / e.attackerPoints) * 100);
     expect(scaled[0]).toBeCloseTo(0.0376765772, 9);
-    expect(scaled[1]).toBeCloseTo(0.0881929714, 9);
+    expect(scaled[1]).toBeCloseTo(0.0898080201, 9);
     expect(row.ciHalfWidth).toBeCloseTo((scaled[0]! + scaled[1]!) / 2, 12);
-    expect(row.ciHalfWidth).toBeCloseTo(0.0629347743, 9);
-    expect(row.woundsPer100).toBeCloseTo(2.8105397727, 9);
+    expect(row.ciHalfWidth).toBeCloseTo(0.0637422987, 9);
+    expect(row.woundsPer100).toBeCloseTo(3.2255397727, 9);
   });
 
   it("puts each entry's own half-width on that entry's expected damage", () => {
@@ -202,12 +202,12 @@ describe("reverse mathhammer's interval", () => {
     const single = (id: string) => r.rows.find((x) => x.candidateIds.join() === id)!;
     const pair = r.rows.find((x) => x.candidateIds.length === 2)!;
     expect(single("melta").backend).toBe("mc");
-    expect(single("melta").ciHalfWidth).toBeCloseTo(0.0633670923, 9);
-    expect(single("bolters").ciHalfWidth).toBeCloseTo(0.0228292022, 9);
+    expect(single("melta").ciHalfWidth).toBeCloseTo(0.065417487, 9);
+    expect(single("bolters").ciHalfWidth).toBeCloseTo(0.02316549, 9);
     // The two are fired in sequence and their damage is added, so the interval is the plain sum.
     expect(pair.ciHalfWidth).toBeCloseTo(single("melta").ciHalfWidth! + single("bolters").ciHalfWidth!, 12);
-    expect(pair.ciHalfWidth).toBeCloseTo(0.0861962945, 9);
-    expect(pair.expectedDamage).toBeCloseTo(7.0611, 9);
+    expect(pair.ciHalfWidth).toBeCloseTo(0.088582977, 9);
+    expect(pair.expectedDamage).toBeCloseTo(8.1858, 9);
   });
 
   it("is absent on a combination solved exactly", () => {

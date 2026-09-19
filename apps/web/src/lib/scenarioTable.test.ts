@@ -32,8 +32,8 @@ describe("filterScenarios", () => {
 
 describe("sortScenarios", () => {
   const metrics: Record<string, RowMetrics> = {
-    a: { expectedDamage: 14.7, pKill: 0.18, per100: 7.5 },
-    b: { expectedDamage: 9.2, pKill: 0.62, per100: 10.2 },
+    a: { expectedDamage: 14.7, pKill: 0.18, expectedSlain: 3.2, per100: 7.5 },
+    b: { expectedDamage: 9.2, pKill: 0.62, expectedSlain: 4.1, per100: 10.2 },
   };
   const metricsOf = (s: ScenarioRow) => metrics[s.id];
 
@@ -50,10 +50,12 @@ describe("sortScenarios", () => {
     expect(sortScenarios(items, { key: "dmg", dir: "desc" }, metricsOf).map((s) => s.id)).toEqual(["a", "b", "c"]);
     expect(sortScenarios(items, { key: "dmg", dir: "asc" }, metricsOf).map((s) => s.id)).toEqual(["b", "a", "c"]);
     expect(sortScenarios(items, { key: "kill", dir: "desc" }, metricsOf).map((s) => s.id)).toEqual(["b", "a", "c"]);
+    expect(sortScenarios(items, { key: "slain", dir: "desc" }, metricsOf).map((s) => s.id)).toEqual(["b", "a", "c"]);
+    expect(sortScenarios(items, { key: "slain", dir: "asc" }, metricsOf).map((s) => s.id)).toEqual(["a", "b", "c"]);
   });
 
   it("treats a missing per-100-points value as not computed", () => {
-    const partial = (s: ScenarioRow): RowMetrics | undefined => (s.id === "a" ? { expectedDamage: 1, pKill: 0, per100: undefined } : metrics[s.id]);
+    const partial = (s: ScenarioRow): RowMetrics | undefined => (s.id === "a" ? { expectedDamage: 1, pKill: 0, expectedSlain: 0, per100: undefined } : metrics[s.id]);
     expect(sortScenarios(items, { key: "per100", dir: "desc" }, partial).map((s) => s.id)).toEqual(["b", "a", "c"]);
   });
 
@@ -67,6 +69,7 @@ describe("nextSort", () => {
   it("flips the direction of the active column and picks a sensible default for a new one", () => {
     expect(nextSort({ key: "name", dir: "asc" }, "name")).toEqual({ key: "name", dir: "desc" });
     expect(nextSort({ key: "name", dir: "asc" }, "dmg")).toEqual({ key: "dmg", dir: "desc" });
+    expect(nextSort({ key: "name", dir: "asc" }, "slain")).toEqual({ key: "slain", dir: "desc" });
     expect(nextSort({ key: "dmg", dir: "desc" }, "attacker")).toEqual({ key: "attacker", dir: "asc" });
   });
 });

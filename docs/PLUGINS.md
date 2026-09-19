@@ -64,7 +64,7 @@ Another edition is a set of rule constants plus keyword differences on the same 
 ```ts
 export const plugin = createGameSystem({
   manifest, gameSystem,
-  rules: RULES_10E,                       // cover as a save bonus, mandatory Lethal Hits, Hazardous on 1s, no auto-6 saves
+  rules: RULES_10E,                       // cover as a save bonus, mandatory Lethal Hits, Hazardous on 1s, saves one wound at a time
   keywords: (registry) => registry.register("CLEAVE", (_kw, c) => c.warnings.push("CLEAVE is not a 10th-edition ability.")),
 });
 ```

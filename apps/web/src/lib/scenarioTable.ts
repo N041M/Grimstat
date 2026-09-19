@@ -1,17 +1,23 @@
 /**
  * Filtering and sorting for the Scenarios table. Pure so the table can be exercised without a DOM
- * or the worker: the row metrics (E[dmg], P(kill), /100 pts) are computed lazily and may be absent,
+ * or the worker: the row metrics (E[dmg], P(kill), models slain, /100 pts) are computed lazily and may be absent,
  * and rows without them always sort last regardless of direction.
  */
 
-export type ScenarioSortKey = "name" | "attacker" | "defender" | "dmg" | "kill" | "per100" | "edited";
+import type { Matchup } from "./matchup";
+
+export type ScenarioSortKey = "name" | "attacker" | "defender" | "dmg" | "kill" | "slain" | "per100" | "edited";
 export type SortDir = "asc" | "desc";
 
 export interface RowMetrics {
   expectedDamage: number;
   pKill: number;
+  /** Expected number of defending models destroyed. */
+  expectedSlain: number;
   /** Expected damage per 100 attacker points; absent when the attacker has no points value. */
   per100?: number | undefined;
+  /** How the attack fares against the unit; absent on a row solved before the mark existed. */
+  matchup?: Matchup | undefined;
 }
 
 /** The shape the table needs from a stored scenario. */
@@ -39,6 +45,7 @@ function metricValue(m: RowMetrics | undefined, key: ScenarioSortKey): number | 
   if (!m) return undefined;
   if (key === "dmg") return m.expectedDamage;
   if (key === "kill") return m.pKill;
+  if (key === "slain") return m.expectedSlain;
   if (key === "per100") return m.per100;
   return undefined;
 }
@@ -83,6 +90,6 @@ export function sortScenarios<T extends ScenarioRow>(items: readonly T[], sort: 
 /** Clicking a header cycles that column: first click sorts descending for metrics, ascending for text. */
 export function nextSort(current: Sort, key: ScenarioSortKey): Sort {
   if (current.key === key) return { key, dir: current.dir === "asc" ? "desc" : "asc" };
-  const numeric = key === "dmg" || key === "kill" || key === "per100" || key === "edited";
+  const numeric = key === "dmg" || key === "kill" || key === "slain" || key === "per100" || key === "edited";
   return { key, dir: numeric ? "desc" : "asc" };
 }

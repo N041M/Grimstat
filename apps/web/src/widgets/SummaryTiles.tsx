@@ -2,12 +2,14 @@ import { defineWidget, type WidgetProps } from "./registry";
 import { SituationBar } from "../components/calc/SituationBar";
 import { fmt, pct, fmtInt } from "../lib/format";
 import { headlineOf, signed, type Headline } from "../lib/headline";
+import { matchupOf } from "../lib/matchup";
+import { MatchupMark } from "../components/MatchupMark";
 import { IDLE_MESSAGE } from "../hooks/useSimulation";
 import { t } from "../i18n";
 
 /**
  * The Calculator's hero header: the eyebrow, the 56px expected-damage figure with its 95% CI, and
- * four secondary metrics right-aligned in one nowrap row that wraps as a unit. While a result is
+ * five secondary metrics right-aligned in one nowrap row that wraps as a unit. While a result is
  * pinned, every figure carries the change against the pinned one beneath it.
  *
  * It is a widget (so it takes part in the rearrangeable dashboard) but renders flush — no card
@@ -25,6 +27,7 @@ export function SummaryTiles({ scenario, result, running, pinned, idle, onContex
   };
   const stats: Array<{ k: string; v: string; d?: string | undefined; title?: string }> = [
     { k: t("hero.pKill"), v: now ? pct(now.pKill, 0) : dash, d: delta((h) => h.pKill, (x) => pct(x, 0)), title: t("hero.pKill.title") },
+    { k: t("hero.slain"), v: now ? fmt(now.slain, 1) : dash, d: delta((h) => h.slain, (x) => fmt(x, 1)), title: t("hero.slain.title") },
     { k: t("hero.median"), v: now ? fmtInt(now.median) : dash, d: delta((h) => h.median, (x) => fmtInt(x)), title: t("hero.median.title") },
     { k: t("hero.p95"), v: now ? fmtInt(now.p95) : dash, d: delta((h) => h.p95, (x) => fmtInt(x)), title: t("hero.p95.title") },
     {
@@ -51,7 +54,10 @@ export function SummaryTiles({ scenario, result, running, pinned, idle, onContex
   return (
     <div className="hero" aria-live="polite">
       <div className="hero-lead">
-        <div className="hero-eyebrow">{t("hero.expectedDamage")}</div>
+        <div className="hero-eyebrow">
+          {t("hero.expectedDamage")}
+          {result ? <MatchupMark grade={matchupOf(result)} label /> : null}
+        </div>
         <div className="hero-value-row">
           <span className="hero-value">{now ? fmt(now.expectedDamage, 1) : dash}</span>
           {/* The exact backend has no confidence interval; the backend and timing live in the dock.

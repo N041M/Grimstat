@@ -1,10 +1,10 @@
 import { ModifierSet, collectModifiers, parseWeaponKeywords, type EvalContext, type KeywordContext, type KeywordHandler, type KeywordOptions, type KeywordRegistry } from "@grimstat/effects";
-import { run, percentiles, delta, mean, type EngineInput, type TargetGroup, type WeaponParams, type GroupParams } from "@grimstat/engine";
+import { run, groupOrder, percentiles, delta, mean, type EngineInput, type TargetGroup, type WeaponParams, type GroupParams } from "@grimstat/engine";
 import type { Scenario, ScenarioModel, ScenarioUnit, ScenarioWeapon, SimResult, Snapshot } from "@grimstat/schema";
 import { CH, POLICY } from "./channels";
 import { create11eKeywordRegistry } from "./keywords";
 import { gameSystem, RULES, RULES_10E, type RulesParams } from "./manifest";
-import { attacksPMF, classifyHit, classifyWound, damagePMF, hitGate, pUnsaved, sustainedPMF, woundGate, woundTarget } from "./attack";
+import { attacksPMF, classifyHit, classifyWound, damageFaces, damagePMF, hitGate, pUnsaved, saveFaceProbs, sustainedPMF, woundGate, woundTarget, type SaveOpts } from "./attack";
 import { abilityNamesOf, activeToggleEffects, coverageFor, listToggles, resolveScenarioUnit, upper } from "./resolve";
 
 /** The live 11e keyword registry. Other plugins may extend it via `registerKeyword` without editing this package. */
@@ -139,6 +139,7 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
   if (!groups.length) warnings.push("Defender has no models.");
   const T = unitToughness(defender);
   const ctx = scenario.context;
+  const allocation = ctx.allocationPolicy === "in-order" ? "in-order" : "protect-character";
   // Hazardous costs a big model more than it costs an infantry one. Which keywords count is an
   // edition rule. 10e names CHARACTER alongside MONSTER and VEHICLE, and 11e does not.
   const attackerBigModel = attacker.keywords.some((k) => rules.hazardousBigModelKeywords.includes(upper(k)));
@@ -253,6 +254,7 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
     const ap = mods.num(CH.ap, w.AP, POLICY[CH.ap]);
     const saveMod = mods.num(CH.saveRoll, 0, POLICY[CH.saveRoll]);
     const fnpChannel = mods.has(CH.fnp) ? mods.num(CH.fnp, 0, POLICY[CH.fnp]) : 0;
+    const saveOpts: SaveOpts[] = [];
     const gparams: GroupParams[] = groups.map((g) => {
       const m = g.model;
       const coverBonus = inCover && rules.coverAsSaveBonus && !(m.Sv <= 3 && ap === 0) ? 1 : 0;
@@ -262,12 +264,18 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
         const v = mods.num(CH.invuln, inv ?? 7, POLICY[CH.critWound]);
         inv = v >= 7 ? inv : inv === null ? v : Math.min(inv, v);
       }
-      const pu = pUnsaved({ armourTarget, invulnTarget: inv, rollMod: saveMod, reroll: mods.reroll(CH.rerollSave), sixAlwaysSaves: rules.sixAlwaysSaves });
+      const so: SaveOpts = { armourTarget, invulnTarget: inv, rollMod: saveMod, reroll: mods.reroll(CH.rerollSave), sixAlwaysSaves: rules.sixAlwaysSaves };
+      saveOpts.push(so);
       const fnp = m.fnp ?? (fnpChannel >= 2 && fnpChannel <= 6 ? fnpChannel : null);
       const dmg = damagePMF(w.D, mods, fnp);
       const mortal = rules.damageModsApplyToDevastating ? dmg : damagePMF(w.D, new ModifierSet(), fnp);
-      return { pUnsaved: pu, damage: dmg, mortalDamage: mortal };
+      return { pUnsaved: pUnsaved(so), damageOn: damageFaces(so), damage: dmg, mortalDamage: mortal };
     });
+    const precision = mods.flag(CH.precision) && groups.some((g) => g.target.isCharacter);
+    // With the saves rolled up front, a re-roll of failures is judged against the group the results
+    // reach first. The results are one pool for the whole profile, so the pool has one distribution.
+    const firstGroup = groupOrder(groups.map((g) => g.target), allocation, precision)[0] ?? 0;
+    const saveFaces = rules.savesResolvedLowestFirst && saveOpts.length ? saveFaceProbs(saveOpts[firstGroup] ?? saveOpts[0]!) : undefined;
 
     // --- lethal hits choice ---
     let lethal = false;
@@ -299,9 +307,10 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
       singleRerollHit: !snap && mods.oneDieReroll(CH.rerollHit),
       singleRerollWound: mods.oneDieReroll(CH.rerollWound),
       groups: gparams,
+      ...(saveFaces ? { saveFaces } : {}),
       ...(fixedHit ? { fixedHit } : {}),
       ...(fixedWound ? { fixedWound } : {}),
-      precision: mods.flag(CH.precision) && groups.some((g) => g.target.isCharacter),
+      precision,
       selfMortalsPerWeapon: hazardous ? rules.hazardousFailProb * (attackerBigModel ? rules.hazardousMortalsBigModel : rules.hazardousMortals) : 0,
     });
   }
@@ -316,7 +325,8 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
   const input: EngineInput = {
     weapons,
     groups: groups.map((g) => g.target),
-    allocation: ctx.allocationPolicy === "in-order" ? "in-order" : "protect-character",
+    allocation,
+    saveOrder: rules.savesResolvedLowestFirst ? "ascending" : "each",
     backend: ctx.backend,
     mcIterations: ctx.mcIterations,
     // Every sampled run in the app draws from this same stream, which is what makes two sampled runs
@@ -357,6 +367,8 @@ export function runScenarioWith(rules: RulesParams, registry: KeywordRegistry, s
     weapons: o.weapons.map((t) => ({ ...t, trace: [] })),
     ...(attacker.points !== undefined ? { attackerPoints: attacker.points } : {}),
     ...(defender.points !== undefined ? { defenderPoints: defender.points } : {}),
+    defenderModels: groups.reduce((s, g) => s + g.target.models, 0),
+    defenderWounds: groups.reduce((s, g) => s + g.target.models * g.target.wounds, 0),
     ...(attacker.points ? { damagePerPoint: o.expectedDamage / attacker.points } : {}),
     pointsSlain: o.expectedPointsSlain,
     coverage,
