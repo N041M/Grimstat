@@ -27,8 +27,8 @@ them:
 
 | Rule | What 2D forces | What 3D gives |
 |---|---|---|
-| Visibility ("if a model can see any part of the target") | a flag per terrain piece; ruins are either walls or not | a real ray against real solids: a Rhino sees over a wall a Guardsman cannot |
-| Obscuring / height classes | a look-up table of hand-tuned exceptions | falls out of the geometry — terrain height vs model height vs distance |
+| Visibility ("if a model can see any part of the target") | a flag per terrain piece; ruins are either walls or not | rays between the two models, judged by the 11th-edition terrain rules: an obscuring area blocks any line across its footprint unless a model is within it, a ruin's walls are solid to 3" and windows above, and exposed terrain blocks only where its solid is |
+| Obscuring / height classes | a look-up table of hand-tuned exceptions | the area rule for obscuring terrain, and real geometry for everything else |
 | Models on upper floors of ruins | not representable | a floor is a horizontal surface at a height, and models stand on it |
 | Vertical movement (climbing, dropping) | ignored, or a flat penalty | the vertical leg is measured and charged against Move |
 | Engagement range (1" horizontally, 5" vertically) | horizontal only | exactly as written |
@@ -98,11 +98,14 @@ apps/web
   cross sections combined with the vertical gap between the `[z, z+h]` spans (`hypot` of the two, so
   a model 3" up and 4" across is 5" away, exactly as a tape measure held taut would read).
 - `withinEngagementRange(a, b)` — the 11e split test: ≤1" horizontally **and** ≤5" vertically.
-- `visible(from, to, terrain)` — **true line of sight**: cast rays from sample points on the
-  observer's hull (base rim × eye heights) to sample points on the target's hull, against the terrain
-  prisms; returns whether *any* ray is unblocked, plus the fraction that are (used for cover and for
-  the AI's positional terms). Obscuring terrain is a solid the ray cannot cross unless the target is
-  inside it or the observer is within the 11e exemptions — all expressed as trait data.
+- `visible(from, to, terrain)` — line of sight under the 11e terrain rules: cast rays from sample
+  points on the observer's hull (base rim × eye heights) to sample points on the target's hull;
+  returns whether *any* ray is unblocked, plus the fraction that are (used for cover and for the
+  AI's positional terms). An `obscuring` piece is a terrain area: it blocks every ray across its
+  footprint at any height, unless either model is within it by any part of its base. A model within
+  a `breachable` piece is stopped by its walls up to 3" (the Solid rule) and sees through the
+  windows above; a piece nobody can be inside is solid to its top. Terrain that is not obscuring
+  blocks only where its prism is, which is true line of sight.
 - `coverFrom(target, attacker, terrain)` — benefit of cover derived from the same ray casts, plus the
   footprint rule, plus per-trait overrides.
 - `coherent(unit)` — 2" to another model (6+ models: two others), the standard check.
@@ -213,7 +216,12 @@ apps/web
 Three answers fell out of the geometry that a 2D model would have had to hard-code, and one of them is
 genuinely counter-intuitive:
 
-- A wall that hides a 2" trooper does not hide a 3.5" Rhino, from the same spot, at the same range.
+- An obscuring area hides a 3.5" Rhino as surely as a 2" trooper, and a model on an upper floor as
+  surely as one on the ground, because the edition's rule is about the footprint and not the
+  height. Only exposed terrain, a crater rim or a bank, is judged by what its solid actually hides.
+- A trooper on the ground floor of a ruin sees nothing outside at ground level and nothing outside
+  sees him, since the walls are solid to 3". One floor up he shoots out through the windows, and a
+  shooter high enough outside looks down through them at him.
 - A model on a ruin's **ground floor is already engaged** with one on the first floor above it —
   engagement range reaches five inches up, and 4.5" of storey is inside that. Charging "upstairs" to
   the first floor costs nothing extra; the second floor is what forces a climb.

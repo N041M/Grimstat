@@ -1491,7 +1491,7 @@ export const en = {
   "battle.samplePlaceholder": "A placeholder force with invented profiles, since the project has no game data of its own.",
 
   "battle.trait.obscuring": "Obscuring",
-  "battle.trait.obscuring.help": "Sight lines drawn through the solid are blocked.",
+  "battle.trait.obscuring.help": "Nothing outside it sees across its footprint, at any height. A model within it sees out and is seen.",
   "battle.trait.light-cover": "Light cover",
   "battle.trait.light-cover.help": "A model shot at through it has the benefit of cover.",
   "battle.trait.heavy-cover": "Heavy cover",
@@ -1501,7 +1501,7 @@ export const en = {
   "battle.trait.difficult": "Difficult ground",
   "battle.trait.difficult.help": "Crossing the footprint costs more than the distance travelled.",
   "battle.trait.breachable": "Breachable walls",
-  "battle.trait.breachable.help": "The footprint is walls: only the keywords listed below cross them or stand inside.",
+  "battle.trait.breachable.help": "The footprint is walls. Only the keywords listed below cross them or stand inside. The walls block sight up to 3\", and are windows above that.",
   "battle.trait.scalable": "Scalable",
   "battle.trait.scalable.help": "Models may climb it to reach an upper floor.",
   "battle.trait.defensible": "Defensible",

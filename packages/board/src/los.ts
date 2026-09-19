@@ -1,18 +1,28 @@
 /**
- * True line of sight, and the cover that follows from it.
+ * Line of sight under the 11th edition terrain rules, and the cover that follows from it.
  *
- * The rule is "if a model can see any part of the target". In three dimensions that is a real
- * question with a real answer: cast rays between the two solids and ask whether any of them clears
- * the terrain. No height classes, no look-up table of exceptions — a Rhino sees over a wall a
- * Guardsman cannot because it is taller, and that is the whole of it.
+ * The base rule is "if any part of a model can be seen from any part of the observer". Rays are
+ * cast between sample points on the two hulls, and one clear ray is enough. What a ray may cross
+ * depends on the terrain it meets, and the edition's terrain rules are the whole of it:
  *
- * The rays are kept, because a rendered ray *explains* a verdict where a boolean only asserts it.
+ * - An **obscuring** terrain area blocks every line that crosses its footprint, at any height, so a
+ *   low wall hides a tank and a model on an upper floor alike. The one exception is a model within
+ *   the area: it sees out and is seen in, and two models within the same area see each other.
+ * - A model is **within** an area when any part of its base is, so toeing in counts.
+ * - A dense feature is **solid** below three inches. A line cannot pass through its walls at that
+ *   height, which keeps a ground-floor model inside a ruin out of sight of the ground outside and
+ *   stops it shooting out. Above three inches the walls are windows, so upper floors see out and
+ *   are seen from above. A piece nobody can be inside is solid to its full height.
+ * - Terrain that is not obscuring blocks only where its solid actually is, which is true line of
+ *   sight: a crater rim hides nobody and an exposed bank hides a trooper but not a tank.
+ *
+ * The rays are kept, because a rendered ray explains a verdict where a boolean only asserts it.
  */
 
 import type { ModelHull } from "./shapes";
 import { coreSegment, footReach, silhouettePoints, topZ } from "./shapes";
 import type { TerrainPiece , TerrainIndex} from "./terrain";
-import { blocksSight, containsPoint, grantsCover, hasTrait, segmentHitsPrism, topOf } from "./terrain";
+import { blocksSight, grantsCover, hasTrait, segmentHitsPrism, topOf } from "./terrain";
 import { horizontalGap } from "./distance";
 import type { Vec2, Vec3 } from "./vec";
 import { EPS, bounds, expand, intervalGap, segInPolygonSpans, segPolygonDistance } from "./vec";
@@ -35,9 +45,9 @@ export interface SightOptions {
   /** Hard cap on rays tested, as a guard for pathological sample sets. */
   readonly maxRays?: number;
   /**
-   * Pieces containing either model do not block that pair — a model inside a ruin can see out of it,
-   * and a model standing on a roof is not blocked by the building under its feet. Set false to test
-   * raw geometry.
+   * Apply the rule for a model within a terrain area: the area does not obscure that pair, and only
+   * its solid walls below `SOLID_BAND` block. Set false to test raw geometry, where every solid is a
+   * prism and nothing is exempt.
    */
   readonly selfExempt?: boolean;
   /** Additional pieces to ignore, by id. */
@@ -57,6 +67,28 @@ export interface SightResult {
   readonly blockers: readonly string[];
   readonly rays: readonly SightRay[];
 }
+
+/**
+ * How far up a dense feature's walls are solid, in inches. Below it a line of sight cannot pass
+ * through the walls even at a door or a window. Above it the walls are windows.
+ */
+export const SOLID_BAND = 3;
+
+/** Does this piece make its terrain area obscuring? Any light or dense feature does, unless it is transparent. */
+export const obscures = (p: TerrainPiece): boolean => hasTrait(p, "obscuring") && !hasTrait(p, "transparent");
+
+/**
+ * The height to which a piece's walls are solid to a line of sight. A piece models can be inside
+ * has windows above the band. A piece nobody can be inside, a bunker or a container, is solid to
+ * its top.
+ */
+export const solidTo = (p: TerrainPiece): number => (hasTrait(p, "breachable") ? p.base + Math.min(p.height, SOLID_BAND) : topOf(p));
+
+/** Is any part of the model's base within the piece's footprint? Toeing in counts, on any floor. */
+export const baseWithin = (p: TerrainPiece, h: ModelHull): boolean => segPolygonDistance(coreSegment(h), p.polygon) <= h.foot.r + EPS;
+
+/** Is the model within an obscuring terrain area? The geometry of the Hidden rule; keywords and shooting are the caller's. */
+export const withinObscuringArea = (h: ModelHull, index: TerrainIndex): boolean => index.near({ x: h.pos.x, y: h.pos.y }, footReach(h.foot), obscures).some((p) => baseWithin(p, h));
 
 /** Top, middle, feet: enough to settle almost every real table position. */
 export const HEIGHT_SAMPLES = [1, 0.5, 0] as const;
@@ -146,9 +178,11 @@ export function visibleFraction(from: readonly ModelHull[], to: readonly ModelHu
 }
 
 /**
- * A unit is hidden when no enemy model within `range` can see any of its models — the shape of the
- * 11e HIDDEN rule and of Lone Operative, with the range left to the caller because it comes from
- * the rules rather than from geometry.
+ * A unit is hidden when no enemy model within `range` can see any of its models. This is the shape
+ * of the Hidden rule, whose detection range is normally 15", and of Lone Operative. The range is
+ * the caller's, since it comes from the rules rather than from geometry, and so are the other
+ * conditions of Hidden: the model's keywords, whether it is within an obscuring area (see
+ * `withinObscuringArea`) and whether its unit shot this turn or last.
  */
 export function hiddenFrom(unit: readonly ModelHull[], enemies: readonly ModelHull[], index: TerrainIndex, range: number, opts?: SightOptions): boolean {
   for (const enemy of enemies) {
@@ -239,7 +273,19 @@ function risesIntoView(piece: TerrainPiece, attacker: ModelHull, target: ModelHu
 
 /* ---- internals -------------------------------------------------------------------------------- */
 
-function candidateBlockers(from: ModelHull, to: ModelHull, index: TerrainIndex, opts: SightOptions): TerrainPiece[] {
+/**
+ * How a piece stands between a pair of models.
+ *
+ * `area`: an obscuring area neither model is within, which blocks any line crossing its footprint.
+ * `walls`: an obscuring piece one of them is within, whose walls block up to `solidTo`.
+ * `solid`: terrain that is not obscuring, which blocks only where its prism is.
+ */
+interface Blocker {
+  readonly piece: TerrainPiece;
+  readonly mode: "area" | "walls" | "solid";
+}
+
+function candidateBlockers(from: ModelHull, to: ModelHull, index: TerrainIndex, opts: SightOptions): Blocker[] {
   const selfExempt = opts.selfExempt ?? true;
   const here: Vec2 = { x: from.pos.x, y: from.pos.y };
   const there: Vec2 = { x: to.pos.x, y: to.pos.y };
@@ -249,20 +295,57 @@ function candidateBlockers(from: ModelHull, to: ModelHull, index: TerrainIndex, 
   const ceiling = Math.max(topZ(from), topZ(to));
   const floor = Math.min(from.pos.z, to.pos.z);
 
-  return index.candidates(region, (p) => {
-    if (!blocksSight(p)) return false;
+  const out: Blocker[] = [];
+  for (const p of index.candidates(region)) {
+    if (opts.ignore?.(p)) continue;
+    if (selfExempt && obscures(p)) {
+      // An obscuring area blocks at any height, so no height test applies to it.
+      out.push({ piece: p, mode: baseWithin(p, from) || baseWithin(p, to) ? "walls" : "area" });
+      continue;
+    }
+    if (!blocksSight(p)) continue;
     // A solid that starts above both models' heads, or ends below both their feet, is never between
     // them: every ray runs inside the two height spans.
-    if (p.base > ceiling + EPS || topOf(p) < floor - EPS) return false;
-    if (opts.ignore?.(p)) return false;
-    if (selfExempt && (containsPoint(p, here) || containsPoint(p, there))) return false;
-    return true;
-  });
+    if (p.base > ceiling + EPS || topOf(p) < floor - EPS) continue;
+    // A model standing on a piece, or in a crater, is not blocked by the ground under its own feet.
+    if (selfExempt && (baseWithin(p, from) || baseWithin(p, to))) continue;
+    out.push({ piece: p, mode: "solid" });
+  }
+  return out;
 }
 
-function firstBlocker(from: Vec3, to: Vec3, pieces: readonly TerrainPiece[]): TerrainPiece | undefined {
-  for (const p of pieces) if (segmentHitsPrism(from, to, p)) return p;
+function firstBlocker(from: Vec3, to: Vec3, blockers: readonly Blocker[]): TerrainPiece | undefined {
+  for (const { piece, mode } of blockers) {
+    if (mode === "solid" ? segmentHitsPrism(from, to, piece) : mode === "area" ? crossesFootprint(from, to, piece) : crossesWalls(from, to, piece)) return piece;
+  }
   return undefined;
+}
+
+/** Does the line cross the piece's footprint at all? Height plays no part. */
+function crossesFootprint(from: Vec3, to: Vec3, p: TerrainPiece): boolean {
+  return segInPolygonSpans({ a: { x: from.x, y: from.y }, b: { x: to.x, y: to.y } }, p.polygon).some(([t0, t1]) => t1 - t0 > EPS);
+}
+
+/**
+ * Does the line pass through the piece's walls where they are solid?
+ *
+ * The walls are the footprint's edges. Where the line enters or leaves the footprint it crosses a
+ * wall, at a height read off the line there. A crossing between the piece's base and `solidTo`
+ * blocks; one above it is through a window. A line that starts inside and stays inside crosses
+ * nothing.
+ */
+function crossesWalls(from: Vec3, to: Vec3, p: TerrainPiece): boolean {
+  const top = solidTo(p);
+  const heightAt = (t: number): number => from.z + (to.z - from.z) * t;
+  for (const [t0, t1] of segInPolygonSpans({ a: { x: from.x, y: from.y }, b: { x: to.x, y: to.y } }, p.polygon)) {
+    if (t1 - t0 <= EPS) continue;
+    for (const t of [t0, t1]) {
+      if (t <= EPS || t >= 1 - EPS) continue;
+      const z = heightAt(t);
+      if (z >= p.base - EPS && z <= top + EPS) return true;
+    }
+  }
+  return false;
 }
 
 function done(visible: boolean, tested: number, clear: number, hits: Map<string, number>, rays: SightRay[], exhaustive: boolean): SightResult {
