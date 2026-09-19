@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { UnitArt } from "../UnitArt";
 import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
-import type { UnitCost } from "@grimstat/resolver";
+import { companionHostOf, type UnitCost } from "@grimstat/resolver";
 import type { PointsBarModel } from "../../lib/pointsBar";
 import { diagnosticsForUnit, modelCountOf, sectionOf, unitDisplayName, wargearSummary, type UnitSection } from "../../lib/roster";
 import { loadsByTransport } from "../../lib/transport";
@@ -187,6 +187,7 @@ function StatusCell({ name, label, bad, issues }: { name: string; label: string;
   if (!bad)
     return (
       <span className="ut-status-ok" title={t("roster.status.legalTitle")}>
+        <Icon name="check" />
         {label}
       </span>
     );
@@ -234,22 +235,40 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
 
-  /** Top-level units in section order, each followed by the characters attached to it. */
-  const { rows, attachedNames } = useMemo(() => {
+  /**
+   * Top-level units in section order, each followed by the characters attached to it and by the
+   * models that come with it. Sir Hekhtur has a datasheet of his own and comes with Canis Rex, so
+   * his row sits under the Knight's the way an attached character's does.
+   */
+  const { rows, attachedNames, partOf } = useMemo(() => {
     const byId = new Map(roster.units.map((u) => [u.id, u] as const));
     const attachedByHost = new Map<string, RosterUnit[]>();
+    const companionsByHost = new Map<string, RosterUnit[]>();
+    const hostOf = new Map<string, RosterUnit>();
     const top: RosterUnit[] = [];
     for (const u of roster.units) {
       const hostId = u.attachedTo?.unitId;
-      if (hostId && byId.has(hostId) && hostId !== u.id) attachedByHost.set(hostId, [...(attachedByHost.get(hostId) ?? []), u]);
-      else top.push(u);
+      if (hostId && byId.has(hostId) && hostId !== u.id) {
+        attachedByHost.set(hostId, [...(attachedByHost.get(hostId) ?? []), u]);
+        continue;
+      }
+      const ds = datasheets.get(u.datasheetId);
+      const hostSheet = ds && companionHostOf(snapshot, ds);
+      const host = hostSheet && roster.units.find((h) => h.datasheetId === hostSheet.id && !(companionsByHost.get(h.id) ?? []).some((c) => c.datasheetId === u.datasheetId));
+      if (host) {
+        companionsByHost.set(host.id, [...(companionsByHost.get(host.id) ?? []), u]);
+        hostOf.set(u.id, host);
+        continue;
+      }
+      top.push(u);
     }
     const order: UnitSection[] = ["character", "battleline", "transport", "other", "allied"];
     const out: DisplayRow[] = [];
     for (const section of order) {
       for (const u of top) {
-        if (sectionOf(datasheets.get(u.datasheetId), roster) !== section) continue;
+        if (sectionOf(datasheets.get(u.datasheetId), roster, snapshot) !== section) continue;
         out.push({ unit: u, nested: false, group: section });
+        for (const c of companionsByHost.get(u.id) ?? []) out.push({ unit: c, nested: true, group: u.id });
         for (const c of attachedByHost.get(u.id) ?? []) out.push({ unit: c, nested: true, group: u.id });
       }
     }
@@ -258,8 +277,8 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
     // have someone in them without reading the line below each one.
     const names = new Map<string, string[]>();
     for (const [hostId, list] of attachedByHost) names.set(hostId, list.map((c) => unitDisplayName(c, datasheets.get(c.datasheetId))));
-    return { rows: out, attachedNames: names };
-  }, [roster, datasheets]);
+    return { rows: out, attachedNames: names, partOf: hostOf };
+  }, [roster, datasheets, snapshot]);
 
   /**
    * Who is riding in what, both ways round.
@@ -287,7 +306,7 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
   const roleOf = (u: RosterUnit): string => {
     const ds = datasheets.get(u.datasheetId);
     const role = ds?.role?.trim();
-    return role || t(SECTION_KEY[sectionOf(ds, roster)]);
+    return role || t(SECTION_KEY[sectionOf(ds, roster, snapshot)]);
   };
 
   /** What this row is riding in, or what it is carrying. Both, for a transport inside nothing, is
@@ -298,8 +317,10 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
     return t("roster.badge.carrying", { names: carrying.join(", ") });
   };
 
-  /** Sub-line: what the unit is attached to, or its wargear. */
+  /** Sub-line: what the unit is attached to or comes with, or its wargear. */
   const subOf = (u: RosterUnit): string => {
+    const host = partOf.get(u.id);
+    if (host) return t("roster.badge.partOf", { name: unitDisplayName(host, datasheets.get(host.datasheetId)) });
     if (u.attachedTo) {
       const host = roster.units.find((h) => h.id === u.attachedTo?.unitId);
       const hostName = host ? unitDisplayName(host, datasheets.get(host.datasheetId)) : t("roster.badge.attached");
@@ -357,7 +378,9 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
     setPicked(new Set());
   };
 
-  // ↑/↓ walk the name buttons; Alt+↑/↓ reorder; Delete/Backspace removes the focused unit (the page offers Undo).
+  // ↑/↓ walk the name buttons, and move the selection with them while a unit is selected, so the
+  // inspector and the row's band follow the keys; Alt+↑/↓ reorder; Delete/Backspace removes the
+  // focused unit (the page offers Undo).
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
     if (!target.classList.contains("ut-name")) return;
@@ -371,7 +394,10 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
       e.preventDefault();
       const all = [...e.currentTarget.querySelectorAll<HTMLElement>(".ut-name")];
       const i = all.indexOf(target);
-      all[e.key === "ArrowDown" ? Math.min(all.length - 1, i + 1) : Math.max(0, i - 1)]?.focus();
+      const next = all[e.key === "ArrowDown" ? Math.min(all.length - 1, i + 1) : Math.max(0, i - 1)];
+      next?.focus();
+      const nextId = next?.dataset.unitId;
+      if (nextId && selectedId !== undefined && !selecting && nextId !== selectedId) onSelect(nextId);
     } else if (e.key === "Delete" || e.key === "Backspace") {
       if (!unit) return;
       e.preventDefault();
@@ -517,7 +543,7 @@ export function UnitTable({ roster, snapshot, datasheets, costById, diagnostics,
                       <span className="ut-num">{cost ? fmtInt(cost.total) : "–"}</span>
                       <span className="ut-phrase">{cost ? t("unit.points", { v: fmtInt(cost.total) }) : "–"}</span>
                     </GridCell>
-                    <GridCell align="end" mono tone={status.bad ? "accent" : "faint"} className="ut-status">
+                    <GridCell align="end" mono tone={status.bad ? "accent" : "muted"} className="ut-status">
                       <span onClick={(e) => e.stopPropagation()}>
                         <StatusCell name={name} label={status.label} bad={status.bad} issues={issues} />
                       </span>

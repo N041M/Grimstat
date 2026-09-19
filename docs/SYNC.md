@@ -187,8 +187,10 @@ the server side.
 
 Email magic links. No passwords exist anywhere. `POST /auth/start` takes an email and a Turnstile
 token, stores a hashed one-time code that lives fifteen minutes, and sends one email through Resend.
-The link opens the app, which posts the code to `POST /auth/finish` and receives a session token in
-the response body. The token is random, 32 bytes, stored hashed on the server and in the device's
+The code is eight typable characters. The email carries it as a link and as text. The link opens
+the app in the browser, which posts the code to `POST /auth/finish` and receives a session token in
+the response body. The text is for the app opened from a phone's home screen, which has its own
+storage and which the link does not reach: the Profile page takes the code typed in. The token is random, 32 bytes, stored hashed on the server and in the device's
 `settings` under a key that never syncs. A session lasts a year and appears on the Profile page as a
 device, where it can be signed out. Rate limits through the Workers rate-limiting binding: five
 starts per email per hour, twenty per address per hour. That is what keeps the email quota from

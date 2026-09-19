@@ -9,6 +9,7 @@ import { LayoutLibrary } from "../components/battle/LayoutLibrary";
 import { LayoutPicker } from "../components/battle/LayoutPicker";
 import { inSelection } from "../components/battle/selection";
 import { MOD_NAME } from "../lib/keys";
+import { navigate, useRouteInfo } from "../router";
 import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
 import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
@@ -518,6 +519,26 @@ export function BattlePage() {
     };
   }, [rostersVersion]);
 
+  /**
+   * An army sent here from its editor, as `#/battle?attacker=<id>` or `?defender=<id>`. It is
+   * taken once the settings and the data are in, and the address is put back to plain `#/battle`
+   * so a reload does not put it on the table again.
+   */
+  const { query } = useRouteInfo();
+  const sentForce = useRef<string | undefined>();
+  useEffect(() => {
+    if (!attackerForceLoaded || !defenderForceLoaded || !snapshot) return;
+    const side = SIDES.find((s) => query.get(s));
+    const id = side ? query.get(side) : null;
+    if (!side || !id) return;
+    const key = `${side}:${id}`;
+    if (sentForce.current === key) return;
+    sentForce.current = key;
+    chooseForce(side, id);
+    setTool("deploy");
+    navigate("battle", true);
+  }, [query, attackerForceLoaded, defenderForceLoaded, snapshot, chooseForce]);
+
   // The army each side was last given, put back on the table once the setting and the data are in.
   const restoredForces = useRef(false);
   useEffect(() => {
@@ -822,6 +843,12 @@ export function BattlePage() {
         const shelving = musterAt(state, at) === selected.side;
         const verdict = shelving ? musterVerdict(state, selected, at) : deployVerdict(state, selected, at, index);
         if (verdict.ok) (shelving ? onMuster : onDeploy)(selected.id, at);
+        // A unit set down by a click is done with: the next pick starts from nothing, so a second
+        // click on the floor does not move it again.
+        if (verdict.ok && !shelving) {
+          setSelectedId(undefined);
+          setActiveModelId(undefined);
+        }
         setDragging(false);
         setDrag(verdict.ok ? undefined : { unitId: selected.id, to: at, legal: false, problems: verdict.problems });
         return;

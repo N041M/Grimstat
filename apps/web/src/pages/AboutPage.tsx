@@ -34,8 +34,18 @@ function bundleLabel(): string {
 
 const APP_VERSION = "0.1.0";
 
+/** Whether the page is open from a home screen rather than in a browser tab. */
+const standalone = (): boolean => {
+  try {
+    return window.matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true;
+  } catch {
+    return false;
+  }
+};
+
 export function AboutPage() {
   const { openTour } = useApp();
+  const installed = standalone();
   const plugins = [...host.registries.manifests.values()];
   // `note` is shown under the value as well as in the tooltip, which a touch screen never opens.
   const stats: Array<{ key: I18nKey; value: string; note: string }> = [
@@ -161,6 +171,39 @@ export function AboutPage() {
             </div>
           ))}
         </div>
+
+        <section className="about-card" aria-labelledby="about-install-h">
+          <h2 className="t-eyebrow" id="about-install-h">
+            {t("about.installTitle")}
+          </h2>
+          {installed ? (
+            <p className="about-card-body prose">{t("about.installed")}</p>
+          ) : (
+            <>
+              <p className="about-card-body prose">{t("about.install1")}</p>
+              <div className="about-install">
+                {(
+                  [
+                    ["about.installIos", ["about.installIos1", "about.installIos2", "about.installIos3"]],
+                    ["about.installAndroid", ["about.installAndroid1", "about.installAndroid2", "about.installAndroid3"]],
+                  ] as const
+                ).map(([label, steps]) => (
+                  <div key={label}>
+                    <h3 className="about-art-group">{t(label)}</h3>
+                    <ol className="about-list prose">
+                      {steps.map((step) => (
+                        <li key={step}>{t(step)}</li>
+                      ))}
+                    </ol>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <p className="about-card-body prose">
+            {t("about.installSignIn")} <a href={hrefFor("profile")}>{t("nav.profile")}</a>
+          </p>
+        </section>
 
         <section className="about-card" aria-labelledby="about-getdata-h">
           <h2 className="t-eyebrow" id="about-getdata-h">

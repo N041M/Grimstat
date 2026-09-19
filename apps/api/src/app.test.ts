@@ -58,7 +58,7 @@ function harness(dbOverride?: (db: Db) => Db, limiter: RateLimiter = noLimiter, 
     async signIn(email, device = "Test device") {
       const started = await h.json("POST", "/api/auth/start", { email });
       expect(started.status).toBe(200);
-      const code = /code=([0-9a-f]+)/.exec(mail[mail.length - 1]!.text)![1]!;
+      const code = /code=([a-z0-9-]+)/.exec(mail[mail.length - 1]!.text)![1]!;
       const finished = await h.json<{ token: string }>("POST", "/api/auth/finish", { code, device });
       expect(finished.status).toBe(200);
       return finished.body.token;
@@ -86,13 +86,13 @@ describe("signing in", () => {
     expect(me.body.devices).toMatchObject([{ deviceName: "Kitchen laptop", current: true }]);
 
     // The same code a second time is refused.
-    const code = /code=([0-9a-f]+)/.exec(h.mail[0]!.text)![1]!;
+    const code = /code=([a-z0-9-]+)/.exec(h.mail[0]!.text)![1]!;
     expect((await h.json("POST", "/api/auth/finish", { code })).status).toBe(400);
   });
 
   it("refuses a code after fifteen minutes and a token after a year", async () => {
     await h.json("POST", "/api/auth/start", { email: "a@example.com" });
-    const code = /code=([0-9a-f]+)/.exec(h.mail[0]!.text)![1]!;
+    const code = /code=([a-z0-9-]+)/.exec(h.mail[0]!.text)![1]!;
     h.clock.now = new Date("2026-09-18T12:16:00.000Z");
     expect((await h.json("POST", "/api/auth/finish", { code })).status).toBe(400);
 
@@ -533,7 +533,7 @@ describe("handles and public pages", () => {
     const bob = await h.signIn("bob@example.com");
     expect((await h.json<{ handle: string }>("PUT", "/api/me/handle", { handle: "Alice-Plays" }, alice)).body.handle).toBe("alice-plays");
     expect((await h.json("PUT", "/api/me/handle", { handle: "ALICE-plays" }, bob)).status).toBe(409);
-    for (const bad of ["ab", "-alice", "alice_", "a".repeat(21), "api", "www", "al ice"]) expect((await h.json("PUT", "/api/me/handle", { handle: bad }, alice)).status).toBe(400);
+    for (const bad of ["ab", "-alice", "alice_", "a".repeat(21), "api", "www", "al ice", "test", "Testing", "admin", "grimstat"]) expect((await h.json("PUT", "/api/me/handle", { handle: bad }, alice)).status).toBe(400);
     // Keeping one's own handle is fine, and an empty one clears it.
     expect((await h.json("PUT", "/api/me/handle", { handle: "alice-plays" }, alice)).status).toBe(200);
     expect((await h.json<{ handle: null }>("PUT", "/api/me/handle", { handle: "" }, alice)).body.handle).toBeNull();

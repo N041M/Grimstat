@@ -1,6 +1,6 @@
 import { Roster, type BattleSize, type Datasheet, type RosterUnit, type Snapshot } from "@grimstat/schema";
 import { BATTLE_SIZES, baseWeaponName, parseLoadout, wargearItems } from "@grimstat/game-40k-11e";
-import { compositionBranches, rosterSummary } from "@grimstat/resolver";
+import { compositionBranches, isOwnFaction, rosterSummary } from "@grimstat/resolver";
 import { newId, nowIso } from "./ids";
 
 /** Pure roster helpers shared by the Armies pages. No DOM, no storage. */
@@ -95,9 +95,9 @@ export function isTransportSheet(ds: Datasheet): boolean {
 }
 
 /** Section of the units list a datasheet belongs to (via role flags, `role` text or keywords). */
-export function sectionOf(ds: Datasheet | undefined, roster: Roster): UnitSection {
+export function sectionOf(ds: Datasheet | undefined, roster: Roster, snapshot: Snapshot): UnitSection {
   if (!ds) return "other";
-  if (ds.factionId !== roster.factionId) return "allied";
+  if (!isOwnFaction(ds, roster, snapshot)) return "allied";
   if (isCharacterSheet(ds)) return "character";
   if (isBattlelineSheet(ds)) return "battleline";
   if (isTransportSheet(ds)) return "transport";
@@ -564,15 +564,53 @@ export function pointsTone(points: number, limit: number): MeterTone {
 export function groupBounds(ds: Datasheet | undefined, groups: ModelGroup[], index: number): ModelBounds {
   if (!ds) return { min: 1, max: undefined };
   const lines = ds.composition;
-  if (lines.length > 1 && lines.length === groups.length) {
-    const line = lines[index]!;
-    const min = Math.max(1, line.min ?? 1);
-    return { min, max: line.max !== undefined ? Math.max(min, line.max) : undefined };
+  const group = groups[index];
+  // One composition line per profile, in the order the profiles are printed. A profile split
+  // into several groups shares its line between them: each may shrink to one model as long as
+  // the others make up the line's minimum.
+  const profile = group ? ds.models.findIndex((m) => m.id === group.modelProfileId) : -1;
+  const line = lines.length > 1 && lines.length === ds.models.length && profile >= 0 ? lines[profile] : undefined;
+  if (line && group) {
+    const siblings = groups.reduce((s, g, i) => (i !== index && g.modelProfileId === group.modelProfileId ? s + g.count : s), 0);
+    const min = Math.max(1, (line.min ?? 1) - siblings);
+    return { min, max: line.max !== undefined ? Math.max(min, line.max - siblings) : undefined };
   }
   const total = compositionBounds(ds);
   const others = groups.reduce((s, g, i) => (i === index ? s : s + g.count), 0);
   const min = Math.max(1, total.min - others);
   return { min, max: total.max !== undefined ? Math.max(min, total.max - others) : undefined };
+}
+
+/**
+ * Take `count` models out of the group at `index` into a group of their own, with the same wargear
+ * to start with. That is how a squad carries two loadouts: a group for each. The new group sits
+ * right after the one it came from.
+ */
+export function splitGroup(groups: ModelGroup[], index: number, count: number): ModelGroup[] {
+  const g = groups[index];
+  const n = Math.floor(count);
+  if (!g || n < 1 || n >= g.count) return groups;
+  const out = [...groups];
+  out.splice(index, 1, { ...g, count: g.count - n }, { ...g, count: n, wargear: [...g.wargear] });
+  return out;
+}
+
+/**
+ * Put the group at `index` back into the nearest earlier group of the same profile, which keeps
+ * its wargear. The reverse of `splitGroup`.
+ */
+export function mergeGroup(groups: ModelGroup[], index: number): ModelGroup[] {
+  const g = groups[index];
+  if (!g) return groups;
+  let into = -1;
+  for (let i = index - 1; i >= 0; i--) if (groups[i]!.modelProfileId === g.modelProfileId) {
+    into = i;
+    break;
+  }
+  if (into < 0) return groups;
+  const out = groups.filter((_, i) => i !== index);
+  out[into] = { ...out[into]!, count: out[into]!.count + g.count };
+  return out;
 }
 
 /** Diagnostics attached to the unit at `index` (path "/units/<index>"). */

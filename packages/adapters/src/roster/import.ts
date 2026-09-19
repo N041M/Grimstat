@@ -910,6 +910,9 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     const t: TextUnit = { u: ctx.newUnit(ds), groups: [{ count: Math.max(1, count), items }] };
     units.push(t);
     st.sub = t;
+    // The header counted the companion among the unit's models: "2x Canis Rex" is the Knight and
+    // Sir Hekhtur. The unit itself is the rest.
+    if (st.cur?.headerCount) st.cur.headerCount = Math.max(1, st.cur.headerCount - Math.max(1, count));
   };
 
   const startUnit = (ref: string | undefined, count: number | undefined, label: string, rest: string | undefined) => {
@@ -1070,7 +1073,9 @@ export function importRosterText(text: string, snapshot: Snapshot, opts: { name?
     const header = isBullet ? undefined : parseUnitHeader(line);
     if (header) {
       const { ref, count, label, rest } = header;
-      const looksLikeUnit = !!ref || !!count || !!ctx.matchDatasheet(label);
+      // The first line of a list is its name. "Knights (2000 points)" names the list, and a loose
+      // match on "Knights" must not turn it into a unit, so only a datasheet's own name counts here.
+      const looksLikeUnit = !!ref || !!count || (headerSeen || units.length ? !!ctx.matchDatasheet(label) : !!ctx.findDatasheet(label));
       if (!headerSeen && !looksLikeUnit && !units.length) {
         // "My list (2000 points)" — the roster name line
         name = name || label.trim();

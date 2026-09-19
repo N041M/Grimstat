@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { BattleSize, Diagnostic, Roster } from "@grimstat/schema";
 import type { SaveStatus } from "../../hooks/useRosterEditor";
 import type { PointsBarModel } from "../../lib/pointsBar";
@@ -41,6 +41,8 @@ interface Props {
   onBattleSize: (size: BattleSize) => void;
   onPointsLimit: (limit: number) => void;
   onAddUnit: () => void;
+  /** Put the army on the battle table, on the side given. */
+  onBattle: (side: "attacker" | "defender") => void;
   tab: EditorTab;
   onTab: (tab: EditorTab) => void;
   /** Detachment chips, hung under the points bar. */
@@ -100,7 +102,9 @@ function IssueCount({ text, bad, diagnostics, onSelectUnit }: { text: string; ba
 }
 
 /** Editor header: editable name, the army's context line, the points bar, the detachment chips and the view tabs. */
-export function RosterHeader({ roster, factionName, points, status, savedAt, errors, warns, diagnostics, onSelectUnit, mode, onMode, onRename, onBattleSize, onPointsLimit, onAddUnit, tab, onTab, children }: Props) {
+export function RosterHeader({ roster, factionName, points, status, savedAt, errors, warns, diagnostics, onSelectUnit, mode, onMode, onRename, onBattleSize, onPointsLimit, onAddUnit, onBattle, tab, onTab, children }: Props) {
+  const [battleOpen, setBattleOpen] = useState(false);
+  const closeBattle = useCallback(() => setBattleOpen(false), []);
   const issueText = errors || warns ? [errors ? tn(errors, "roster.issues.error.one", "roster.issues.error.many") : "", warns ? tn(warns, "roster.issues.warn.one", "roster.issues.warn.many") : ""].filter(Boolean).join(" · ") : t("roster.issues.none");
   const toggle = (m: EditorMode) => onMode(mode === m ? "unit" : m);
   const tabbar = useRef<HTMLDivElement>(null);
@@ -153,6 +157,33 @@ export function RosterHeader({ roster, factionName, points, status, savedAt, err
           <button type="button" aria-pressed={mode === "history"} onClick={() => toggle("history")}>
             {t("roster.history")}
           </button>
+          <Popover
+            open={battleOpen}
+            onClose={closeBattle}
+            align="end"
+            label={t("roster.battle.menu")}
+            trigger={
+              <button type="button" aria-haspopup="menu" aria-expanded={battleOpen} onClick={() => setBattleOpen((v) => !v)}>
+                {t("roster.battle")}
+              </button>
+            }
+          >
+            <div className="menu" role="menu">
+              {(["attacker", "defender"] as const).map((side) => (
+                <button
+                  key={side}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    closeBattle();
+                    onBattle(side);
+                  }}
+                >
+                  {t(side === "attacker" ? "roster.battle.attacker" : "roster.battle.defender")}
+                </button>
+              ))}
+            </div>
+          </Popover>
           <button type="button" className="primary" onClick={onAddUnit}>
             {t("roster.units.add")}
           </button>

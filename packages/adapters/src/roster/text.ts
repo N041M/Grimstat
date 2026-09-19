@@ -8,12 +8,15 @@ function gwUnit(v: UnitView, indent = ""): string[] {
   if (v.unit.isWarlord) lines.push(`${indent}  • Warlord`);
   if (v.host) lines.push(`${indent}  • ${v.unit.attachedTo?.role === "support" ? "Supports" : "Leads"}: ${v.host.name}`);
   if (v.enhancement) lines.push(`${indent}  • Enhancement: ${v.enhancement.name} (+${v.enhancement.cost} pts)`);
-  for (const g of v.groups) {
+  for (const g of [...v.groups, ...v.companions.flatMap((c) => c.groups)]) {
     lines.push(`${indent}  • ${g.count}x ${g.profileName}`);
     for (const w of g.wargear) lines.push(`${indent}     ${g.count}x ${w}`);
   }
   return lines;
 }
+
+/** The unit's model groups and those of the models that come with it, as one list. */
+const allGroups = (v: UnitView): UnitView["groups"] => [...v.groups, ...v.companions.flatMap((c) => c.groups)];
 
 export function exportGwAppText(view: RosterView): string {
   const r = view.roster;
@@ -43,7 +46,7 @@ export function exportNrTournamentText(view: RosterView): string {
   for (const s of view.sections) {
     out.push(`+ ${s.section} +`);
     for (const v of s.units) {
-      const groups = v.groups.map((g) => `${g.count}x ${g.profileName}${g.wargear.length ? ` (${g.wargear.join(", ")})` : ""}`).join(", ");
+      const groups = allGroups(v).map((g) => `${g.count}x ${g.profileName}${g.wargear.length ? ` (${g.wargear.join(", ")})` : ""}`).join(", ");
       const flags = [v.unit.isWarlord ? "Warlord" : "", v.enhancement ? `Enhancement: ${v.enhancement.name}` : "", v.host ? `${v.unit.attachedTo?.role === "support" ? "Supports" : "Leads"}: ${v.host.name}` : ""].filter(Boolean);
       out.push(`${v.name} [${v.points}pts]: ${groups}${flags.length ? ` — ${flags.join("; ")}` : ""}`);
     }
@@ -61,8 +64,8 @@ export function exportMarkdown(view: RosterView): string {
   for (const s of view.sections) {
     out.push("", `## ${s.section}`, "", "| Unit | Models | Wargear | Notes | Points |", "|---|---|---|---|---|");
     for (const v of s.units) {
-      const models = v.groups.map((g) => `${g.count}× ${g.profileName}`).join(", ");
-      const wargear = [...new Set(v.groups.flatMap((g) => g.wargear))].join(", ");
+      const models = allGroups(v).map((g) => `${g.count}× ${g.profileName}`).join(", ");
+      const wargear = [...new Set(allGroups(v).flatMap((g) => g.wargear))].join(", ");
       const notes = [v.unit.isWarlord ? "Warlord" : "", v.enhancement ? `Enh: ${v.enhancement.name}` : "", v.host ? `${v.unit.attachedTo?.role === "support" ? "Supports" : "Leads"} ${v.host.name}` : ""].filter(Boolean).join("; ");
       out.push(`| ${v.name} | ${models} | ${wargear} | ${notes} | ${v.points} |`);
     }

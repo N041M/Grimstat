@@ -25,6 +25,8 @@ export function ProfilePage() {
   const { confirm, dialog } = useConfirm();
   const [email, setEmail] = useState("");
   const [phase, setPhase] = useState<"idle" | "sending" | "sent" | "finishing">("idle");
+  /** The code typed from the email, for a device the link cannot reach: the app on a home screen. */
+  const [typed, setTyped] = useState("");
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [handle, setHandle] = useState("");
   const [savingHandle, setSavingHandle] = useState(false);
@@ -65,14 +67,36 @@ export function ProfilePage() {
   }, [user.anonymous, notify]);
   useEffect(() => void loadDevices(), [loadDevices]);
 
-  const send = async (): Promise<void> => {
+  const send = async (again = false): Promise<void> => {
     setPhase("sending");
     try {
       await auth().start(email);
       setPhase("sent");
+      if (again) notify(t("profile.resent"), "success");
     } catch (e) {
       notify(e instanceof Error ? e.message : String(e), "error");
+      setPhase(again ? "sent" : "idle");
+    }
+  };
+
+  /** The same sign-in as the link's, with the code typed rather than carried. */
+  const finishTyped = async (): Promise<void> => {
+    const code = typed.trim();
+    if (!code) return;
+    setPhase("finishing");
+    try {
+      const u = await auth().finish(code);
+      setTyped("");
+      notify(t("profile.welcome", { email: u.displayName }), "success");
       setPhase("idle");
+    } catch (e) {
+      if (e instanceof SignInDeclined) {
+        notify(t("profile.declined"), "info");
+        setPhase("idle");
+      } else {
+        notify(e instanceof Error ? e.message : String(e), "error");
+        setPhase("sent");
+      }
     }
   };
 
@@ -124,7 +148,33 @@ export function ProfilePage() {
             {phase === "finishing" ? (
               <p className="data-note">{t("profile.finishing")}</p>
             ) : phase === "sent" ? (
-              <p className="data-note">{t("profile.checkEmail")}</p>
+              <>
+                <p className="data-note">{t("profile.checkEmail", { email: email.trim() })}</p>
+                <form
+                  className="field-row"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void finishTyped();
+                  }}
+                >
+                  <label className="grow">
+                    <span className="t-meta">{t("profile.code")}</span>
+                    <input type="text" inputMode="text" autoComplete="one-time-code" autoCapitalize="none" spellCheck={false} placeholder="abcd-efgh" value={typed} onChange={(e) => setTyped(e.target.value)} />
+                  </label>
+                  <button type="submit" className="primary" disabled={!typed.trim()}>
+                    {t("profile.signInWithCode")}
+                  </button>
+                </form>
+                <p className="data-note">{t("profile.homeScreenCode")}</p>
+                <div className="data-actions">
+                  <button type="button" onClick={() => void send(true)}>
+                    {t("profile.resend")}
+                  </button>
+                  <button type="button" className="ghost" onClick={() => setPhase("idle")}>
+                    {t("profile.changeEmail")}
+                  </button>
+                </div>
+              </>
             ) : (
               <form
                 className="field-row"

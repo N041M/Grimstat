@@ -12,8 +12,19 @@ import { bodyText, type StoredBody } from "./codec";
 import type { Deps } from "./deps";
 
 const HANDLE = /^[a-z0-9](?:[a-z0-9-]{1,18}[a-z0-9])?$/;
-/** Paths and names a handle could be confused with. */
-const RESERVED = new Set(["api", "l", "u", "www", "admin", "grimstat", "about", "profile", "data", "armies", "help", "support", "mail", "hello", "root", "null", "undefined"]);
+/**
+ * Names nobody gets. Paths of the site, names that read as the site's own or as staff, test names,
+ * and words a page address should not be.
+ */
+const RESERVED = new Set([
+  ...["api", "l", "u", "s", "r", "www", "app", "apps", "static", "assets", "public", "index", "home"],
+  ...["calculator", "scenarios", "armies", "army", "collection", "codex", "analyses", "battle", "play", "data", "profile", "about", "overrides", "share", "links"],
+  ...["grimstat", "grim-stat", "official", "staff", "team", "admin", "admins", "administrator", "mod", "moderator", "moderators", "owner", "root", "sysadmin", "system", "sys", "bot", "bots", "dev", "developer", "developers"],
+  ...["support", "help", "helpdesk", "info", "contact", "mail", "email", "hello", "noreply", "no-reply", "postmaster", "webmaster", "abuse", "security", "legal", "privacy", "terms", "billing", "sales", "press"],
+  ...["test", "tests", "tester", "testing", "test-user", "testuser", "demo", "sample", "example", "guest", "anonymous", "anon", "user", "users", "account", "accounts", "login", "signin", "sign-in", "signup", "sign-up", "register", "settings", "me", "you", "unknown", "deleted", "removed"],
+  ...["null", "undefined", "nan", "true", "false", "none", "void"],
+  ...["gamesworkshop", "games-workshop", "warhammer", "warhammer40k", "warhammer-40k", "40k", "wahapedia", "bsdata", "battlescribe", "newrecruit", "new-recruit"],
+]);
 
 /** The handle as stored, or a reason it cannot be. */
 export function normaliseHandle(raw: string): { handle: string } | { error: string } {

@@ -31,7 +31,8 @@ export function exportRosterPrintHtml(roster: Roster, snapshot: Snapshot): strin
   parts.push(`<h2>Army list</h2><table><tr><th>Unit</th><th>Models</th><th>Wargear</th><th>Notes</th><th>Pts</th></tr>`);
   for (const s of view.sections) for (const v of s.units) {
     const notes = [v.unit.isWarlord ? "Warlord" : "", v.enhancement ? `Enh: ${v.enhancement.name}` : "", v.host ? `${v.unit.attachedTo?.role === "support" ? "Supports" : "Leads"} ${v.host.name}` : ""].filter(Boolean).join("; ");
-    parts.push(`<tr><td>${esc(v.name)}</td><td>${v.groups.map((g) => `${g.count}× ${esc(g.profileName)}`).join(", ")}</td><td>${esc([...new Set(v.groups.flatMap((g) => g.wargear))].join(", "))}</td><td>${esc(notes)}</td><td>${v.points}</td></tr>`);
+    const groups = [...v.groups, ...v.companions.flatMap((c) => c.groups)];
+    parts.push(`<tr><td>${esc(v.name)}</td><td>${groups.map((g) => `${g.count}× ${esc(g.profileName)}`).join(", ")}</td><td>${esc([...new Set(groups.flatMap((g) => g.wargear))].join(", "))}</td><td>${esc(notes)}</td><td>${v.points}</td></tr>`);
   }
   parts.push(`</table>`);
 

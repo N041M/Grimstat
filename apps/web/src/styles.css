@@ -2630,6 +2630,16 @@ table.data input.dice {
 .group-name strong {
   color: var(--ink);
 }
+/* Splitting a group: a count and a button on one line, under the group's head. */
+.group-split {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.group-split-count input[type="number"] {
+  width: 3.4rem;
+}
 .wargear-list {
   max-height: none;
 }
@@ -2729,6 +2739,18 @@ table.data input.dice {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+}
+/* The search box, two quick filters and the Codex's filter button on one line, which wraps when
+   the panel is narrow. */
+.add-unit-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.add-unit-tools .search-wrap {
+  flex: 1 1 200px;
+  min-width: 0;
 }
 .add-unit-head > strong {
   flex: none;
@@ -5323,9 +5345,10 @@ a.btn:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* The unit's name is what the row is for, so the badges beside it give way first. A led squad
-     in a transport carries two of them, and without this the name went to "War…". */
-  flex: 1 1 auto;
+  /* The name is as wide as its text, so the badges sit beside it rather than at the far end of
+     the cell, where the Warlord mark read as part of the Role column. When the row is short of
+     room the badges give way first: the name keeps its first characters. */
+  flex: 0 1 auto;
   min-width: 7ch;
 }
 .ut-nest {
@@ -5360,8 +5383,18 @@ a.btn:hover {
   overflow: visible;
   color: var(--muted);
 }
+/* A unit with nothing to fix says so in green with a check, so the column reads at a glance. In
+   the faint grey it had, the word was taken for an empty cell. */
 .ut-status-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 10px;
+  color: var(--good);
+}
+.ut-status-ok svg {
+  width: 11px;
+  height: 11px;
 }
 /* The count opens the checks it counts, so it keeps the cell's own type rather than a button's. */
 .ut-status-btn {
@@ -6577,6 +6610,15 @@ button.val-row:hover {
 .about-list li + li {
   margin-top: 6px;
 }
+.about-install {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px 22px;
+  margin-bottom: 10px;
+}
+.about-install .about-art-group {
+  margin-top: 4px;
+}
 .about-links {
   display: flex;
   gap: 14px;
@@ -7028,14 +7070,17 @@ button.val-row:hover {
   margin: 0 0 6px;
   padding: 0;
 }
+/* A row is marked by a flat band at its left edge, as the roster's rows are. A rounded outline
+   round the row curved in at the corners and matched nothing else in the app. */
 .battle-unit {
   display: flex;
   align-items: center;
   gap: 7px;
   width: 100%;
   padding: 5px 6px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-input);
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
   background: none;
   color: var(--ink);
   text-align: left;
@@ -7045,11 +7090,11 @@ button.val-row:hover {
   background: var(--hover);
 }
 .battle-unit.is-selected {
-  border-color: var(--ink-2);
+  border-left-color: var(--accent);
   background: var(--hover);
 }
 .battle-unit.is-target {
-  border-color: var(--accent);
+  border-left-color: var(--ink-2);
 }
 .battle-swatch {
   flex: none;

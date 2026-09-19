@@ -17,6 +17,7 @@ export type { AbilityEffects } from "./patterns";
 export { hitGate, woundGate, woundTarget, pUnsaved, damagePMF, attacksPMF, sustainedPMF, classifyHit, classifyWound } from "./attack";
 export type { HitOpts, WoundOpts, SaveOpts } from "./attack";
 export { constraints11e, BATTLE_SIZES, RESERVES_FRACTION, reservesLimit, startsInReserves } from "./constraints";
+export { checkAllies, checkCompanions } from "./allies";
 export { compositionBounds } from "./composition";
 export type { BattleSizeRules } from "./constraints";
 export { parseTransportCapacity, unitFitsKeywords, hasKeywordPhrase } from "./transport";

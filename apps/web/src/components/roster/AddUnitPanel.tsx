@@ -5,12 +5,17 @@ import { pointsFor } from "@grimstat/game-40k-11e";
 import type { PointsBarModel } from "../../lib/pointsBar";
 import { compositionBounds, duplicateCap, factionLineage, PICKER_GROUP_ORDER, pickerGroupOf, type PickerGroup } from "../../lib/roster";
 import { fmtInt } from "../../lib/format";
+import { ALL_FACTIONS, codexKeywords, filterCount, NO_FILTERS, parseFilters, passesFilters, type CodexFilters } from "../../lib/codex";
+import { usePersistedSetting } from "../../hooks/usePersistedSetting";
 import { battleSizeKey } from "../../pages/ArmiesPage";
+import { CodexFilterMenu } from "../codex/shared";
 import { Icon } from "../ui";
 import { t, tn, type I18nKey } from "../../i18n";
 
 /** How long the "Added …" line stays in the live region after the last add. */
 const ADDED_NOTE_MS = 4000;
+/** The picker's filters are remembered across armies, as the Codex's are: a hidden Legends stays hidden. */
+const PICKER_FILTERS_KEY = "roster.picker.filters";
 
 interface Props {
   roster: Roster;
@@ -53,6 +58,12 @@ interface Row {
 export function AddUnitPanel({ roster, snapshot, points, onAdd, onClose }: Props) {
   const [search, setSearch] = useState("");
   const [hl, setHl] = useState(0);
+  /** The Codex's filters, the same panel: type, Legends, keywords, points and profile. */
+  const [filters, setFilters] = usePersistedSetting<CodexFilters>(PICKER_FILTERS_KEY, NO_FILTERS, parseFilters);
+  /** Two questions only this list asks: whether the unit fits the points left, and whether it is in the army already. */
+  const [fits, setFits] = useState(false);
+  const [fresh, setFresh] = useState(false);
+  const narrowed = filterCount(filters) + (fits ? 1 : 0) + (fresh ? 1 : 0);
   // `at` makes two adds of the same datasheet distinct, so the clearing timer restarts each time.
   const [added, setAdded] = useState<{ name: string; at: number } | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
@@ -79,20 +90,25 @@ export function AddUnitPanel({ roster, snapshot, points, onAdd, onClose }: Props
   // A sub-faction army fields its own datasheets and its parent codex's.
   const lineage = useMemo(() => new Set(factionLineage(snapshot, roster.factionId)), [snapshot, roster.factionId]);
 
+  /** The keywords the picker's sheets carry, for the keyword filter to offer. */
+  const keywords = useMemo(() => codexKeywords(snapshot.data.datasheets.filter((d) => lineage.has(d.factionId)), ALL_FACTIONS), [snapshot, lineage]);
+
   const groups = useMemo(() => {
     const q = search.trim().toLowerCase();
     const sizeName = t(battleSizeKey(roster.battleSize));
     const rows: Row[] = snapshot.data.datasheets
-      .filter((d) => lineage.has(d.factionId) && (!q || d.name.toLowerCase().includes(q) || (d.role ?? "").toLowerCase().includes(q)))
+      .filter((d) => lineage.has(d.factionId) && (!q || d.name.toLowerCase().includes(q) || (d.role ?? "").toLowerCase().includes(q)) && passesFilters(d, snapshot, filters))
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((ds) => {
         const n = copies.get(ds.id) ?? 0;
         const cap = duplicateCap(ds, roster.battleSize);
         const blocked = n >= cap.cap ? (cap.kind === "epicHero" ? t("roster.units.capEpic") : cap.kind === "battleline" ? t("roster.units.capBattleline", { cap: cap.cap, size: sizeName }) : t("roster.units.capReached", { cap: cap.cap, size: sizeName })) : undefined;
         return { ds, size: sizeLabel(ds), points: pointsFor(ds, snapshot, compositionBounds(ds).min), copies: n, blocked };
-      });
+      })
+      // A unit whose price is unknown may fit, so it is kept.
+      .filter((r) => (!fits || r.points === undefined || r.points <= points.spare) && (!fresh || r.copies === 0));
     return PICKER_GROUP_ORDER.map((group) => ({ group, rows: rows.filter((r) => pickerGroupOf(r.ds) === group) })).filter((g) => g.rows.length);
-  }, [snapshot, lineage, roster.battleSize, search, copies]);
+  }, [snapshot, lineage, roster.battleSize, search, copies, filters, fits, fresh, points.spare]);
 
   const flat = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
 
@@ -116,6 +132,8 @@ export function AddUnitPanel({ roster, snapshot, points, onAdd, onClose }: Props
   const budget = over ? t("roster.units.budgetOver", { used: fmtInt(points.total), limit: fmtInt(points.limit), over: fmtInt(points.over) }) : t("roster.units.budget", { used: fmtInt(points.total), limit: fmtInt(points.limit), spare: fmtInt(points.spare) });
 
   const onKey = (e: KeyboardEvent) => {
+    // The filter panel answers its own keys: arrows in a number box, Escape to close it.
+    if ((e.target as HTMLElement).closest(".popover")) return;
     if (e.key === "Escape") {
       e.preventDefault();
       onClose();
@@ -145,20 +163,29 @@ export function AddUnitPanel({ roster, snapshot, points, onAdd, onClose }: Props
           <Icon name="close" />
         </button>
       </div>
-      <div className="search-wrap">
-        <Icon name="search" />
-        <input
-          ref={input}
-          type="search"
-          value={search}
-          placeholder={t("roster.units.searchPlaceholder")}
-          aria-label={t("roster.units.search")}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setHl(0);
-            setAdded(undefined);
-          }}
-        />
+      <div className="add-unit-tools">
+        <div className="search-wrap">
+          <Icon name="search" />
+          <input
+            ref={input}
+            type="search"
+            value={search}
+            placeholder={t("roster.units.searchPlaceholder")}
+            aria-label={t("roster.units.search")}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setHl(0);
+              setAdded(undefined);
+            }}
+          />
+        </div>
+        <button type="button" className={`codex-filter-btn ${fits ? "on" : ""}`.trim()} aria-pressed={fits} onClick={() => setFits((v) => !v)}>
+          {t("roster.units.fits")}
+        </button>
+        <button type="button" className={`codex-filter-btn ${fresh ? "on" : ""}`.trim()} aria-pressed={fresh} onClick={() => setFresh((v) => !v)}>
+          {t("roster.units.fresh")}
+        </button>
+        <CodexFilterMenu filters={filters} onFilters={setFilters} keywords={keywords} />
       </div>
       <div className="small ok-text add-unit-live" role="status" aria-live="polite">
         {added ? (
@@ -209,6 +236,21 @@ export function AddUnitPanel({ roster, snapshot, points, onAdd, onClose }: Props
               </ul>
             </div>
           ))
+        ) : narrowed ? (
+          <div className="empty small">
+            {t("roster.units.noneFiltered")}{" "}
+            <button
+              type="button"
+              className="sm"
+              onClick={() => {
+                setFilters(NO_FILTERS);
+                setFits(false);
+                setFresh(false);
+              }}
+            >
+              {t("roster.units.clearFilters")}
+            </button>
+          </div>
         ) : (
           <div className="empty small">{t("roster.units.none")}</div>
         )}

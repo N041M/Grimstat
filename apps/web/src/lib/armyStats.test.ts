@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Datasheet, Roster, RosterUnit } from "@grimstat/schema";
+import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import type { UnitCost } from "@grimstat/resolver";
 import { armyComposition, casualtyAt, casualtyCurve, CASUALTY_LEVELS, compareStatRows, pointsForLoss, sortStatRows, summariseSaturation, type ArmyStatRow, type CasualtyUnit, type SaturationCandidate, type StatSort } from "./armyStats";
 
@@ -51,6 +51,9 @@ function roster(units: RosterUnit[], pointsLimit = 1000): Roster {
   } as Roster;
 }
 
+/** A snapshot holding the datasheets the test built, which is all the section logic reads. */
+const snapOf = (datasheets: Map<string, Datasheet>): Snapshot => ({ data: { datasheets: [...datasheets.values()], priceRules: [], abilities: [] } }) as unknown as Snapshot;
+
 const cost = (n: number): UnitCost => ({ base: n, wargear: 0, enhancement: 0, total: n, copyIndex: 0, modelCount: 1, notes: [] }) as UnitCost;
 
 /** Battleline ×10 (W2 OC2) led by a character, a dedicated transport and an allied unit. */
@@ -76,7 +79,7 @@ function army() {
 describe("armyComposition", () => {
   it("totals points, models, wounds and objective control across the whole list", () => {
     const { roster: r, datasheets, costs } = army();
-    const c = armyComposition(r, datasheets, costs);
+    const c = armyComposition(r, snapOf(datasheets), datasheets, costs);
 
     expect(c.points).toBe(430);
     expect(c.limit).toBe(1000);
@@ -93,7 +96,7 @@ describe("armyComposition", () => {
 
   it("folds an attached character into its host, so the army has three units on the table", () => {
     const { roster: r, datasheets, costs } = army();
-    const c = armyComposition(r, datasheets, costs);
+    const c = armyComposition(r, snapOf(datasheets), datasheets, costs);
 
     expect(c.units).toBe(3);
     expect(c.rows.map((x) => x.id)).toEqual(["u-troops", "u-ride", "u-merc"]);
@@ -113,7 +116,7 @@ describe("armyComposition", () => {
     const datasheets = new Map([["d", sheet("d")]]);
     const units = [unit("a", "d", 1, { attachedTo: { unitId: "b", role: "leader" } }), unit("b", "d", 1, { attachedTo: { unitId: "c", role: "leader" } }), unit("c", "d", 1)];
     const costs = new Map(units.map((u) => [u.id, cost(100)]));
-    const c = armyComposition(roster(units), datasheets, costs);
+    const c = armyComposition(roster(units), snapOf(datasheets), datasheets, costs);
 
     expect(c.rows).toHaveLength(1);
     expect(c.rows[0]!.id).toBe("c");
@@ -128,7 +131,7 @@ describe("armyComposition", () => {
     const datasheets = new Map([["d", sheet("d")]]);
     const units = [unit("a", "d", 1, { attachedTo: { unitId: "b", role: "leader" } }), unit("b", "d", 1, { attachedTo: { unitId: "a", role: "leader" } })];
     const costs = new Map(units.map((u) => [u.id, cost(100)]));
-    const c = armyComposition(roster(units), datasheets, costs);
+    const c = armyComposition(roster(units), snapOf(datasheets), datasheets, costs);
 
     expect(c.units).toBe(2);
     expect(c.models).toBe(2);
@@ -139,7 +142,7 @@ describe("armyComposition", () => {
   it("keeps a unit attached to itself on the table", () => {
     const datasheets = new Map([["d", sheet("d")]]);
     const units = [unit("a", "d", 1, { attachedTo: { unitId: "a", role: "leader" } })];
-    const c = armyComposition(roster(units), datasheets, new Map([["a", cost(100)]]));
+    const c = armyComposition(roster(units), snapOf(datasheets), datasheets, new Map([["a", cost(100)]]));
 
     expect(c.rows.map((x) => x.id)).toEqual(["a"]);
     expect(c.points).toBe(100);
@@ -148,7 +151,7 @@ describe("armyComposition", () => {
 
   it("splits points by role with each entry under its own role, matching the header bar", () => {
     const { roster: r, datasheets, costs } = army();
-    const c = armyComposition(r, datasheets, costs);
+    const c = armyComposition(r, snapOf(datasheets), datasheets, costs);
 
     expect(c.roles.map((x) => x.section)).toEqual(["battleline", "transport", "character", "allied"]);
     expect(c.roles.map((x) => x.points)).toEqual([200, 90, 80, 60]);
@@ -162,7 +165,7 @@ describe("armyComposition", () => {
 
   it("counts faction and unit keywords per roster entry, busiest first", () => {
     const { roster: r, datasheets, costs } = army();
-    const c = armyComposition(r, datasheets, costs);
+    const c = armyComposition(r, snapOf(datasheets), datasheets, costs);
 
     expect(c.factionKeywords).toEqual([
       { name: "FX", count: 3 },
@@ -179,12 +182,12 @@ describe("armyComposition", () => {
 
   it("de-duplicates a keyword repeated on one datasheet and ignores case and padding", () => {
     const datasheets = new Map<string, Datasheet>([["troops", sheet("troops", { keywords: ["Infantry", "INFANTRY", " infantry "], factionKeywords: [] })]]);
-    const c = armyComposition(roster([unit("a", "troops", 1), unit("b", "troops", 1)]), datasheets, new Map());
+    const c = armyComposition(roster([unit("a", "troops", 1), unit("b", "troops", 1)]), snapOf(datasheets), datasheets, new Map());
     expect(c.unitKeywords).toEqual([{ name: "INFANTRY", count: 2 }]);
   });
 
   it("describes an empty army without dividing by zero", () => {
-    const c = armyComposition(roster([]), new Map(), new Map());
+    const c = armyComposition(roster([]), snapOf(new Map()), new Map(), new Map());
     expect(c).toMatchObject({ units: 0, models: 0, wounds: 0, oc: 0, points: 0, pointsPerModel: 0 });
     expect(c.rows).toEqual([]);
     expect(c.roles).toEqual([]);
@@ -193,7 +196,7 @@ describe("armyComposition", () => {
 
   it("counts a unit with no costing as zero points and reports the overrun", () => {
     const datasheets = new Map<string, Datasheet>([["troops", sheet("troops")]]);
-    const c = armyComposition(roster([unit("a", "troops", 1), unit("b", "troops", 1)], 100), datasheets, new Map([["a", cost(160)]]));
+    const c = armyComposition(roster([unit("a", "troops", 1), unit("b", "troops", 1)], 100), snapOf(datasheets), datasheets, new Map([["a", cost(160)]]));
     expect(c.points).toBe(160);
     expect(c.over).toBe(60);
     expect(c.spare).toBe(0);

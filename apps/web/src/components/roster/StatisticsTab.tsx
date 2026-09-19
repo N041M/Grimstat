@@ -172,7 +172,7 @@ export function StatisticsTab({ roster, snapshot, datasheets, costById, onSelect
   const [target, setTarget] = usePersistedSetting<StatTargetId>("roster.stats.target", "marine-like", parseTarget);
   const [sort, setSort] = useState<StatSort>({ col: "points", dir: "desc" });
 
-  const composition = useMemo(() => armyComposition(roster, datasheets, costById), [roster, datasheets, costById]);
+  const composition = useMemo(() => armyComposition(roster, snapshot, datasheets, costById), [roster, snapshot, datasheets, costById]);
   const solve = useArmyStats(roster, snapshot, composition.rows, composition.rows.length > 0);
 
   const rows: ArmyStatRow[] = useMemo(

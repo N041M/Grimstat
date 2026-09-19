@@ -40,7 +40,7 @@ function server() {
   const fetchImpl: FetchLike = async (input, init) => app.request(input, init);
   const signIn = async (email: string): Promise<string> => {
     await fetchImpl("/api/auth/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
-    const code = /code=([0-9a-f]+)/.exec(mail[mail.length - 1]!)![1]!;
+    const code = /code=([a-z0-9-]+)/.exec(mail[mail.length - 1]!)![1]!;
     const res = await fetchImpl("/api/auth/finish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, device: "test" }) });
     return ((await res.json()) as { token: string }).token;
   };
@@ -244,7 +244,7 @@ describe("signing in on a device", () => {
     await a.collection.put({ id: "ds", name: "n", factionId: "f", factionName: "F", owned: 2, painted: 0, updatedAt: NOW });
     const account = createAccount({ db: a, fetchImpl: s.fetchImpl });
     await account.start("a@example.com");
-    const code = /code=([0-9a-f]+)/.exec(s.mail[0]!)![1]!;
+    const code = /code=([a-z0-9-]+)/.exec(s.mail[0]!)![1]!;
     const user = await account.finish(code);
     expect(user.anonymous).toBe(false);
     expect(user.displayName).toBe("a@example.com");
@@ -270,13 +270,13 @@ describe("signing in on a device", () => {
     let answer = false;
     const account = createAccount({ db: a, fetchImpl: s.fetchImpl, askReplace: async () => answer });
     await account.start("b@example.com");
-    const code = /code=([0-9a-f]+)/.exec(s.mail[0]!)![1]!;
+    const code = /code=([a-z0-9-]+)/.exec(s.mail[0]!)![1]!;
     await expect(account.finish(code)).rejects.toBeInstanceOf(SignInDeclined);
     expect((await a.rosters.get("r1"))?.name).toBe("theirs");
 
     answer = true;
     await account.start("b@example.com");
-    const code2 = /code=([0-9a-f]+)/.exec(s.mail[1]!)![1]!;
+    const code2 = /code=([a-z0-9-]+)/.exec(s.mail[1]!)![1]!;
     await account.finish(code2);
     expect(await a.rosters.count()).toBe(0);
     expect(await a.outbox.count()).toBe(0);

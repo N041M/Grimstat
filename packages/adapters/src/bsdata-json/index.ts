@@ -19,6 +19,9 @@ import { parseAP, parseDice, parseInches, parseInt0, parseTargetNumber, parseWea
 import { glossaryKey, parseWeaponKeywords } from "@grimstat/effects";
 import { parseCoreAbility } from "../util/core-abilities";
 
+/** An Enhancement's name as a key: lower case, without the "(Upgrade)" or "(Aura)" a catalogue appends. */
+const enhancementKey = (name: string): string => name.trim().toLowerCase().replace(/\s*\((?:upgrade|aura)\)$/, "");
+
 export const BSDATA_REPO = "BSData/wh40k-11e";
 export const BSDATA_RAW_URL = `https://raw.githubusercontent.com/${BSDATA_REPO}/`;
 export const BSDATA_TREE_URL = `https://api.github.com/repos/${BSDATA_REPO}/git/trees/main`;
@@ -996,7 +999,12 @@ export function parse(input: AdapterInput, opts: ParseOptions = {}): AdapterOutp
   if (ref) sourceRef.ref = ref;
 
   const stubs: DatasheetStub[] = datasheets;
-  const out: AdapterOutput = { sourceRef, warnings, factions, datasheets: stubs, abilities, detachments, enhancements, priceRules, wargearPrices, publications, staging };
+  // A catalogue lists a detachment's Enhancements as costed upgrades under every unit that may
+  // take them, and read as wargear they were offered to any unit. They are Enhancements, and
+  // `enhancements` carries them with the detachment they belong to.
+  const enhancementKeys = new Set(enhancements.map((e) => enhancementKey(e.name)));
+  const gear = wargearPrices.filter((w) => !enhancementKeys.has(enhancementKey(w.item)));
+  const out: AdapterOutput = { sourceRef, warnings, factions, datasheets: stubs, abilities, detachments, enhancements, priceRules, wargearPrices: gear, publications, staging };
   if (gameSystem) out.gameSystem = gameSystem;
   if (glossaryByKey.size) out.glossary = [...glossaryByKey.values()];
   return out;

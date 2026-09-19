@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BattleSize, Datasheet, Roster, RosterUnit } from "@grimstat/schema";
 import { constraints11e, unitFromRosterUnit } from "@grimstat/game-40k-11e";
-import { rosterSummary, validateRoster } from "@grimstat/resolver";
+import { companionsOf, rosterSummary, validateRoster } from "@grimstat/resolver";
 import { useApp } from "../state/AppContext";
 import { useRosterEditor, useRosterSnapshot } from "../hooks/useRosterEditor";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
@@ -52,7 +52,7 @@ export function RosterEditorPage({ id }: { id: string }) {
   const faction = snapshot?.data.factions.find((f) => f.id === roster?.factionId);
 
   // Points by role for the header bar; attached characters count under their own role.
-  const points = useMemo(() => (roster ? pointsBarModel(roster.units.map((u) => ({ section: sectionOf(datasheets.get(u.datasheetId), roster), points: costById.get(u.id)?.total ?? 0 })), roster.pointsLimit) : undefined), [roster, datasheets, costById]);
+  const points = useMemo(() => (roster && snapshot ? pointsBarModel(roster.units.map((u) => ({ section: sectionOf(datasheets.get(u.datasheetId), roster, snapshot), points: costById.get(u.id)?.total ?? 0 })), roster.pointsLimit) : undefined), [roster, snapshot, datasheets, costById]);
 
   /*
    * Escape closes the inspector / export / history panel (the phone sheet handles its own).
@@ -70,6 +70,26 @@ export function RosterEditorPage({ id }: { id: string }) {
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
+  }, []);
+
+  /*
+   * A press on the page outside the inspector and outside anything that acts closes the inspector,
+   * the way a press on the table's empty ground clears a selection. Rows, buttons, fields, the
+   * dock's lists and any layer over the page keep the selection, since a press on them is a
+   * choice of its own.
+   */
+  const editorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Listened for on the document, since the editor's own element is not there yet while the
+    // army loads, and a listener put on it then would be put on nothing.
+    const on = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target || !editorRef.current?.contains(target)) return;
+      if (target.closest(".roster-inspector, .roster-sheet, .ut-row, .dock, button, input, select, textarea, a, label, summary, [role='dialog'], [role='menu'], .popover")) return;
+      setSelectedId(undefined);
+    };
+    document.addEventListener("pointerdown", on);
+    return () => document.removeEventListener("pointerdown", on);
   }, []);
 
   const selectUnit = useCallback((unitId: string) => {
@@ -93,9 +113,14 @@ export function RosterEditorPage({ id }: { id: string }) {
   const selectedIndex = roster && selected ? roster.units.indexOf(selected) : -1;
   const selectedIssues = useMemo(() => (selectedIndex >= 0 ? diagnosticsForUnit(diagnostics, selectedIndex) : []), [diagnostics, selectedIndex]);
 
+  /**
+   * Adding a unit also adds the models that come with it. Canis Rex brings Sir Hekhtur, who has a
+   * datasheet of his own and no points, the way the official app lists him.
+   */
   const addUnit = (ds: Datasheet, edit: boolean) => {
     const u = newRosterUnit(ds);
-    update((r) => ({ ...r, units: [...r.units, u] }));
+    const extras = snapshot ? companionsOf(snapshot, ds).map(newRosterUnit) : [];
+    update((r) => ({ ...r, units: [...r.units, u, ...extras] }));
     if (edit) {
       setAdding(false);
       selectUnit(u.id);
@@ -126,6 +151,17 @@ export function RosterEditorPage({ id }: { id: string }) {
   const removeMany = (units: RosterUnit[]) => {
     if (!roster || units.length === 0) return;
     const ids = new Set(units.map((u) => u.id));
+    // A model that came with a unit goes with it, unless another copy of the unit stays to keep it.
+    for (const u of units) {
+      const ds = datasheets.get(u.datasheetId);
+      const companions = ds && snapshot ? companionsOf(snapshot, ds) : [];
+      for (const c of companions) {
+        const hosts = roster.units.filter((h) => h.datasheetId === u.datasheetId && !ids.has(h.id)).length;
+        const spare = roster.units.filter((h) => h.datasheetId === c.id && !ids.has(h.id));
+        for (const extra of spare.slice(hosts)) ids.add(extra.id);
+      }
+    }
+    units = roster.units.filter((u) => ids.has(u.id));
     // `update` runs the function it is given straight away, so the record is ready below.
     let removed: RemovedUnit[] = [];
     update((r) => {
@@ -154,6 +190,14 @@ export function RosterEditorPage({ id }: { id: string }) {
     } catch (e) {
       notify(t("roster.inspector.openFailed"), "error", [e instanceof Error ? e.message : String(e)]);
     }
+  };
+
+  /** Put the army on the battle table. The save goes first, so the table reads what is on screen. */
+  const toBattle = (side: "attacker" | "defender") => {
+    if (!roster) return;
+    void editor.flush().then(() => {
+      location.hash = `#/battle?${side}=${encodeURIComponent(roster.id)}`;
+    });
   };
 
   const restore = (r: Roster, revision: number) => {
@@ -217,7 +261,7 @@ export function RosterEditorPage({ id }: { id: string }) {
   const panelOpen = mode !== "unit" || (!!selected && tab === "units");
 
   return (
-    <div className={`roster-editor ${narrow ? "narrow" : ""}`.trim()}>
+    <div className={`roster-editor ${narrow ? "narrow" : ""}`.trim()} ref={editorRef}>
       <div className="roster-main">
         <RosterHeader
           roster={roster}
@@ -245,6 +289,7 @@ export function RosterEditorPage({ id }: { id: string }) {
             setTab("units");
             setAdding((v) => !v);
           }}
+          onBattle={toBattle}
           tab={tab}
           onTab={setTab}
         >

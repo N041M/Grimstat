@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Datasheet, Diagnostic, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import type { UnitCost } from "@grimstat/resolver";
-import { groupBounds, hasWargear, isCharacterSheet, modelCountOf, printedCopies, toggleWargear, unitDisplayName, wargearChoices, type ModelGroup } from "../../lib/roster";
+import { groupBounds, hasWargear, isCharacterSheet, mergeGroup, modelCountOf, printedCopies, splitGroup, toggleWargear, unitDisplayName, wargearChoices, type ModelGroup } from "../../lib/roster";
 import { canEmbark, loadsByTransport, transportCandidates } from "../../lib/transport";
 import { fmtInt } from "../../lib/format";
 import { DiagnosticItem } from "./DiagnosticItem";
@@ -32,8 +32,24 @@ interface WargearItem {
   copies: number;
 }
 
-function GroupEditor({ group, profileName, bounds, items, onChange }: { group: ModelGroup; profileName: string; bounds: { min: number; max: number | undefined }; items: WargearItem[]; onChange: (g: ModelGroup) => void }) {
+interface GroupEditorProps {
+  group: ModelGroup;
+  profileName: string;
+  bounds: { min: number; max: number | undefined };
+  items: WargearItem[];
+  onChange: (g: ModelGroup) => void;
+  /** Take some of the models into a group of their own, to give them other wargear. */
+  onSplit: (count: number) => void;
+  /** Whether an earlier group holds the same profile, so this one can go back into it. */
+  canMerge: boolean;
+  onMerge: () => void;
+}
+
+function GroupEditor({ group, profileName, bounds, items, onChange, onSplit, canMerge, onMerge }: GroupEditorProps) {
   const [other, setOther] = useState("");
+  const [splitCount, setSplitCount] = useState(1);
+  const splitMax = group.count - 1;
+  const canSplit = splitMax >= 1;
   const known = new Set(items.map((i) => i.name.toLowerCase()));
   const extras = group.wargear.filter((w) => !known.has(w.toLowerCase()));
   /*
@@ -100,6 +116,26 @@ function GroupEditor({ group, profileName, bounds, items, onChange }: { group: M
           </button>
         </span>
       </div>
+      {canSplit || canMerge ? (
+        <div className="group-split">
+          {canSplit ? (
+            <>
+              <label className="group-split-count">
+                <span className="sr-only">{t("roster.inspector.splitCount")}</span>
+                <input type="number" min={1} max={splitMax} value={Math.min(splitCount, splitMax)} onChange={(e) => setSplitCount(Math.max(1, Math.min(splitMax, Math.floor(Number(e.target.value)) || 1)))} />
+              </label>
+              <button type="button" className="sm" onClick={() => onSplit(Math.min(splitCount, splitMax))}>
+                {t("roster.inspector.split")}
+              </button>
+            </>
+          ) : null}
+          {canMerge ? (
+            <button type="button" className="sm ghost" onClick={onMerge}>
+              {t("roster.inspector.merge")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="check-list wargear-list">
         {items.map((it) => (
           <label key={it.name} className="inline">
@@ -156,7 +192,11 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
 
   const items = useMemo<WargearItem[]>(() => {
     if (!ds) return [];
-    const prices = snapshot.data.wargearPrices.filter((w) => w.datasheetId === ds.id);
+    // A priced item with an Enhancement's name is that Enhancement, which the Enhancement field
+    // offers when its detachment is in the army. Listed here it read as wargear any unit could take.
+    const enhancementNames = new Set(snapshot.data.enhancements.map((e) => e.name.toLowerCase().replace(/\s*\((?:upgrade|aura)\)$/, "")));
+    const isEnhancement = (item: string) => enhancementNames.has(item.toLowerCase().replace(/\s*\((?:upgrade|aura)\)$/, ""));
+    const prices = snapshot.data.wargearPrices.filter((w) => w.datasheetId === ds.id && !isEnhancement(w.item));
     const out: WargearItem[] = wargearChoices(ds).map((name) => ({ name, price: prices.find((p) => p.item.toLowerCase() === name.toLowerCase())?.points, copies: printedCopies(ds, name) }));
     for (const p of prices) if (!out.some((i) => i.name.toLowerCase() === p.item.toLowerCase())) out.push({ name: p.item, price: p.points, copies: 1 });
     return out;
@@ -195,6 +235,9 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
   }, [roster.detachments, snapshot]);
 
   const setGroup = (i: number, g: ModelGroup) => onChange({ ...unit, models: unit.models.map((m, j) => (j === i ? g : m)) });
+  const split = (i: number, count: number) => onChange({ ...unit, models: splitGroup(unit.models, i, count) });
+  const merge = (i: number) => onChange({ ...unit, models: mergeGroup(unit.models, i) });
+  const canMerge = (i: number) => unit.models.slice(0, i).some((g) => g.modelProfileId === unit.models[i]?.modelProfileId);
   const setAttach = (hostId: string) => {
     const { attachedTo: _a, ...rest } = unit;
     const h = hosts.find((x) => x.unit.id === hostId);
@@ -257,8 +300,9 @@ export function UnitInspector({ unit, roster, snapshot, datasheets, cost, issues
         <section className="insp-section">
           <h4 className="inspector-h">{t("roster.inspector.modelsWargear")}</h4>
           {unit.models.map((g, i) => (
-            <GroupEditor key={`${g.modelProfileId}-${i}`} group={g} profileName={ds?.models.find((m) => m.id === g.modelProfileId)?.name ?? ds?.name ?? g.modelProfileId} bounds={groupBounds(ds, unit.models, i)} items={items} onChange={(ng) => setGroup(i, ng)} />
+            <GroupEditor key={`${g.modelProfileId}-${i}`} group={g} profileName={ds?.models.find((m) => m.id === g.modelProfileId)?.name ?? ds?.name ?? g.modelProfileId} bounds={groupBounds(ds, unit.models, i)} items={items} onChange={(ng) => setGroup(i, ng)} onSplit={(n) => split(i, n)} canMerge={canMerge(i)} onMerge={() => merge(i)} />
           ))}
+          <p className="small muted insp-note">{t("roster.inspector.splitHint")}</p>
         </section>
 
         {isCharacter ? (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, useLayoutEffect } from "react";
 import { t } from "../i18n";
 
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
@@ -406,6 +406,26 @@ export function Popover({ open, onClose, trigger, children, label, align = "star
     }
     return () => restoreFocus(opener);
   }, [open]);
+  /*
+   * The layer hangs off its trigger, and a trigger near the edge of its panel hangs it over the
+   * edge: the checks behind a unit's status opened across the rail when the table sat in a narrow
+   * panel. Once open, the layer is measured against the nearest box that clips it and moved back
+   * inside, and narrowed when it is wider than the box.
+   */
+  useLayoutEffect(() => {
+    const el = layer.current;
+    if (!open || !el) return;
+    el.style.transform = "";
+    el.style.maxWidth = "";
+    if (getComputedStyle(el).position === "fixed") return;
+    const box = clipBox(el);
+    if (!box) return;
+    const gap = 6;
+    if (el.getBoundingClientRect().width > box.width - gap * 2) el.style.maxWidth = `${Math.max(120, box.width - gap * 2)}px`;
+    const r = el.getBoundingClientRect();
+    const dx = r.left < box.left + gap ? box.left + gap - r.left : r.right > box.right - gap ? box.right - gap - r.right : 0;
+    if (dx) el.style.transform = `translateX(${dx}px)`;
+  }, [open]);
   return (
     <div className={`pop-wrap ${className ?? ""}`.trim()} ref={ref}>
       {trigger}
@@ -416,6 +436,18 @@ export function Popover({ open, onClose, trigger, children, label, align = "star
       ) : null}
     </div>
   );
+}
+
+/** The box of the nearest ancestor that clips what overflows it, or the viewport. */
+function clipBox(el: HTMLElement): { left: number; right: number; width: number } | undefined {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const { overflow, overflowX } = getComputedStyle(p);
+    if (/hidden|auto|scroll|clip/.test(`${overflow} ${overflowX}`)) {
+      const r = p.getBoundingClientRect();
+      return { left: r.left, right: r.right, width: r.width };
+    }
+  }
+  return { left: 0, right: window.innerWidth, width: window.innerWidth };
 }
 
 // ---------- confirmation ----------

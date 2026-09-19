@@ -1,4 +1,5 @@
 import type { Datasheet, Detachment, Diagnostic, Enhancement, PriceRule, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
+import { companionHostOf } from "./factions";
 
 /**
  * Roster legality and costing. ONE module shared by UI, CLI and tests.
@@ -8,6 +9,7 @@ import type { Datasheet, Detachment, Diagnostic, Enhancement, PriceRule, Roster,
 
 export { compositionSegments, compositionPart, compositionParts, compositionLineBounds, compositionBranches, compositionBounds, profileBounds } from "./composition";
 export type { CompositionPart, CompositionLineLike, ProfileBounds } from "./composition";
+export { factionKeywordsOf, isOwnFaction, companionHostOf, companionsOf } from "./factions";
 
 export interface RosterContext {
   roster: Roster;
@@ -148,7 +150,8 @@ function buildContext(roster: Roster, snapshot: Snapshot): RosterContext {
     } else if (sheet?.fallbackPoints !== undefined) {
       base = sheet.fallbackPoints;
       notes.push("Using fallback points (no price rule in snapshot).");
-    } else notes.push("No points found for this unit.");
+    } else if (!sheet || !companionHostOf(snapshot, sheet)) notes.push("No points found for this unit.");
+    // A model that comes with another unit is paid for in that unit's points.
     let wargear = 0;
     const prices = snapshot.data.wargearPrices.filter((w) => w.datasheetId === unit.datasheetId);
     for (const m of unit.models) for (const item of m.wargear) {

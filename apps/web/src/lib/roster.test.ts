@@ -224,13 +224,13 @@ describe("loadout-based wargear prefill", () => {
 describe("sections", () => {
   const roster = newRoster({ snapshot, factionId: "f1", battleSize: "incursion" });
   it("classifies by flags, role text and keywords", () => {
-    expect(sectionOf(captain, roster)).toBe("character");
-    expect(sectionOf(squad, roster)).toBe("battleline");
-    expect(sectionOf(sheet({ id: "t", name: "t", models: captain.models, role: "Dedicated Transports" }), roster)).toBe("transport");
-    expect(sectionOf(sheet({ id: "k", name: "k", models: captain.models, keywords: ["Character"] }), roster)).toBe("character");
-    expect(sectionOf(sheet({ id: "v", name: "v", models: captain.models, role: "Vehicles" }), roster)).toBe("other");
-    expect(sectionOf(sheet({ id: "a", name: "a", models: captain.models, factionId: "f2" }), roster)).toBe("allied");
-    expect(sectionOf(undefined, roster)).toBe("other");
+    expect(sectionOf(captain, roster, snapshot)).toBe("character");
+    expect(sectionOf(squad, roster, snapshot)).toBe("battleline");
+    expect(sectionOf(sheet({ id: "t", name: "t", models: captain.models, role: "Dedicated Transports" }), roster, snapshot)).toBe("transport");
+    expect(sectionOf(sheet({ id: "k", name: "k", models: captain.models, keywords: ["Character"] }), roster, snapshot)).toBe("character");
+    expect(sectionOf(sheet({ id: "v", name: "v", models: captain.models, role: "Vehicles" }), roster, snapshot)).toBe("other");
+    expect(sectionOf(sheet({ id: "a", name: "a", models: captain.models, factionId: "f2" }), roster, snapshot)).toBe("allied");
+    expect(sectionOf(undefined, roster, snapshot)).toBe("other");
   });
   it("creates rosters with the battle-size limit", () => {
     expect(roster.pointsLimit).toBe(1000);

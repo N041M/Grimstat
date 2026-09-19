@@ -1,6 +1,6 @@
 import type { Datasheet, Detachment, Enhancement, Faction, ModelProfile, Roster, RosterDetachment, RosterUnit, Snapshot } from "@grimstat/schema";
 import { normaliseName } from "@grimstat/snapshot";
-import { compositionBranches, profileBounds } from "@grimstat/resolver";
+import { compositionBranches, profileBounds, isOwnFaction } from "@grimstat/resolver";
 
 /** Battle-size labels as written by the GW app, New Recruit and BattleScribe. */
 export const SIZE_BY_LABEL: Record<string, Roster["battleSize"]> = { "combat patrol": "combat-patrol", incursion: "incursion", "strike force": "strike-force", onslaught: "onslaught" };
@@ -209,11 +209,21 @@ export class RosterImportContext {
     const contained = this.index.names.filter((n) => n.key.length >= 5 && (key.includes(n.key) || n.key.includes(key))).map((n) => n.ds);
     if (!contained.length) return undefined;
     const inFaction = contained.filter((d) => d.factionId === this.factionId);
-    return (inFaction.length ? inFaction : contained).sort((a, b) => b.name.length - a.name.length)[0];
+    const inFamily = inFaction.length ? inFaction : contained.filter((d) => this.own(d));
+    return (inFamily.length ? inFamily : contained).sort((a, b) => b.name.length - a.name.length)[0];
+  }
+
+  /**
+   * Whether a datasheet is the army's own as the rules read it: a Blood Angels list takes its
+   * Intercessors from the Space Marines book, and a Land Raider named in it is that book's, not
+   * the Grey Knights'.
+   */
+  private own(ds: Datasheet): boolean {
+    return this.factionId !== undefined && isOwnFaction(ds, { factionId: this.factionId }, this.snapshot);
   }
 
   private pick(cands: readonly Datasheet[]): Datasheet | undefined {
-    return cands.find((d) => d.factionId === this.factionId) ?? cands[0];
+    return cands.find((d) => d.factionId === this.factionId) ?? cands.find((d) => this.own(d)) ?? cands[0];
   }
 
   /** Detachment by name; prefers the roster's faction, falls back to any faction. */

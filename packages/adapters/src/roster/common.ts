@@ -1,5 +1,5 @@
 import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
-import { createContext, type RosterContext } from "@grimstat/resolver";
+import { companionHostOf, createContext, isOwnFaction, type RosterContext } from "@grimstat/resolver";
 
 export const SIZE_LABEL: Record<Roster["battleSize"], string> = {
   "combat-patrol": "Combat Patrol",
@@ -11,9 +11,9 @@ export const SIZE_LABEL: Record<Roster["battleSize"], string> = {
 
 export type Section = "CHARACTERS" | "BATTLELINE" | "DEDICATED TRANSPORTS" | "OTHER DATASHEETS" | "ALLIED UNITS";
 
-export function sectionOf(ds: Datasheet | undefined, roster: Roster): Section {
+export function sectionOf(ds: Datasheet | undefined, roster: Roster, snapshot: Snapshot): Section {
   if (!ds) return "OTHER DATASHEETS";
-  if (ds.factionId !== roster.factionId) return "ALLIED UNITS";
+  if (!isOwnFaction(ds, roster, snapshot)) return "ALLIED UNITS";
   if (ds.isCharacter) return "CHARACTERS";
   if (ds.isBattleline) return "BATTLELINE";
   const role = (ds.role ?? "").toLowerCase();
@@ -42,6 +42,10 @@ export interface UnitView {
   modelCount: number;
   host?: UnitView;
   attached: UnitView[];
+  /** The unit this one's model comes with, when it comes with one: Sir Hekhtur's is Canis Rex. */
+  partOf?: UnitView;
+  /** Units whose models come with this one. They are written inside its entry. */
+  companions: UnitView[];
   enhancement?: { name: string; cost: number };
   groups: Array<{ profileName: string; count: number; wargear: string[] }>;
 }
@@ -60,6 +64,7 @@ export function rosterView(roster: Roster, snapshot: Snapshot): RosterView {
       points: cost.total,
       modelCount: cost.modelCount,
       attached: [],
+      companions: [],
       groups: u.models.map((g) => ({ profileName: ds?.models.find((m) => m.id === g.modelProfileId)?.name ?? ds?.name ?? "Model", count: g.count, wargear: g.wargear })),
     };
     if (enh) v.enhancement = { name: enh.name, cost: enh.cost };
@@ -72,7 +77,17 @@ export function rosterView(roster: Roster, snapshot: Snapshot): RosterView {
       v.host.attached.push(v);
     }
   }
-  const sections = SECTION_ORDER.map((section) => ({ section, units: [...byId.values()].filter((v) => sectionOf(v.ds, roster) === section) })).filter((s) => s.units.length);
+  // A model that comes with another unit is written inside that unit's entry, the way the official
+  // app writes Sir Hekhtur under Canis Rex. Each such model takes the first host with room.
+  for (const v of byId.values()) {
+    const hostSheet = v.ds && companionHostOf(snapshot, v.ds);
+    if (!hostSheet) continue;
+    const host = [...byId.values()].find((h) => h.unit.datasheetId === hostSheet.id && !h.companions.some((c) => c.unit.datasheetId === v.unit.datasheetId));
+    if (!host) continue;
+    v.partOf = host;
+    host.companions.push(v);
+  }
+  const sections = SECTION_ORDER.map((section) => ({ section, units: [...byId.values()].filter((v) => !v.partOf && sectionOf(v.ds, roster, snapshot) === section) })).filter((s) => s.units.length);
   const faction = snapshot.data.factions.find((f) => f.id === roster.factionId);
   return {
     ctx,

@@ -30,7 +30,7 @@ type Env = { Variables: Vars };
 type App = Hono<Env>;
 
 const StartRequest = z.object({ email: z.string().min(3).max(254) });
-const FinishRequest = z.object({ code: z.string().min(16).max(128), device: z.string().max(200).default("") });
+const FinishRequest = z.object({ code: z.string().min(8).max(128), device: z.string().max(200).default("") });
 const HandleRequest = z.object({ handle: z.string().max(40) });
 
 /** Request bodies larger than these are refused before they are read. */

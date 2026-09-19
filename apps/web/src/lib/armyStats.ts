@@ -1,4 +1,4 @@
-import type { Datasheet, Roster, RosterUnit } from "@grimstat/schema";
+import type { Datasheet, Roster, RosterUnit, Snapshot } from "@grimstat/schema";
 import type { UnitCost } from "@grimstat/resolver";
 import { modelCountOf, sectionOf, unitDisplayName, type UnitSection } from "./roster";
 import { BAR_ORDER, pointsBarModel, type SegmentTone } from "./pointsBar";
@@ -110,7 +110,7 @@ function tally(counts: Map<string, number>): KeywordCount[] {
  * `costById` is the resolver's per-unit costing keyed by roster unit id; a unit missing from it
  * counts as 0 points, exactly as the units list shows it.
  */
-export function armyComposition(roster: Roster, datasheets: Map<string, Datasheet>, costById: Map<string, UnitCost>): ArmyComposition {
+export function armyComposition(roster: Roster, snapshot: Snapshot, datasheets: Map<string, Datasheet>, costById: Map<string, UnitCost>): ArmyComposition {
   const byId = new Map(roster.units.map((u) => [u.id, u] as const));
   const pointsOf = (u: RosterUnit) => costById.get(u.id)?.total ?? 0;
 
@@ -143,7 +143,7 @@ export function armyComposition(roster: Roster, datasheets: Map<string, Datashee
   for (const section of ["character", "battleline", "transport", "other", "allied"] as UnitSection[]) {
     for (const host of top) {
       const ds = datasheets.get(host.datasheetId);
-      if (sectionOf(ds, roster) !== section) continue;
+      if (sectionOf(ds, roster, snapshot) !== section) continue;
       const members = [host, ...(attachedByHost.get(host.id) ?? [])];
       let models = 0;
       let wounds = 0;
@@ -162,12 +162,12 @@ export function armyComposition(roster: Roster, datasheets: Map<string, Datashee
 
   // ---- role split: every entry under its own role, so the total matches the header bar ----
   const bar = pointsBarModel(
-    roster.units.map((u) => ({ section: sectionOf(datasheets.get(u.datasheetId), roster), points: pointsOf(u) })),
+    roster.units.map((u) => ({ section: sectionOf(datasheets.get(u.datasheetId), roster, snapshot), points: pointsOf(u) })),
     roster.pointsLimit,
   );
   const agg = new Map<UnitSection, { units: number; models: number; points: number }>();
   for (const u of roster.units) {
-    const section = sectionOf(datasheets.get(u.datasheetId), roster);
+    const section = sectionOf(datasheets.get(u.datasheetId), roster, snapshot);
     const cur = agg.get(section) ?? { units: 0, models: 0, points: 0 };
     cur.units += 1;
     cur.models += modelCountOf(u);

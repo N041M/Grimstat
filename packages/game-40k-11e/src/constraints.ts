@@ -1,6 +1,7 @@
 import { modelCountOf } from "@grimstat/resolver";
 import type { ConstraintSet, RosterContext } from "@grimstat/resolver";
 import { compositionBounds, profileBounds } from "./composition";
+import { checkAllies, checkCompanions } from "./allies";
 import { checkLoadout } from "./loadout";
 import { unitFromDatasheet, unitFromRosterUnit } from "./resolve";
 import type { BattleSize, Diagnostic, RosterUnit } from "@grimstat/schema";
@@ -128,12 +129,13 @@ export const constraints11e: ConstraintSet = {
           const n = ctx.copies(u.datasheetId).length;
           const cap = ds.isEpicHero ? 1 : ds.isBattleline ? rules.duplicates * 2 : rules.duplicates;
           if (n > cap) out.push({ severity: "error", code: "units.duplicates", message: `${ds.name} appears ${n} times; the limit is ${cap}${ds.isEpicHero ? " (Epic Hero)" : ds.isBattleline ? " (Battleline)" : ""}.`, path: path(ctx, u) });
-          if (ds.factionId !== ctx.roster.factionId) out.push({ severity: "warn", code: "units.faction", message: `${ds.name} is from another faction (allies are not validated yet).`, path: path(ctx, u) });
           if (ds.isLegends) out.push({ severity: "warn", code: "units.legends", message: `${ds.name} is a Legends datasheet; check event rules.`, path: path(ctx, u) });
         }
         return out;
       },
     },
+    { code: "allies", run: checkAllies },
+    { code: "units.companion", run: checkCompanions },
     {
       code: "units.size",
       run: (ctx) => {

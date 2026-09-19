@@ -1,15 +1,16 @@
 /**
  * Signing in with an email address and nothing else.
  *
- * `start` stores a hashed one-time code and mails a link carrying it. `finish` takes the code back
- * from the app, makes the user on the first visit, and hands out a session token that the device
- * keeps and sends with every request. Tokens and codes are stored hashed, so a copy of the database
- * signs nobody in.
+ * `start` stores a hashed one-time code and mails it, both as a link and as eight characters to
+ * type. The link is for the browser the email is read in. The typed code is for the app on a home
+ * screen, which the link cannot reach. `finish` takes the code back from the app, makes the user on
+ * the first visit, and hands out a session token that the device keeps and sends with every
+ * request. Tokens and codes are stored hashed, so a copy of the database signs nobody in.
  *
  * The limits exist because every start sends one email from a daily allowance of a hundred. Five
  * starts per address per hour, twenty per network address per hour, and ninety a day in all.
  */
-import { hashIp, randomToken, sha256 } from "./crypto";
+import { hashIp, normaliseCode, randomToken, sha256, signInCode } from "./crypto";
 import { iso, plusMs, type Deps } from "./deps";
 import { SESSION_IDLE_DAYS } from "./purge";
 
@@ -55,10 +56,11 @@ export async function start(deps: Deps, email: string, ip: string): Promise<void
   ]);
   if ((byEmail?.n ?? 0) >= LIMIT_PER_EMAIL || (byIp?.n ?? 0) >= LIMIT_PER_IP) throw new AuthError(429, "Too many sign-in emails in the last hour. Try again later.");
   if ((today?.n ?? 0) >= LIMIT_PER_DAY) throw new AuthError(503, "Sign-in is paused for today. Everything else keeps working.");
-  const code = randomToken(32);
+  const code = signInCode();
   await deps.db.run("INSERT INTO logins (code_hash, email, ip_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)", await sha256(code), address, ipHash, iso(now), plusMs(now, CODE_LIFE));
-  const link = `${deps.appUrl}/#/profile?code=${code}`;
-  await deps.mail.send(address, "Sign in to Grimstat", `Open this link to sign in. It works once and for fifteen minutes.\n\n${link}\n\nIf you did not ask for it, ignore this message and nothing happens.`);
+  const shown = `${code.slice(0, 4)}-${code.slice(4)}`;
+  const link = `${deps.appUrl}/#/profile?code=${shown}`;
+  await deps.mail.send(address, "Sign in to Grimstat", `Open this link to sign in. It works once and for fifteen minutes.\n\n${link}\n\nIf you use Grimstat from your home screen, type this code on its Profile page instead: ${shown}\n\nIf you did not ask for it, ignore this message and nothing happens.`);
 }
 
 export interface Finished {
@@ -68,7 +70,7 @@ export interface Finished {
 
 export async function finish(deps: Deps, code: string, deviceName: string): Promise<Finished> {
   const now = deps.now();
-  const codeHash = await sha256(code.trim());
+  const codeHash = await sha256(normaliseCode(code));
   // The code is spent in one statement that only succeeds while it is unspent and unexpired, so
   // two requests carrying the same code cannot both get a session.
   const spent = await deps.db.run("UPDATE logins SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at >= ?", iso(now), codeHash, iso(now));

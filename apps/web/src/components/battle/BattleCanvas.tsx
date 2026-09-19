@@ -148,6 +148,8 @@ const MUSTER_RUNGS = 3;
 const MUSTER_RUNG = 2.4;
 /** A rung of the same ladder seen from straight above, in CSS pixels: a label's height and a gap. */
 const MUSTER_RUNG_PX = 22;
+/** Screen space kept between a label and the one it was moved off, in CSS pixels. */
+const LABEL_GAP_PX = 2;
 /**
  * How a unit label grows when the table is zoomed in.
  *
@@ -756,12 +758,16 @@ function LabelProjector({ labelsRef, units }: { labelsRef: RefObject<HTMLDivElem
     return units.map((u) => (u.reserve ? (rung[u.side]++ % MUSTER_RUNGS) * MUSTER_RUNG : 0));
   }, [units]);
 
+  /** Where each label lands this frame, in CSS pixels, reused frame to frame. */
+  const placed = useMemo(() => [] as { el: HTMLElement; x: number; y: number; w: number; h: number }[], []);
+
   useFrame(() => {
     const host = labelsRef.current;
     if (!host) return;
     const children = host.children;
     const scale = Math.min(LABEL_SCALE_MAX, Math.max(1, viewScale.pxPerInch / LABEL_REST_PX_PER_INCH));
     const topDown = (camera as OrthographicCamera).isOrthographicCamera === true;
+    placed.length = 0;
     for (let i = 0; i < units.length && i < children.length; i++) {
       const unit = units[i]!;
       const el = children[i] as HTMLElement;
@@ -779,8 +785,24 @@ function LabelProjector({ labelsRef, units }: { labelsRef: RefObject<HTMLDivElem
       const behind = scratch.z > 1;
       el.style.visibility = behind ? "hidden" : "visible";
       if (behind) continue;
+      const x = ((scratch.x + 1) / 2) * size.width;
+      let y = ((1 - scratch.y) / 2) * size.height - liftPx;
+      // Two labels on one patch of screen are read as neither. A label that would land on one
+      // placed before it moves up until it is clear, so a row of units seen from a low angle
+      // stacks its names instead of piling them. Earlier units keep their place, so nothing
+      // shuffles as the camera moves.
+      const w = el.offsetWidth * scale;
+      const h = el.offsetHeight * scale;
+      const left = x - w / 2;
+      for (let pass = 0; pass < placed.length; pass++) {
+        const p = placed[pass]!;
+        if (left >= p.x + p.w || left + w <= p.x || y <= p.y - p.h || y - h >= p.y) continue;
+        y = p.y - p.h - LABEL_GAP_PX;
+        pass = -1;
+      }
+      placed.push({ el, x: left, y, w, h });
       // Placed by its bottom centre, then grown about that point, so the anchor holds as it scales.
-      el.style.transform = `translate(${((scratch.x + 1) / 2) * size.width}px, ${((1 - scratch.y) / 2) * size.height - liftPx}px) scale(${scale}) translate(-50%, -100%)`;
+      el.style.transform = `translate(${x}px, ${y}px) scale(${scale}) translate(-50%, -100%)`;
     }
   });
   return null;

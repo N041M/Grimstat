@@ -3,9 +3,8 @@ import { unitIndexFromPath } from "../../lib/roster";
 import { t } from "../../i18n";
 
 /**
- * One diagnostic line: the message, then the suggested fix when the rule offers one. The rule's
- * internal code is not printed, and stays available as the tooltip. Rows that point at a unit
- * become a button when `onSelectUnit` is given.
+ * One diagnostic line: the message, then the suggested fix when the rule offers one. Rows that
+ * point at a unit become a button when `onSelectUnit` is given.
  */
 export function DiagnosticItem({ d, onSelectUnit }: { d: Diagnostic; onSelectUnit?: (index: number) => void }) {
   const idx = unitIndexFromPath(d.path);
@@ -20,9 +19,9 @@ export function DiagnosticItem({ d, onSelectUnit }: { d: Diagnostic; onSelectUni
     </>
   );
   return (
-    <li className="val-item" title={d.code}>
+    <li className="val-item">
       {idx !== undefined && onSelectUnit ? (
-        <button type="button" className="val-row" onClick={() => onSelectUnit(idx)} title={`${t("roster.diagnostics.goTo")} · ${d.code}`}>
+        <button type="button" className="val-row" onClick={() => onSelectUnit(idx)} title={t("roster.diagnostics.goTo")}>
           {body}
         </button>
       ) : (
