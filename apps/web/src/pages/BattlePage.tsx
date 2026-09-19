@@ -14,7 +14,9 @@ import { useApp } from "../state/AppContext";
 import { useStoreVersion } from "../hooks/useStoreVersion";
 import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { usePersistedSetting } from "../hooks/usePersistedSetting";
+import type { Roster } from "@grimstat/schema";
 import { db } from "../db";
+import { ImportArmyButton } from "../components/roster/ImportArmyButton";
 import { EDIT_STEP, copyLayout, isBuiltIn, moveObjective, movePiece, placePiece, placePieceSnapped, removeObjective, removePiece, rotatePiece, snapPoint } from "../lib/layoutEdit";
 import { BUILT_IN, listLayouts, saveLayout, type StoredLayout } from "../lib/layoutStore";
 import { canRedo, canUndo, canUndoUnits, editorReducer, initialEditor } from "../lib/battleEditor";
@@ -58,6 +60,7 @@ import {
   rotateVerdict,
   sampleBattle,
   sampleForce,
+  showcaseForce,
   dropMark,
   sightBetween,
   tapeDistance,
@@ -149,6 +152,8 @@ const NO_REACH: readonly ReachNode[] = [];
 
 /** What the army select calls the sample force. Every other option is a stored army's id. */
 const SAMPLE_FORCE = "sample";
+/** The sample force with one unit of every other class, for looking at every figure. */
+const SHOWCASE_FORCE = "showcase";
 const parseForceId = (raw: unknown): string | undefined => (typeof raw === "string" && raw ? raw : undefined);
 
 /** A refusal the table reported, shown over the table until the next thing happens. */
@@ -468,8 +473,8 @@ export function BattlePage() {
       // A force put back from the settings on the way in is not something the player just did, so it
       // does not go on the undo stack; a force they picked does.
       const record = !quiet;
-      if (id === SAMPLE_FORCE) {
-        dispatch({ type: "units", change: (b) => withForce(b, side, sampleForce(side)), record });
+      if (id === SAMPLE_FORCE || id === SHOWCASE_FORCE) {
+        dispatch({ type: "units", change: (b) => withForce(b, side, id === SAMPLE_FORCE ? sampleForce(side) : showcaseForce(side)), record });
         return;
       }
       const roster = await db.rosters.get(id);
@@ -485,7 +490,8 @@ export function BattlePage() {
       }
       const force = unitsFromRoster(roster, snap, side);
       if (!force.length) {
-        notify(t("battle.force.empty", { name: roster.name }), "error");
+        // An army with no units yet is a different case from one whose datasheets are missing.
+        notify(t(roster.units.length ? "battle.force.empty" : "battle.force.noUnits", { name: roster.name }), "error");
         return;
       }
       dispatch({ type: "units", change: (b) => withForce(b, side, force), record });
@@ -503,6 +509,15 @@ export function BattlePage() {
       void applyForce(side, id);
     },
     [applyForce, setAttackerForce, setDefenderForce],
+  );
+
+  /** An army imported from a saved file on this screen goes straight onto the side it was imported for. */
+  const importForce = useCallback(
+    (side: Side, saved: readonly Roster[]) => {
+      const first = saved[0];
+      if (first) chooseForce(side, first.id);
+    },
+    [chooseForce],
   );
 
   useEffect(() => {
@@ -543,7 +558,7 @@ export function BattlePage() {
   const restoredForces = useRef(false);
   useEffect(() => {
     if (restoredForces.current || !attackerForceLoaded || !defenderForceLoaded) return;
-    const wanted = [attackerForce, defenderForce].filter((id) => id !== SAMPLE_FORCE);
+    const wanted = [attackerForce, defenderForce].filter((id) => id !== SAMPLE_FORCE && id !== SHOWCASE_FORCE);
     if (wanted.length && !snapshot) return;
     restoredForces.current = true;
     for (const side of SIDES) {
@@ -1266,6 +1281,7 @@ export function BattlePage() {
               armies={armies}
               forceOf={forceOf}
               onChooseForce={chooseForce}
+              onImportForce={importForce}
               onPick={pickUnit}
               onEdit={editUnit}
               onWithdraw={onWithdraw}
@@ -1469,6 +1485,7 @@ function BattlePanel({
   armies,
   forceOf,
   onChooseForce,
+  onImportForce,
   onPick,
   onEdit,
   onWithdraw,
@@ -1504,6 +1521,8 @@ function BattlePanel({
   /** Which force a side is showing: an army's id, or the sample force. */
   forceOf: (side: Side) => string;
   onChooseForce: (side: Side, id: string) => void;
+  /** An army imported from a saved file, to go on this side. */
+  onImportForce: (side: Side, saved: readonly Roster[]) => void;
   onPick: (id: string | undefined, modelId?: string) => void;
   onEdit: (unitId: string, change: (u: BattleUnit) => BattleUnit) => void;
   onWithdraw: (unitId: string) => void;
@@ -1546,6 +1565,7 @@ function BattlePanel({
                 <span>{t("battle.force.label")}</span>
                 <select className="sm" value={forceOf(side)} onChange={(e) => onChooseForce(side, e.target.value)}>
                   <option value={SAMPLE_FORCE}>{t("battle.force.sample")}</option>
+                  <option value={SHOWCASE_FORCE}>{t("battle.force.showcase")}</option>
                   {armies.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
@@ -1553,6 +1573,7 @@ function BattlePanel({
                   ))}
                 </select>
               </label>
+              <ImportArmyButton className="ghost sm" onImported={(saved) => onImportForce(side, saved)} />
               <ul className={`battle-unit-list ${side}`}>
                 {unitsOf(state, side).map((u) => (
                   <li key={u.id} className="battle-unit-row">

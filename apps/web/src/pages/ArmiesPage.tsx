@@ -15,6 +15,8 @@ import { Dialog, Empty, Field, Icon, Popover, useConfirm } from "../components/u
 import { ProportionBar } from "../components/kit";
 import { PageHeader, useContextNewAction } from "../components/shell";
 import { PictureImport } from "../components/roster/PictureImport";
+import { ImportArmyButton } from "../components/roster/ImportArmyButton";
+import { storeImportedArmies } from "../lib/savedArmies";
 import { t, tn, type I18nKey } from "../i18n";
 
 export const battleSizeKey = (s: BattleSize): I18nKey => `battleSize.${s}` as I18nKey;
@@ -33,7 +35,7 @@ export function typedPointsLimit(text: string): number | undefined {
   return points >= 1 ? points : undefined;
 }
 
-function CardMenu({ name, busy, shared, onDuplicate, onDelete, onShare }: { name: string; busy: boolean; shared?: boolean; onDuplicate: () => void; onDelete: () => void; onShare?: (shared: boolean) => void }) {
+function CardMenu({ name, busy, shared, onBattle, onDuplicate, onDelete, onShare }: { name: string; busy: boolean; shared?: boolean; onBattle: (side: "attacker" | "defender") => void; onDuplicate: () => void; onDelete: () => void; onShare?: (shared: boolean) => void }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const run = (fn: () => void) => () => {
@@ -53,6 +55,12 @@ function CardMenu({ name, busy, shared, onDuplicate, onDelete, onShare }: { name
       }
     >
       <div className="menu" role="menu">
+        {(["attacker", "defender"] as const).map((side) => (
+          <button key={side} type="button" role="menuitem" onClick={run(() => onBattle(side))}>
+            <Icon name="cube" />
+            {t(side === "attacker" ? "roster.battle.attacker" : "roster.battle.defender")}
+          </button>
+        ))}
         <button type="button" role="menuitem" onClick={run(onDuplicate)}>
           <Icon name="copy" />
           {t("armies.duplicate")}
@@ -244,19 +252,7 @@ export function ArmiesPage() {
       notify(t("armies.jsonUnreadable"), "error");
       return;
     }
-    // The ids are read from the database rather than the list on screen, and every army written here
-    // joins the set, so a bundle that carries the same id twice cannot overwrite its own first army.
-    const existing = new Set(await db.rosters.toCollection().primaryKeys());
-    let present = 0;
-    const saved: Roster[] = [];
-    for (const r of parsed.rosters) {
-      const clash = existing.has(r.id);
-      const rec = clash ? cloneRoster(r, t("armies.copyName", { name: r.name })) : r;
-      if (clash) present++;
-      await saveRosterWithVersion(rec);
-      existing.add(rec.id);
-      saved.push(rec);
-    }
+    const { saved, present } = await storeImportedArmies(parsed.rosters, (name) => t("armies.copyName", { name }));
     await refresh();
     setText("");
     setName("");
@@ -395,6 +391,14 @@ export function ArmiesPage() {
               <Icon name="file" />
               {t("armies.importText")}
             </button>
+            <ImportArmyButton
+              disabled={busy}
+              onImported={(saved) => {
+                void refresh();
+                const only = saved.length === 1 ? saved[0] : undefined;
+                if (only) navigate("armies", false, only.id);
+              }}
+            />
             <button type="button" className="ghost" disabled={!items?.length || busy} onClick={exportAll}>
               <Icon name="export" />
               {t("armies.exportAll")}
@@ -603,7 +607,18 @@ export function ArmiesPage() {
                 <a href={hrefFor("armies", r.id)} className="army-card-title">
                   {r.name}
                 </a>
-                <CardMenu name={r.name} busy={busy} shared={r.shared} onDuplicate={() => void duplicate(r)} onDelete={() => void remove(r)} onShare={me.anonymous ? undefined : (shared) => void share(r, shared)} />
+                <CardMenu
+                  name={r.name}
+                  busy={busy}
+                  shared={r.shared}
+                  // The same address the editor's Battle table menu uses: the battle screen takes the army from it.
+                  onBattle={(side) => {
+                    location.hash = `#/battle?${side}=${encodeURIComponent(r.id)}`;
+                  }}
+                  onDuplicate={() => void duplicate(r)}
+                  onDelete={() => void remove(r)}
+                  onShare={me.anonymous ? undefined : (shared) => void share(r, shared)}
+                />
               </div>
               <div className="army-card-kind">
                 {faction} · {t(battleSizeKey(r.battleSize))}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, TerrainIndex, bounds, canSee, canStand, circleBase, coherency, coreSegment, distance, footReach, inBox, inZone, ovalBase, segPolygonDistance, terrain, type ReachNode, type TerrainLayout, type Vec2 } from "@grimstat/board";
+import { CROSSFIRE, OPEN_APPROACH, RUINED_CITY, TerrainIndex, bounds, canSee, canStand, circleBase, coherency, coreSegment, distance, footReach, heightForKeywords, inBox, inZone, ovalBase, segPolygonDistance, terrain, type ReachNode, type TerrainLayout, type Vec2 } from "@grimstat/board";
 import type { ModelProfile } from "@grimstat/schema";
+import { UNIT_CLASS_IDS, unitClassFor } from "./unitArt";
 import {
   anchorOf,
   applyGroupMove,
@@ -47,6 +48,7 @@ import {
   replaceUnit,
   sampleBattle,
   sampleForce,
+  showcaseForce,
   sightBetween,
   tapeDistance,
   translateUnit,
@@ -131,6 +133,26 @@ describe("the sample battle", () => {
   it("gives each side the same units", () => {
     const names = (side: "attacker" | "defender") => state.units.filter((u) => u.side === side).map((u) => u.name);
     expect(names("attacker")).toEqual(names("defender"));
+  });
+});
+
+describe("the force with every unit type", () => {
+  it("has one unit of every class the table draws a figure for, with the sample force first", () => {
+    const force = showcaseForce("attacker");
+    const sample = sampleForce("attacker");
+    expect(force.slice(0, sample.length).map((u) => u.name)).toEqual(sample.map((u) => u.name));
+    expect(new Set(force.map((u) => unitClassFor(u.keywords))).size).toBe(UNIT_CLASS_IDS.length);
+    expect(new Set(force.map((u) => u.id)).size).toBe(force.length);
+    for (const u of force) for (const m of u.models) expect(m.hull.height).toBe(heightForKeywords(u.keywords));
+  });
+
+  it("stands on the muster table like any force, and most of it can be set down", () => {
+    const start = withForce(sampleBattle(OPEN_APPROACH), "defender", showcaseForce("defender"));
+    const mine = start.units.filter((u) => u.side === "defender");
+    expect(mine).toHaveLength(showcaseForce("defender").length);
+    for (const u of mine) expect(u.reserve).toBe(true);
+    const down = freshDeployment(start);
+    expect(deployedUnits(down).filter((u) => u.side === "defender").length).toBeGreaterThan(sampleForce("defender").length);
   });
 
   it("takes whichever layout it is handed", () => {

@@ -1047,18 +1047,45 @@ export function dropMark(pending: Vec3 | undefined, at: Vec3, id: string): { pen
 /**
  * A placeholder force, so the table has something on it before an army is loaded.
  *
- * Invented profiles and invented names: this project ships no Games Workshop data, and a
+ * The profiles and the names are invented. This project ships no Games Workshop data, and a
  * demonstration is no reason to start.
  */
-const SAMPLE: readonly { name: string; move: number; oc: number; count: number; baseMm: number; keywords: string[] }[] = [
-  { name: "battle.sample.lineInfantry", move: 6, oc: 2, count: 10, baseMm: 32, keywords: ["INFANTRY"] },
-  { name: "battle.sample.heavyInfantry", move: 5, oc: 1, count: 5, baseMm: 40, keywords: ["INFANTRY"] },
-  { name: "battle.sample.transport", move: 12, oc: 0, count: 1, baseMm: 100, keywords: ["VEHICLE"] },
-  { name: "battle.sample.walker", move: 8, oc: 3, count: 1, baseMm: 90, keywords: ["MONSTER", "WALKER"] },
+interface SampleSpec {
+  readonly name: string;
+  readonly move: number;
+  readonly oc: number;
+  readonly count: number;
+  readonly base: () => Footprint;
+  readonly keywords: string[];
+}
+const SAMPLE: readonly SampleSpec[] = [
+  { name: "battle.sample.lineInfantry", move: 6, oc: 2, count: 10, base: () => circleBase(32), keywords: ["INFANTRY"] },
+  { name: "battle.sample.heavyInfantry", move: 5, oc: 1, count: 5, base: () => circleBase(40), keywords: ["INFANTRY"] },
+  { name: "battle.sample.transport", move: 12, oc: 0, count: 1, base: () => circleBase(100), keywords: ["VEHICLE", "TRANSPORT"] },
+  { name: "battle.sample.walker", move: 8, oc: 3, count: 1, base: () => circleBase(90), keywords: ["MONSTER", "WALKER"] },
 ];
 
-function sampleUnit(side: Side, i: number): BattleUnit {
-  const spec = SAMPLE[i % SAMPLE.length]!;
+/**
+ * The sample force with one unit of every other class the table draws a figure for, so every
+ * figure can be seen without loading an army. The sample force stays small, since it is what the
+ * table opens with; this one is chosen.
+ */
+const SHOWCASE: readonly SampleSpec[] = [
+  ...SAMPLE,
+  { name: "battle.sample.commander", move: 6, oc: 1, count: 1, base: () => circleBase(40), keywords: ["INFANTRY", "CHARACTER"] },
+  { name: "battle.sample.bikes", move: 12, oc: 2, count: 3, base: () => ovalBase(75, 42), keywords: ["BIKE"] },
+  { name: "battle.sample.cavalry", move: 10, oc: 2, count: 3, base: () => ovalBase(60, 35), keywords: ["MOUNTED"] },
+  { name: "battle.sample.beasts", move: 10, oc: 2, count: 3, base: () => circleBase(50), keywords: ["BEAST"] },
+  { name: "battle.sample.swarm", move: 6, oc: 0, count: 3, base: () => circleBase(40), keywords: ["SWARM"] },
+  { name: "battle.sample.monster", move: 8, oc: 3, count: 1, base: () => ovalBase(105, 70), keywords: ["MONSTER"] },
+  { name: "battle.sample.tank", move: 10, oc: 3, count: 1, base: () => ovalBase(120, 92), keywords: ["VEHICLE"] },
+  { name: "battle.sample.gunship", move: 20, oc: 0, count: 1, base: () => circleBase(60), keywords: ["VEHICLE", "AIRCRAFT", "FLY"] },
+  { name: "battle.sample.titan", move: 10, oc: 10, count: 1, base: () => circleBase(160), keywords: ["VEHICLE", "WALKER", "TITANIC"] },
+  { name: "battle.sample.bunker", move: 0, oc: 0, count: 1, base: () => circleBase(152.4), keywords: ["FORTIFICATION"] },
+];
+
+function sampleUnit(side: Side, i: number, specs: readonly SampleSpec[] = SAMPLE): BattleUnit {
+  const spec = specs[i % specs.length]!;
   const height = heightForKeywords(spec.keywords);
   return {
     id: `${side}-${i}`,
@@ -1067,13 +1094,16 @@ function sampleUnit(side: Side, i: number): BattleUnit {
     move: spec.move,
     oc: spec.oc,
     keywords: spec.keywords,
-    models: Array.from({ length: spec.count }, (_, m) => ({ id: `${side}-${i}-${m}`, hull: { pos: { x: 0, y: 0, z: 0 }, facing: 0, foot: circleBase(spec.baseMm), height } })),
+    models: Array.from({ length: spec.count }, (_, m) => ({ id: `${side}-${i}-${m}`, hull: { pos: { x: 0, y: 0, z: 0 }, facing: 0, foot: spec.base(), height } })),
     reserve: true,
   };
 }
 
 /** The sample force for one side, off the board. */
 export const sampleForce = (side: Side): BattleUnit[] => SAMPLE.map((_, i) => sampleUnit(side, i));
+
+/** The sample force and one unit of every other class, for one side, off the board. */
+export const showcaseForce = (side: Side): BattleUnit[] => SHOWCASE.map((_, i) => sampleUnit(side, i, SHOWCASE));
 
 /** A layout, its zones and the units given, as they are: nothing is placed. */
 export function battleWith(layout: TerrainLayout, units: readonly BattleUnit[]): BattleState {

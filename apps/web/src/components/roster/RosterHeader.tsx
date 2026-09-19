@@ -2,13 +2,14 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { BattleSize, Diagnostic, Roster } from "@grimstat/schema";
 import type { SaveStatus } from "../../hooks/useRosterEditor";
 import type { PointsBarModel } from "../../lib/pointsBar";
-import { hrefFor } from "../../router";
+import { hrefFor, navigate } from "../../router";
 import { BATTLE_SIZE_ORDER } from "../../lib/roster";
 import { PageHeader } from "../shell";
 import { PointsBar } from "./PointsBar";
 import { battleSizeKey } from "../../pages/ArmiesPage";
 import { Icon, Popover, useTabInView, useEdgeFade } from "../ui";
 import { DiagnosticItem } from "./DiagnosticItem";
+import { ImportArmyButton } from "./ImportArmyButton";
 import { t, tn, type I18nKey } from "../../i18n";
 
 export type EditorMode = "unit" | "export" | "history";
@@ -151,6 +152,8 @@ export function RosterHeader({ roster, factionName, points, status, savedAt, err
       subtitle={subtitle}
       actions={
         <>
+          {/* One army imported opens in this editor. Several go to the list, which shows them all. */}
+          <ImportArmyButton onImported={(saved) => (saved.length === 1 ? navigate("armies", false, saved[0]!.id) : navigate("armies"))} />
           <button type="button" aria-pressed={mode === "export"} onClick={() => toggle("export")}>
             {t("roster.export")}
           </button>
