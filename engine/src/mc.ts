@@ -1,0 +1,275 @@
+import { makeSampler, mulberry32 } from "./rng";
+import { decode, groupOrder, makeStateSpace, saveClasses } from "./allocation";
+import type { EngineInput, EngineOutput, WeaponParams, WeaponTrace } from "./types";
+import { mean, pmfFromHistogram } from "./pmf";
+import { survivalFromPMF } from "./stats";
+
+interface Prepared {
+  w: WeaponParams;
+  attacks: () => number;
+  sustained: (() => number) | null;
+  damage: Array<() => number>;
+  mortal: Array<() => number>;
+  order: number[];
+  /** Sampler over the unmodified save result when saves are resolved lowest first, or null when they are taken one at a time. */
+  saveFace: (() => number) | null;
+  /** Per group, which save results inflict damage, indexed by die face. Empty when `saveFace` is null. */
+  damageOn: boolean[][];
+}
+
+export function runMonteCarlo(input: EngineInput): EngineOutput {
+  const rand = mulberry32(input.seed ?? 0x9e3779b9);
+  const iters = Math.max(100, input.mcIterations);
+  // The same reading of the defender the state space uses, so both backends run the same unit.
+  const space = makeStateSpace(input.groups);
+  const groups = space.groups;
+  const G = groups.length;
+  const prepared: Prepared[] = input.weapons
+    .filter((w) => w.count > 0)
+    .map((w) => ({
+      w,
+      attacks: makeSampler(w.attacks, rand),
+      sustained: w.sustained ? makeSampler(w.sustained, rand) : null,
+      damage: w.groups.map((g) => makeSampler(g.damage, rand)),
+      mortal: w.groups.map((g) => makeSampler(g.mortalDamage, rand)),
+      order: groupOrder(groups, input.allocation, w.precision),
+      // Only groups differing in which results save them need the pooled order; otherwise the
+      // one-at-a-time draw is the same distribution. The exact backend does the same.
+      saveFace: input.saveOrder === "ascending" && w.saveFaces && saveClasses(w) ? makeSampler(w.saveFaces, rand) : null,
+      damageOn: w.groups.map((g) => g.damageOn ?? []),
+    }));
+
+  const totalModels = groups.reduce((s, g) => s + g.models, 0);
+  const totalWounds = groups.reduce((s, g) => s + g.models * g.wounds, 0);
+  const slainHist = new Array<number>(totalModels + 1).fill(0);
+  const dmgHist = new Array<number>(totalWounds + 1).fill(0);
+  let wastedSum = 0;
+  let killCount = 0;
+  let ptsSum = 0;
+  let dmgSum = 0;
+  let dmgSq = 0;
+  const tr = prepared.map(() => ({ attacks: 0, hits: 0, wounds: 0, unsaved: 0, damage: 0 }));
+
+  const slain = new Array<number>(G).fill(0);
+  const curW = new Array<number>(G).fill(0);
+  const initial = input.initialState ? makeSampler(input.initialState, rand) : null;
+  let startSlain = 0;
+  let startDamage = 0;
+  let startPts = 0;
+
+  const pickGroup = (order: number[]): number => {
+    for (const g of order) if (slain[g]! < groups[g]!.models) return g;
+    return -1;
+  };
+  const applyDamage = (g: number, d: number): { dealt: number; wasted: number } => {
+    const grp = groups[g]!;
+    const w = curW[g]!;
+    if (d >= w) {
+      slain[g] = slain[g]! + 1;
+      curW[g] = grp.wounds;
+      return { dealt: w, wasted: d - w };
+    }
+    curW[g] = w - d;
+    return { dealt: d, wasted: 0 };
+  };
+
+  for (let it = 0; it < iters; it++) {
+    let dealt = 0;
+    let slainBefore = 0;
+    let ptsBefore = 0;
+    if (initial) {
+      const locals = decode(space, initial());
+      for (let g = 0; g < G; g++) {
+        const grp = groups[g]!;
+        const l = locals[g]!;
+        const terminal = l >= grp.models * grp.wounds;
+        slain[g] = terminal ? grp.models : Math.floor(l / grp.wounds);
+        curW[g] = terminal ? grp.wounds : grp.wounds - (l % grp.wounds);
+        dealt += Math.min(l, grp.models * grp.wounds);
+        slainBefore += slain[g]!;
+        ptsBefore += slain[g]! * (grp.pointsPerModel ?? 0);
+      }
+    } else {
+      for (let g = 0; g < G; g++) {
+        slain[g] = 0;
+        curW[g] = groups[g]!.wounds;
+      }
+    }
+    startSlain += slainBefore;
+    startDamage += dealt;
+    startPts += ptsBefore;
+    // The interval describes the damage this run adds, which is what it is asked for. `dealt` still
+    // carries whatever the initial state came in with.
+    const dealtBefore = dealt;
+    let wasted = 0;
+    for (let wi = 0; wi < prepared.length; wi++) {
+      const P = prepared[wi]!;
+      const w = P.w;
+      const t = tr[wi]!;
+      let mortalEvents = 0;
+      let rerollHit = w.singleRerollHit;
+      let rerollWound = w.singleRerollWound;
+      let fixedHitLeft = !!w.fixedHit && !w.autoHit;
+      let fixedWoundLeft = !!w.fixedWound;
+      // The save results of the whole profile, when they are rolled up front and resolved lowest first.
+      const faces: number[] = [];
+      for (let c = 0; c < w.count; c++) {
+        const n = P.attacks();
+        t.attacks += n;
+        for (let a = 0; a < n; a++) {
+          // hit roll
+          let cat: 0 | 1 | 2; // miss, hit, crit
+          if (w.autoHit) cat = 1;
+          else if (fixedHitLeft) {
+            fixedHitLeft = false;
+            cat = w.fixedHit === "miss" ? 0 : w.fixedHit === "hit" ? 1 : 2;
+          } else {
+            let u = rand();
+            cat = u < w.hit.pMiss ? 0 : u < w.hit.pMiss + w.hit.pHit ? 1 : 2;
+            if (cat === 0 && rerollHit) {
+              rerollHit = false;
+              u = rand();
+              cat = u < w.hit.pMiss ? 0 : u < w.hit.pMiss + w.hit.pHit ? 1 : 2;
+            }
+          }
+          if (cat === 0) continue;
+          let rollingHits = 0;
+          let autoWounds = 0;
+          if (cat === 1) rollingHits = 1;
+          else {
+            const extra = P.sustained ? P.sustained() : 0;
+            if (w.lethal) {
+              autoWounds = 1;
+              rollingHits = extra;
+            } else rollingHits = 1 + extra;
+          }
+          t.hits += rollingHits + autoWounds;
+          let woundsNeedingSave = autoWounds;
+          for (let h = 0; h < rollingHits; h++) {
+            let u = rand();
+            let wc: 0 | 1 | 2 = u < w.wound.pFail ? 0 : u < w.wound.pFail + w.wound.pWound ? 1 : 2;
+            if (fixedWoundLeft) {
+              fixedWoundLeft = false;
+              wc = w.fixedWound === "fail" ? 0 : w.fixedWound === "wound" ? 1 : 2;
+            } else if (wc === 0 && rerollWound) {
+              rerollWound = false;
+              u = rand();
+              wc = u < w.wound.pFail ? 0 : u < w.wound.pFail + w.wound.pWound ? 1 : 2;
+            }
+            if (wc === 0) continue;
+            if (wc === 2 && w.devastating) mortalEvents++;
+            else woundsNeedingSave++;
+          }
+          t.wounds += woundsNeedingSave;
+          if (P.saveFace) {
+            for (let k = 0; k < woundsNeedingSave; k++) faces.push(P.saveFace());
+            continue;
+          }
+          for (let k = 0; k < woundsNeedingSave; k++) {
+            const g = pickGroup(P.order);
+            if (g < 0) {
+              // Nothing left to allocate to, so the wound is wasted. With no group at all there is
+              // no damage profile to measure it against.
+              const gp = w.groups[P.order[0] ?? 0];
+              if (gp) wasted += mean(gp.damage) * gp.pUnsaved;
+              continue;
+            }
+            if (rand() < w.groups[g]!.pUnsaved) {
+              t.unsaved += 1;
+              const d = P.damage[g]!();
+              const r = applyDamage(g, d);
+              dealt += r.dealt;
+              wasted += r.wasted;
+              t.damage += r.dealt;
+            }
+          }
+        }
+      }
+      if (P.saveFace) {
+        // Each result goes to whichever group is current when it is reached, lowest results first.
+        faces.sort((a, b) => a - b);
+        for (const f of faces) {
+          const g = pickGroup(P.order);
+          if (g < 0) {
+            const gi = P.order[0] ?? 0;
+            const gp = w.groups[gi];
+            if (gp && P.damageOn[gi]?.[f]) wasted += mean(gp.damage);
+            continue;
+          }
+          if (!P.damageOn[g]?.[f]) continue;
+          t.unsaved += 1;
+          const d = P.damage[g]!();
+          const r = applyDamage(g, d);
+          dealt += r.dealt;
+          wasted += r.wasted;
+          t.damage += r.dealt;
+        }
+      }
+      t.wounds += mortalEvents;
+      t.unsaved += mortalEvents;
+      for (let k = 0; k < mortalEvents; k++) {
+        const g = pickGroup(P.order);
+        if (g < 0) {
+          const gp = w.groups[P.order[0] ?? 0];
+          if (gp) wasted += mean(gp.mortalDamage);
+          continue;
+        }
+        const d = P.mortal[g]!();
+        const r = applyDamage(g, d);
+        dealt += r.dealt;
+        wasted += r.wasted;
+        t.damage += r.dealt;
+      }
+    }
+    let totalSlain = 0;
+    let allDead = true;
+    for (let g = 0; g < G; g++) {
+      totalSlain += slain[g]!;
+      ptsSum += slain[g]! * (groups[g]!.pointsPerModel ?? 0);
+      if (slain[g]! < groups[g]!.models) allDead = false;
+    }
+    slainHist[totalSlain] = (slainHist[totalSlain] ?? 0) + 1;
+    dmgHist[dealt] = (dmgHist[dealt] ?? 0) + 1;
+    wastedSum += wasted;
+    dmgSum += dealt;
+    dmgSq += (dealt - dealtBefore) * (dealt - dealtBefore);
+    if (allDead) killCount++;
+  }
+
+  const damagePMF = pmfFromHistogram(dmgHist, iters);
+  const slainPMF = pmfFromHistogram(slainHist, iters);
+  const m = dmgSum / iters - startDamage / iters;
+  const sd = Math.sqrt(Math.max(0, dmgSq / iters - m * m));
+  /*
+   * The half-width assumes the sample spread stands in for the real one. Against a target the attack
+   * almost always wipes, a short run can deal identical damage every time; the spread is then zero
+   * and the formula reports "± 0.00" from a method that produced no such certainty. No interval is
+   * quoted for a sample with no spread.
+   */
+  const ciHalfWidth = sd > 0 ? (1.96 * sd) / Math.sqrt(iters) : undefined;
+  const traces: WeaponTrace[] = prepared.map((P, i) => ({
+    name: P.w.name,
+    count: P.w.count,
+    expectedAttacks: tr[i]!.attacks / iters,
+    expectedHits: tr[i]!.hits / iters,
+    expectedWounds: tr[i]!.wounds / iters,
+    expectedUnsaved: tr[i]!.unsaved / iters,
+    expectedDamage: tr[i]!.damage / iters,
+  }));
+  return {
+    backend: "mc",
+    iterations: iters,
+    ...(ciHalfWidth !== undefined ? { ciHalfWidth } : {}),
+    damagePMF,
+    slainPMF,
+    expectedDamage: m,
+    expectedSlain: mean(slainPMF) - startSlain / iters,
+    pKill: killCount / iters,
+    pAtLeastSlain: survivalFromPMF(slainPMF),
+    expectedWasted: wastedSum / iters,
+    expectedSelfMortals: prepared.reduce((s, P) => s + P.w.count * P.w.selfMortalsPerWeapon, 0),
+    expectedPointsSlain: (ptsSum - startPts) / iters,
+    weapons: traces,
+    warnings: [],
+  };
+}
