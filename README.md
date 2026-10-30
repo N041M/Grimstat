@@ -6,7 +6,7 @@ runs in your browser and keeps everything you make on your own device.
 Open it at [grimstat.com](https://grimstat.com). It is free, and you can use all of it without an
 account. There is also an Android build of the same app.
 
-![The calculator: expected damage, a damage distribution chart, a models-slain table, a what-if panel and a column of rules toggles](docs/screenshots/calculator.png)
+![The calculator with the attacker, the defender and the situation on the left, and expected damage, a damage distribution chart and a models-slain table on the right](docs/screenshots/calculator.png)
 
 ## What it does
 
@@ -28,13 +28,13 @@ account. There is also an Android build of the same app.
   which units the field takes, where your list has more or fewer of them, and which lists yours is
   closest to.
 
-The battle table below shows two deployment zones, terrain and a placeholder force on a 60×44" board.
+The battle table below shows two deployment zones, ruins and two placeholder forces on a 60×44" board.
 
 ![The 3D battle table showing terrain blocks, a red and a blue deployment zone, and labelled units](docs/screenshots/battle.png)
 
 The codex below shows every datasheet in the loaded snapshot, grouped by role.
 
-![The codex landing page showing datasheet cards grouped into characters, battleline and other datasheets](docs/screenshots/codex.png)
+![The codex as a table of datasheets grouped into characters, battleline and other datasheets, with filters for faction, role, keywords, points and profile beside it](docs/screenshots/codex.png)
 
 Every screenshot uses the app's built-in sample data. The units and profiles in them are invented.
 Loading your own snapshot replaces them.
