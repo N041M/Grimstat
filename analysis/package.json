@@ -1,0 +1,22 @@
+{
+  "name": "@grimstat/analysis",
+  "version": "0.1.0",
+  "description": "Army-level analyses built from single-scenario runs: matchup matrix, durability, efficiency, what-if, reverse search and a whole-turn optimiser.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@grimstat/engine": "file:../engine"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

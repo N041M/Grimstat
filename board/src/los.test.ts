@@ -1,0 +1,326 @@
+import { describe, expect, it } from "vitest";
+import {
+  HEIGHT_SAMPLES_FINE,
+  TerrainIndex,
+  canSee,
+  circleBase,
+  coverFor,
+  hiddenFrom,
+  horizontalGap,
+  ovalBase,
+  segmentHitsPrism,
+  sight,
+  terrain,
+  unitSight,
+  visibleFraction,
+  withinObscuringArea,
+  type Footprint,
+  type ModelHull,
+  type TerrainTrait,
+  type Vec2,
+} from "./index";
+
+const model = (x: number, y: number, z: number, height: number, baseMm = 32): ModelHull => ({ pos: { x, y, z }, facing: 0, foot: circleBase(baseMm), height });
+const trooper = (x: number, y: number, z = 0) => model(x, y, z, 2);
+const vehicle = (x: number, y: number, z = 0) => model(x, y, z, 3.5, 80);
+
+const rect = (minX: number, minY: number, maxX: number, maxY: number): Vec2[] => [
+  { x: minX, y: minY },
+  { x: maxX, y: minY },
+  { x: maxX, y: maxY },
+  { x: minX, y: maxY },
+];
+
+/** An obscuring wall across the middle of the firing lane: `x` in [4, 5], `y` in [-yHalf, yHalf]. */
+const wall = (height: number, yHalf = 6, traits: TerrainTrait[] = ["obscuring"]) => terrain({ id: "wall", polygon: rect(4, -yHalf, 5, yHalf), height, traits });
+/** The same shape as exposed terrain, which blocks only where its solid is. */
+const bank = (height: number, yHalf = 6) => terrain({ id: "bank", polygon: rect(4, -yHalf, 5, yHalf), height });
+/** A ruin models can be inside: obscuring, breachable, a floor at ground level and one four inches up. */
+const ruin = (minX: number, minY: number, maxX: number, maxY: number, id = "ruin") => terrain({ id, polygon: rect(minX, minY, maxX, maxY), height: 9, traits: ["obscuring", "breachable"], floors: [0, 4], passableBy: ["INFANTRY"] });
+
+const index = (...pieces: ReturnType<typeof terrain>[]) => new TerrainIndex(pieces);
+
+describe("segment versus prism", () => {
+  const block = terrain({ id: "block", polygon: rect(0, 0, 2, 2), height: 3 });
+
+  it("hits a segment that passes through the solid", () => {
+    expect(segmentHitsPrism({ x: -1, y: 1, z: 1 }, { x: 3, y: 1, z: 1 }, block)).toBe(true);
+  });
+
+  it("misses a segment that passes over the top", () => {
+    expect(segmentHitsPrism({ x: -1, y: 1, z: 4 }, { x: 3, y: 1, z: 4 }, block)).toBe(false);
+  });
+
+  it("misses a segment that passes to one side", () => {
+    expect(segmentHitsPrism({ x: -1, y: 5, z: 1 }, { x: 3, y: 5, z: 1 }, block)).toBe(false);
+  });
+
+  it("hits a segment that dives into the top", () => {
+    expect(segmentHitsPrism({ x: -1, y: 1, z: 5 }, { x: 1, y: 1, z: 0 }, block)).toBe(true);
+  });
+
+  it("ignores a footprint with no height", () => {
+    expect(segmentHitsPrism({ x: -1, y: 1, z: 0 }, { x: 3, y: 1, z: 0 }, terrain({ id: "flat", polygon: rect(0, 0, 2, 2), height: 0 }))).toBe(false);
+  });
+});
+
+describe("true line of sight past exposed terrain", () => {
+  it("sees over a bank shorter than both models", () => {
+    expect(canSee(trooper(0, 0), trooper(10, 0), index(bank(1.5)))).toBe(true);
+  });
+
+  it("is blocked by a bank taller than both models", () => {
+    expect(canSee(trooper(0, 0), trooper(10, 0), index(bank(3)))).toBe(false);
+  });
+
+  it("lets a tall model be seen over a bank that hides an infantry model", () => {
+    // Same bank, same shooter, different target height.
+    const board = index(bank(3));
+    expect(canSee(trooper(0, 0), trooper(10, 0), board)).toBe(false);
+    expect(canSee(trooper(0, 0), model(10, 0, 0, 6, 100), board)).toBe(true);
+  });
+
+  it("lets a tall model see over a bank that blinds an infantry model", () => {
+    const board = index(bank(3));
+    expect(canSee(vehicle(0, 0), trooper(10, 0), board)).toBe(false); // 3.5" tall, but the target is 2"
+    expect(canSee(model(0, 0, 0, 6, 100), trooper(10, 0), board)).toBe(true);
+  });
+
+  it("is symmetric: if I can see you, you can see me", () => {
+    const board = index(bank(3));
+    const tall = model(10, 0, 0, 6, 100);
+    expect(canSee(trooper(0, 0), tall, board)).toBe(canSee(tall, trooper(0, 0), board));
+  });
+
+  it("sees past the end of a bank, using the target's silhouette", () => {
+    // The bank stops at y = 0.2; the target's near edge is hidden but its flank is not.
+    expect(canSee(trooper(0, 0), trooper(10, 0), index(bank(4, 6)))).toBe(false);
+    expect(canSee(trooper(0, 0), trooper(10, 0), index(terrain({ id: "bank", polygon: rect(4, -6, 5, 0.2), height: 4 })))).toBe(true);
+  });
+
+  it("sees from an upper floor over a bank that blocks the ground floor", () => {
+    const board = index(bank(4));
+    expect(canSee(trooper(0, 0, 0), trooper(10, 0), board)).toBe(false);
+    expect(canSee(trooper(0, 0, 5), trooper(10, 0), board)).toBe(true); // one storey up
+  });
+
+  it("ignores terrain flagged transparent", () => {
+    expect(canSee(trooper(0, 0), trooper(10, 0), index(wall(6, 6, ["transparent", "light-cover"])))).toBe(true);
+  });
+
+  it("stops at the first clear ray but tests them all when asked", () => {
+    const open = index();
+    expect(sight(trooper(0, 0), trooper(10, 0), open).tested).toBe(1);
+    const all = sight(trooper(0, 0), trooper(10, 0), open, { exhaustive: true });
+    expect(all.tested).toBe(144); // 4 lateral samples x 3 heights, both models
+    expect(all.exposure).toBe(1);
+  });
+
+  it("reports partial exposure for a model that only sticks out above a bank", () => {
+    // A 2.2" bank hides a 2" trooper outright, but a 3.5" vehicle's upper hull clears it.
+    expect(sight(trooper(0, 0), trooper(10, 0), index(bank(2.2)), { exhaustive: true }).exposure).toBe(0);
+    const result = sight(trooper(0, 0), vehicle(10, 0), index(bank(2.2)), { exhaustive: true, heights: HEIGHT_SAMPLES_FINE });
+    expect(result.visible).toBe(true);
+    expect(result.exposure).toBeGreaterThan(0);
+    expect(result.exposure).toBeLessThan(1);
+  });
+
+  it("respects the ray cap", () => {
+    expect(sight(trooper(0, 0), trooper(10, 0), index(wall(6)), { exhaustive: true, maxRays: 10 }).tested).toBe(10);
+  });
+});
+
+describe("obscuring terrain areas", () => {
+  it("block every line across the footprint at any height: a low wall hides a tank and an upper floor alike", () => {
+    const board = index(wall(1.5));
+    expect(canSee(trooper(0, 0), trooper(10, 0), board)).toBe(false);
+    expect(canSee(trooper(0, 0), vehicle(10, 0), board)).toBe(false);
+    expect(canSee(model(0, 0, 0, 6, 100), model(10, 0, 0, 6, 100), board)).toBe(false);
+    expect(canSee(trooper(0, 0, 5), trooper(10, 0, 5), board)).toBe(false);
+  });
+
+  it("do not block a line that goes round them", () => {
+    expect(canSee(trooper(0, 0), trooper(10, 0), index(terrain({ id: "wall", polygon: rect(4, -6, 5, 0.2), height: 4, traits: ["obscuring"] })))).toBe(true);
+  });
+
+  it("name the area that blocked the shot", () => {
+    const result = sight(trooper(0, 0), trooper(10, 0), index(wall(1)), { exhaustive: true });
+    expect(result.visible).toBe(false);
+    expect(result.blockers).toEqual(["wall"]);
+    expect(result.rays.every((r) => r.blockedBy === "wall")).toBe(true);
+  });
+
+  it("do not obscure a model within them, whose ground-floor walls are solid and whose upper walls are windows", () => {
+    const board = index(ruin(-2, -2, 2, 2));
+    // On the ground floor inside: the walls stop every line to the ground outside, both ways.
+    expect(canSee(trooper(0, 0), trooper(10, 0), board)).toBe(false);
+    expect(canSee(trooper(10, 0), trooper(0, 0), board)).toBe(false);
+    // One floor up the lines leave through the windows.
+    expect(canSee(trooper(0, 0, 4), trooper(10, 0), board)).toBe(true);
+    expect(canSee(trooper(10, 0), trooper(0, 0, 4), board)).toBe(true);
+    // A shooter high enough outside looks down through the windows at the ground floor.
+    expect(canSee(trooper(10, 0, 6), trooper(0, 0), board)).toBe(true);
+    // The floor of a window a storey up still sees a trooper close under it: the line down to his
+    // far side passes the wall above the solid band.
+    expect(canSee(trooper(0, 0, 4), trooper(3, 0), board)).toBe(true);
+  });
+
+  it("count a model as within when any part of its base is, so toeing in sees along the inside", () => {
+    const board = index(ruin(0, -2, 4, 2));
+    // Base centre half an inch outside, base edge a tenth of an inch inside: within.
+    expect(canSee(trooper(-0.5, 0), trooper(2, 0), board)).toBe(true);
+    // A whole base outside: the area obscures the pair.
+    expect(canSee(trooper(-1.5, 0), trooper(2, 0), board)).toBe(false);
+  });
+
+  it("let two models within the same area see each other", () => {
+    expect(canSee(trooper(-1, 0), trooper(1, 0), index(ruin(-2, -2, 2, 2)))).toBe(true);
+  });
+
+  it("make a piece nobody can be inside solid to its top, where a ruin has windows", () => {
+    const shape = rect(-2, -2, 2, 2);
+    const bunker = terrain({ id: "bunker", polygon: shape, height: 6, traits: ["obscuring", "impassable"], floors: [6] });
+    const tower = terrain({ id: "tower", polygon: shape, height: 6, traits: ["obscuring", "breachable"], floors: [0, 6], passableBy: ["INFANTRY"] });
+    // The same lines, from a roof down to a trooper a base's width outside, pass the wall between
+    // 3.5" and 4.5" up: through a window in a ruin, into a wall in a bunker.
+    expect(canSee(trooper(0, 0, 6), trooper(3, 0), index(bunker))).toBe(false);
+    expect(canSee(trooper(0, 0, 6), trooper(3, 0), index(tower))).toBe(true);
+  });
+
+  it("are raw prisms when asked to test geometry alone", () => {
+    expect(canSee(trooper(0, 0), trooper(10, 0), index(wall(1.5)), { selfExempt: false })).toBe(true);
+    expect(canSee(trooper(0, 0), trooper(10, 0), index(ruin(-2, -2, 2, 2)), { selfExempt: false })).toBe(false);
+  });
+
+  it("say whether a model stands within one, for the Hidden rule", () => {
+    const board = index(ruin(0, -2, 4, 2));
+    expect(withinObscuringArea(trooper(2, 0), board)).toBe(true);
+    expect(withinObscuringArea(trooper(-0.5, 0), board)).toBe(true);
+    expect(withinObscuringArea(trooper(-1.5, 0), board)).toBe(false);
+    expect(withinObscuringArea(trooper(2, 0), index(bank(1)))).toBe(false);
+  });
+});
+
+describe("line of sight to an oval base", () => {
+  // A capsule's silhouette reaches `r + half` from its centre, and the rays are cast out to it. The
+  // far wall stands in the ground between the radius and the reach, so a search region sized by the
+  // radius misses it. Every ray that gets past the near wall crosses it.
+  const walls = (foot: Footprint) => [
+    terrain({ id: "near", polygon: rect(7.5, -6, 7.7, foot.r + 0.05), height: 20, traits: ["obscuring"] }),
+    terrain({ id: "far", polygon: rect(7.75, foot.r + 0.05, 7.95, 6), height: 20, traits: ["obscuring"] }),
+  ];
+
+  for (const [length, width] of [[120, 92], [105, 70], [170, 105]] as const) {
+    it(`is blocked for a ${length} x ${width} mm base as it is for a round one`, () => {
+      const foot = ovalBase(length, width);
+      // Long axis across the lane, which is where a capsule reaches furthest towards the walls.
+      const tank: ModelHull = { pos: { x: 10, y: 0, z: 0 }, facing: Math.PI / 2, foot, height: 4 };
+      const board = walls(foot);
+      const result = sight(trooper(0, 0), tank, index(...board), { exhaustive: true });
+
+      // Every ray the kernel cast really does hit one of the two walls, tested against them directly.
+      expect(result.rays.every((r) => board.some((piece) => segmentHitsPrism(r.from, r.to, piece)))).toBe(true);
+      expect(result.tested).toBe(144);
+      expect(result.clear).toBe(0);
+      expect(result.visible).toBe(false);
+      // The same board with a round base of the same width, which was answered correctly before.
+      expect(canSee(trooper(0, 0), { ...tank, foot: circleBase(width) }, index(...board))).toBe(false);
+    });
+  }
+});
+
+describe("unit-level visibility", () => {
+  const board = index(terrain({ id: "wall", polygon: rect(4, -6, 5, 1), height: 4 }));
+  const shooters = [trooper(0, 0), trooper(0, 2)];
+  const targets = [trooper(10, -3), trooper(10, 3)];
+
+  it("is true when any model sees any model", () => {
+    expect(unitSight(shooters, targets, board)).toBe(true);
+  });
+
+  it("counts how much of the target unit is exposed", () => {
+    // The wall covers y up to 1, so the model at y = -3 is hidden and the one at y = 3 is not.
+    expect(visibleFraction(shooters, targets, board)).toBe(0.5);
+    expect(visibleFraction(shooters, [], board)).toBe(0);
+  });
+
+  it("calls a unit hidden when nothing in range can see it", () => {
+    const bunker = index(terrain({ id: "bunker", polygon: rect(4, -20, 5, 20), height: 8 }));
+    expect(hiddenFrom([trooper(10, 0)], [trooper(0, 0)], bunker, 15)).toBe(true);
+    expect(hiddenFrom([trooper(10, 0)], [trooper(0, 0)], index(), 15)).toBe(false);
+    // Out of range: not "hidden from" anyone, because nobody is close enough to look.
+    expect(hiddenFrom([trooper(40, 0)], [trooper(0, 0)], index(), 15)).toBe(true);
+  });
+
+  it("measures the range from the bases, so an oval-based model in the open is never hidden", () => {
+    // A 170 x 105 mm base with its long axis pointed at the observer reaches 3.35" from its centre.
+    // Measured as a circle of its width it looks 1.28" further away than a tape measure makes it.
+    const open = index();
+    const tank = (centres: number): ModelHull => ({ pos: { x: centres, y: 0, z: 0 }, facing: Math.PI, foot: ovalBase(170, 105), height: 4 });
+    for (const centres of [17, 17.7, 18.5]) {
+      expect(horizontalGap(trooper(0, 0), tank(centres))).toBeLessThan(15);
+      expect(canSee(trooper(0, 0), tank(centres), open)).toBe(true);
+      expect(hiddenFrom([tank(centres)], [trooper(0, 0)], open, 15)).toBe(false);
+    }
+    // Past fifteen inches of base-to-base gap nobody is close enough to look.
+    expect(horizontalGap(trooper(0, 0), tank(19.1))).toBeGreaterThan(15);
+    expect(hiddenFrom([tank(19.1)], [trooper(0, 0)], open, 15)).toBe(true);
+  });
+});
+
+describe("cover", () => {
+  const crater = terrain({ id: "crater", polygon: rect(9, -2, 12, 2), height: 0.5, traits: ["light-cover", "transparent"] });
+  const ruin = terrain({ id: "ruin", polygon: rect(4, -6, 5, 6), height: 1.5, traits: ["heavy-cover"] });
+
+  it("grants cover to a model standing in a cover footprint", () => {
+    const result = coverFor(trooper(10, 0), trooper(0, 0), index(crater));
+    expect(result).toMatchObject({ level: "light", from: "crater", reason: "within" });
+  });
+
+  it("grants cover from an intervening footprint", () => {
+    const result = coverFor(trooper(10, 0), trooper(0, 0), index(ruin));
+    expect(result).toMatchObject({ level: "heavy", from: "ruin", reason: "intervening" });
+  });
+
+  it("gives nothing in the open", () => {
+    expect(coverFor(trooper(10, 0), trooper(0, 0), index()).level).toBe("none");
+    expect(coverFor(trooper(10, 0), trooper(0, 0), index(terrain({ id: "hill", polygon: rect(4, -6, 5, 6), height: 4 }))).level).toBe("none");
+  });
+
+  it("does not count a footprint the attacker is also standing in", () => {
+    expect(coverFor(trooper(11, 0), trooper(10, 0), index(crater)).reason).toBe("within"); // the target's own footprint still counts
+    const wide = terrain({ id: "wide", polygon: rect(-2, -6, 6, 6), height: 1.5, traits: ["heavy-cover"] });
+    expect(coverFor(trooper(10, 0), trooper(0, 0), index(wide)).level).toBe("none"); // attacker is inside it
+  });
+
+  it("measures the bases rather than the two centre points", () => {
+    // A 32 mm base is 0.63" in radius, so a trooper whose centre is 0.3" outside the crater still
+    // has most of his base inside it. The line between the two centres misses the crater entirely,
+    // which is what used to leave him in the open.
+    expect(coverFor(trooper(10.5, 2.3), trooper(0, 2.3), index(crater))).toMatchObject({ level: "light", from: "crater", reason: "within" });
+
+    // The same measurement on the attacker's side: a footprint his own base is in is not in his way,
+    // even when the line between the centres runs through it.
+    const wide = terrain({ id: "wide", polygon: rect(2, -6, 6, 6), height: 1.5, traits: ["heavy-cover"] });
+    expect(coverFor(trooper(10, 0), trooper(1.7, 0), index(wide)).level).toBe("none");
+  });
+
+  it("prefers heavy cover when both apply", () => {
+    expect(coverFor(trooper(10, 0), trooper(0, 0), index(crater, ruin)).level).toBe("heavy");
+  });
+
+  it("does not put a model in a crater it stands twelve inches above", () => {
+    const board = index(crater);
+    // On a gantry over the crater's footprint. On the ground in the same spot he is in it.
+    expect(coverFor(trooper(10.5, 0, 12), trooper(0, 0), board)).toMatchObject({ level: "none", reason: "none" });
+    expect(coverFor(trooper(10.5, 0), trooper(0, 0), board)).toMatchObject({ level: "light", from: "crater", reason: "within" });
+    // Nor does a crater 0.4" tall intervene for a target twelve inches up: it is under the whole shot.
+    expect(coverFor(trooper(14, 0, 12), trooper(0, 0), board).level).toBe("none");
+    expect(coverFor(trooper(14, 0), trooper(0, 0), board)).toMatchObject({ level: "light", reason: "intervening" });
+  });
+
+  it("still gives a model on an upper floor the cover of the ruin around it", () => {
+    const tower = terrain({ id: "tower", polygon: rect(9, -3, 13, 3), height: 9, traits: ["heavy-cover", "obscuring"], floors: [0, 4.5] });
+    expect(coverFor(trooper(11, 0, 4.5), trooper(0, 0), index(tower))).toMatchObject({ level: "heavy", from: "tower", reason: "within" });
+  });
+});

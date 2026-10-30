@@ -47,12 +47,22 @@ and loading your own snapshot replaces them.
 ## What is in this repository
 
 The application source is private. This repository is the project's front page and the place to
-report a fault. It also holds two parts of the code that stand on their own.
+report a fault. It also holds four parts of the code that stand on their own.
 
 **[`engine/`](engine/)** is the probability engine behind the calculator, extracted so that it
 runs on its own. It turns an attack sequence into a full damage distribution, and falls back to
 sampling when solving it exactly would take too long. It has no dependencies. `npm test` runs 51
 tests, including property-based ones and Monte Carlo runs checked against the exact solver.
+
+**[`analysis/`](analysis/)** is the army-level maths built on the engine: the matchup matrix,
+durability, the efficiency ranking, the what-if panel, the search for what removes a given unit, and
+a whole-turn optimiser that spends command points. It reads no characteristic itself, and its tests
+run every analysis over a made-up game to show it.
+
+**[`board/`](board/)** is the geometry behind the battle table. It measures between models in
+three dimensions, casts line of sight between model hulls through terrain, works out cover, and
+finds where a model can move across the ground and up the floors of a ruin. It has no dependencies,
+and `npm test` runs 174 tests.
 
 **[`server/`](server/)** — the files the privacy notice makes claims about: every migration, the
 purge job, sign-in, share links and the hashing. [`server/README.md`](server/README.md) maps each
