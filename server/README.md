@@ -39,9 +39,12 @@ Each sentence of the notice's "How long it is kept" section comes from one place
 ## What is hashed
 
 The notice says a session token, a sign-in code and a network address are stored hashed. All three
-are in `crypto.ts`. `sha256` covers the tokens and codes. `hashIp` and `hashEmail` take a salt, which
-is a secret the running Worker holds and the database does not. A copy of the database on its own
-cannot be used to sign in, and it does not name a network address.
+are in `crypto.ts`. `sha256` covers the session tokens and the token in the link that puts a change
+of address back. `hashCode` covers the sign-in codes and the codes that confirm a change of address.
+It is an HMAC keyed with a secret the running Worker holds and the database does not, because a code
+carries only about forty bits and a plain hash of it could be matched by trying every value.
+`hashIp` and `hashEmail` take the same secret as a salt. A copy of the database on its own cannot be
+used to sign in, and it does not name a network address.
 
 `typable()` in the same file draws sign-in codes from a 31-character alphabet with no look-alikes. It
 throws away the last eight values of a byte instead of folding them in, because 256 is not a multiple
@@ -61,7 +64,7 @@ string table, which is not published.
 
 ## These are copies
 
-Taken from the private repository at commit `5f964d7`. They are not updated automatically yet, so
-check the dates before relying on them being current. If a retention in the live notice disagrees
+Taken from the private repository at commit `7121c88` on 30 October 2026. They are not updated
+automatically, so check the dates before relying on them being current. If a retention in the live notice disagrees
 with a file here, the live notice is the one that describes the running server, and the difference is
 a fault worth an issue.

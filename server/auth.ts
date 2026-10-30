@@ -1,15 +1,18 @@
 /**
  * Signing in with an email address and nothing else.
  *
- * `start` stores a hashed one-time code and mails it, as a link and as eight characters to type.
- * The link is for the browser the email is read in; the typed code is for the app on a home screen,
- * which the link cannot reach. `finish` takes the code back, makes the user on the first visit, and
- * hands out a session token. Tokens and codes are stored hashed.
+ * `start` stores a hashed one-time code and mails it, both as a link and as eight characters to
+ * type. The link is for the browser the email is read in. The typed code is for the app on a home
+ * screen, which the link cannot reach. `finish` takes the code back from the app, makes the user on
+ * the first visit, and hands out a session token that the device keeps and sends with every
+ * request. Session tokens are 256 random bits stored as SHA-256 hashes. Codes are eight characters,
+ * about forty bits, stored as hashes keyed with the server's secret (`hashCode`). A copy of the
+ * database without that secret signs nobody in.
  *
- * Every start sends one email from a daily allowance of a hundred, so: five starts per address per
- * hour, twenty per network address per hour, ninety a day in all.
+ * The limits exist because every start sends one email from a daily allowance of a hundred. Five
+ * starts per address per hour, twenty per network address per hour, and ninety a day in all.
  */
-import { hashEmail, hashIp, normaliseCode, randomToken, sha256, signInCode } from "./crypto";
+import { hashCode, hashEmail, hashIp, normaliseCode, randomToken, sha256, signInCode } from "./crypto";
 import { iso, plusMs, type Deps } from "./deps";
 import { SESSION_IDLE_DAYS } from "./purge";
 import { emailChangeAuthorise, emailChangeCode, emailChangedNotice, signInEmail } from "./signInEmail";
@@ -58,7 +61,7 @@ export async function start(deps: Deps, email: string, ip: string): Promise<void
   if ((byEmail?.n ?? 0) >= LIMIT_PER_EMAIL || (byIp?.n ?? 0) >= LIMIT_PER_IP) throw new AuthError(429, "Too many sign-in emails in the last hour. Try again later.");
   if ((today?.n ?? 0) >= LIMIT_PER_DAY) throw new AuthError(503, "Sign-in is paused for today. Everything else keeps working.");
   const code = signInCode();
-  const codeHash = await sha256(code);
+  const codeHash = await hashCode(code, deps.ipSalt);
   await deps.db.run("INSERT INTO logins (code_hash, email, email_hash, ip_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)", codeHash, address, emailHash, ipHash, iso(now), plusMs(now, CODE_LIFE));
   const shown = `${code.slice(0, 4)}-${code.slice(4)}`;
   const link = `${deps.appUrl}/#/profile?code=${shown}`;
@@ -66,8 +69,8 @@ export async function start(deps: Deps, email: string, ip: string): Promise<void
   try {
     await deps.mail.send(address, mail.subject, mail.text, mail.html);
   } catch (err) {
-    // The row is what the three limits count, and no email went out for it. Left behind, a spell of
-    // failed sends would spend the day's allowance without a single email sent.
+    // The row is what the three limits count, and no email went out for it. Left behind, a spell
+    // of failed sends would spend the day's allowance for everyone without a single email sent.
     await deps.db.run("DELETE FROM logins WHERE code_hash = ?", codeHash).catch(() => undefined);
     throw err;
   }
@@ -80,18 +83,18 @@ export interface Finished {
 
 export async function finish(deps: Deps, code: string, deviceName: string): Promise<Finished> {
   const now = deps.now();
-  const codeHash = await sha256(normaliseCode(code));
+  const codeHash = await hashCode(normaliseCode(code), deps.ipSalt);
   // The code is spent in one statement that only succeeds while it is unspent and unexpired, so
   // two requests carrying the same code cannot both get a session.
   const spent = await deps.db.run("UPDATE logins SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at >= ?", iso(now), codeHash, iso(now));
   if (spent.changes !== 1) throw new AuthError(400, "This sign-in link has expired. Ask for a new one.");
   const login = await deps.db.first<{ email: string }>("SELECT email FROM logins WHERE code_hash = ?", codeHash);
-  // An address cleared by `deleteAccount` leaves the row behind for the limit to count, but a code
+  // An address cleared by `deleteAccount` leaves the row behind for the limit to count. A code
   // asked for before the account went is not one to sign back in with.
   if (!login?.email) throw new AuthError(400, "This sign-in link has expired. Ask for a new one.");
   let user = await deps.db.first<User & { deleted_at?: string | null }>("SELECT id, email, handle, deleted_at FROM users WHERE email = ?", login.email);
-  // Deleting the account marks it and leaves everything in place for a month. Signing in again
-  // brings it back, which is what the grace period is for.
+  // Deleting the account marks it and leaves everything in place for a month. Signing in again is
+  // what brings it back, which is the whole point of the grace period.
   if (user?.deleted_at) await deps.db.run("UPDATE users SET deleted_at = NULL WHERE id = ?", user.id);
   if (!user) {
     // Two codes for an address with no account yet, used at the same moment, both find no user.
@@ -124,15 +127,19 @@ export const REVERT_DAYS = 30;
 /**
  * Ask to move the account to another address.
  *
- * Two codes go out and both are needed. The one to the current address puts the change back behind
- * the inbox the account rests on, out of reach of a session token taken off a device. The one to the
- * address being taken stops a typo moving the account somewhere its owner cannot read.
+ * Two codes go out and both are needed. One goes to the address the account has now: sign-in is by
+ * emailed code, so the inbox is what the account really rests on, and a session token sitting on a
+ * device for a year is a weaker thing than that. Requiring this code puts the change back behind the
+ * inbox, where a taken session cannot reach it. The other goes to the address being taken, because a
+ * change that only checked the old address would let a typo move the account somewhere its owner
+ * cannot read.
  *
- * Both are sent at once, so a taken session can put a message in front of an address of its
- * choosing. The three-an-hour limit counts the account rather than the address for that reason.
+ * Both are sent at once rather than one after the other. That does mean a taken session can put a
+ * message in front of an address of its choosing, which is why the three-an-hour limit counts the
+ * account rather than the address.
  *
- * Whether the new address already has an account is not said, which would otherwise be a way to ask
- * the server which addresses it knows.
+ * Whether the new address already has an account is not said. Answering that would turn this into a
+ * way to ask the server which addresses it knows, from any account.
  */
 export async function startEmailChange(deps: Deps, user: User, raw: string): Promise<void> {
   const address = raw.trim().toLowerCase();
@@ -152,8 +159,8 @@ export async function startEmailChange(deps: Deps, user: User, raw: string): Pro
     `ec_${randomToken(8)}`,
     user.id,
     address,
-    await sha256(currentCode),
-    await sha256(newCode),
+    await hashCode(currentCode, deps.ipSalt),
+    await hashCode(newCode, deps.ipSalt),
     iso(now),
     plusMs(now, CODE_LIFE),
   );
@@ -168,17 +175,19 @@ export async function startEmailChange(deps: Deps, user: User, raw: string): Pro
  * Spend both codes and move the account.
  *
  * The pair is spent in one statement, as a sign-in code is, so two requests carrying the same codes
- * cannot both move the account. Every device but the one that asked is signed out, which is what
- * someone changing their address over a lost device needs.
+ * cannot both move the account. Every device but the one that asked is signed out: someone changing
+ * their address because they are worried about a device wants exactly that, and it costs the rest
+ * only a fresh sign-in.
  *
- * The address that was left is told, with the link that undoes it. A refusal from the mail service
- * must not fail the request: the account has already moved by then.
+ * The address that was left is told, with the link that undoes it. That send must not take the
+ * change with it if the mail service refuses: the account has already moved, and saying it has not
+ * would be worse than a notice that never arrives.
  */
 export async function finishEmailChange(deps: Deps, session: Session, currentCode: string, newCode: string): Promise<string> {
   const user = session.user;
   const now = deps.now();
-  const currentHash = await sha256(normaliseCode(currentCode));
-  const newHash = await sha256(normaliseCode(newCode));
+  const currentHash = await hashCode(normaliseCode(currentCode), deps.ipSalt);
+  const newHash = await hashCode(normaliseCode(newCode), deps.ipSalt);
   const spent = await deps.db.run(
     "UPDATE email_changes SET used_at = ? WHERE user_id = ? AND current_code_hash = ? AND new_code_hash = ? AND used_at IS NULL AND expires_at >= ?",
     iso(now),
@@ -212,11 +221,12 @@ export async function finishEmailChange(deps: Deps, session: Session, currentCod
 }
 
 /**
- * Put the address back, from the link in the notice. Takes no session, and cannot: whoever reads
- * that message can no longer sign in, because the account answers to the new address.
+ * Put the address back, from the link in the notice. Takes no session, and cannot.
  *
- * The token is the credential. It went to the address being taken away, whose holder could have
- * signed in before the change anyway. Every session goes, including the one that made the change.
+ * Whoever reads that message can no longer sign in, because the account answers to the new address.
+ * The token is the credential. It went to the address being taken away, and anyone holding that
+ * inbox could have signed in before the change anyway, so it gives away nothing that was not already
+ * theirs. Every session goes, including the one that made the change.
  */
 export async function revertEmail(deps: Deps, token: string): Promise<void> {
   const now = deps.now();
@@ -241,12 +251,12 @@ export async function sessionFor(deps: Deps, token: string | undefined): Promise
   const hash = await sha256(token);
   const row = await deps.db.first<{ id: string; user_id: string; expires_at: string; last_seen_at: string; email: string; handle: string | null }>(
     // `deleted_at` is set while an account waits to be deleted. Its sessions are dropped when it is
-    // marked, but a token copied off a device beforehand must not answer either.
+    // marked, but a token copied off a device before that must not answer either.
     "SELECT s.id, s.user_id, s.expires_at, s.last_seen_at, u.email, u.handle FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND u.deleted_at IS NULL",
     hash,
   );
   if (!row || row.expires_at < iso(now)) return undefined;
-  // A device not seen for ninety days signs in again.
+  // A device not seen for ninety days signs in again. A token found on an old laptop is worth less.
   if (row.last_seen_at < iso(new Date(now.getTime() - SESSION_IDLE_DAYS * 24 * HOUR))) {
     await deps.db.run("DELETE FROM sessions WHERE token_hash = ?", hash);
     return undefined;
@@ -274,15 +284,17 @@ export async function signOut(deps: Deps, userId: string, sessionId: string): Pr
 /**
  * Everything the server holds for the user, gone.
  *
- * The sign-in rows for the address stay, because they are what the hourly and daily limits count;
- * deleting them would hand the address a fresh allowance for every account made and deleted. The
- * address is cleared out of them instead, so the row goes on counting under `email_hash` and
- * nothing on the server still spells it out. The purge takes the rows within the day either way.
+ * The sign-in rows for the address stay where they are, because they are what the hourly and daily
+ * limits count, and deleting them would hand the address a fresh allowance every time an account was
+ * made and deleted. The address is cleared out of them instead: the row goes on counting under
+ * `email_hash`, and nothing on the server still spells the address out. The purge takes the rows
+ * within the day either way.
  *
- * The account is marked rather than emptied, so that one request from a device cannot destroy every
- * army, game and collection with nothing to undo. Signing in again inside the grace period brings it
- * back and the purge does the real deletion after. Every session goes at once and the handle is
- * given up, so from every device that held one the account is already gone.
+ * The account is marked rather than emptied. One request from a device was otherwise enough to
+ * destroy every army, game and collection with nothing to undo, and a session token is a weaker
+ * thing than the inbox the account rests on. Signing in again inside the grace period brings it
+ * back; the purge does the real deletion once the period is up. Every session goes at once and the
+ * handle is given up, so from every device that held one the account is as gone as it looks.
  */
 export async function deleteAccount(deps: Deps, user: Pick<User, "id" | "email">): Promise<void> {
   await deps.db.batch([

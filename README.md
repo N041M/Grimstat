@@ -49,9 +49,9 @@ and loading your own snapshot replaces them.
 The application source is private. This repository is the project's front page and the place to
 report a fault. It also holds two parts of the code that stand on their own.
 
-**[`engine/`](engine/)** — the probability engine behind the calculator, extracted so that it
+**[`engine/`](engine/)** is the probability engine behind the calculator, extracted so that it
 runs on its own. It turns an attack sequence into a full damage distribution, and falls back to
-sampling when solving it exactly would take too long. It has no dependencies. `npm test` runs 37
+sampling when solving it exactly would take too long. It has no dependencies. `npm test` runs 51
 tests, including property-based ones and Monte Carlo runs checked against the exact solver.
 
 **[`server/`](server/)** — the files the privacy notice makes claims about: every migration, the

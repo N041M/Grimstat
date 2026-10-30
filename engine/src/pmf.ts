@@ -92,8 +92,9 @@ export function binomial(n: number, p: number): PMF {
   let coef = 1;
   for (let k = 0; k <= n; k++) {
     const v = coef * Math.pow(p, k) * Math.pow(1 - p, n - k);
-    // The coefficient overflows a double above about n = 1030, before the powers of p bring the
-    // product back down. Build the same distribution through logarithms from there.
+    // The coefficient runs past the largest double a little above n = 1030, before the powers of p
+    // have fallen far enough to bring the product back down, and every entry from there on is an
+    // infinity or a NaN. Above that size the same distribution is built through logarithms instead.
     if (!Number.isFinite(v)) return binomialLog(n, p);
     out[k] = v;
     coef = (coef * (n - k)) / (k + 1);
@@ -142,7 +143,8 @@ export function mapPMF(p: PMF, f: (k: number) => number): PMF {
     const w = p[k] ?? 0;
     if (w < EPS) continue;
     const fk = f(k);
-    // Math.round(NaN) is NaN, which indexes a "NaN" property instead of a slot and loses the mass.
+    // Rounding a NaN gives a NaN, which is no index at all. The mass at k went into a property named
+    // "NaN" and the caller was handed a distribution summing to less than one, with no error raised.
     if (!Number.isFinite(fk)) throw new Error(`mapPMF: the value at ${k} mapped to ${String(fk)}`);
     const v = Math.max(0, Math.round(fk));
     out[v] = (out[v] ?? 0) + w;

@@ -13,15 +13,16 @@ const LIMIT_PER_IP_HOUR = 30;
 export const ANON_LIMIT_PER_DAY = 500;
 /**
  * Links one account may make in a day. A link made from an account is kept for as long as the
- * account, so without this nothing would ever remove them. Sharing an army a few times a day sits
- * well inside it.
+ * account, so without this an account could fill the database a link at a time and nothing would
+ * ever remove any of it. Sharing an army a few times a day sits well inside it.
  */
 export const ACCOUNT_LIMIT_PER_DAY = 100;
 export const LinkKinds = ["scenario", "roster"] as const;
 
 /**
- * The characters a token is made of: lz-string's URI-safe output, which is letters, digits, `+`,
- * `-` and `$`. Anything else is not a link this app made, and a line break would break the redirect.
+ * The characters a token is made of. Both kinds are lz-string's URI-safe output, which is letters,
+ * digits, `+`, `-` and `$`. Anything else is not a link this app made, and a line break in one
+ * would go on to break the redirect for good.
  */
 const TOKEN = /^[A-Za-z0-9+$-]+$/;
 

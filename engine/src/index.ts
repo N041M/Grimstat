@@ -6,6 +6,7 @@ export * from "./types";
 export { runExact } from "./exact";
 export { runMonteCarlo } from "./mc";
 export { makeStateSpace, groupOrder } from "./allocation";
+export { engineWork } from "./work";
 
 import { runExact } from "./exact";
 import { runMonteCarlo } from "./mc";

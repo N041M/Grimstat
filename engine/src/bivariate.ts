@@ -1,4 +1,5 @@
 import { EPS, type PMF, binomial } from "./pmf";
+import { engineWork } from "./work";
 
 /** Bivariate PMF over (a, b): B[a][b] = P(A = a, B = b). Rows are padded to equal length. */
 export type BPMF = number[][];
@@ -19,6 +20,7 @@ export function bcols(B: BPMF): number {
 export function bconvolve(X: BPMF, Y: BPMF): BPMF {
   const rows = X.length + Y.length - 1;
   const cols = bcols(X) + bcols(Y) - 1;
+  engineWork.convolutions++;
   const out: BPMF = [];
   for (let i = 0; i < rows; i++) out.push(new Array<number>(cols).fill(0));
   for (let a1 = 0; a1 < X.length; a1++) {
@@ -78,13 +80,22 @@ export function baddScaled(acc: BPMF, B: BPMF, w: number): BPMF {
 /** Σ_n count[n] · per^{*n} for bivariate `per`. */
 export function bcompound(count: PMF, per: BPMF): BPMF {
   let pow: BPMF = bdelta();
-  let out: BPMF = [[0]];
+  const out: BPMF = [[0]];
   for (let n = 0; n < count.length; n++) {
     const w = count[n] ?? 0;
-    if (w > EPS) out = baddScaled(out, pow, w);
+    if (w > EPS) addIntoGrowing(out, pow, w);
     if (n + 1 < count.length) pow = bconvolve(pow, per);
   }
   return btrim(out);
+}
+
+/** `acc += w · B`, widening `acc` first wherever `B` reaches past it. */
+function addIntoGrowing(acc: BPMF, B: BPMF, w: number): void {
+  const cols = bcols(B);
+  if (cols > bcols(acc)) for (const row of acc) while (row.length < cols) row.push(0);
+  const width = bcols(acc);
+  while (acc.length < B.length) acc.push(new Array<number>(width).fill(0));
+  addInto(acc, B, w);
 }
 
 /**
@@ -99,9 +110,16 @@ export function bcompoundOneReroll(count: PMF, per: BPMF, pFail: number, perGive
   // powers of perGivenNotFail
   const pows: BPMF[] = [bdelta()];
   for (let k = 1; k <= nMax; k++) pows.push(bconvolve(pows[k - 1]!, perGivenNotFail));
-  // Pairs sharing m = n - j want the same convolution, so it is built once and kept. Weights are
-  // gathered per grid before any grid is read, which changes the order of the summation and so the
-  // last bit or two of a probability.
+  // The same two savings `bcompoundOneRerollTable` below already makes, which this function was
+  // written without: every `(n, j)` pair sharing `m = n - j` wants the same convolution, and adding
+  // the terms one at a time copies the whole growing grid once per term. Together they were a
+  // tenfold cost on a profile with a re-roll on the hit.
+  //
+  // Beyond those, the pairs are gathered by the grid they want before any grid is read. Eighty
+  // attack dice of D6+2 make thirty-five thousand pairs out of three hundred grids, so a pass per
+  // pair reads each grid a hundred times over, and that was nine tenths of what this function cost.
+  // Adding the weights first and reading each grid once leaves the same sum in a different order,
+  // which moves the last bit or two of a probability.
   const rerolled: BPMF[] = [];
   const weight = new Map<BPMF, number>();
   const wanted: BPMF[] = [];
@@ -131,7 +149,13 @@ export function bcompoundOneReroll(count: PMF, per: BPMF, pFail: number, perGive
   return btrim(out);
 }
 
-/** `acc += w · B`, over the cells of `B` that hold anything. A large grid is nearly all zeros. */
+/**
+ * `acc += w · B`, over the cells of `B` that hold anything.
+ *
+ * A grid of many dice is nearly all zeros: the outcomes that carry any probability are a band
+ * across it, and after four hundred dice that band is a few hundred cells of eighty thousand.
+ * Skipping the rest leaves every sum exactly as it was, because the term skipped is zero.
+ */
 function addInto(acc: BPMF, B: BPMF, w: number): void {
   for (let i = 0; i < B.length; i++) {
     const src = B[i]!;
@@ -145,9 +169,13 @@ function addInto(acc: BPMF, B: BPMF, w: number): void {
 }
 
 /**
- * The table of `bcompoundOneReroll(delta(k), per, pFail, perGivenNotFail)` for k = 0..nMax. Every
- * entry needs the same convolution powers of `perGivenNotFail`, so they are built once and shared;
- * calling `bcompoundOneReroll` per k would rebuild them and make the table quadratic in nMax.
+ * The table of `bcompoundOneReroll(delta(k), per, pFail, perGivenNotFail)` for k = 0..nMax.
+ *
+ * Every entry is built from the convolution powers of `perGivenNotFail`, and they are the same
+ * powers for every entry, so they are built once here and shared. Calling `bcompoundOneReroll` once
+ * per k rebuilds the whole power table on each call, which makes the table quadratic in nMax. On
+ * the exact backend that cost 30 weapons of D6+2 attacks 8.9 s with a single re-roll switched on
+ * against 0.11 s with it off.
  */
 export function bcompoundOneRerollTable(nMax: number, per: BPMF, pFail: number, perGivenNotFail: BPMF): BPMF[] {
   const table: BPMF[] = [];
@@ -182,8 +210,9 @@ export function bcompoundOneRerollTable(nMax: number, per: BPMF, pFail: number, 
       rows = Math.max(rows, part.length);
       cols = Math.max(cols, bcols(part));
     }
-    // Added into one grid of the final shape. `baddScaled` would copy the whole grid per term, and
-    // the grid is much larger than most of the terms in it.
+    // The terms are added into one grid of the final shape. Adding them one at a time with
+    // `baddScaled` copies the whole grid once per term, and the grid is much larger than most of the
+    // terms in it. That copying was three quarters of the time this table took.
     const out: BPMF = [];
     for (let i = 0; i < rows; i++) out.push(new Array<number>(cols).fill(0));
     for (const { p, part } of terms) addInto(out, part, p);

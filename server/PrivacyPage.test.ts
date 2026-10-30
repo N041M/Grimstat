@@ -3,14 +3,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ACCOUNT_DELETE_GRACE_DAYS } from "@grimstat/schema";
-import { en } from "../i18n/en";
+import { ALL as en } from "../i18n/tables";
 
 /**
- * The privacy notice says the server holds a listed set of things "and nothing else", and states how
- * long each is kept. Both are claims about code in `apps/api`.
+ * The privacy notice says the server holds a listed set of things "and nothing else", and it states
+ * how long each is kept. Both are claims about code in `apps/api`, and both were wrong once: the
+ * two rows a change of sign-in address needs hold an address each, and neither was on the list.
  *
- * These read the server's own files rather than importing them, so that a claim in the web app's
- * dictionary does not make the web app depend on the server package. A table added to a migration,
+ * These read the server's own files rather than importing them, because a claim in the web app's
+ * dictionary should not make the web app depend on the server package. A table added to a migration,
  * or a retention changed, fails here and names what moved.
  */
 
@@ -73,9 +74,11 @@ describe("what the notice says the server holds", () => {
 
 describe("how long the notice says things are kept", () => {
   /**
-   * The value of a `const NAME = <arithmetic>;` in one of the server's files. The arithmetic is
-   * written in named units (`365 * 24 * HOUR`), so a name on the right-hand side is looked up in the
-   * same file and substituted. Only products of integers survive that.
+   * The value of a `const NAME = <arithmetic>;` in one of the server's files.
+   *
+   * The arithmetic is written in named units - `365 * 24 * HOUR` - so a name on the right-hand side
+   * is looked up in the same file and put in its place. Only products of integers survive that, so
+   * the result is read with `Number` on a plain expression.
    */
   const number = (file: string, name: string): number => {
     const text = source(file);
@@ -84,7 +87,8 @@ describe("how long the notice says things are kept", () => {
       if (!m) throw new Error(`${of} not found in ${file}`);
       return (m[1] as string).replace(/\b[A-Z_]{2,}\b/g, (unit) => `(${read(unit)})`);
     };
-    // The expression reaching here is integer literals and operators, read out of our own source.
+    // The expression reaching here is integer literals and the operators between them, read out of
+    // our own source, so there is nothing in it to evaluate but arithmetic.
     return Number(new Function(`return ${read(name)}`)());
   };
 
@@ -123,13 +127,14 @@ describe("what the notice says a share link carries", () => {
 
 describe("what the notice says about the script Cloudflare adds", () => {
   /**
-   * The notice says the script does not run. The built page's content policy is what keeps that
-   * true: it admits an inline script only by hash, and Cloudflare's bootstrap carries a token that
-   * changes on every response, so no fixed hash matches it. Adding `unsafe-inline` to `script-src`
-   * would let it run, which is what this reads for.
+   * The notice says the script does not run. What keeps that true is the built page's content
+   * policy, which admits an inline script only by hash: Cloudflare's bootstrap carries a token that
+   * changes on every response, so no fixed hash can ever match it. Adding `unsafe-inline` to
+   * `script-src` would let it run and turn the sentence into a false promise with nothing else to
+   * notice, which is what this reads for.
    *
-   * If Cloudflare ever serves the check as `<script src="/cdn-cgi/...">` instead of inline, `'self'`
-   * admits it and the sentence has to go. That half cannot be tested here.
+   * The half outside this repository cannot be tested here. If Cloudflare ever serves the check as
+   * `<script src="/cdn-cgi/...">` instead of inline, `'self'` admits it and the sentence has to go.
    */
   it("keeps a content policy that admits no inline script it has not hashed", () => {
     const config = readFileSync(join(here, "..", "..", "vite.config.ts"), "utf8");

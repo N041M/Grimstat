@@ -38,7 +38,9 @@ warning when it does. You can force either with `input.backend`.
 | `exact.ts` | The exact solver, walking that state space. |
 | `mc.ts` | The sampler used when it is not affordable. |
 | `rng.ts` | `mulberry32`, so a Monte Carlo run is reproducible from a seed. |
-| `engine.test.ts` | 900 lines. Golden cases worked by hand, plus property-based tests with fast-check, plus Monte Carlo checked against exact on targets small enough for both. |
+| `work.ts` | Counters of the work the exact solver does: convolutions, table builds, events and the states they read. Tests read them to check that a run costs what it should. |
+| `engine.test.ts` | About 1,100 lines. Golden cases worked by hand, plus property-based tests with fast-check, plus Monte Carlo checked against exact on targets small enough for both, plus bounds on the work a run takes. |
+| `work.test.ts` | Checks that the counters count what they name, so a cost test cannot pass by reading a counter that never moves. |
 
 ## Running it
 

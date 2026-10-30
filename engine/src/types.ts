@@ -91,14 +91,18 @@ export interface EngineInput {
   mcIterations: number;
   /**
    * How one weapon profile's saves are taken. "each" allocates a wound and rolls its save one at a
-   * time. "ascending" rolls every save first and resolves them from the lowest up, each against
-   * whichever group is current when it is reached. Default "each".
+   * time. "ascending" rolls every save of the profile first and resolves the results from the lowest
+   * up, each against whichever group is current when it is reached, which is how the 11th edition
+   * sequence reads. The two agree unless the groups differ in which results save them. Default "each".
    */
   saveOrder?: "each" | "ascending";
   seed?: number;
-  /** Exact backend falls back to MC above this many DP states. */
+  /**
+   * Exact backend falls back to MC above this many reachable defender states. A run hands back a
+   * `finalState` only when the product encoding has at most this many states. Default 40,000.
+   */
   maxExactStates?: number;
-  /** Exact backend falls back to MC above this many DP state visits (states × wounds × mortal events). */
+  /** Exact backend falls back to MC above this many DP state visits (reachable states × events). */
   maxExactWork?: number;
   /** Start from this defender state distribution (from a previous EngineOutput.finalState with the same groups). */
   initialState?: number[];
@@ -112,6 +116,8 @@ export interface WeaponTrace {
   expectedWounds: number;
   expectedUnsaved: number;
   expectedDamage: number;
+  /** The part of `expectedDamage` that the profile's mortal-damage events deal (Devastating Wounds). */
+  expectedMortalDamage: number;
 }
 
 export interface EngineOutput {
@@ -131,6 +137,10 @@ export interface EngineOutput {
   expectedPointsSlain: number;
   weapons: WeaponTrace[];
   warnings: string[];
-  /** Defender state distribution after all weapons (exact backend only); feed into another run's initialState. */
+  /**
+   * Defender state distribution after all weapons, over the product encoding; feed into another
+   * run's initialState. Exact backend only, and only when the encoding has at most
+   * `maxExactStates` states.
+   */
   finalState?: number[];
 }
